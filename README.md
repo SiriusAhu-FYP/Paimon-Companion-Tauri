@@ -47,10 +47,13 @@ paimon-live/
 │   │   ├── control-panel/   # 控制台与监控
 │   │   └── stage/           # OBS 输出窗口
 │   ├── services/            # 核心业务服务
+│   │   ├── runtime/         # 运行时控制器
+│   │   ├── event-bus/       # 事件总线
 │   │   ├── audio/           # 音频管线 (ASR/TTS)
 │   │   ├── llm/             # LLM 对接
-│   │   ├── event-bus/       # 事件总线
 │   │   ├── character/       # 角色状态管理
+│   │   ├── knowledge/       # 知识与上下文层
+│   │   ├── external-input/  # 外部事件接入
 │   │   └── logger/          # 日志与调试
 │   ├── hooks/               # 自定义 React Hooks
 │   ├── types/               # 共享类型定义
