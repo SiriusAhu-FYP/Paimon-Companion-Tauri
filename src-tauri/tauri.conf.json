@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "paimon-live",
+        "title": "Paimon Live",
         "width": 800,
         "height": 600
       }
