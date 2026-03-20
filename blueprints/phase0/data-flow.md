@@ -209,6 +209,8 @@
 
 由 runtime 统一控制，其他模块响应 runtime 的模式变更。
 
+> **分阶段实现说明：** 以下为完整设计目标。Phase 1 仅实现 auto/stopped 模式切换。manual（人工接管）、paused 模式及完整的急停协调流程留到 Phase 3+ 实现。
+
 ### 5.1 急停
 
 ```

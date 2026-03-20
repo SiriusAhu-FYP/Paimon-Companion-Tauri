@@ -71,6 +71,16 @@ src/
 - 发布 `runtime:mode-change` → 通知所有模块当前运行模式
 - 其他模块在执行关键操作前，应检查 runtime 当前是否允许
 
+**分阶段实现说明：**
+
+上述为完整 runtime 设计目标。各阶段实现的最小子集如下：
+
+| Phase | 实现范围 |
+|-------|---------|
+| Phase 1 | 仅 auto / stopped 两个模式切换、模式变更通知、`isAllowed()` 门控查询 |
+| Phase 2+ | manual 模式、paused 模式 |
+| Phase 3+ | 完整急停/恢复协调、人工接管流程、串行处理规则、锁麦协调 |
+
 ---
 
 ### 2.2 event-bus — 事件总线
@@ -371,6 +381,8 @@ src/
 | 各模块 | logger | 直接调用 | 日志记录 |
 
 ### 4.3 React 桥接
+
+**原则：** Hook 是 service 状态到 React 响应式 UI 的单向桥接，不是业务逻辑的容器。业务状态归属 service，Hook 只做订阅和转发。如果引入 Zustand 等 React 状态库，其职责仅限于 UI 层状态和桥接层，不承载核心业务逻辑。
 
 每个 service 模块提供对应的 Hook：
 
