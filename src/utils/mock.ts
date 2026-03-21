@@ -1,0 +1,119 @@
+import type { EventBus } from "@/services/event-bus";
+import type { CharacterConfig } from "@/types";
+import type { CharacterService } from "@/services/character";
+import type { ExternalInputService } from "@/services/external-input";
+import { createLogger } from "@/services/logger";
+
+const log = createLogger("mock");
+
+// Mock 角色配置
+export const MOCK_CHARACTER_CONFIG: CharacterConfig = {
+	id: "paimon",
+	name: "派蒙",
+	persona: "你是旅行者的好伙伴派蒙，说话活泼可爱，喜欢吃东西。",
+	defaultEmotion: "neutral",
+	expressionMap: {
+		neutral: "exp_neutral",
+		happy: "exp_happy",
+		sad: "exp_sad",
+		angry: "exp_angry",
+		surprised: "exp_surprised",
+	},
+};
+
+// 模拟完整的 ASR → LLM → 角色反馈链路
+export function mockVoicePipeline(bus: EventBus) {
+	log.info("starting mock voice pipeline");
+
+	bus.emit("audio:asr-result", {
+		text: "你好，派蒙！今天有什么好吃的推荐吗？",
+		source: "voice",
+	});
+
+	setTimeout(() => {
+		bus.emit("llm:request-start", {
+			userText: "你好，派蒙！今天有什么好吃的推荐吗？",
+		});
+	}, 200);
+
+	setTimeout(() => {
+		bus.emit("llm:tool-call", {
+			name: "setExpression",
+			args: { emotion: "happy" },
+		});
+	}, 600);
+
+	setTimeout(() => {
+		bus.emit("llm:response-end", {
+			fullText: "嘿嘿，当然有啦！今天推荐蒙德的甜甜花酿鸡，超级好吃的！",
+		});
+	}, 1000);
+
+	setTimeout(() => {
+		bus.emit("audio:tts-start", {
+			text: "嘿嘿，当然有啦！今天推荐蒙德的甜甜花酿鸡，超级好吃的！",
+		});
+	}, 1200);
+
+	setTimeout(() => {
+		bus.emit("audio:tts-end");
+	}, 3000);
+}
+
+// 模拟外部事件注入
+export function mockExternalEvents(externalInput: ExternalInputService) {
+	log.info("injecting mock external events");
+
+	externalInput.injectEvent({
+		source: "debug",
+		type: "danmaku",
+		data: { user: "测试用户A", text: "派蒙好可爱！" },
+	});
+
+	setTimeout(() => {
+		externalInput.injectEvent({
+			source: "debug",
+			type: "gift",
+			data: { user: "测试用户B", giftName: "火箭", count: 1 },
+		});
+	}, 500);
+
+	setTimeout(() => {
+		externalInput.injectEvent({
+			source: "debug",
+			type: "product-message",
+			data: {
+				priority: true,
+				content: "当前主推商品：原神周边摆件，限时8折优惠！",
+				ttl: 300,
+			},
+		});
+	}, 1000);
+}
+
+// 初始化 mock 角色
+export function mockCharacterInit(character: CharacterService) {
+	character.loadConfig(MOCK_CHARACTER_CONFIG);
+	log.info("mock character loaded");
+}
+
+// 将 mock 工具挂载到 window 上，方便在开发者工具中使用
+export function exposeMockTools(bus: EventBus, character: CharacterService, externalInput: ExternalInputService) {
+	const tools = {
+		voicePipeline: () => mockVoicePipeline(bus),
+		externalEvents: () => mockExternalEvents(externalInput),
+		emit: bus.emit.bind(bus),
+		stop: () => bus.emit("system:emergency-stop"),
+		resume: () => bus.emit("system:resume"),
+		setEmotion: (e: string) => character.setEmotion(e),
+		injectDanmaku: (user: string, text: string) =>
+			externalInput.injectEvent({
+				source: "devtools",
+				type: "danmaku",
+				data: { user, text },
+			}),
+	};
+
+	(window as unknown as Record<string, unknown>).__paimon = tools;
+	log.info("mock tools exposed at window.__paimon");
+}
