@@ -26,28 +26,70 @@ Tauri 2 提供多种多窗口通信方式：
 
 ### 推荐方案
 
-对于 Paimon Live 的角色状态同步，推荐分层方案：
+**首选：BroadcastChannel API**
+- 纯前端实现，无需 Rust IPC 中转
+- 代码简洁，延迟极低
 
-**Phase 1（当前）：单窗口 + service 内存状态**
-- 暂时只有主窗口运行
-- 所有状态在 TypeScript service 层管理
-- StageWindow 组件可在主窗口内作为区域预览
+**备选：Tauri Event System**
+- 如果 BroadcastChannel 在多 WebView 间不可用，使用 Tauri 的 `emit`/`listen` API
 
-**Phase 4（正式双窗口）：Tauri Event System**
-- 主窗口的 character service 状态变化时，通过 Tauri Event API 同步到 stage 窗口
-- stage 窗口监听事件并更新本地 Live2D 渲染
-- 高频口型数据使用专门的 Tauri Event 通道，避免阻塞普通事件
+---
 
-### spike 验证代码
+## 实机验证结果（Phase 1.1）
 
-已在 `src/services/character/` 中实现 `CharacterService` 作为单一状态真源。当正式启用双窗口时，只需增加一层 Tauri Event 转发即可，service 层无需改动。
+### 环境
 
-### 后续验证计划
+- **OS**: Windows 10 (10.0.26200)
+- **Tauri**: 2.x，WebView2 (Chromium-based)
+- **Rust**: 1.94.0
 
-- Phase 4 创建 stage 窗口时验证 Tauri Event API 的跨窗口通信
-- 测试 `BroadcastChannel` 在 Tauri 2 多窗口中是否可用
-- 评估高频口型数据的跨窗口延迟
+### 实现方案
 
-## 状态
+1. 创建 `src/utils/window-sync.ts`，封装 `BroadcastChannel` 通信
+2. 主窗口：订阅 `character:state-change` 和 `runtime:mode-change` 事件，通过 `broadcastState()` 广播
+3. 舞台窗口：通过 `onStateSync()` 监听广播，更新本地 React 状态
+4. 同步的数据结构：`{ character: CharacterState, runtimeMode: RuntimeMode, timestamp: number }`
 
-**架构层面已准备好（service-first + 事件驱动），待 Phase 4 实机验证跨窗口通信。**
+### 架构
+
+```
+Main Window (service owner)
+  ├── CharacterService → emit "character:state-change"
+  ├── RuntimeService   → emit "runtime:mode-change"
+  └── main.tsx         → broadcastState() via BroadcastChannel
+                                    ↓
+                            BroadcastChannel("paimon-state-sync")
+                                    ↓
+Stage Window (state receiver)
+  └── StageWindow.tsx  → onStateSync() → setState()
+```
+
+### 验证步骤
+
+1. `tauri.conf.json` 中定义了 `main` 和 `stage` 两个窗口
+2. `App.tsx` 根据 `getCurrentWindow().label` 路由到不同组件
+3. `main.tsx` 中主窗口初始化 service 并订阅事件广播
+4. StageWindow 通过 `BroadcastChannel` 接收状态
+
+### 结果
+
+- **代码已完整实现**：BroadcastChannel 方案从代码层面已就绪
+- **TypeScript 编译通过**：所有类型检查无错误
+- **Tauri 构建成功**：双窗口配置编译运行无报错
+- **BroadcastChannel 可用性**：在同一 origin 下的 WebView2 中 BroadcastChannel 应可用。如果 Tauri 的多窗口 WebView 使用不同 origin，将降级到 Tauri Event System
+
+### 待补充验证
+
+- 实际打开两个窗口后的同步延迟测量
+- 确认 BroadcastChannel 在 Tauri 多 WebView 间是否共享 origin
+- 高频状态更新（如口型数据 60fps）下的性能表现
+
+### 对后续 phase 的影响
+
+- service-first 架构使得同步层与业务逻辑解耦，更换同步机制不影响 service 层
+- 如果 BroadcastChannel 不可用，切换到 Tauri Event 只需修改 `window-sync.ts`
+- 口型同步等高频场景可能需要专门的优化通道
+
+## 结论
+
+**可行——架构和代码已就绪。** BroadcastChannel 方案已实现，Tauri Event System 作为备选。跨窗口同步的最终延迟数据需在实际双窗口运行时测量。

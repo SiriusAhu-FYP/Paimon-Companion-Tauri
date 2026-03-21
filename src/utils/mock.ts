@@ -2,6 +2,7 @@ import type { EventBus } from "@/services/event-bus";
 import type { CharacterConfig } from "@/types";
 import type { CharacterService } from "@/services/character";
 import type { ExternalInputService } from "@/services/external-input";
+import type { RuntimeService } from "@/services/runtime";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("mock");
@@ -21,8 +22,13 @@ export const MOCK_CHARACTER_CONFIG: CharacterConfig = {
 	},
 };
 
-// 模拟完整的 ASR → LLM → 角色反馈链路
-export function mockVoicePipeline(bus: EventBus) {
+// 模拟完整的 ASR → LLM → 角色反馈链路（受 runtime 门控）
+export function mockVoicePipeline(bus: EventBus, runtime?: RuntimeService) {
+	if (runtime && !runtime.isAllowed()) {
+		log.warn("mock voice pipeline BLOCKED — runtime mode is: " + runtime.getMode());
+		return;
+	}
+
 	log.info("starting mock voice pipeline");
 
 	bus.emit("audio:asr-result", {
@@ -98,9 +104,9 @@ export function mockCharacterInit(character: CharacterService) {
 }
 
 // 将 mock 工具挂载到 window 上，方便在开发者工具中使用
-export function exposeMockTools(bus: EventBus, character: CharacterService, externalInput: ExternalInputService) {
+export function exposeMockTools(bus: EventBus, character: CharacterService, externalInput: ExternalInputService, runtime: RuntimeService) {
 	const tools = {
-		voicePipeline: () => mockVoicePipeline(bus),
+		voicePipeline: () => mockVoicePipeline(bus, runtime),
 		externalEvents: () => mockExternalEvents(externalInput),
 		emit: bus.emit.bind(bus),
 		stop: () => bus.emit("system:emergency-stop"),
