@@ -16,6 +16,15 @@
         "title": "Paimon Live",
         "width": 1200,
         "height": 800
+      },
+      {
+        "label": "stage",
+        "title": "Paimon Live - Stage",
+        "width": 800,
+        "height": 600,
+        "transparent": true,
+        "decorations": false,
+        "visible": false
       }
     ],
     "security": {

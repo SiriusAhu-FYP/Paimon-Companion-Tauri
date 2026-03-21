@@ -1,5 +1,11 @@
+import { useState } from "react";
 import { useRuntime } from "@/hooks";
 import { useCharacter } from "@/hooks";
+import { getServices } from "@/services";
+import { mockVoicePipeline, mockExternalEvents } from "@/utils/mock";
+import { createLogger } from "@/services/logger";
+
+const log = createLogger("control-panel");
 
 const EMOTIONS = ["neutral", "happy", "sad", "angry", "surprised"];
 
@@ -7,14 +13,68 @@ export function ControlPanel() {
 	const { mode, stop, resume } = useRuntime();
 	const { characterId, emotion, isSpeaking, setEmotion } = useCharacter();
 
+	const handleMockPipeline = () => {
+		const { bus, runtime } = getServices();
+		mockVoicePipeline(bus, runtime);
+	};
+
+	const handleMockExternal = () => {
+		const { externalInput } = getServices();
+		mockExternalEvents(externalInput);
+	};
+
+	const [micStatus, setMicStatus] = useState<"idle" | "ok" | "denied" | "error">("idle");
+	const handleMicTest = async () => {
+		try {
+			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+			const ctx = new AudioContext();
+			const source = ctx.createMediaStreamSource(stream);
+			const analyser = ctx.createAnalyser();
+			analyser.fftSize = 256;
+			source.connect(analyser);
+
+			const dataArray = new Uint8Array(analyser.frequencyBinCount);
+			analyser.getByteFrequencyData(dataArray);
+			const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+			log.info(`mic test OK — avg volume: ${avg.toFixed(1)}`);
+
+			stream.getTracks().forEach((t) => t.stop());
+			ctx.close();
+			setMicStatus("ok");
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			log.error("mic test failed", msg);
+			setMicStatus(msg.includes("denied") || msg.includes("NotAllowed") ? "denied" : "error");
+		}
+	};
+
+	const [stageOpen, setStageOpen] = useState(false);
+	const handleOpenStage = async () => {
+		try {
+			const { Window } = await import("@tauri-apps/api/window");
+			const stageWin = await Window.getByLabel("stage");
+			if (stageWin) {
+				await stageWin.show();
+				await stageWin.setFocus();
+				setStageOpen(true);
+				log.info("stage window opened");
+			} else {
+				log.warn("stage window not found");
+			}
+		} catch (err) {
+			log.error("failed to open stage window", err);
+		}
+	};
+
 	return (
 		<section className="control-panel">
 			<h2>控制面板</h2>
 
-			<div className="control-section">
+			<div className={`control-section ${mode === "stopped" ? "control-stopped" : ""}`}>
 				<h3>运行状态</h3>
 				<p>
 					模式：<strong>{mode}</strong>
+					{mode === "stopped" && <span className="badge-stopped"> STOPPED</span>}
 				</p>
 				<div className="control-actions">
 					<button onClick={stop} disabled={mode === "stopped"}>
@@ -45,6 +105,41 @@ export function ControlPanel() {
 							{e}
 						</button>
 					))}
+				</div>
+			</div>
+
+			<div className="control-section">
+				<h3>窗口管理</h3>
+				<div className="control-actions">
+					<button onClick={handleOpenStage} disabled={stageOpen}>
+						{stageOpen ? "舞台已打开" : "打开舞台窗口"}
+					</button>
+				</div>
+			</div>
+
+			<div className="control-section">
+				<h3>Spike 验证</h3>
+				<div className="control-actions">
+					<button onClick={handleMicTest}>
+						麦克风测试
+					</button>
+					<span style={{ fontSize: 11, marginLeft: 6 }}>
+						{micStatus === "ok" && "✅ 成功"}
+						{micStatus === "denied" && "❌ 权限被拒绝"}
+						{micStatus === "error" && "❌ 出错"}
+					</span>
+				</div>
+			</div>
+
+			<div className="control-section">
+				<h3>Mock 测试</h3>
+				<div className="control-actions">
+					<button onClick={handleMockPipeline}>
+						模拟语音链路
+					</button>
+					<button onClick={handleMockExternal}>
+						模拟外部事件
+					</button>
 				</div>
 			</div>
 		</section>

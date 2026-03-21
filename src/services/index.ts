@@ -27,6 +27,7 @@ export function initServices(): ServiceContainer {
 	const character = new CharacterService(eventBus);
 	const knowledge = new KnowledgeService(eventBus);
 	const externalInput = new ExternalInputService(eventBus);
+	externalInput.setRuntime(runtime);
 
 	services = {
 		bus: eventBus,

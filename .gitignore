@@ -23,6 +23,10 @@ src-tauri/target/
 .env.*
 !.env.example
 
+# Live2D SDK and model assets (binary / redistributable)
+public/Core/
+public/Resources/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

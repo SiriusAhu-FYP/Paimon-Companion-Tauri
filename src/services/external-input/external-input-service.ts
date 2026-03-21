@@ -1,4 +1,5 @@
 import type { EventBus } from "@/services/event-bus";
+import type { RuntimeService } from "@/services/runtime";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("external-input");
@@ -16,14 +17,24 @@ export interface RawExternalEvent {
  */
 export class ExternalInputService {
 	private bus: EventBus;
+	private runtime: RuntimeService | null = null;
 	private sources = new Map<string, { connected: boolean }>();
 
 	constructor(bus: EventBus) {
 		this.bus = bus;
 	}
 
-	// 调试/mock 注入入口
+	setRuntime(runtime: RuntimeService) {
+		this.runtime = runtime;
+	}
+
+	// 调试/mock 注入入口（受 runtime 门控）
 	injectEvent(raw: RawExternalEvent) {
+		if (this.runtime && !this.runtime.isAllowed()) {
+			log.warn(`event BLOCKED by runtime gate [${raw.source}]: ${raw.type}`);
+			return;
+		}
+
 		log.debug(`raw event from [${raw.source}]: ${raw.type}`, raw.data);
 
 		switch (raw.type) {
