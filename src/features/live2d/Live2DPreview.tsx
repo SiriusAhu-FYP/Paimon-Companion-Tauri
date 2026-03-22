@@ -1,16 +1,71 @@
-import { useCharacter } from "@/hooks";
-import { useRef, useEffect, useState } from "react";
+import { useCharacter, useEventBus } from "@/hooks";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("live2d-preview");
 
+// 情绪 → Cubism 参数覆盖映射（Hiyori 模型无 Expressions 文件，用参数直接驱动）
+const EMOTION_PARAMS: Record<string, Record<string, number>> = {
+	neutral: {},
+	happy: {
+		ParamMouthForm: 1,
+		ParamEyeLSmile: 1,
+		ParamEyeRSmile: 1,
+	},
+	sad: {
+		ParamEyeLOpen: 0.35,
+		ParamEyeROpen: 0.35,
+		ParamMouthForm: -0.6,
+		ParamBrowLY: -0.6,
+		ParamBrowRY: -0.6,
+	},
+	angry: {
+		ParamBrowLY: -1,
+		ParamBrowRY: -1,
+		ParamEyeLOpen: 0.6,
+		ParamEyeROpen: 0.6,
+		ParamMouthForm: -0.4,
+		ParamAngleZ: -5,
+	},
+	surprised: {
+		ParamEyeLOpen: 1.3,
+		ParamEyeROpen: 1.3,
+		ParamMouthOpenY: 0.6,
+		ParamBrowLY: 0.8,
+		ParamBrowRY: 0.8,
+	},
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyModel = any;
+
+function applyEmotionParams(model: AnyModel, emotion: string) {
+	const overrides = EMOTION_PARAMS[emotion] ?? {};
+	try {
+		const coreModel = model.internalModel?.coreModel;
+		if (!coreModel) return;
+		const rawModel = coreModel._model;
+		if (!rawModel?.parameters) return;
+		const { ids, values, count } = rawModel.parameters;
+		for (let i = 0; i < count; i++) {
+			if (ids[i] in overrides) {
+				values[i] = overrides[ids[i]];
+			}
+		}
+	} catch {
+		// 某些模型结构不同，忽略
+	}
+}
+
 /**
  * Live2D 预览区域：使用 PIXI + pixi-live2d-display 渲染模型。
- * 加载失败时降级回文字占位。
+ * 订阅 character:expression 事件，将情绪映射为 Cubism 参数覆盖。
  */
 export function Live2DPreview() {
 	const { characterId, emotion, isSpeaking } = useCharacter();
 	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const modelRef = useRef<AnyModel>(null);
+	const emotionRef = useRef("neutral");
 	const [loadStatus, setLoadStatus] = useState<"loading" | "ok" | "error">("loading");
 	const [errorMsg, setErrorMsg] = useState("");
 
@@ -25,7 +80,6 @@ export function Live2DPreview() {
 
 				if (cancelled || !canvasRef.current) return;
 
-				// pixi-live2d-display 需要注册到 PIXI
 				const reg = (Live2DModel as unknown as Record<string, (...args: unknown[]) => void>).registerTicker;
 				if (reg) reg(PIXI.Ticker);
 
@@ -46,6 +100,14 @@ export function Live2DPreview() {
 				model.y = 300;
 
 				app.stage.addChild(model as unknown as import("pixi.js").DisplayObject);
+				modelRef.current = model;
+
+				// 每帧施加情绪参数覆盖（idle 动画会重置参数，需要持续覆盖）
+				app.ticker.add(() => {
+					if (modelRef.current && emotionRef.current !== "neutral") {
+						applyEmotionParams(modelRef.current, emotionRef.current);
+					}
+				});
 
 				setLoadStatus("ok");
 				log.info("Live2D model loaded: Hiyori");
@@ -62,11 +124,33 @@ export function Live2DPreview() {
 
 		return () => {
 			cancelled = true;
+			modelRef.current = null;
 			if (app) {
 				try { app.destroy(true); } catch { /* */ }
 			}
 		};
 	}, []);
+
+	// 响应 character:expression 事件——真正驱动 Live2D 表情切换
+	const onExpression = useCallback(({ emotion: newEmotion }: { emotion: string; expressionName: string }) => {
+		emotionRef.current = newEmotion;
+
+		const model = modelRef.current;
+		if (!model) return;
+
+		// 播放一个动作作为切换时的视觉反馈
+		try {
+			if (newEmotion === "happy" || newEmotion === "surprised") {
+				model.motion("TapBody", 0);
+			} else if (newEmotion !== "neutral") {
+				model.motion("Idle", Math.floor(Math.random() * 9));
+			}
+		} catch { /* motion 播放失败不阻塞 */ }
+
+		log.info(`expression applied: ${newEmotion}`);
+	}, []);
+
+	useEventBus("character:expression", onExpression);
 
 	return (
 		<section className="live2d-preview">

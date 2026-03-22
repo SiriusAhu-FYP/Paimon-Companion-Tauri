@@ -72,6 +72,34 @@ pixi-live2d-display@0.4.0
 - 模型切换（加载不同 model3.json）的逻辑可在 CharacterService 中实现
 - 需要注意 `pixi-live2d-display` 仍使用 pixi.js v6 API，如果未来升级 pixi.js 需关注兼容性
 
+---
+
+## 表情驱动验证结果（Phase 1 Close-out）
+
+### 验证内容
+
+将 `character:expression` 事件真正接到 Live2D 渲染层，验证参数覆盖能否驱动模型表情变化。
+
+### 关键发现
+
+- **Hiyori 模型没有 Expressions 文件**，只有 Motions（Idle × 9, TapBody × 1）
+- 解决方案：直接操作 Cubism Core 参数（`rawModel.parameters.values[i]`），每帧在 PIXI ticker 中施加覆盖
+- 参数覆盖必须持续施加，因为 idle 动画会在每帧重置参数
+
+### 情绪 → 参数映射
+
+| 情绪 | 关键参数 | 视觉效果 |
+|------|---------|---------|
+| neutral | 无覆盖 | 自然表情 |
+| happy | ParamMouthForm=1, ParamEyeLSmile=1 | 嘴角上扬 + 眯眼笑 |
+| sad | ParamEyeL/ROpen=0.35, ParamMouthForm=-0.6 | 半闭眼 + 嘴角下垂 |
+| angry | ParamBrowL/RY=-1, ParamAngleZ=-5 | 皱眉 + 微侧头 |
+| surprised | ParamEyeL/ROpen=1.3, ParamMouthOpenY=0.6 | 瞪大眼 + 张嘴 |
+
+### 结果
+
+✅ **表情切换已真正生效**。从截图对比可以清晰看到不同情绪之间的视觉差异。事件总线 → CharacterService → character:expression → Live2DPreview 的完整链路已打通。
+
 ## 结论
 
-**可行——已实机验证通过。** Live2D + PIXI + Cubism 4 在 Tauri WebView2 中渲染正常，无阻塞风险。
+**可行——已实机验证通过。** Live2D + PIXI + Cubism 4 在 Tauri WebView2 中渲染正常，表情参数驱动已验证。无阻塞风险。

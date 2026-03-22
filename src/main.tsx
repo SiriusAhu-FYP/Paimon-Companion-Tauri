@@ -10,10 +10,16 @@ import "./App.css";
 const services = initServices();
 
 let windowLabel = "main";
-try {
-	windowLabel = getCurrentWindow().label;
-} catch {
-	// 非 Tauri 环境（浏览器调试），默认 main
+const urlParams = new URLSearchParams(window.location.search);
+const urlOverride = urlParams.get("window");
+if (urlOverride === "stage") {
+	windowLabel = "stage";
+} else {
+	try {
+		windowLabel = getCurrentWindow().label;
+	} catch {
+		// 非 Tauri 环境（浏览器调试），默认 main
+	}
 }
 
 if (windowLabel === "main") {
