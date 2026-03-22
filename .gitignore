@@ -7,10 +7,25 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+
+# Build output
 dist
 dist-ssr
 *.local
+
+# Rust / Tauri
+src-tauri/target/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Live2D SDK and model assets (binary / redistributable)
+public/Core/
+public/Resources/
 
 # Editor directories and files
 .vscode/*
