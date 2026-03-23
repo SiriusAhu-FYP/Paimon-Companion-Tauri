@@ -1,24 +1,33 @@
+mod commands;
+
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .on_window_event(|window, event| {
-            // 主窗口关闭时退出整个应用（确保所有子窗口和进程被清理）
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                if window.label() == "main" {
-                    // 关闭所有其他窗口
-                    for (label, win) in window.app_handle().webview_windows() {
-                        if label != "main" {
-                            let _ = win.close();
-                        }
-                    }
-                    // 退出应用
-                    window.app_handle().exit(0);
-                }
-            }
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+	tauri::Builder::default()
+		.plugin(tauri_plugin_opener::init())
+		.plugin(tauri_plugin_store::Builder::default().build())
+		.plugin(tauri_plugin_keyring::init())
+		.invoke_handler(tauri::generate_handler![
+			commands::secret::secret_set,
+			commands::secret::secret_get,
+			commands::secret::secret_has,
+			commands::secret::secret_delete,
+			commands::http_proxy::proxy_http_request,
+			commands::http_proxy::proxy_sse_request,
+		])
+		.on_window_event(|window, event| {
+			if let tauri::WindowEvent::CloseRequested { .. } = event {
+				if window.label() == "main" {
+					for (label, win) in window.app_handle().webview_windows() {
+						if label != "main" {
+							let _ = win.close();
+						}
+					}
+					window.app_handle().exit(0);
+				}
+			}
+		})
+		.run(tauri::generate_context!())
+		.expect("error while running tauri application");
 }

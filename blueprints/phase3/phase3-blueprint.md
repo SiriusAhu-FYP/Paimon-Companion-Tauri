@@ -1,8 +1,8 @@
-# Phase 3 — 真实服务接入与直播能力接线
+# Phase 3 — 真实服务接入与角色/知识基础
 
 **日期**：2026-03-23
 **前置依赖**：Phase 2 功能基线稳定、Phase 2.1 结构收敛完成、回归烟雾测试通过
-**性质**：真实服务替换 + 外部输入接入——小步替换 mock，不破坏已有主链路
+**性质**：真实服务替换 + 角色设定导入 + 纯文本知识注入——小步替换 mock，不破坏已有主链路
 
 ---
 
@@ -16,13 +16,15 @@
 | Phase 3 | Control & Monitor | 大部分已在 Phase 1/2 中提前交付（控制面板、急停/恢复、事件日志、状态栏） |
 | Phase 4 | Live Integration | OBS 透明捕获已在 Phase 2 中验证完成 |
 
-由于项目的实际推进节奏，原定 Phase 3（Control & Monitor）和 Phase 4（Live Integration）的部分能力已经在 Phase 1–2 中提前落地。当前真正缺失的核心能力是：
+由于项目的实际推进节奏，原路线图中的部分能力已在 Phase 1–2 中提前落地。当前各阶段重新定义如下：
 
-1. **真实 LLM / TTS 替换 mock**（原属 Phase 2 规划，Phase 2 只做了接口和 mock）
-2. **直播间外部输入的真实接入**（原属 Phase 4）
-3. **知识/上下文层与 LLM 的真实串联**（原属 Phase 4）
+| Phase | 名称 | 核心目标 |
+|-------|------|---------|
+| **Phase 3** | 真实服务接入与角色/知识基础 | 真实 LLM/TTS 替换 mock、SillyTavern 角色卡导入、纯文本知识注入、配置管理基础 |
+| **Phase 4** | 直播能力接线与语音输入闭环 | 真实直播/外部输入源接入、ASR 语音输入、VAD/锁麦策略 |
+| **Phase 5** | 知识系统深化与产品化收口 | RAG/向量检索、知识管理 UI、配置/商品资料管理体验、打包安装引导 |
 
-因此本阶段重新定义为**"真实服务接入与直播能力接线"**，覆盖原路线图中尚未落地的核心能力。
+**本 blueprint 覆盖范围**：Phase 3（真实服务接入与角色/知识基础）
 
 ---
 
@@ -45,15 +47,14 @@
 
 ### 1.2 当前瓶颈
 
-唯一阻止系统变成"最小可用直播系统"的障碍是：**所有外部服务调用仍然是 mock**。
+唯一阻止系统变成"最小可用播出系统"的障碍是：**所有外部服务调用仍然是 mock，且角色设定和知识上下文尚未与 LLM 接通**。
 
-- `MockLLMService`：随机回复预设文本，不理解上下文
+- `MockLLMService`：随机回复预设文本，不理解上下文，不读取角色设定
 - `MockTTSService`：返回正弦波音频，不产生语音
-- ASR：仅有接口定义，无任何实现
-- 弹幕/外部输入：仅有 mock 注入，无真实平台适配器
-- 知识层：能存储和组装上下文，但 LLM 调用时未使用
+- 角色设定：仅有占位，无导入机制（SillyTavern 角色卡未接入）
+- 知识层：能存储和组装上下文，但 LLM 调用时未注入
 
-现在替换这些 mock 是最小成本的——接口边界清晰、替换点集中在 `services/index.ts`，不需要改动 pipeline 编排逻辑。
+ASR（语音输入）和弹幕/外部输入属于 Phase 4 范围，当前阶段不处理。
 
 ---
 
@@ -114,58 +115,95 @@
 
 ---
 
-### M3：知识层与 LLM 的串联
+### M3：角色设定导入与知识层串联
 
-**目标**：让 LLM 调用时自动获取知识上下文，使回复能基于商品信息和角色设定。
+**目标**：实现角色设定导入，并将角色设定和知识上下文串联到 LLM，使 AI 回复能基于角色人设、商品资料和当前上下文。
+
+**角色设定导入（SillyTavern 角色卡）**：
+- 支持导入 SillyTavern 角色卡 JSON 文件（`*.png` 内嵌或独立 JSON）
+- 解析角色卡中的 `name`、`description`、`personality`、`first_mes`、`avatar` 等字段
+- 角色卡格式定位为**外部导入格式**，内部角色数据结构按项目需求独立设计
+- 解析后的角色设定写入 `CharacterService`，供后续 LLM 调用时注入 system prompt
+- 本阶段仅支持纯文本角色设定，暂不涉及图像 Avatar 渲染
 
 **当前状态**：
 - `KnowledgeService` 已实现：`addKnowledge()`、`addLiveContext()`、`getAssembledContext()`、自动过期清理
-- `ExternalInputService` 已将 `external:product-message` 路由到 `KnowledgeService`
-- **但** `LLMService.sendMessage()` 和 `PipelineService.run()` 目前没有调用 `knowledge.getAssembledContext()`
+- `CharacterService` 已实现：角色状态管理，但无外部导入机制
+- **但**角色设定未与 LLM 接通，知识上下文也未注入 LLM
 
 **需要做的事**：
-1. 在 `PipelineService` 或 `LLMService` 中，构建 LLM 请求前组装 system prompt：
+1. 实现 SillyTavern 角色卡解析器（`src/services/character/card-parser.ts`）
+2. 在 `CharacterService` 中增加角色卡导入方法 `importCharacterCard(card: CharacterCard): void`
+3. 在 `PipelineService` 或 `LLMService` 中，构建 LLM 请求前组装 system prompt：
    - 角色人设（从 `CharacterService` 获取）
    - 知识上下文（从 `KnowledgeService.getAssembledContext()` 获取）
-2. 设计 system prompt 模板，明确角色设定、知识、临时上下文的注入位置和优先级
-3. 确保 `KnowledgeService` 的已有接口满足需求，不满足则扩展
+4. 设计 system prompt 模板，明确角色设定、知识、临时上下文的注入位置和优先级
+5. 确保 `KnowledgeService` 的已有接口满足需求，不满足则扩展
 
 **不做**：
 - 不实现 RAG / 向量检索 / Embedding——当前阶段知识层为纯文本注入
 - 不实现知识管理 UI——通过配置文件或 DevTools 管理
+- 不实现角色卡在线编辑或完整管理 UI
 
 ---
 
 ### M4：配置管理基础
 
-**目标**：建立统一的应用配置机制，支持 LLM/TTS 端点和凭证的配置。
+**目标**：建立统一的应用配置机制，支持 LLM/TTS 端点、凭证及运行时参数的配置与管理。
 
 **当前状态**：
-- 无 `.env` / `.env.example`
 - 无配置管理模块
-- 无 `import.meta.env.VITE_*` 使用
+- 无持久化配置读写
 - Tauri capabilities 中无 HTTP 权限
 
+**配置策略（桌面应用产品形态）**：
+
+| 配置类型 | 示例 | 存储方式 |
+|---------|------|---------|
+| **运行时可调参数** | LLM endpoint、model、temperature、TTS speed、默认角色等 | 设置界面 + 本地持久化 |
+| **云端密钥/凭证** | API Key、auth token 等 | 本地安全存储（不写入前端可见内存） |
+
+> **注意**：本项目不依赖 `.env` 作为用户配置路径。设置界面是唯一的正式配置入口，开发环境首次启动也通过设置界面或首次启动引导完成配置。`.env` 仅作为开发者本地启动时的可选开发辅助（`vite-env.d.ts` 类型声明可保留用于开发期提示）。
+
+**非敏感配置（设置界面管理）**：
+- LLM provider 选择（OpenAI 兼容 / Azure / 自建）
+- LLM endpoint URL
+- LLM model name
+- temperature、max_tokens 等推理参数
+- TTS endpoint URL
+- TTS speaker / voice ID
+- TTS speed、pitch 参数
+- 默认角色人设路径
+- 日志级别等运行参数
+
+**敏感配置（安全存储）**：
+- API Key、API Secret
+- Auth token / session key
+- 平台认证信息
+- **原则**：云端密钥不应写入前端可见内存或环境变量，应存入更安全的本地存储（系统 keychain / Tauri Rust 安全存储），后续 Phase 4/5 细化
+
 **需要做的事**：
-1. 建立 Vite 环境变量方案：`.env` / `.env.example` + `import.meta.env.VITE_*` 类型声明
-2. 或 建立 JSON/TOML 配置文件方案（通过 Tauri 文件系统读取）
-3. 新建 `src/services/config/` 或 `src/utils/config.ts`，提供 `getConfig()` 接口
-4. 配置项至少包括：
-   - LLM API endpoint + API key + model name
-   - TTS API endpoint + 认证信息
-   - 角色人设文本（或人设文件路径）
-5. 提供 `.env.example` 模板，方便新开发者快速配置
+1. 新建 `src/services/config/` 配置服务，提供 `getConfig()` / `setConfig()` 接口
+2. 实现普通配置本地持久化（通过 Tauri fs API 读写 JSON 配置文件，路径建议 `app_data_dir()/config.json`）
+   - **注意**：`config.json` 仅存储普通配置（endpoint、model、参数等），**敏感配置不写入此文件**
+3. 敏感配置（API Key）写入单独的本地安全存储路径（Tauri Rust 侧存储 / 系统 keychain），不由普通 config 模块管理
+4. 设置界面组件：可在 ControlPanel 中增加"设置"Tab 或独立 Modal
+5. 首次启动引导（可选，可与设置界面合并），引导用户完成首次配置
 
 **MVP 阶段约定**：
-- 配置方式以 `.env` 文件 + Vite 环境变量为最小可行方案
-- 不做配置 UI——通过编辑配置文件完成
-- API Key 不提交到仓库（`.gitignore` 已包含 `.env`）
+- **唯一正式配置入口**：设置界面
+- `.env` / `vite-env.d.ts` 不作为配置方案组成部分
+- 敏感配置（API Key）**必须**存入本地安全存储（Tauri Rust 侧安全存储 / 系统 keychain），不写入环境变量、不作为普通 JSON 明文存储、不暴露在前端运行时
+- Phase 3 MVP 至少做到"不把密钥写入前端可见位置"，完整 secret 管理能力（如 keychain 集成）在 Phase 4/5 完善
+- 敏感配置不提交到仓库
 
 ---
 
-### M5：弹幕 / 外部输入真实接入（边界定义）
+### M5：弹幕 / 外部输入接入（边界定义，本阶段暂不实施）
 
 **目标**：定义外部输入适配器接口，实现至少一个真实平台的弹幕接入。
+
+**与 Phase 3 的关系**：弹幕/外部输入属于 Phase 4"直播能力接线"范畴，本阶段仅做接口定义，不实施真实适配器。
 
 **当前状态**：
 - `ExternalInputService` 已实现：`injectEvent(RawExternalEvent)` → 标准化 → 事件总线
@@ -173,8 +211,8 @@
 - 事件类型已覆盖：`danmaku`、`gift`、`product-message`
 - 目前只有 mock 注入（DevTools 和 ControlPanel 按钮）
 
-**需要做的事**：
-1. 定义适配器接口 `IExternalInputAdapter`：
+**Phase 3 需要做的预备工作**：
+1. 定义适配器接口 `IExternalInputAdapter`（不影响现有框架）：
 
 ```typescript
 interface IExternalInputAdapter {
@@ -186,15 +224,14 @@ interface IExternalInputAdapter {
 }
 ```
 
-2. 实现至少一个真实适配器（如 B 站直播弹幕），消费平台 WebSocket / API 并转换为 `RawExternalEvent`
+2. **Phase 4 再实施**：实现至少一个真实平台适配器（如 B 站直播弹幕），消费平台 WebSocket / API 并转换为 `RawExternalEvent`
 3. 适配器注册到 `ExternalInputService`，与现有 `injectEvent` 路径复用
 4. 在 ControlPanel 或 StatusBar 中显示外部输入源连接状态
 
 **本阶段边界**：
-- 适配器数量：1 个真实平台 + mock 保留
+- Phase 3 仅做接口定义，真实适配器在 Phase 4 实施
 - 不做弹幕筛选/排队/去重
-- 不做自动弹幕回复触发（弹幕进入事件总线后，由操作员或后续阶段决定如何处理）
-- 弹幕触发 LLM 回复的自动链路如果时间允许可做，但不是 M5 的必须交付
+- 不做自动弹幕回复触发
 
 ---
 
@@ -208,12 +245,14 @@ interface IExternalInputAdapter {
 - CSP 为 `null`（未限制）
 
 **需要做的事**：
-1. 评估 HTTP 请求路径：
-   - **方案 A**：前端直接 `fetch`（CSP 为 null 时可行，但 API Key 暴露在前端内存）
-   - **方案 B**：通过 Tauri Rust 侧代理（更安全，但实现量更大）
-   - **MVP 建议**：方案 A 先行，Phase 5 再迁移到方案 B
-2. 如选方案 A：确认 Tauri WebView 的 `fetch` 能力和 CORS 限制
-3. 如选方案 B：在 `src-tauri/` 中实现 `invoke` 命令，前端通过 `@tauri-apps/api/core` 调用
+1. 评估 HTTP 请求路径（按服务类型选择）：
+   - **本地/局域网服务（如自建 GPT-SoVITS）**：可接受前端直接 `fetch`，无密钥暴露风险
+   - **云端服务（如 OpenAI API、Azure TTS）**：不应默认前端直连，API Key 会暴露在前端运行时内存中
+     - 唯一可行路径：通过 Tauri Rust 侧代理（`src-tauri/` 实现 `invoke` 命令）转发请求，密钥仅存在于 Rust 侧
+     - 不接受"构建期注入密钥"等伪隔离方案（密钥仍会存在于前端运行时内存）
+   - **具体选型在 M6 实施前确认**，不预设默认方案
+2. 确认 Tauri WebView 的 `fetch` 能力和 CORS 限制
+3. 如选 Tauri Rust 代理：在 `src-tauri/` 中实现 `invoke` 命令，前端通过 `@tauri-apps/api/core` 调用
 4. 添加必要的 Tauri capabilities 权限
 
 ---
@@ -222,13 +261,13 @@ interface IExternalInputAdapter {
 
 | 不做的事 | 原因 |
 |---------|------|
-| ASR / 语音输入 | 真实语音输入需要麦克风权限、VAD 方案选型、音频流处理，复杂度高，单独规划 |
-| 锁麦策略 | 依赖 ASR，ASR 不做则锁麦无意义 |
-| 完整 RAG / 向量检索 | 当前阶段知识层走纯文本注入，够用即可 |
-| 知识管理 UI | 通过配置文件管理，后续做 UI |
-| 多平台弹幕适配 | 先做 1 个平台验证架构，其余平台后续扩展 |
-| 弹幕自动回复队列 / 筛选 | 后续功能增强 |
-| 配置 UI | 本阶段通过 `.env` / 配置文件管理 |
+| ASR / 语音输入 | 属于 Phase 4 范围（直播能力接线与语音输入闭环） |
+| VAD / 锁麦策略 | 依赖 ASR，属于 Phase 4 |
+| 弹幕/外部输入真实接入 | 属于 Phase 4 范围（Phase 3 仅做接口定义） |
+| 多平台弹幕适配 | Phase 4 范围 |
+| 完整 RAG / 向量检索 | 当前阶段知识层走纯文本注入，完整 RAG 属于 Phase 5 |
+| 知识管理 UI | 通过配置文件管理，Phase 5 再做 UI |
+| 配置管理 UI（完整版） | 本阶段只做最小设置界面，完整配置 UI 属于 Phase 5 |
 | Windows 安装包 | Phase 5 范围 |
 | Stage / OBS 方案变更 | 已稳定，不动 |
 | Live2DRenderer 重构 | 渲染核心无需改动 |
@@ -245,7 +284,7 @@ interface IExternalInputAdapter {
 - 流式 SSE/chunked 响应解析
 - tool calling 支持（至少 `setExpression`）
 - system prompt 组装（角色人设 + 知识上下文）
-- 环境变量配置
+- 配置读取（从 ConfigService 获取 endpoint、model、key）
 
 **范围外**：
 - 多模型切换 UI（在配置文件中切换即可）
@@ -258,7 +297,7 @@ interface IExternalInputAdapter {
 
 **范围内**：
 - 实现 `ITTSService` 的 HTTP API 调用版本
-- 支持配置 endpoint、speaker、速度
+- 支持配置读取（endpoint、speaker、速度等从 ConfigService 获取）
 - 返回浏览器可播放的音频格式
 
 **范围外**：
@@ -270,27 +309,44 @@ interface IExternalInputAdapter {
 
 ### 4.3 弹幕 / 外部输入接入边界
 
-**范围内**：
-- 适配器接口定义
+> **注**：弹幕/外部输入属于 Phase 4 范围。Phase 3 仅做接口定义，真实适配器在 Phase 4 实施。
+
+**Phase 3 范围内（仅接口定义）**：
+- 适配器接口 `IExternalInputAdapter` 定义
+
+**Phase 4 实施范围**：
 - 1 个真实平台适配器实现
 - 弹幕事件路由到事件总线
 - 连接状态展示
 
-**范围外**：
+**Phase 4 范围外**：
 - 多平台同时接入
 - 弹幕排队/去重/过滤
 - 自动弹幕回复链路（弹幕 → LLM → TTS 自动触发）
 - 弹幕展示 UI（覆盖在 Stage 上）
 - 礼物特效
 
-### 4.4 知识 / 商品资料接入边界
+### 4.4 角色设定导入边界
 
 **范围内**：
+- SillyTavern 角色卡解析（JSON 格式，支持 `*.png` 内嵌或独立 JSON）
+- 解析 `name`、`description`、`personality`、`first_mes` 等字段
+- 角色卡定位为**外部导入格式**，内部数据结构按项目需求独立设计
+- 解析后角色设定写入 `CharacterService`，供 LLM system prompt 使用
+
+**范围外**：
+- 角色卡在线编辑 UI
+- 角色 Avatar 图像渲染（Live2D 模型切换除外）
+- 多角色管理
+
+### 4.5 知识 / 商品资料接入边界
+
+**Phase 3 范围内（纯文本注入）**：
 - `KnowledgeService.getAssembledContext()` 注入 LLM system prompt
 - 通过 `external:product-message` 事件注入临时商品信息
 - 通过配置文件加载初始长期知识
 
-**范围外**：
+**Phase 5 范围**：
 - 向量数据库 / RAG 检索
 - 知识管理 UI
 - 自动商品信息抓取
@@ -306,7 +362,7 @@ interface IExternalInputAdapter {
 Step 1: M4 — 配置管理基础
          最底层基础设施，LLM/TTS 接入依赖它
          风险：低（纯新增，不改现有代码）
-         交付：.env.example + config 模块 + 类型声明
+         交付：ConfigService + 本地 JSON 持久化 + 最小设置界面（可选首次启动引导）
 
 Step 2: M6 — HTTP 网络能力开通
          确认 fetch 路径可用，排除网络层阻塞
@@ -318,8 +374,13 @@ Step 3: M1 — 真实 LLM 接入
          风险：中（涉及外部 API 调用、流式解析）
          交付：真实 LLM 回复替换 mock 预设文本
 
-Step 4: M3 — 知识层与 LLM 串联
-         依赖 M1 完成后才能验证效果
+Step 4a: M3a — 角色设定导入（SillyTavern 角色卡）
+         依赖 M1（M4 配置就绪后即可开始）
+         风险：低（纯解析逻辑，无外部依赖）
+         交付：角色卡解析器 + CharacterService 导入方法
+
+Step 4b: M3b — 知识层与 LLM 串联
+         依赖 M3a（角色设定就绪后）
          风险：低-中（主要是 prompt 工程）
          交付：LLM 回复能基于角色设定和知识上下文
 
@@ -328,21 +389,18 @@ Step 5: M2 — 真实 TTS 接入
          风险：中（依赖外部 TTS 服务可用性）
          交付：真实语音替换正弦波音频
 
-Step 6: M5 — 弹幕 / 外部输入接入
-         最后做，风险最高（涉及第三方平台协议）
-         风险：中-高（平台 API 变更、认证、WebSocket 稳定性）
-         交付：真实弹幕进入事件总线
-```
+Step 6: M5 — 弹幕/外部输入接口定义
+         仅做接口定义，真实适配器在 Phase 4 实施
+         风险：低（接口设计不影响现有框架）
+         交付：`IExternalInputAdapter` 接口定义完成
 
 ### 分批策略
 
-**第一批（MVP 最小闭环）**：M4 → M6 → M1 → M3 → M2
+**第一批（MVP 最小闭环）**：M4 → M6 → M1 → M3a → M3b → M2
 
 完成后系统能做到：操作员输入文本 → 真实 LLM 基于角色设定和知识回复 → 真实 TTS 语音播放 → Live2D 口型同步。这已经是一个**可用于演示和内部测试的最小闭环**。
 
-**第二批（直播能力扩展）**：M5
-
-弹幕接入需要真实直播间环境验证，可以在第一批稳定后再推进。
+**第二批（Phase 4 预备）**：M5 接口定义（为 Phase 4 直播能力接线做好接口准备）
 
 ---
 
@@ -378,29 +436,37 @@ Step 6: M5 — 弹幕 / 外部输入接入
 - [ ] TTS 服务不可用时，有明确错误提示
 - [ ] mock 模式仍可通过配置切回
 
-### 6.5 M3 — 知识串联
+### 6.5 M3 — 角色设定导入与知识串联
 
+**M3a — 角色设定导入**：
+- [ ] 能导入 SillyTavern 角色卡 JSON 文件
+- [ ] 正确解析 `name`、`description`、`personality`、`first_mes` 等字段
+- [ ] 角色设定正确写入 `CharacterService`
+
+**M3b — 知识串联**：
 - [ ] 加载角色人设后，LLM 回复风格符合人设
 - [ ] 通过 `injectEvent` 注入商品信息后，LLM 回复能引用该商品信息
 - [ ] 临时上下文过期后，LLM 不再引用过期信息
 
 ### 6.6 M4 — 配置管理
 
-- [ ] `.env.example` 包含所有必要配置项及说明
-- [ ] 应用能从环境变量读取配置
-- [ ] 缺少必要配置时启动不 crash，给出清晰提示
+- [ ] ConfigService 提供 `getConfig()` / `setConfig()` 接口
+- [ ] 非敏感配置（endpoint、model 等）可在设置界面中修改并持久化
+- [ ] 敏感配置（API Key）**不**写入前端环境变量、不作为普通 JSON 明文存储、不暴露在前端运行时
+- [ ] 敏感配置至少采用最小可接受的本地安全存储方案（Tauri Rust 侧存储 / 系统 keychain）
+- [ ] 应用在缺少必要配置时启动不 crash，给出清晰提示
 
-### 6.7 M5 — 外部输入（如实施）
+### 6.7 M5 — 外部输入接口定义（本阶段仅做定义）
 
-- [ ] 至少一个真实平台适配器能连接并接收弹幕
-- [ ] 弹幕事件出现在事件日志中
-- [ ] 适配器断开时能在 UI 中体现状态
-- [ ] 断开不影响主链路运行
+- [ ] `IExternalInputAdapter` 接口定义完整（connect/disconnect/onEvent/getStatus）
+- [ ] 接口与现有 `ExternalInputService` 和 `injectEvent` 路径兼容
+- [ ] 真实适配器实现不在本阶段范围内（Phase 4 实施）
 
 ### 6.8 M6 — 网络能力
 
-- [ ] 前端能成功 `fetch` 外部 HTTPS API
-- [ ] 网络错误有合理的超时和重试策略（至少有超时）
+- [ ] 本地/局域网服务（如自建 TTS）前端直连验证可行
+- [ ] 云端服务（如需密钥的 LLM/TTS API）已验证不暴露密钥的调用路径（如 Tauri Rust 代理）
+- [ ] 网络错误有合理的超时处理（至少有超时）
 
 ---
 
@@ -413,7 +479,7 @@ Step 6: M5 — 弹幕 / 外部输入接入
 | LLM API 调用失败（网络、鉴权、限速） | 主链路中断 | 高 | 错误捕获 + 降级到 mock；配置验证；超时控制 |
 | TTS 服务不可用或返回格式不兼容 | 无语音输出 | 中 | 格式检测 + 降级到 mock TTS；支持多种音频格式 |
 | Tauri WebView fetch 被 CORS 阻断 | 无法调用外部 API | 中 | 提前验证；必要时走 Tauri Rust 代理 |
-| API Key 泄露 | 安全问题 | 中 | `.gitignore` 已包含 `.env`；文档中强调不提交 |
+| API Key 泄露 | 安全问题 | 中 | 敏感配置不进入前端环境变量；不作为普通 JSON 明文存储；采用最小安全存储方案（Tauri Rust 侧 / keychain）；配置与 secret 不提交到仓库 |
 | 弹幕平台协议变更 | 适配器失效 | 中 | 适配器层隔离，不影响核心链路；保留 mock 注入 |
 | 外部服务延迟过高导致用户体验差 | 回复缓慢 | 中 | 超时控制；UI 加载状态提示；考虑流式 TTS（Phase 5） |
 | LLM 返回不当内容 | 直播安全 | 中 | Runtime 急停机制已就绪；可在 prompt 中加安全约束 |
@@ -461,20 +527,27 @@ Step 6: M5 — 弹幕 / 外部输入接入
 | TTS 方案 | GPT-SoVITS（本地/局域网）、云端 TTS API | M2 实施前 |
 | HTTP 路径 | 前端 fetch vs Tauri Rust 代理 | M6 实施时验证 |
 | 弹幕平台 | B 站直播、抖音直播、其他 | M5 实施前 |
-| 配置格式 | Vite 环境变量 vs JSON 配置文件 vs 混合 | M4 实施时确认 |
+| 配置存储 | 本地 JSON（设置界面读写） | M4 实施时确认 |
 
 ---
 
 ## 9. 与后续阶段的关系
 
+### 各阶段边界定义
+
+| Phase | 名称 | 核心目标 |
+|-------|------|---------|
+| **Phase 3**（本 blueprint） | 真实服务接入与角色/知识基础 | 真实 LLM/TTS 替换 mock、设置界面+本地持久化配置、SillyTavern 角色卡导入、纯文本知识注入 |
+| **Phase 4** | 直播能力接线与语音输入闭环 | 真实直播/外部输入源接入（弹幕等）、ASR 语音输入、VAD/锁麦策略、主播与外部输入的交互闭环 |
+| **Phase 5** | 知识系统深化与产品化收口 | RAG/向量检索、知识管理 UI、商品资料管理体验、配置管理体验完善、打包安装引导、首次启动引导、性能优化 |
+
 ### Phase 3 完成后的系统能力
 
 完成本阶段后，Paimon Live 将具备：
-- 操作员输入文本 → 真实 AI 回复 → 真实语音播出 → Live2D 口型同步
-- AI 回复基于角色人设和知识上下文
-- 至少一个真实弹幕源可接入（如实施 M5）
-- OBS 透明捕获仍然可用
-- 急停/恢复仍然有效
+- 操作员输入文本 → 真实 AI 回复（基于角色人设） → 真实语音播出 → Live2D 口型同步
+- AI 回复能基于角色设定和纯文本知识上下文
+- 敏感配置安全存储，普通配置通过设置界面管理
+- OBS 透明捕获仍然可用，急停/恢复仍然有效
 
 ### 尚未覆盖（后续阶段）
 
@@ -482,11 +555,12 @@ Step 6: M5 — 弹幕 / 外部输入接入
 |------|---------|
 | ASR / 语音输入 | Phase 4 |
 | VAD + 锁麦策略 | Phase 4 |
+| 弹幕/外部输入真实接入 | Phase 4 |
 | 多平台弹幕适配 | Phase 4 |
 | 弹幕自动回复链路 | Phase 4 |
-| 知识管理 UI | Phase 4/5 |
-| 配置管理 UI | Phase 5 |
-| RAG / 向量检索 | Phase 5+ |
+| 知识管理 UI | Phase 5 |
+| 配置管理 UI（完整版） | Phase 5 |
+| RAG / 向量检索 | Phase 5 |
 | 流式 TTS（边合成边播放） | Phase 5 |
 | Windows 安装包 | Phase 5 |
 | 首次启动引导 | Phase 5 |
@@ -505,10 +579,11 @@ Step 6: M5 — 弹幕 / 外部输入接入
 
 | 替换点 | 当前实现 | 目标实现 | 文件位置 |
 |--------|---------|---------|---------|
-| LLM Provider | `MockLLMService` | `OpenAILLMService`（暂定） | `services/index.ts` 第 40 行 |
-| TTS Provider | `MockTTSService` | `RealTTSService`（暂定） | `services/index.ts` 第 42 行 |
+| LLM Provider | `MockLLMService` | `OpenAILLMService`（暂定） | `services/index.ts` |
+| TTS Provider | `MockTTSService` | `RealTTSService`（暂定） | `services/index.ts` |
+| 角色设定导入 | 无 | `card-parser.ts` 解析 SillyTavern 角色卡 | `services/character/` |
 | 知识注入 | 未串联 | `PipelineService` 或 `LLMService` 中组装 prompt | `services/pipeline/` 或 `services/llm/` |
-| 外部输入 | `injectEvent` mock 调用 | 真实适配器 → `injectEvent` | `services/external-input/` |
+| 外部输入 | `injectEvent` mock 调用 | Phase 4 实施，Phase 3 仅定义接口 | `services/external-input/` |
 
 ## 附录 B：预估新增文件
 
@@ -516,10 +591,12 @@ Step 6: M5 — 弹幕 / 外部输入接入
 |------|------|
 | `src/services/llm/openai-llm-service.ts` | 真实 LLM 实现 |
 | `src/services/tts/real-tts-service.ts` | 真实 TTS 实现 |
-| `src/services/config/index.ts` 或 `src/utils/config.ts` | 配置管理 |
-| `src/services/external-input/adapters/` | 弹幕适配器目录 |
-| `.env.example` | 环境变量模板 |
-| `src/vite-env.d.ts` 更新 | Vite 环境变量类型声明 |
+| `src/services/character/card-parser.ts` | SillyTavern 角色卡解析器 |
+| `src/services/config/index.ts` | 配置管理服务（读写本地 JSON + 设置界面） |
+| `src/features/settings/` | 设置界面组件（可选，先做在 ControlPanel 中） |
+
+> **注**：`.env` / `vite-env.d.ts` 不作为本阶段配置方案组成部分，如未来确有非敏感开发期环境变量需求再补充。
+> **注**：弹幕适配器目录 `src/services/external-input/adapters/` 属于 Phase 4 范围，Phase 3 不预估。
 
 ## 附录 C：现有不改动的文件
 
@@ -535,5 +612,6 @@ Step 6: M5 — 弹幕 / 外部输入接入
 
 唯一预期修改的现有文件：
 - `src/services/index.ts`：根据配置选择实现
-- `src/vite-env.d.ts`：环境变量类型
 - `src/services/llm/index.ts` / `src/services/tts/index.ts`：新增导出
+
+> **注**：如未来确有非敏感开发期环境变量需求，再补充 `vite-env.d.ts` 类型声明。

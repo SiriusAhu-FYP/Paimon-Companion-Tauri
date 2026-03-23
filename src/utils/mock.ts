@@ -101,6 +101,15 @@ export function exposeMockTools(bus: EventBus, character: CharacterService, exte
 				type: "danmaku",
 				data: { user, text },
 			}),
+		// Phase 3 M6: 网络能力测试
+		testProxy: async (url: string) => {
+			const { proxyRequest } = await import("@/services/config");
+			return proxyRequest({ url, method: "GET", timeoutMs: 10000 });
+		},
+		testSecretProxy: async (url: string, secretKey: string) => {
+			const { proxyRequest } = await import("@/services/config");
+			return proxyRequest({ url, method: "GET", secretKey, timeoutMs: 10000 });
+		},
 	};
 
 	(window as unknown as Record<string, unknown>).__paimon = tools;
