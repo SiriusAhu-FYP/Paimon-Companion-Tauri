@@ -30,9 +30,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	const [llmApiKey, setLlmApiKey] = useState("");
 	const [ttsApiKey, setTtsApiKey] = useState("");
 	const [llmKeyExists, setLlmKeyExists] = useState(false);
-	const [ttsKeyExists, setTtsKeyExists] = useState(false);
 	const [showLlmKey, setShowLlmKey] = useState(false);
-	const [showTtsKey, setShowTtsKey] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 	const [llmTestResult, setLlmTestResult] = useState<{ ok: boolean; text: string } | null>(null);
@@ -40,12 +38,17 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	const [testing, setTesting] = useState<"llm" | "tts" | null>(null);
 
 	useEffect(() => {
+		let cancelled = false;
 		(async () => {
 			const loaded = await loadConfig();
+			if (cancelled) return;
 			setConfig(loaded);
-			setLlmKeyExists(await hasSecret(SECRET_KEYS.LLM_API_KEY));
-			setTtsKeyExists(await hasSecret(SECRET_KEYS.TTS_API_KEY));
+			const llmHas = await hasSecret(SECRET_KEYS.LLM_API_KEY);
+			if (cancelled) return;
+			setLlmKeyExists(llmHas);
+			log.info("settings loaded", { provider: loaded.llm.provider, llmKeyExists: llmHas });
 		})();
+		return () => { cancelled = true; };
 	}, []);
 
 	const handleSave = useCallback(async () => {
@@ -62,7 +65,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 
 			if (ttsApiKey.trim()) {
 				await setSecret(SECRET_KEYS.TTS_API_KEY, ttsApiKey.trim());
-				setTtsKeyExists(true);
 				setTtsApiKey("");
 			}
 
@@ -83,7 +85,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		await deleteSecret(SECRET_KEYS.LLM_API_KEY);
 		await deleteSecret(SECRET_KEYS.TTS_API_KEY);
 		setLlmKeyExists(false);
-		setTtsKeyExists(false);
 		setLlmApiKey("");
 		setTtsApiKey("");
 		setMessage({ type: "success", text: "已恢复默认设置" });
@@ -155,7 +156,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	}, [config.tts.baseUrl]);
 
 	const needsLlmKey = config.llm.provider !== "mock" && !llmKeyExists && !llmApiKey.trim();
-	const needsTtsKey = config.tts.provider !== "mock" && !ttsKeyExists && !ttsApiKey.trim();
 
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1, height: "100%", overflowY: "auto" }}>
@@ -285,12 +285,12 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 					fullWidth
 				>
 					<MenuItem value="mock">Mock（模拟）</MenuItem>
-					<MenuItem value="http-api">HTTP TTS API</MenuItem>
+					<MenuItem value="gpt-sovits">GPT-SoVITS</MenuItem>
 				</Select>
 
-				{config.tts.provider !== "mock" && (
+				{config.tts.provider === "gpt-sovits" && (
 					<>
-						<FieldLabel>Base URL</FieldLabel>
+						<FieldLabel>GPT-SoVITS 服务地址</FieldLabel>
 						<TextField
 							size="small" fullWidth
 							placeholder="http://localhost:9880"
@@ -298,47 +298,64 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 							onChange={(e) => updateTTS({ baseUrl: e.target.value })}
 						/>
 
-						<FieldLabel>Speaker ID</FieldLabel>
+						<FieldLabel>GPT 权重路径（服务端路径）</FieldLabel>
 						<TextField
 							size="small" fullWidth
-							placeholder="默认说话人"
-							value={config.tts.speakerId}
-							onChange={(e) => updateTTS({ speakerId: e.target.value })}
+							placeholder="/path/to/model.ckpt"
+							value={config.tts.gptWeightsPath}
+							onChange={(e) => updateTTS({ gptWeightsPath: e.target.value })}
 						/>
 
-						<FieldLabel>API Key {ttsKeyExists && <KeyBadge />}</FieldLabel>
+						<FieldLabel>SoVITS 权重路径（服务端路径）</FieldLabel>
 						<TextField
 							size="small" fullWidth
-							type={showTtsKey ? "text" : "password"}
-							placeholder={ttsKeyExists ? "已保存（输入新值覆盖）" : "请输入（无需则留空）"}
-							value={ttsApiKey}
-							onChange={(e) => setTtsApiKey(e.target.value)}
-							slotProps={{
-								input: {
-									endAdornment: (
-										<InputAdornment position="end">
-											<IconButton size="small" onClick={() => setShowTtsKey(!showTtsKey)}>
-												{showTtsKey ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
-											</IconButton>
-										</InputAdornment>
-									),
-								},
-							}}
+							placeholder="/path/to/model.pth"
+							value={config.tts.sovitsWeightsPath}
+							onChange={(e) => updateTTS({ sovitsWeightsPath: e.target.value })}
 						/>
 
-						{needsTtsKey && (
-							<Alert severity="info" sx={{ py: 0, fontSize: 12 }}>
-								本地 TTS 服务通常不需要 API Key
-							</Alert>
-						)}
-
-						<FieldLabel>语速</FieldLabel>
+						<FieldLabel>参考音频路径（服务端路径）</FieldLabel>
 						<TextField
-							size="small" fullWidth type="number"
-							slotProps={{ htmlInput: { min: 0.5, max: 2.0, step: 0.1 } }}
-							value={config.tts.speed}
-							onChange={(e) => updateTTS({ speed: parseFloat(e.target.value) || 1.0 })}
+							size="small" fullWidth
+							placeholder="/path/to/ref_audio.wav"
+							value={config.tts.refAudioPath}
+							onChange={(e) => updateTTS({ refAudioPath: e.target.value })}
 						/>
+
+						<FieldLabel>参考音频文本</FieldLabel>
+						<TextField
+							size="small" fullWidth
+							placeholder="参考音频对应的文字内容"
+							value={config.tts.promptText}
+							onChange={(e) => updateTTS({ promptText: e.target.value })}
+						/>
+
+						<Stack direction="row" spacing={1}>
+							<Box sx={{ flex: 1 }}>
+								<FieldLabel>参考音频语言</FieldLabel>
+								<Select
+									size="small" fullWidth
+									value={config.tts.promptLang}
+									onChange={(e: SelectChangeEvent) => updateTTS({ promptLang: e.target.value })}
+								>
+									<MenuItem value="zh">中文</MenuItem>
+									<MenuItem value="en">English</MenuItem>
+									<MenuItem value="ja">日本語</MenuItem>
+								</Select>
+							</Box>
+							<Box sx={{ flex: 1 }}>
+								<FieldLabel>合成语言</FieldLabel>
+								<Select
+									size="small" fullWidth
+									value={config.tts.textLang}
+									onChange={(e: SelectChangeEvent) => updateTTS({ textLang: e.target.value })}
+								>
+									<MenuItem value="zh">中文</MenuItem>
+									<MenuItem value="en">English</MenuItem>
+									<MenuItem value="ja">日本語</MenuItem>
+								</Select>
+							</Box>
+						</Stack>
 
 						<Button
 							size="small" variant="outlined"

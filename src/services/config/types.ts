@@ -17,13 +17,20 @@ export interface LLMProviderConfig {
 
 // ── TTS Provider ──
 
-export type TTSProviderType = "http-api" | "mock";
+export type TTSProviderType = "gpt-sovits" | "mock";
 
 export interface TTSProviderConfig {
 	provider: TTSProviderType;
 	baseUrl: string;
 	speakerId: string;
 	speed: number;
+	// GPT-SoVITS 专属字段（服务端路径）
+	gptWeightsPath: string;
+	sovitsWeightsPath: string;
+	refAudioPath: string;
+	promptText: string;
+	promptLang: string;
+	textLang: string;
 }
 
 // ── Character ──
@@ -61,9 +68,15 @@ export const DEFAULT_CONFIG: AppConfig = {
 	},
 	tts: {
 		provider: "mock",
-		baseUrl: "",
+		baseUrl: "http://localhost:9880",
 		speakerId: "",
 		speed: 1.0,
+		gptWeightsPath: "",
+		sovitsWeightsPath: "",
+		refAudioPath: "",
+		promptText: "",
+		promptLang: "zh",
+		textLang: "zh",
 	},
 	character: {
 		persona: "你是旅行者的好伙伴派蒙，说话活泼可爱，喜欢吃东西。",
