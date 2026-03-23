@@ -91,7 +91,8 @@ export class Live2DRenderer {
 			autoDensity: true,
 		});
 
-		const model = await Live2DModel.from(options.modelPath);
+		// autoInteract: false 禁用库内部的自动鼠标跟随，由我们自己控制眼神
+		const model = await Live2DModel.from(options.modelPath, { autoInteract: false });
 		if (this.destroyed) {
 			model.destroy();
 			return;
@@ -117,6 +118,50 @@ export class Live2DRenderer {
 		this.setupLipSyncHandler();
 
 		log.info(`model loaded (DPR=${this.dpr})`);
+	}
+
+	/**
+	 * 在已有 app 的情况下切换模型，复用 PIXI.Application 避免 WebGL context 泄漏。
+	 */
+	async switchModel(modelPath: string): Promise<void> {
+		if (!this.app || this.destroyed) return;
+
+		// 清理旧模型
+		this.stopRandomEye();
+		if (this.lipSyncHandler && this.model) {
+			try { this.model.internalModel?.off("beforeModelUpdate", this.lipSyncHandler); } catch { /* */ }
+		}
+		this.lipSyncHandler = null;
+		if (this.model) {
+			try {
+				this.app.stage.removeChild(this.model);
+				this.model.destroy();
+			} catch { /* */ }
+			this.model = null;
+		}
+
+		const { Live2DModel } = await import("pixi-live2d-display/cubism4");
+		const model = await Live2DModel.from(modelPath, { autoInteract: false });
+		if (this.destroyed || !this.app) {
+			model.destroy();
+			return;
+		}
+
+		this.app.stage.addChild(model as unknown as import("pixi.js").DisplayObject);
+		this.model = model;
+		this.userZoom = 1;
+
+		if (this.autoFit) {
+			this.fitModel(this.canvasW, this.canvasH);
+		} else {
+			model.scale.set(this.baseScale);
+			model.anchor.set(0.5, 0.5);
+			model.x = this.canvasW / 2;
+			model.y = this.canvasH * 0.6;
+		}
+
+		this.setupLipSyncHandler();
+		log.info(`model switched (DPR=${this.dpr})`);
 	}
 
 	/**
@@ -206,6 +251,16 @@ export class Live2DRenderer {
 		this.model.scale.set(this.baseScale * this.userZoom);
 	}
 
+	setZoom(zoom: number) {
+		if (!this.model) return;
+		this.userZoom = Math.max(0.2, Math.min(5, zoom));
+		this.model.scale.set(this.baseScale * this.userZoom);
+	}
+
+	resetZoom() {
+		this.setZoom(1);
+	}
+
 	getZoom(): number {
 		return this.userZoom;
 	}
@@ -223,13 +278,12 @@ export class Live2DRenderer {
 	}
 
 	/**
-	 * 外部传入鼠标相对于 canvas 的坐标，仅在 follow-mouse 模式下生效
+	 * 外部传入鼠标屏幕像素坐标，仅在 follow-mouse 模式下生效。
+	 * pixi-live2d-display 的 model.focus() 接受屏幕像素坐标，内部自行转换。
 	 */
-	focusMouse(canvasX: number, canvasY: number) {
+	focusMouse(screenX: number, screenY: number) {
 		if (this.eyeMode !== "follow-mouse" || !this.model) return;
-		const x = (canvasX / this.canvasW) * 2 - 1;
-		const y = (canvasY / this.canvasH) * 2 - 1;
-		this.model.focus(x, y);
+		this.model.focus(screenX, screenY);
 	}
 
 	resize(width: number, height: number) {
@@ -279,10 +333,10 @@ export class Live2DRenderer {
 
 		switch (this.eyeMode) {
 			case "fixed":
-				this.model.focus(0, 0, true);
+				// 看向 canvas 中心——即"面向摄像头"的默认位置
+				this.model.focus(this.canvasW / 2, this.canvasH / 2, true);
 				break;
 			case "follow-mouse":
-				// 由外部调用 focusMouse() 驱动
 				break;
 			case "random-path":
 				this.startRandomEye();
@@ -295,13 +349,13 @@ export class Live2DRenderer {
 		const tick = () => {
 			if (this.destroyed || !this.model || this.eyeMode !== "random-path") return;
 			const t = (performance.now() - this.randomEyeStartTime) / 1000;
-			// 多频率正弦叠加，产生自然缓慢的注视路径
-			const x = Math.sin(t * 0.3) * 0.4 + Math.sin(t * 0.7 + 1.2) * 0.25 + Math.sin(t * 1.3 + 3.7) * 0.1;
-			const y = Math.sin(t * 0.2 + 0.5) * 0.3 + Math.sin(t * 0.5 + 2.1) * 0.2 + Math.sin(t * 1.1 + 4.3) * 0.08;
-			this.model.focus(
-				Math.max(-1, Math.min(1, x)),
-				Math.max(-1, Math.min(1, y)),
-			);
+			// 多频率正弦叠加，[-1, 1] 范围内产生自然注视偏移
+			const nx = Math.sin(t * 0.3) * 0.4 + Math.sin(t * 0.7 + 1.2) * 0.25 + Math.sin(t * 1.3 + 3.7) * 0.1;
+			const ny = Math.sin(t * 0.2 + 0.5) * 0.3 + Math.sin(t * 0.5 + 2.1) * 0.2 + Math.sin(t * 1.1 + 4.3) * 0.08;
+			// 转换为像素坐标：中心 + 偏移 * 半宽/半高
+			const cx = this.canvasW / 2;
+			const cy = this.canvasH / 2;
+			this.model.focus(cx + nx * cx, cy + ny * cy);
 			this.randomEyeRafId = requestAnimationFrame(tick);
 		};
 		this.randomEyeRafId = requestAnimationFrame(tick);

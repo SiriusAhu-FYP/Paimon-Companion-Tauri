@@ -36,7 +36,8 @@ export type ControlCommand =
 	| { type: "report-expressions"; expressions: string[] }
 	| { type: "set-scale-lock"; locked: boolean }
 	| { type: "set-eye-mode"; mode: EyeMode }
-	| { type: "set-size"; width: number; height: number };
+	| { type: "set-size"; width: number; height: number }
+	| { type: "reset-zoom" };
 
 // ── Tauri 事件 vs BroadcastChannel 自适应 ──
 

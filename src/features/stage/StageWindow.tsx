@@ -9,6 +9,18 @@ import type { EyeMode } from "@/features/live2d";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("stage-window");
+const ZOOM_STORAGE_KEY = "paimon-live:stage-zoom";
+
+function saveZoom(zoom: number) {
+	try { localStorage.setItem(ZOOM_STORAGE_KEY, String(zoom)); } catch { /* */ }
+}
+function loadZoom(): number {
+	try {
+		const v = localStorage.getItem(ZOOM_STORAGE_KEY);
+		if (v) { const n = parseFloat(v); if (n > 0) return n; }
+	} catch { /* */ }
+	return 1;
+}
 
 export function StageWindow() {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -85,14 +97,8 @@ export function StageWindow() {
 		applyCursorEvents();
 	}, [displayMode, stageMode]);
 
-	// 稳定的 loadModel — 无外部 state 依赖，通过 ref 读取当前值
-	const loadModel = useCallback(async (modelPath: string) => {
-		const oldRenderer = rendererRef.current;
-		if (oldRenderer) {
-			oldRenderer.destroy();
-			rendererRef.current = null;
-		}
-
+	// 初始加载（创建 renderer + app）
+	const initRenderer = useCallback(async (modelPath: string) => {
 		if (!canvasRef.current) return;
 
 		setLoadStatus("loading");
@@ -100,19 +106,17 @@ export function StageWindow() {
 		rendererRef.current = renderer;
 		currentModelPath.current = modelPath;
 
-		const w = window.innerWidth;
-		const h = window.innerHeight;
-
 		try {
 			await renderer.init({
 				canvas: canvasRef.current,
-				width: w,
-				height: h,
+				width: window.innerWidth,
+				height: window.innerHeight,
 				modelPath,
 				autoFit: true,
 			});
-			// 通过 ref 读取当前眼神模式，避免 loadModel 对 eyeMode state 的依赖
 			renderer.setEyeMode(eyeModeRef.current);
+			const savedZoom = loadZoom();
+			if (savedZoom !== 1) renderer.setZoom(savedZoom);
 			setLoadStatus("ok");
 			log.info(`model loaded: ${modelPath}`);
 
@@ -122,9 +126,35 @@ export function StageWindow() {
 			setLoadStatus("error");
 			log.error("model load failed", err);
 		}
-	}, []); // 空依赖——稳定引用
+	}, []);
 
-	// 稳定的 handleControlCommand — 通过 ref 读取 renderer
+	// 切换模型（复用已有 renderer/app，只换模型）
+	const switchModel = useCallback(async (modelPath: string) => {
+		const renderer = rendererRef.current;
+		if (!renderer) {
+			await initRenderer(modelPath);
+			return;
+		}
+
+		currentModelPath.current = modelPath;
+		setLoadStatus("loading");
+
+		try {
+			await renderer.switchModel(modelPath);
+			renderer.setEyeMode(eyeModeRef.current);
+			const savedZoom = loadZoom();
+			if (savedZoom !== 1) renderer.setZoom(savedZoom);
+			setLoadStatus("ok");
+			log.info(`model switched: ${modelPath}`);
+
+			const expressions = renderer.getExpressionNames();
+			broadcastControl({ type: "report-expressions", expressions });
+		} catch (err) {
+			setLoadStatus("error");
+			log.error("model switch failed", err);
+		}
+	}, [initRenderer]);
+
 	const handleControlCommand = useCallback(async (cmd: ControlCommand) => {
 		try {
 			const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -155,7 +185,7 @@ export function StageWindow() {
 					break;
 				case "set-model":
 					if (cmd.modelPath !== currentModelPath.current) {
-						await loadModel(cmd.modelPath);
+						await switchModel(cmd.modelPath);
 					}
 					break;
 				case "set-expression":
@@ -173,11 +203,15 @@ export function StageWindow() {
 						await win.setSize(new LogicalSize(cmd.width, cmd.height));
 					} catch { /* */ }
 					break;
+				case "reset-zoom":
+					rendererRef.current?.resetZoom();
+					saveZoom(1);
+					break;
 			}
 		} catch {
 			if (cmd.type === "hide-stage") window.close();
 		}
-	}, [loadModel, setEyeMode]); // loadModel 和 setEyeMode 都是稳定引用
+	}, [switchModel, setEyeMode]);
 
 	// 初始化——只运行一次
 	useEffect(() => {
@@ -187,7 +221,7 @@ export function StageWindow() {
 		const cleanups: (() => void)[] = [];
 
 		async function setup() {
-			await loadModel(DEFAULT_MODEL.path);
+			await initRenderer(DEFAULT_MODEL.path);
 
 			broadcastControl({ type: "request-state" });
 
@@ -215,7 +249,7 @@ export function StageWindow() {
 			rendererRef.current?.destroy();
 			rendererRef.current = null;
 		};
-	}, [loadModel, handleControlCommand]);
+	}, [initRenderer, handleControlCommand]);
 
 	// 滚轮缩放
 	useEffect(() => {
@@ -227,6 +261,8 @@ export function StageWindow() {
 			e.preventDefault();
 			const delta = e.deltaY < 0 ? 1 : -1;
 			rendererRef.current?.applyZoomDelta(delta);
+			const zoom = rendererRef.current?.getZoom();
+			if (zoom !== undefined) saveZoom(zoom);
 		};
 
 		canvas.addEventListener("wheel", handleWheel, { passive: false });
