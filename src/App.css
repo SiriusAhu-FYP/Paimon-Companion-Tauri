@@ -95,28 +95,105 @@ section h3 {
 	margin-bottom: 4px;
 }
 
-/* ── Live2D 预览占位 ── */
+/* ── Stage Host（主界面左栏停靠区） ── */
 
-.live2d-placeholder {
+.stage-host {
 	display: flex;
 	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	height: 280px;
-	background: #16213e;
-	border-radius: 8px;
-	border: 1px dashed #0f3460;
+	height: 100%;
 }
 
-.placeholder-icon {
-	font-size: 48px;
+.stage-host-status {
+	padding: 8px;
+	background: #16213e;
+	border-radius: 6px;
 	margin-bottom: 8px;
 }
 
-.placeholder-info {
+.stage-host-state-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	margin: 2px 0;
+}
+
+.stage-host-indicator {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #444;
+	transition: background 0.2s;
+}
+
+.stage-host-indicator.indicator-on {
+	background: #4caf50;
+	box-shadow: 0 0 4px #4caf50;
+}
+
+.stage-host-mode-label {
+	font-size: 11px;
+	color: #888;
+	padding: 1px 6px;
+	background: #0f3460;
+	border-radius: 3px;
+}
+
+.stage-host-pin-label {
+	font-size: 10px;
+	color: #4caf50;
+	padding: 1px 5px;
+	background: rgba(76, 175, 80, 0.15);
+	border-radius: 3px;
+	font-weight: 600;
+}
+
+.stage-host-char-info {
 	font-size: 12px;
-	color: #666;
-	margin-top: 4px;
+	color: #999;
+}
+
+.stage-host-speaking {
+	font-size: 10px;
+	color: #e94560;
+	animation: pulse 1.5s ease-in-out infinite;
+}
+
+.stage-host-slot {
+	flex: 1;
+	min-height: 120px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: #0d1b2a;
+	border: 1px dashed #0f3460;
+	border-radius: 6px;
+	margin-bottom: 8px;
+	transition: border-color 0.2s, background 0.2s;
+}
+
+.stage-host-slot.slot-active {
+	border-color: #e94560;
+	border-style: solid;
+	background: rgba(233, 69, 96, 0.05);
+}
+
+.slot-hint {
+	font-size: 12px;
+	color: #555;
+	text-align: center;
+}
+
+.stage-host-controls {
+	padding: 4px 0;
+}
+
+.stage-host-controls h3 {
+	margin-top: 6px;
+	margin-bottom: 2px;
+	font-size: 11px;
+	color: #777;
 }
 
 /* ── 控制面板 ── */
@@ -174,10 +251,19 @@ button.active {
 
 /* ── 对话面板 ── */
 
+.chat-panel {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
 .chat-messages {
+	flex: 1;
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
+	overflow-y: auto;
+	min-height: 0;
 }
 
 .chat-empty {
@@ -207,6 +293,74 @@ button.active {
 	font-weight: 600;
 	color: #e94560;
 	min-width: 32px;
+}
+
+.chat-cursor {
+	animation: blink 0.8s step-end infinite;
+	color: #e94560;
+}
+
+@keyframes blink {
+	50% { opacity: 0; }
+}
+
+.chat-status {
+	padding: 4px 8px;
+	font-size: 12px;
+	color: #e94560;
+	text-align: center;
+	animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+	0%, 100% { opacity: 0.6; }
+	50% { opacity: 1; }
+}
+
+.chat-input-area {
+	display: flex;
+	gap: 6px;
+	padding: 8px 0 0;
+	border-top: 1px solid #0f3460;
+	margin-top: 8px;
+}
+
+.chat-input {
+	flex: 1;
+	padding: 6px 10px;
+	font-size: 13px;
+	border: 1px solid #0f3460;
+	border-radius: 4px;
+	background: #16213e;
+	color: #e0e0e0;
+	outline: none;
+}
+
+.chat-input:focus {
+	border-color: #e94560;
+}
+
+.chat-input:disabled {
+	opacity: 0.5;
+}
+
+.chat-send-btn {
+	padding: 6px 16px;
+	font-size: 12px;
+	background: #e94560;
+	border: none;
+	border-radius: 4px;
+	color: #fff;
+	cursor: pointer;
+}
+
+.chat-send-btn:hover:not(:disabled) {
+	background: #c73550;
+}
+
+.chat-send-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
 }
 
 /* ── 事件日志 ── */
@@ -257,25 +411,67 @@ button.active {
 /* ── 舞台窗口 ── */
 
 .stage-window {
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	position: relative;
+	width: 100vw;
 	height: 100vh;
 	background: transparent;
+	overflow: hidden;
 }
 
-.stage-character {
-	text-align: center;
+/* hover 控制条——整条可拖拽（data-tauri-drag-region） */
+.stage-toolbar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 100;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 3px 8px;
+	background: rgba(0, 0, 0, 0.45);
+	opacity: 0;
+	transition: opacity 0.2s;
+	pointer-events: none;
+	cursor: grab;
+	user-select: none;
 }
 
-.stage-placeholder-icon {
-	font-size: 96px;
+.stage-toolbar-visible {
+	opacity: 1;
+	pointer-events: auto;
 }
 
-.stage-info {
-	font-size: 14px;
-	color: #999;
-	margin-top: 8px;
+.stage-toolbar-label {
+	font-size: 11px;
+	color: rgba(255, 255, 255, 0.6);
+	letter-spacing: 0.5px;
+}
+
+.stage-toolbar-actions {
+	display: flex;
+	gap: 4px;
+}
+
+.stage-tb-btn {
+	padding: 1px 8px;
+	font-size: 11px;
+	background: rgba(255, 255, 255, 0.1);
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	border-radius: 3px;
+	color: rgba(255, 255, 255, 0.7);
+	cursor: pointer;
+	line-height: 1.4;
+}
+
+.stage-tb-btn:hover {
+	background: rgba(255, 255, 255, 0.2);
+	color: #fff;
+}
+
+.stage-tb-close:hover {
+	background: rgba(233, 69, 96, 0.7);
+	border-color: rgba(233, 69, 96, 0.7);
 }
 
 /* ── 运行状态指示 ── */

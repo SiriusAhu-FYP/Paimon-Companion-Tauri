@@ -1,1 +1,2 @@
-export { Live2DPreview } from "./Live2DPreview";
+export { Live2DRenderer } from "./live2d-renderer";
+export type { Live2DRendererOptions } from "./live2d-renderer";

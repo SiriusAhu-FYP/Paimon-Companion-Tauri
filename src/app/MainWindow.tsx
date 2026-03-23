@@ -1,4 +1,4 @@
-import { Live2DPreview } from "@/features/live2d";
+import { StageHost } from "@/features/stage";
 import { ControlPanel } from "@/features/control-panel";
 import { ChatPanel } from "@/features/chat";
 import { EventLog } from "@/app/EventLog";
@@ -12,7 +12,7 @@ export function MainWindow() {
 
 			<div className="main-layout">
 				<div className="main-left">
-					<Live2DPreview />
+					<StageHost />
 				</div>
 
 				<div className="main-center">
