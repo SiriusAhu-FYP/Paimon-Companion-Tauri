@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from "react";
+import { Box, Typography, TextField, Button, Paper } from "@mui/material";
+import SendIcon from "@mui/icons-material/Send";
 import { useEventBus } from "@/hooks";
 import { getServices } from "@/services";
 import { createLogger } from "@/services/logger";
@@ -19,12 +21,10 @@ export function ChatPanel() {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const streamBufferRef = useRef("");
 
-	// 滚动到最新消息
 	useEffect(() => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [messages]);
 
-	// 流式 chunk → 逐字追加到当前 AI 回复
 	useEventBus("llm:request-start", () => {
 		setStatus("thinking");
 		streamBufferRef.current = "";
@@ -62,7 +62,6 @@ export function ChatPanel() {
 	useEventBus("audio:tts-start", () => setStatus("speaking"));
 	useEventBus("audio:tts-end", () => setStatus("idle"));
 
-	// 也监听旧的 asr-result，用于 mock pipeline 或未来 ASR 接入
 	useEventBus("audio:asr-result", (payload) => {
 		setMessages((prev) => [
 			...prev,
@@ -72,8 +71,7 @@ export function ChatPanel() {
 
 	const handleSend = async () => {
 		const text = inputText.trim();
-		if (!text) return;
-		if (status !== "idle") return;
+		if (!text || status !== "idle") return;
 
 		setInputText("");
 		setMessages((prev) => [
@@ -97,52 +95,78 @@ export function ChatPanel() {
 	};
 
 	return (
-		<section className="chat-panel">
-			<h2>对话</h2>
-			<div className="chat-messages">
+		<Box sx={{ display: "flex", flexDirection: "column", height: "100%", p: 1.5 }}>
+			<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, mb: 1 }}>
+				对话
+			</Typography>
+
+			{/* 消息列表 */}
+			<Box sx={{ flex: 1, overflowY: "auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 0.75 }}>
 				{messages.length === 0 ? (
-					<p className="chat-empty">输入文本开始对话</p>
+					<Typography variant="body2" color="text.disabled" sx={{ textAlign: "center", py: 3 }}>
+						输入文本开始对话
+					</Typography>
 				) : (
 					messages.map((msg, i) => (
-						<div key={i} className={`chat-message chat-${msg.role}`}>
-							<span className="chat-role">
+						<Paper
+							key={i}
+							elevation={0}
+							sx={{
+								p: 1, borderRadius: 1,
+								bgcolor: msg.role === "user" ? "background.paper" : "#1a2744",
+								display: "flex", gap: 1,
+							}}
+						>
+							<Typography variant="caption" sx={{ color: "primary.main", fontWeight: 600, minWidth: 32 }}>
 								{msg.role === "user" ? "用户" : "AI"}
-							</span>
-							<span className="chat-content">
+							</Typography>
+							<Typography variant="body2" sx={{ flex: 1 }}>
 								{msg.content}
-								{msg.streaming && <span className="chat-cursor">▌</span>}
-							</span>
-						</div>
+								{msg.streaming && (
+									<Box component="span" sx={{ color: "primary.main", animation: "blink 0.8s step-end infinite" }}>
+										▌
+									</Box>
+								)}
+							</Typography>
+						</Paper>
 					))
 				)}
 				<div ref={messagesEndRef} />
-			</div>
+			</Box>
 
 			{status !== "idle" && (
-				<div className="chat-status">
+				<Typography variant="caption" sx={{ color: "primary.main", textAlign: "center", py: 0.5, animation: "pulse 1.5s ease-in-out infinite" }}>
 					{status === "thinking" && "AI 正在思考..."}
 					{status === "speaking" && "正在播放语音..."}
-				</div>
+				</Typography>
 			)}
 
-			<div className="chat-input-area">
-				<input
-					type="text"
-					className="chat-input"
+			{/* 输入区 */}
+			<Box sx={{ display: "flex", gap: 0.75, pt: 1, borderTop: "1px solid", borderColor: "secondary.main", mt: 1 }}>
+				<TextField
+					size="small"
+					fullWidth
 					placeholder={status === "idle" ? "输入消息，按 Enter 发送..." : "等待回复中..."}
 					value={inputText}
 					onChange={(e) => setInputText(e.target.value)}
 					onKeyDown={handleKeyDown}
 					disabled={status !== "idle"}
+					sx={{
+						"& .MuiOutlinedInput-root": {
+							fontSize: 13,
+						},
+					}}
 				/>
-				<button
-					className="chat-send-btn"
+				<Button
+					variant="contained"
+					size="small"
 					onClick={handleSend}
 					disabled={status !== "idle" || !inputText.trim()}
+					sx={{ minWidth: 0, px: 1.5 }}
 				>
-					发送
-				</button>
-			</div>
-		</section>
+					<SendIcon sx={{ fontSize: 16 }} />
+				</Button>
+			</Box>
+		</Box>
 	);
 }
