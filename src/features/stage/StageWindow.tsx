@@ -5,6 +5,7 @@ import {
 	type ControlCommand, type StageDisplayMode,
 } from "@/utils/window-sync";
 import { Live2DRenderer, DEFAULT_MODEL } from "@/features/live2d";
+import type { EyeMode } from "@/features/live2d";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("stage-window");
@@ -18,6 +19,8 @@ export function StageWindow() {
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
 	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("interactive");
 	const currentModelPath = useRef(DEFAULT_MODEL.path);
+	const [scaleLocked, setScaleLocked] = useState(false);
+	const [eyeMode, setEyeMode] = useState<EyeMode>("random-path");
 
 	const syncStateToHost = useCallback((overrides?: Partial<{
 		mode: "docked" | "floating";
@@ -100,17 +103,17 @@ export function StageWindow() {
 				modelPath,
 				autoFit: true,
 			});
+			renderer.setEyeMode(eyeMode);
 			setLoadStatus("ok");
 			log.info(`model loaded: ${modelPath}`);
 
-			// 汇报模型支持的表情给主窗口
 			const expressions = renderer.getExpressionNames();
 			broadcastControl({ type: "report-expressions", expressions });
 		} catch (err) {
 			setLoadStatus("error");
 			log.error("model load failed", err);
 		}
-	}, []);
+	}, [eyeMode]);
 
 	// 初始化
 	useEffect(() => {
@@ -150,6 +153,33 @@ export function StageWindow() {
 		};
 	}, [loadModel]);
 
+	// 滚轮缩放
+	useEffect(() => {
+		const canvas = canvasRef.current;
+		if (!canvas) return;
+
+		const handleWheel = (e: WheelEvent) => {
+			if (scaleLocked) return;
+			e.preventDefault();
+			const delta = e.deltaY < 0 ? 1 : -1;
+			rendererRef.current?.applyZoomDelta(delta);
+		};
+
+		canvas.addEventListener("wheel", handleWheel, { passive: false });
+		return () => canvas.removeEventListener("wheel", handleWheel);
+	}, [scaleLocked]);
+
+	// 鼠标跟随（follow-mouse 模式）
+	useEffect(() => {
+		if (eyeMode !== "follow-mouse") return;
+
+		const handleMouseMove = (e: MouseEvent) => {
+			rendererRef.current?.focusMouse(e.clientX, e.clientY);
+		};
+		window.addEventListener("mousemove", handleMouseMove);
+		return () => window.removeEventListener("mousemove", handleMouseMove);
+	}, [eyeMode]);
+
 	const handleControlCommand = useCallback(async (cmd: ControlCommand) => {
 		try {
 			const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -185,6 +215,19 @@ export function StageWindow() {
 					break;
 				case "set-expression":
 					rendererRef.current?.setExpression(cmd.expressionName);
+					break;
+				case "set-scale-lock":
+					setScaleLocked(cmd.locked);
+					break;
+				case "set-eye-mode":
+					setEyeMode(cmd.mode);
+					rendererRef.current?.setEyeMode(cmd.mode);
+					break;
+				case "set-size":
+					try {
+						const { LogicalSize } = await import("@tauri-apps/api/dpi");
+						await win.setSize(new LogicalSize(cmd.width, cmd.height));
+					} catch { /* */ }
 					break;
 			}
 		} catch {
