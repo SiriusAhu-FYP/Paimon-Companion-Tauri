@@ -1,28 +1,15 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { ThemeProvider, CssBaseline } from "@mui/material";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { initServices } from "@/services";
 import { mockCharacterInit, exposeMockTools } from "@/utils/mock";
 import { broadcastState, broadcastControl, onControlCommand } from "@/utils/window-sync";
+import { windowLabel } from "@/utils/window-label";
 import theme from "./theme";
 import App from "./App";
 import "./App.css";
 
 const services = initServices();
-
-let windowLabel = "main";
-const urlParams = new URLSearchParams(window.location.search);
-const urlOverride = urlParams.get("window");
-if (urlOverride === "stage") {
-	windowLabel = "stage";
-} else {
-	try {
-		windowLabel = getCurrentWindow().label;
-	} catch {
-		// 非 Tauri 环境（浏览器调试），默认 main
-	}
-}
 
 if (windowLabel === "main") {
 	mockCharacterInit(services.character);

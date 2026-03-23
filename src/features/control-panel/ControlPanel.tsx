@@ -1,16 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
 	Box, Button, Typography, Stack, Chip, Divider,
-	Select, MenuItem, FormControl,
 } from "@mui/material";
-import type { SelectChangeEvent } from "@mui/material";
 import StopIcon from "@mui/icons-material/Stop";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import MicIcon from "@mui/icons-material/Mic";
 import { useRuntime, useCharacter } from "@/hooks";
 import { HelpTooltip } from "@/components";
-import { MODEL_REGISTRY, DEFAULT_MODEL } from "@/features/live2d";
-import { broadcastControl, onControlCommand, type ControlCommand } from "@/utils/window-sync";
 import { getServices } from "@/services";
 import { mockVoicePipeline, mockExternalEvents } from "@/utils/mock";
 import { createLogger } from "@/services/logger";
@@ -20,32 +16,6 @@ const log = createLogger("control-panel");
 export function ControlPanel() {
 	const { mode, stop, resume } = useRuntime();
 	const { characterId, emotion, isSpeaking } = useCharacter();
-
-	const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL.path);
-	const [expressions, setExpressions] = useState<string[]>([]);
-
-	// 监听 Stage 汇报的表情列表
-	useEffect(() => {
-		let cleanup: (() => void) | null = null;
-		onControlCommand((cmd: ControlCommand) => {
-			if (cmd.type === "report-expressions") {
-				setExpressions(cmd.expressions);
-				log.info(`received ${cmd.expressions.length} expressions from stage`);
-			}
-		}).then((unsub) => { cleanup = unsub; });
-		return () => { cleanup?.(); };
-	}, []);
-
-	const handleModelChange = (event: SelectChangeEvent) => {
-		const path = event.target.value;
-		setSelectedModel(path);
-		setExpressions([]);
-		broadcastControl({ type: "set-model", modelPath: path });
-	};
-
-	const handleExpression = (name: string) => {
-		broadcastControl({ type: "set-expression", expressionName: name });
-	};
 
 	const handleMockPipeline = async () => {
 		const { bus, runtime } = getServices();
@@ -88,29 +58,6 @@ export function ControlPanel() {
 				控制面板
 			</Typography>
 
-			{/* 模型切换 */}
-			<Box>
-				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>模型</Typography>
-					<HelpTooltip title="切换 Live2D 模型。切换后 Stage 窗口会重新加载" />
-				</Stack>
-				<FormControl size="small" fullWidth>
-					<Select
-						value={selectedModel}
-						onChange={handleModelChange}
-						sx={{ fontSize: 12 }}
-					>
-						{MODEL_REGISTRY.map((m) => (
-							<MenuItem key={m.path} value={m.path} sx={{ fontSize: 12 }}>
-								{m.name}
-							</MenuItem>
-						))}
-					</Select>
-				</FormControl>
-			</Box>
-
-			<Divider />
-
 			{/* 运行状态 */}
 			<Box sx={{
 				bgcolor: "background.paper", borderRadius: 1, p: 1,
@@ -151,32 +98,6 @@ export function ControlPanel() {
 			</Box>
 
 			<Divider />
-
-			{/* 表情切换——动态从模型读取 */}
-			{expressions.length > 0 && (
-				<>
-					<Box>
-						<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-							<Typography variant="caption" color="text.secondary" fontWeight={600}>表情</Typography>
-							<HelpTooltip title="模型自带的表情文件。点击后 Stage 中的模型会切换表情" />
-						</Stack>
-						<Stack direction="row" flexWrap="wrap" gap={0.5}>
-							{expressions.map((e) => (
-								<Button
-									key={e}
-									size="small"
-									variant="outlined"
-									onClick={() => handleExpression(e)}
-									sx={{ fontSize: 10, px: 1, py: 0.25, minWidth: 0, textTransform: "none" }}
-								>
-									{e}
-								</Button>
-							))}
-						</Stack>
-					</Box>
-					<Divider />
-				</>
-			)}
 
 			{/* Spike 验证 */}
 			<Box>

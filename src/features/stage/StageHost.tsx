@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import {
 	Box, Button, ButtonGroup, Typography, Chip, Stack, Divider, Tooltip,
-	TextField,
+	TextField, Select, MenuItem, FormControl,
 } from "@mui/material";
+import type { SelectChangeEvent } from "@mui/material";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import PushPinIcon from "@mui/icons-material/PushPin";
@@ -12,10 +13,18 @@ import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import CloseIcon from "@mui/icons-material/Close";
 import SaveIcon from "@mui/icons-material/Save";
 import { HelpTooltip } from "@/components";
+import { MODEL_REGISTRY, DEFAULT_MODEL } from "@/features/live2d";
 import {
 	broadcastControl, onControlCommand,
 	type StageDisplayMode, type ControlCommand, type EyeMode,
 } from "@/utils/window-sync";
+import {
+	loadCustomPresets, saveCustomPresets,
+	type SizePreset,
+} from "@/utils/stage-storage";
+import { createLogger } from "@/services/logger";
+
+const log = createLogger("stage-host");
 
 interface StageHostProps {
 	onShowStage: () => void;
@@ -29,13 +38,6 @@ interface StageHostProps {
 	onDisplayModeChange: (mode: StageDisplayMode) => void;
 }
 
-interface SizePreset {
-	label: string;
-	w: number;
-	h: number;
-	custom?: boolean;
-}
-
 const BUILT_IN_PRESETS: SizePreset[] = [
 	{ label: "1:1 400", w: 400, h: 400 },
 	{ label: "3:4 480", w: 480, h: 640 },
@@ -43,22 +45,6 @@ const BUILT_IN_PRESETS: SizePreset[] = [
 	{ label: "\u2b50 9:16 720", w: 720, h: 1280 },
 	{ label: "\u2b50 9:16 1080", w: 1080, h: 1920 },
 ];
-
-const CUSTOM_PRESETS_KEY = "paimon-live:custom-size-presets";
-
-function loadCustomPresets(): SizePreset[] {
-	try {
-		const raw = localStorage.getItem(CUSTOM_PRESETS_KEY);
-		if (!raw) return [];
-		return JSON.parse(raw) as SizePreset[];
-	} catch {
-		return [];
-	}
-}
-
-function saveCustomPresets(presets: SizePreset[]) {
-	localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(presets));
-}
 
 export function StageHost({
 	onShowStage,
@@ -79,7 +65,11 @@ export function StageHost({
 	const [saveW, setSaveW] = useState("");
 	const [saveH, setSaveH] = useState("");
 
-	// 监听 Stage 侧的 sync-state 回报
+	// 模型 / 表情控制（从 ControlPanel 迁移至此）
+	const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL.path);
+	const [expressions, setExpressions] = useState<string[]>([]);
+
+	// 监听 Stage 侧的 sync-state 和 report-expressions
 	useEffect(() => {
 		let cleanup: (() => void) | null = null;
 		onControlCommand((cmd: ControlCommand) => {
@@ -91,8 +81,23 @@ export function StageHost({
 					onVisibilityChange(cmd.state.visible);
 				}
 			}
+			if (cmd.type === "report-expressions") {
+				setExpressions(cmd.expressions);
+				log.info(`received ${cmd.expressions.length} expressions from stage`);
+			}
 		}).then((unsub) => { cleanup = unsub; });
 		return () => { cleanup?.(); };
+	}, []);
+
+	const handleModelChange = useCallback((event: SelectChangeEvent) => {
+		const path = event.target.value;
+		setSelectedModel(path);
+		setExpressions([]);
+		broadcastControl({ type: "set-model", modelPath: path });
+	}, []);
+
+	const handleExpression = useCallback((name: string) => {
+		broadcastControl({ type: "set-expression", expressionName: name });
 	}, []);
 
 	const handleHide = useCallback(() => {
@@ -172,6 +177,52 @@ export function StageHost({
 			<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
 				Stage
 			</Typography>
+
+			{/* 模型切换 */}
+			<Box>
+				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>模型</Typography>
+					<HelpTooltip title="切换 Live2D 模型。切换后 Stage 窗口会重新加载" />
+				</Stack>
+				<FormControl size="small" fullWidth>
+					<Select
+						value={selectedModel}
+						onChange={handleModelChange}
+						sx={{ fontSize: 12 }}
+					>
+						{MODEL_REGISTRY.map((m) => (
+							<MenuItem key={m.path} value={m.path} sx={{ fontSize: 12 }}>
+								{m.name}
+							</MenuItem>
+						))}
+					</Select>
+				</FormControl>
+			</Box>
+
+			{/* 表情切换 */}
+			{expressions.length > 0 && (
+				<Box>
+					<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
+						<Typography variant="caption" color="text.secondary" fontWeight={600}>表情</Typography>
+						<HelpTooltip title="模型自带的表情文件。点击后 Stage 中的模型会切换表情" />
+					</Stack>
+					<Stack direction="row" flexWrap="wrap" gap={0.5}>
+						{expressions.map((e) => (
+							<Button
+								key={e}
+								size="small"
+								variant="outlined"
+								onClick={() => handleExpression(e)}
+								sx={{ fontSize: 10, px: 1, py: 0.25, minWidth: 0, textTransform: "none" }}
+							>
+								{e}
+							</Button>
+						))}
+					</Stack>
+				</Box>
+			)}
+
+			<Divider />
 
 			{/* 窗口控制 */}
 			<Box>

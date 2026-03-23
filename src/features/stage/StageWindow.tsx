@@ -1,26 +1,15 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import {
 	onMouthSync, onControlCommand,
-	broadcastControl,
+	broadcastControl, isTauriEnvironment,
 	type ControlCommand, type StageDisplayMode,
 } from "@/utils/window-sync";
 import { Live2DRenderer, DEFAULT_MODEL } from "@/features/live2d";
 import type { EyeMode } from "@/features/live2d";
 import { createLogger } from "@/services/logger";
+import { saveZoom, loadZoom } from "@/utils/stage-storage";
 
 const log = createLogger("stage-window");
-const ZOOM_STORAGE_KEY = "paimon-live:stage-zoom";
-
-function saveZoom(zoom: number) {
-	try { localStorage.setItem(ZOOM_STORAGE_KEY, String(zoom)); } catch { /* */ }
-}
-function loadZoom(): number {
-	try {
-		const v = localStorage.getItem(ZOOM_STORAGE_KEY);
-		if (v) { const n = parseFloat(v); if (n > 0) return n; }
-	} catch { /* */ }
-	return 1;
-}
 
 export function StageWindow() {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -59,8 +48,7 @@ export function StageWindow() {
 	}, [stageMode, alwaysOnTop, displayMode]);
 
 	useEffect(() => {
-		const hasTauri = "__TAURI_INTERNALS__" in window;
-		if (!hasTauri) return;
+		if (!isTauriEnvironment()) return;
 
 		async function applyAlwaysOnTop() {
 			try {
@@ -81,8 +69,7 @@ export function StageWindow() {
 	}, [stageMode, alwaysOnTop]);
 
 	useEffect(() => {
-		const hasTauri = "__TAURI_INTERNALS__" in window;
-		if (!hasTauri) return;
+		if (!isTauriEnvironment()) return;
 
 		async function applyCursorEvents() {
 			try {

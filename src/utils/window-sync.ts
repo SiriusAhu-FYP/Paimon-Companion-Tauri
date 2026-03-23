@@ -39,6 +39,12 @@ export type ControlCommand =
 	| { type: "set-size"; width: number; height: number }
 	| { type: "reset-zoom" };
 
+// ── Tauri 环境检测 ──
+
+export function isTauriEnvironment(): boolean {
+	return "__TAURI_INTERNALS__" in window;
+}
+
 // ── Tauri 事件 vs BroadcastChannel 自适应 ──
 
 let isTauri = false;
@@ -46,8 +52,7 @@ let tauriEmit: ((event: string, payload: unknown) => Promise<void>) | null = nul
 let tauriListen: ((event: string, handler: (event: { payload: unknown }) => void) => Promise<() => void>) | null = null;
 
 async function initTauriEvents() {
-	const hasTauriRuntime = "__TAURI_INTERNALS__" in window;
-	if (!hasTauriRuntime) {
+	if (!isTauriEnvironment()) {
 		isTauri = false;
 		log.info("using BroadcastChannel for sync (browser mode)");
 		return;
