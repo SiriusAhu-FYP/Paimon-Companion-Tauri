@@ -48,24 +48,6 @@ export function ControlPanel() {
 		}
 	};
 
-	const [stageOpen, setStageOpen] = useState(false);
-	const handleOpenStage = async () => {
-		try {
-			const { Window } = await import("@tauri-apps/api/window");
-			const stageWin = await Window.getByLabel("stage");
-			if (stageWin) {
-				await stageWin.show();
-				await stageWin.setFocus();
-				setStageOpen(true);
-				log.info("stage window opened");
-			} else {
-				log.warn("stage window not found");
-			}
-		} catch (err) {
-			log.error("failed to open stage window", err);
-		}
-	};
-
 	return (
 		<section className="control-panel">
 			<h2>控制面板</h2>
@@ -77,12 +59,8 @@ export function ControlPanel() {
 					{mode === "stopped" && <span className="badge-stopped"> STOPPED</span>}
 				</p>
 				<div className="control-actions">
-					<button onClick={stop} disabled={mode === "stopped"}>
-						急停
-					</button>
-					<button onClick={resume} disabled={mode === "auto"}>
-						恢复
-					</button>
+					<button onClick={stop} disabled={mode === "stopped"}>急停</button>
+					<button onClick={resume} disabled={mode === "auto"}>恢复</button>
 				</div>
 			</div>
 
@@ -109,20 +87,9 @@ export function ControlPanel() {
 			</div>
 
 			<div className="control-section">
-				<h3>窗口管理</h3>
-				<div className="control-actions">
-					<button onClick={handleOpenStage} disabled={stageOpen}>
-						{stageOpen ? "舞台已打开" : "打开舞台窗口"}
-					</button>
-				</div>
-			</div>
-
-			<div className="control-section">
 				<h3>Spike 验证</h3>
 				<div className="control-actions">
-					<button onClick={handleMicTest}>
-						麦克风测试
-					</button>
+					<button onClick={handleMicTest}>麦克风测试</button>
 					<span style={{ fontSize: 11, marginLeft: 6 }}>
 						{micStatus === "ok" && "✅ 成功"}
 						{micStatus === "denied" && "❌ 权限被拒绝"}
@@ -134,12 +101,8 @@ export function ControlPanel() {
 			<div className="control-section">
 				<h3>Mock 测试</h3>
 				<div className="control-actions">
-					<button onClick={handleMockPipeline}>
-						模拟语音链路
-					</button>
-					<button onClick={handleMockExternal}>
-						模拟外部事件
-					</button>
+					<button onClick={handleMockPipeline}>模拟语音链路</button>
+					<button onClick={handleMockExternal}>模拟外部事件</button>
 				</div>
 			</div>
 		</section>

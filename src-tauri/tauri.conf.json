@@ -24,7 +24,9 @@
         "height": 600,
         "transparent": true,
         "decorations": false,
-        "visible": false
+        "visible": false,
+        "parent": "main",
+        "skipTaskbar": true
       }
     ],
     "security": {
