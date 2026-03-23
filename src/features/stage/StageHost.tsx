@@ -39,10 +39,10 @@ interface SizePreset {
 
 const BUILT_IN_PRESETS: SizePreset[] = [
 	{ label: "1:1 400", w: 400, h: 400 },
-	{ label: "4:3 640", w: 640, h: 480 },
-	{ label: "16:9 720p", w: 1280, h: 720 },
-	{ label: "16:9 1080p", w: 1920, h: 1080 },
+	{ label: "3:4 480", w: 480, h: 640 },
 	{ label: "9:16 480", w: 480, h: 854 },
+	{ label: "9:16 720", w: 720, h: 1280 },
+	{ label: "9:16 1080", w: 1080, h: 1920 },
 ];
 
 const CUSTOM_PRESETS_KEY = "paimon-live:custom-size-presets";
