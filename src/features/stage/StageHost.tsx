@@ -11,7 +11,6 @@ import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import CloseIcon from "@mui/icons-material/Close";
 import SaveIcon from "@mui/icons-material/Save";
-import { useCharacter } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import {
 	broadcastControl, onControlCommand,
@@ -40,9 +39,9 @@ interface SizePreset {
 const BUILT_IN_PRESETS: SizePreset[] = [
 	{ label: "1:1 400", w: 400, h: 400 },
 	{ label: "3:4 480", w: 480, h: 640 },
-	{ label: "9:16 480", w: 480, h: 854 },
-	{ label: "9:16 720", w: 720, h: 1280 },
-	{ label: "9:16 1080", w: 1080, h: 1920 },
+	{ label: "\u2b50 9:16 480", w: 480, h: 854 },
+	{ label: "\u2b50 9:16 720", w: 720, h: 1280 },
+	{ label: "\u2b50 9:16 1080", w: 1080, h: 1920 },
 ];
 
 const CUSTOM_PRESETS_KEY = "paimon-live:custom-size-presets";
@@ -72,7 +71,6 @@ export function StageHost({
 	onAlwaysOnTopChange,
 	onDisplayModeChange,
 }: StageHostProps) {
-	const { emotion, isSpeaking } = useCharacter();
 	const [scaleLocked, setScaleLocked] = useState(false);
 	const [eyeMode, setEyeMode] = useState<EyeMode>("random-path");
 	const [customPresets, setCustomPresets] = useState<SizePreset[]>(loadCustomPresets);
@@ -175,36 +173,6 @@ export function StageHost({
 				Stage
 			</Typography>
 
-			{/* 状态指示 */}
-			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
-				<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 0.5 }}>
-					<Box sx={{
-						width: 8, height: 8, borderRadius: "50%",
-						bgcolor: stageVisible ? "success.main" : "text.disabled",
-						boxShadow: stageVisible ? "0 0 4px #4caf50" : "none",
-					}} />
-					<Typography variant="caption">
-						{stageVisible ? "播出中" : "未启动"}
-					</Typography>
-				</Stack>
-				<Stack direction="row" spacing={0.5} flexWrap="wrap">
-					<Chip label={isDocked ? "贴靠" : "浮动"} size="small" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
-					{isDocked && <Chip label="pin" size="small" color="success" sx={{ height: 20, fontSize: 10 }} />}
-					{!isDocked && alwaysOnTop && <Chip label="置顶" size="small" color="success" sx={{ height: 20, fontSize: 10 }} />}
-					<Chip label={displayMode} size="small" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
-				</Stack>
-				<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.5 }}>
-					<Typography variant="caption" color="text.secondary">{emotion}</Typography>
-					{isSpeaking && (
-						<Typography variant="caption" sx={{ color: "primary.main", animation: "pulse 1.5s ease-in-out infinite" }}>
-							说话中
-						</Typography>
-					)}
-				</Stack>
-			</Box>
-
-			<Divider />
-
 			{/* 窗口控制 */}
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
@@ -297,16 +265,28 @@ export function StageHost({
 					<Typography variant="caption" color="text.secondary" fontWeight={600}>缩放</Typography>
 					<HelpTooltip title="在 Stage 窗口中使用鼠标滚轮可缩放模型。锁定后禁止滚轮缩放。" />
 				</Stack>
+			<Stack direction="row" spacing={0.5}>
 				<Button
 					variant={scaleLocked ? "contained" : "outlined"}
 					size="small"
-					fullWidth
+					sx={{ flex: 1 }}
 					onClick={handleToggleScaleLock}
 					startIcon={scaleLocked ? <LockIcon /> : <LockOpenIcon />}
 					color={scaleLocked ? "warning" : "inherit"}
 				>
-					{scaleLocked ? "缩放已锁定" : "缩放未锁定"}
+					{scaleLocked ? "已锁定" : "未锁定"}
 				</Button>
+				<Tooltip title="重置缩放比例为默认值">
+					<Button
+						variant="outlined"
+						size="small"
+						onClick={() => broadcastControl({ type: "reset-zoom" })}
+						startIcon={<RestartAltIcon />}
+					>
+						重置
+					</Button>
+				</Tooltip>
+			</Stack>
 			</Box>
 
 			{/* 眼神模式 */}

@@ -219,16 +219,7 @@ export function MainWindow() {
 				</Box>
 			</Box>
 
-			{/* 底部状态栏 */}
-			<StatusBar
-				stageVisible={stageVisible}
-				stageMode={stageMode}
-				displayMode={displayMode}
-				eventLogOpen={eventLogOpen}
-				onToggleEventLog={() => setEventLogOpen((v) => !v)}
-			/>
-
-			{/* 可折叠事件日志 */}
+			{/* 可折叠事件日志（在状态栏上方） */}
 			{eventLogOpen && (
 				<Box sx={{
 					height: 180, flexShrink: 0,
@@ -239,6 +230,15 @@ export function MainWindow() {
 					<EventLog />
 				</Box>
 			)}
+
+			{/* 底部状态栏——始终在最底部 */}
+			<StatusBar
+				stageVisible={stageVisible}
+				stageMode={stageMode}
+				displayMode={displayMode}
+				eventLogOpen={eventLogOpen}
+				onToggleEventLog={() => setEventLogOpen((v) => !v)}
+			/>
 		</Box>
 	);
 }
