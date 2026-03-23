@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Box } from "@mui/material";
+import { Box, IconButton, Tooltip } from "@mui/material";
+import SettingsIcon from "@mui/icons-material/Settings";
 import { StageHost, StageSlot } from "@/features/stage";
 import { ControlPanel } from "@/features/control-panel";
+import { SettingsPanel } from "@/features/settings";
 import { ChatPanel } from "@/features/chat";
 import { EventLog } from "@/app/EventLog";
 import { StatusBar } from "@/app/StatusBar";
@@ -16,6 +18,7 @@ export function MainWindow() {
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
 	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("interactive");
 	const [eventLogOpen, setEventLogOpen] = useState(false);
+	const [showSettings, setShowSettings] = useState(false);
 
 	const slotRectRef = useRef<DOMRect | null>(null);
 	const unlistenMoveRef = useRef<(() => void) | null>(null);
@@ -212,9 +215,22 @@ export function MainWindow() {
 					<ChatPanel />
 				</Box>
 
-				{/* 右栏: 控制面板 */}
-				<Box sx={{ width: 280, minWidth: 220, flexShrink: 0, overflowY: "auto" }}>
-					<ControlPanel />
+				{/* 右栏: 控制面板 / 设置 */}
+				<Box sx={{ width: 280, minWidth: 220, flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+					{showSettings ? (
+						<SettingsPanel onClose={() => setShowSettings(false)} />
+					) : (
+						<>
+							<ControlPanel />
+							<Box sx={{ px: 1.5, pb: 1 }}>
+								<Tooltip title="打开设置">
+									<IconButton size="small" onClick={() => setShowSettings(true)} sx={{ color: "text.secondary" }}>
+										<SettingsIcon fontSize="small" />
+									</IconButton>
+								</Tooltip>
+							</Box>
+						</>
+					)}
 				</Box>
 			</Box>
 

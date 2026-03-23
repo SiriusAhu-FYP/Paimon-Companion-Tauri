@@ -1,2 +1,2 @@
-// Tauri IPC 命令模块
-// 后续 phase 在此注册桌面能力相关命令（窗口管理、文件操作、系统桥接等）
+pub mod http_proxy;
+pub mod secret;
