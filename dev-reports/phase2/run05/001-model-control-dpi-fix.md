@@ -97,4 +97,4 @@ docked + visible 状态下不再显示 StageSlot 中的文字提示（"Stage 覆
 
 ## Commit
 
-待提交后补充 hash。
+`0ff749f` fix(live2d): separate emotion/motion control, fix mouth sync, add DPI scaling

@@ -5,42 +5,11 @@ const log = createLogger("live2d-renderer");
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyModel = any;
 
-/**
- * 情绪 → Cubism 参数覆盖映射。
- * Hiyori 模型无独立 Expressions 文件，用参数直接驱动表情。
- * 这些参数在每帧渲染后写入，优先级高于 motion 系统。
- *
- * 注意：ParamMouthOpenY 不在此表中——口型由独立的高频通道 setMouthOpenY 控制，
- * 避免表情与口型争用。
- */
-const EMOTION_PARAMS: Record<string, Record<string, number>> = {
-	neutral: {},
-	happy: {
-		ParamMouthForm: 1,
-		ParamEyeLSmile: 1,
-		ParamEyeRSmile: 1,
-	},
-	sad: {
-		ParamEyeLOpen: 0.35,
-		ParamEyeROpen: 0.35,
-		ParamMouthForm: -0.6,
-		ParamBrowLY: -0.6,
-		ParamBrowRY: -0.6,
-	},
-	angry: {
-		ParamBrowLY: -1,
-		ParamBrowRY: -1,
-		ParamEyeLOpen: 0.6,
-		ParamEyeROpen: 0.6,
-		ParamMouthForm: -0.4,
-		ParamAngleZ: -5,
-	},
-	surprised: {
-		ParamEyeLOpen: 1.3,
-		ParamEyeROpen: 1.3,
-		ParamBrowLY: 0.8,
-		ParamBrowRY: 0.8,
-	},
+const LIP_SYNC_CONFIG = {
+	smoothing: 0.3,
+	volumeThreshold: 0.01,
+	amplification: 3.0,
+	mouthParam: "ParamMouthOpenY",
 };
 
 export interface Live2DRendererOptions {
@@ -48,40 +17,44 @@ export interface Live2DRendererOptions {
 	width: number;
 	height: number;
 	modelPath: string;
-	/** 模型初始缩放（若不指定，会自动 fit） */
 	scale?: number;
-	/** 自动 fit：根据窗口大小计算缩放，使模型完整显示 */
 	autoFit?: boolean;
+}
+
+export interface ModelInfo {
+	/** 模型显示名 */
+	name: string;
+	/** model3.json 的路径（相对于 public） */
+	path: string;
 }
 
 /**
  * Live2D 渲染核心——不依赖 React，可被多个窗口独立实例化。
  *
- * 控制语义边界：
- * - Emotion（表情）：通过 setEmotion() 设置，每帧覆盖 Cubism 参数，不触发 motion。
- * - Motion（动作）：通过 playMotion() 独立控制，与表情互不干扰。
- * - MouthOpenY（口型）：通过 setMouthOpenY() 高频驱动，独立于表情和动作。
+ * 控制语义：
+ * - Expression：通过 model.expression(name) 驱动，使用模型自带 .exp3.json
+ * - Motion：通过 model.motion(group, index) 驱动
+ * - 口型：通过 beforeModelUpdate 钩子用 setParameterValueById 写入 ParamMouthOpenY
  *
- * DPI 适配：使用 devicePixelRatio 创建高分辨率 backing store，
- * canvas 的 CSS 尺寸保持逻辑像素，WebGL 按物理像素渲染。
+ * DPI：canvas backing store 按 devicePixelRatio 缩放，CSS 保持逻辑尺寸
  */
 export class Live2DRenderer {
 	private app: import("pixi.js").Application | null = null;
 	private model: AnyModel = null;
-	private currentEmotion = "neutral";
-	private mouthOpenY = 0;
 	private destroyed = false;
 	private autoFit = false;
 	private dpr = 1;
+
+	// 口型平滑
+	private mouthTarget = 0;
+	private mouthCurrent = 0;
+	private lipSyncHandler: (() => void) | null = null;
 
 	async init(options: Live2DRendererOptions): Promise<void> {
 		if (this.destroyed) return;
 
 		this.autoFit = options.autoFit ?? false;
 		this.dpr = Math.max(1, window.devicePixelRatio || 1);
-
-		const physicalW = Math.round(options.width * this.dpr);
-		const physicalH = Math.round(options.height * this.dpr);
 
 		const PIXI = await import("pixi.js");
 		const { Live2DModel } = await import("pixi-live2d-display/cubism4");
@@ -91,14 +64,14 @@ export class Live2DRenderer {
 		const reg = (Live2DModel as unknown as Record<string, (...args: unknown[]) => void>).registerTicker;
 		if (reg) reg(PIXI.Ticker);
 
-		// DPI: 以物理像素渲染，CSS 保持逻辑像素
+		// DPI: 用 resolution + autoDensity 让 PIXI 自动处理物理/逻辑像素
 		options.canvas.style.width = `${options.width}px`;
 		options.canvas.style.height = `${options.height}px`;
 
 		this.app = new PIXI.Application({
 			view: options.canvas,
-			width: physicalW,
-			height: physicalH,
+			width: options.width,
+			height: options.height,
 			backgroundAlpha: 0,
 			autoStart: true,
 			resolution: this.dpr,
@@ -124,46 +97,90 @@ export class Live2DRenderer {
 			model.y = options.height * 0.6;
 		}
 
-		// 每帧施加情绪参数覆盖 + 口型覆盖（在 motion 系统之后写入，保证参数优先级）
-		this.app.ticker.add(() => {
-			if (!this.model) return;
-			if (this.currentEmotion !== "neutral") {
-				this.applyEmotionParams(this.currentEmotion);
-			}
-			// 口型始终覆盖（即使 mouthOpenY 为 0 也写入，确保复位）
-			this.applyParam("ParamMouthOpenY", this.mouthOpenY);
-		});
+		this.setupLipSyncHandler();
 
-		log.info(`model loaded (DPR=${this.dpr}, physical=${physicalW}×${physicalH})`);
-	}
-
-	getCurrentEmotion(): string {
-		return this.currentEmotion;
+		log.info(`model loaded (DPR=${this.dpr})`);
 	}
 
 	/**
-	 * 设置模型情绪。仅更改每帧参数覆盖，不触发 motion。
-	 * 这确保表情按钮语义清晰：点什么就显示什么。
+	 * 返回模型自带的表情列表（从 model3.json 的 Expressions 中读取）
 	 */
-	setEmotion(emotion: string) {
-		if (emotion === this.currentEmotion) return;
-		this.currentEmotion = emotion;
-		log.info(`emotion → ${emotion}`);
+	getExpressionNames(): string[] {
+		if (!this.model) return [];
+		try {
+			const settings = this.model.internalModel?.settings;
+			if (!settings) return [];
+			// Cubism4ModelSettings.expressions 是 { Name, File }[] 或 undefined
+			const expDefs: Array<{ Name?: string; File?: string }> | undefined = settings.expressions;
+			if (!expDefs) return [];
+			return expDefs.map((e: { Name?: string; File?: string }) => e.Name || "").filter(Boolean);
+		} catch {
+			return [];
+		}
 	}
 
+	/**
+	 * 返回模型自带的 motion 组名列表
+	 */
+	getMotionGroups(): string[] {
+		if (!this.model) return [];
+		try {
+			const settings = this.model.internalModel?.settings;
+			if (!settings?.motions) return [];
+			return Object.keys(settings.motions);
+		} catch {
+			return [];
+		}
+	}
+
+	/**
+	 * 切换表情——使用 pixi-live2d-display 内建 API
+	 */
+	async setExpression(name: string): Promise<boolean> {
+		if (!this.model) return false;
+		try {
+			const ok = await this.model.expression(name);
+			log.info(`expression → ${name} (${ok ? "ok" : "fail"})`);
+			return ok;
+		} catch (err) {
+			// 部分模型 name 不含后缀，尝试加后缀
+			if (!name.endsWith(".exp3.json")) {
+				try {
+					const ok = await this.model.expression(`${name}.exp3.json`);
+					log.info(`expression → ${name}.exp3.json (${ok ? "ok" : "fail"})`);
+					return ok;
+				} catch { /* */ }
+			}
+			log.warn(`expression fail: ${name}`, err);
+			return false;
+		}
+	}
+
+	/**
+	 * 重置表情为默认（无表情覆盖）
+	 */
+	resetExpression() {
+		if (!this.model) return;
+		try {
+			const exprMgr = this.model.internalModel?.motionManager?.expressionManager;
+			if (exprMgr) {
+				exprMgr.resetExpression();
+				log.info("expression reset");
+			}
+		} catch { /* */ }
+	}
+
+	/**
+	 * 设置口型目标值（0-1），由 beforeModelUpdate 钩子平滑应用
+	 */
 	setMouthOpenY(value: number) {
-		this.mouthOpenY = Math.max(0, Math.min(1, value));
+		this.mouthTarget = Math.max(0, Math.min(1, value));
 	}
 
-	/** 调整渲染器尺寸，autoFit 模式下会重新计算模型缩放和位置 */
 	resize(width: number, height: number) {
 		if (!this.app || !this.model) return;
-
 		this.dpr = Math.max(1, window.devicePixelRatio || 1);
-
-		// PIXI renderer.resize 接受逻辑尺寸（autoDensity 会自动乘 resolution）
 		this.app.renderer.resize(width, height);
-
 		if (this.autoFit) {
 			this.fitModel(width, height);
 		} else {
@@ -172,7 +189,6 @@ export class Live2DRenderer {
 		}
 	}
 
-	/** 独立的动作播放入口，不影响表情参数 */
 	playMotion(group: string, index: number) {
 		if (!this.model) return;
 		try {
@@ -183,6 +199,12 @@ export class Live2DRenderer {
 
 	destroy() {
 		this.destroyed = true;
+		if (this.lipSyncHandler && this.model) {
+			try {
+				this.model.internalModel?.off("beforeModelUpdate", this.lipSyncHandler);
+			} catch { /* */ }
+		}
+		this.lipSyncHandler = null;
 		this.model = null;
 		if (this.app) {
 			try { this.app.destroy(true); } catch { /* */ }
@@ -191,9 +213,36 @@ export class Live2DRenderer {
 	}
 
 	/**
-	 * 根据画布逻辑尺寸自动计算模型缩放和位置，确保模型完整可见。
-	 * 采用 contain 策略，给顶部/底部留出一定 padding。
+	 * 在 beforeModelUpdate 事件中写入口型参数。
+	 * 这个时机在 motion 系统处理之前，通过 setParameterValueById 写入参数，
+	 * 配合模型配置中的 LipSync 组保证口型优先级。
 	 */
+	private setupLipSyncHandler() {
+		if (!this.model) return;
+
+		const handler = () => {
+			if (!this.model) return;
+
+			// 平滑插值
+			this.mouthCurrent += (this.mouthTarget - this.mouthCurrent) * LIP_SYNC_CONFIG.smoothing;
+
+			// 阈值以下归零
+			if (this.mouthCurrent < LIP_SYNC_CONFIG.volumeThreshold) {
+				this.mouthCurrent = 0;
+			}
+
+			try {
+				const coreModel = this.model.internalModel?.coreModel;
+				if (coreModel?.setParameterValueById) {
+					coreModel.setParameterValueById(LIP_SYNC_CONFIG.mouthParam, this.mouthCurrent, 1.0);
+				}
+			} catch { /* */ }
+		};
+
+		this.lipSyncHandler = handler;
+		this.model.internalModel.on("beforeModelUpdate", handler);
+	}
+
 	private fitModel(canvasW: number, canvasH: number) {
 		if (!this.model) return;
 
@@ -220,37 +269,5 @@ export class Live2DRenderer {
 		this.model.anchor.set(0.5, 0.5);
 		this.model.x = canvasW / 2;
 		this.model.y = canvasH * 0.52;
-	}
-
-	private applyEmotionParams(emotion: string) {
-		const overrides = EMOTION_PARAMS[emotion] ?? {};
-		try {
-			const coreModel = this.model?.internalModel?.coreModel;
-			if (!coreModel) return;
-			const rawModel = coreModel._model;
-			if (!rawModel?.parameters) return;
-			const { ids, values, count } = rawModel.parameters;
-			for (let i = 0; i < count; i++) {
-				if (ids[i] in overrides) {
-					values[i] = overrides[ids[i]];
-				}
-			}
-		} catch { /* */ }
-	}
-
-	private applyParam(paramId: string, value: number) {
-		try {
-			const coreModel = this.model?.internalModel?.coreModel;
-			if (!coreModel) return;
-			const rawModel = coreModel._model;
-			if (!rawModel?.parameters) return;
-			const { ids, values, count } = rawModel.parameters;
-			for (let i = 0; i < count; i++) {
-				if (ids[i] === paramId) {
-					values[i] = value;
-					break;
-				}
-			}
-		} catch { /* */ }
 	}
 }

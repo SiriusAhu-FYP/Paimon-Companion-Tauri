@@ -4,7 +4,7 @@ import { ThemeProvider, CssBaseline } from "@mui/material";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { initServices } from "@/services";
 import { mockCharacterInit, exposeMockTools } from "@/utils/mock";
-import { broadcastState, onControlCommand } from "@/utils/window-sync";
+import { broadcastState, broadcastControl, onControlCommand } from "@/utils/window-sync";
 import theme from "./theme";
 import App from "./App";
 import "./App.css";
@@ -40,7 +40,10 @@ if (windowLabel === "main") {
 
 	services.bus.on("character:state-change", () => broadcastFullState());
 	services.bus.on("runtime:mode-change", () => broadcastFullState());
-	services.bus.on("character:expression", (payload) => broadcastFullState(payload.emotion));
+	services.bus.on("character:expression", (payload) => {
+		broadcastFullState(payload.emotion);
+		broadcastControl({ type: "set-expression", expressionName: payload.expressionName });
+	});
 
 	// 响应 Stage 的 request-state
 	onControlCommand((cmd) => {
