@@ -12,13 +12,14 @@ const log = createLogger("stage-window");
 /**
  * OBS 舞台窗口——唯一的 Live2D 渲染实例。
  *
- * 窗口语义：
- * - docked：pinToApp 激活，Stage 始终在主窗口之上（setAlwaysOnTop），不可拖拽
- * - floating：可拖拽，alwaysOnTop 可独立切换
+ * 窗口行为：
+ * - pinToApp 由 Tauri parent 关系保证（tauri.conf.json stage.parent = "main"）
+ * - docked 模式：不可拖拽，位置由主窗口 StageHost 驱动
+ * - floating 模式：可拖拽，alwaysOnTop 可独立控制
  *
  * 显示模式：
- * - clean：控制条完全隐藏，适合 OBS 播出
- * - interactive：hover 时显示控制条，便于操作
+ * - clean：控制条不渲染 + docked 时 setIgnoreCursorEvents(true) 实现点击穿透
+ * - interactive：hover 显示控制条
  */
 export function StageWindow() {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -29,9 +30,25 @@ export function StageWindow() {
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
 	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("interactive");
 
-	// pinToApp 由 Tauri parent 关系实现（tauri.conf.json 中 stage.parent = "main"）
-	// Win32 owned window 保证：Stage 始终在 main 之上，main 最小化时 Stage 跟随隐藏
-	// 此处只控制 alwaysOnTop（是否压在其他应用之上）
+	// 向主窗口广播当前状态
+	const syncStateToHost = useCallback((overrides?: Partial<{
+		mode: "docked" | "floating";
+		alwaysOnTop: boolean;
+		displayMode: StageDisplayMode;
+		visible: boolean;
+	}>) => {
+		broadcastControl({
+			type: "sync-state",
+			state: {
+				mode: overrides?.mode ?? stageMode,
+				alwaysOnTop: overrides?.alwaysOnTop ?? alwaysOnTop,
+				displayMode: overrides?.displayMode ?? displayMode,
+				visible: overrides?.visible ?? true,
+			},
+		});
+	}, [stageMode, alwaysOnTop, displayMode]);
+
+	// alwaysOnTop 控制
 	useEffect(() => {
 		const hasTauri = "__TAURI_INTERNALS__" in window;
 		if (!hasTauri) return;
@@ -40,8 +57,6 @@ export function StageWindow() {
 			try {
 				const { getCurrentWindow } = await import("@tauri-apps/api/window");
 				const win = getCurrentWindow();
-				// docked 模式不需要 alwaysOnTop（parent 关系已保证在 main 之上）
-				// floating 模式下由用户控制
 				if (stageMode === "docked") {
 					await win.setAlwaysOnTop(false);
 					await win.setSkipTaskbar(true);
@@ -57,6 +72,27 @@ export function StageWindow() {
 		applyAlwaysOnTop();
 	}, [stageMode, alwaysOnTop]);
 
+	// clean + docked 时启用点击穿透
+	useEffect(() => {
+		const hasTauri = "__TAURI_INTERNALS__" in window;
+		if (!hasTauri) return;
+
+		async function applyCursorEvents() {
+			try {
+				const { getCurrentWindow } = await import("@tauri-apps/api/window");
+				const win = getCurrentWindow();
+				const shouldIgnore = displayMode === "clean" && stageMode === "docked";
+				await win.setIgnoreCursorEvents(shouldIgnore);
+				log.info(`ignoreCursorEvents → ${shouldIgnore}`);
+			} catch (err) {
+				log.warn("setIgnoreCursorEvents failed", err);
+			}
+		}
+
+		applyCursorEvents();
+	}, [displayMode, stageMode]);
+
+	// Live2D 初始化 + 事件监听
 	useEffect(() => {
 		document.documentElement.style.background = "transparent";
 		document.body.style.background = "transparent";
@@ -171,26 +207,27 @@ export function StageWindow() {
 		try {
 			const { getCurrentWindow } = await import("@tauri-apps/api/window");
 			await getCurrentWindow().hide();
+			syncStateToHost({ visible: false });
 		} catch {
 			window.close();
 		}
-	}, []);
+	}, [syncStateToHost]);
 
 	const toggleMode = useCallback(() => {
 		const next = stageMode === "docked" ? "floating" : "docked";
 		setStageMode(next);
 		broadcastControl({ type: "set-mode", mode: next });
-	}, [stageMode]);
+		syncStateToHost({ mode: next });
+	}, [stageMode, syncStateToHost]);
 
 	const toggleDisplayMode = useCallback(() => {
-		const next = displayMode === "clean" ? "interactive" : "clean";
+		const next: StageDisplayMode = displayMode === "clean" ? "interactive" : "clean";
 		setDisplayMode(next);
 		broadcastControl({ type: "set-display-mode", displayMode: next });
-	}, [displayMode]);
+		syncStateToHost({ displayMode: next });
+	}, [displayMode, syncStateToHost]);
 
 	const isFloating = stageMode === "floating";
-
-	// clean 模式：控制条完全不渲染
 	const shouldShowToolbar = displayMode === "interactive" && showControls;
 
 	return (

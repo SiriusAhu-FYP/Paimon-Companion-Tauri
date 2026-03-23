@@ -1,9 +1,11 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { ThemeProvider, CssBaseline } from "@mui/material";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { initServices } from "@/services";
 import { mockCharacterInit, exposeMockTools } from "@/utils/mock";
 import { broadcastState, onControlCommand } from "@/utils/window-sync";
+import theme from "./theme";
 import App from "./App";
 import "./App.css";
 
@@ -56,6 +58,9 @@ if (windowLabel === "main") {
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 	<React.StrictMode>
-		<App />
+		<ThemeProvider theme={theme}>
+			<CssBaseline />
+			<App />
+		</ThemeProvider>
 	</React.StrictMode>,
 );

@@ -1,17 +1,4 @@
-:root {
-	font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-	font-size: 14px;
-	line-height: 1.5;
-	font-weight: 400;
-
-	color: #e0e0e0;
-	background-color: #1a1a2e;
-
-	font-synthesis: none;
-	text-rendering: optimizeLegibility;
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
-}
+/* ── 全局 reset（MUI CssBaseline 覆盖大部分，仅保留补充） ── */
 
 * {
 	margin: 0;
@@ -19,348 +6,15 @@
 	box-sizing: border-box;
 }
 
-/* ── 主窗口布局 ── */
-
-.main-window {
-	display: flex;
-	flex-direction: column;
-	height: 100vh;
-	overflow: hidden;
-}
-
-.main-header {
-	padding: 8px 16px;
-	background: #16213e;
-	border-bottom: 1px solid #0f3460;
-}
-
-.main-header h1 {
-	font-size: 18px;
-	font-weight: 600;
-	color: #e94560;
-}
-
-.main-layout {
-	display: flex;
-	flex: 1;
-	min-height: 0;
-}
-
-.main-left {
-	width: 300px;
-	min-width: 240px;
-	border-right: 1px solid #0f3460;
-	overflow-y: auto;
-}
-
-.main-center {
-	flex: 1;
-	min-width: 0;
-	border-right: 1px solid #0f3460;
-	overflow-y: auto;
-}
-
-.main-right {
-	width: 280px;
-	min-width: 220px;
-	overflow-y: auto;
-}
-
-.main-footer {
-	height: 180px;
-	border-top: 1px solid #0f3460;
-	overflow-y: auto;
-	background: #0f0f23;
-}
-
-/* ── 通用 section ── */
-
-section {
-	padding: 12px;
-}
-
-section h2 {
-	font-size: 14px;
-	font-weight: 600;
-	color: #e94560;
-	margin-bottom: 8px;
-	text-transform: uppercase;
-	letter-spacing: 0.5px;
-}
-
-section h3 {
-	font-size: 12px;
-	font-weight: 600;
-	color: #999;
-	margin-bottom: 4px;
-}
-
-/* ── Stage Host（主界面左栏停靠区） ── */
-
-.stage-host {
-	display: flex;
-	flex-direction: column;
-	height: 100%;
-}
-
-.stage-host-status {
-	padding: 8px;
-	background: #16213e;
-	border-radius: 6px;
-	margin-bottom: 8px;
-}
-
-.stage-host-state-row {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	font-size: 13px;
-	margin: 2px 0;
-}
-
-.stage-host-indicator {
-	display: inline-block;
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background: #444;
-	transition: background 0.2s;
-}
-
-.stage-host-indicator.indicator-on {
-	background: #4caf50;
-	box-shadow: 0 0 4px #4caf50;
-}
-
-.stage-host-mode-label {
-	font-size: 11px;
-	color: #888;
-	padding: 1px 6px;
-	background: #0f3460;
-	border-radius: 3px;
-}
-
-.stage-host-pin-label {
-	font-size: 10px;
-	color: #4caf50;
-	padding: 1px 5px;
-	background: rgba(76, 175, 80, 0.15);
-	border-radius: 3px;
-	font-weight: 600;
-}
-
-.stage-host-char-info {
-	font-size: 12px;
-	color: #999;
-}
-
-.stage-host-speaking {
-	font-size: 10px;
-	color: #e94560;
-	animation: pulse 1.5s ease-in-out infinite;
-}
-
-.stage-host-slot {
-	flex: 1;
-	min-height: 120px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background: #0d1b2a;
-	border: 1px dashed #0f3460;
-	border-radius: 6px;
-	margin-bottom: 8px;
-	transition: border-color 0.2s, background 0.2s;
-}
-
-.stage-host-slot.slot-active {
-	border-color: #e94560;
-	border-style: solid;
-	background: rgba(233, 69, 96, 0.05);
-}
-
-.slot-hint {
-	font-size: 12px;
-	color: #555;
-	text-align: center;
-}
-
-.stage-host-controls {
-	padding: 4px 0;
-}
-
-.stage-host-controls h3 {
-	margin-top: 6px;
-	margin-bottom: 2px;
-	font-size: 11px;
-	color: #777;
-}
-
-/* ── 控制面板 ── */
-
-.control-section {
-	margin-bottom: 12px;
-	padding: 8px;
-	background: #16213e;
-	border-radius: 6px;
-}
-
-.control-section p {
-	font-size: 13px;
-	margin: 2px 0;
-}
-
-.control-actions {
-	display: flex;
-	gap: 6px;
-	margin-top: 6px;
-}
-
-button {
-	padding: 4px 12px;
-	font-size: 12px;
-	border: 1px solid #0f3460;
-	border-radius: 4px;
-	background: #1a1a2e;
-	color: #e0e0e0;
-	cursor: pointer;
-	transition: background 0.15s;
-}
-
-button:hover:not(:disabled) {
-	background: #0f3460;
-}
-
-button:disabled {
-	opacity: 0.4;
-	cursor: not-allowed;
-}
-
-button.active {
-	background: #e94560;
-	border-color: #e94560;
-	color: #fff;
-}
-
-.emotion-buttons {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	margin-top: 4px;
-}
-
-/* ── 对话面板 ── */
-
-.chat-panel {
-	display: flex;
-	flex-direction: column;
-	height: 100%;
-}
-
-.chat-messages {
-	flex: 1;
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	overflow-y: auto;
-	min-height: 0;
-}
-
-.chat-empty {
-	color: #555;
-	font-size: 13px;
-	text-align: center;
-	padding: 24px;
-}
-
-.chat-message {
-	display: flex;
-	gap: 8px;
-	padding: 6px 8px;
-	border-radius: 4px;
-	font-size: 13px;
-}
-
-.chat-user {
-	background: #16213e;
-}
-
-.chat-assistant {
-	background: #1a2744;
-}
-
-.chat-role {
-	font-weight: 600;
-	color: #e94560;
-	min-width: 32px;
-}
-
-.chat-cursor {
-	animation: blink 0.8s step-end infinite;
-	color: #e94560;
-}
+/* ── 动画 keyframes ── */
 
 @keyframes blink {
 	50% { opacity: 0; }
 }
 
-.chat-status {
-	padding: 4px 8px;
-	font-size: 12px;
-	color: #e94560;
-	text-align: center;
-	animation: pulse 1.5s ease-in-out infinite;
-}
-
 @keyframes pulse {
 	0%, 100% { opacity: 0.6; }
 	50% { opacity: 1; }
-}
-
-.chat-input-area {
-	display: flex;
-	gap: 6px;
-	padding: 8px 0 0;
-	border-top: 1px solid #0f3460;
-	margin-top: 8px;
-}
-
-.chat-input {
-	flex: 1;
-	padding: 6px 10px;
-	font-size: 13px;
-	border: 1px solid #0f3460;
-	border-radius: 4px;
-	background: #16213e;
-	color: #e0e0e0;
-	outline: none;
-}
-
-.chat-input:focus {
-	border-color: #e94560;
-}
-
-.chat-input:disabled {
-	opacity: 0.5;
-}
-
-.chat-send-btn {
-	padding: 6px 16px;
-	font-size: 12px;
-	background: #e94560;
-	border: none;
-	border-radius: 4px;
-	color: #fff;
-	cursor: pointer;
-}
-
-.chat-send-btn:hover:not(:disabled) {
-	background: #c73550;
-}
-
-.chat-send-btn:disabled {
-	opacity: 0.4;
-	cursor: not-allowed;
 }
 
 /* ── 事件日志 ── */
@@ -371,6 +25,9 @@ button.active {
 
 .event-log h3 {
 	margin-bottom: 6px;
+	font-size: 12px;
+	font-weight: 600;
+	color: #999;
 }
 
 .event-log-empty {
@@ -408,7 +65,7 @@ button.active {
 	white-space: nowrap;
 }
 
-/* ── 舞台窗口 ── */
+/* ── 舞台窗口（独立 Tauri Window 内） ── */
 
 .stage-window {
 	position: relative;
@@ -418,7 +75,6 @@ button.active {
 	overflow: hidden;
 }
 
-/* hover 控制条——整条可拖拽（data-tauri-drag-region） */
 .stage-toolbar {
 	position: absolute;
 	top: 0;
@@ -472,23 +128,4 @@ button.active {
 .stage-tb-close:hover {
 	background: rgba(233, 69, 96, 0.7);
 	border-color: rgba(233, 69, 96, 0.7);
-}
-
-/* ── 运行状态指示 ── */
-
-.control-stopped {
-	border: 1px solid #e94560;
-	background: #2a1020;
-}
-
-.badge-stopped {
-	display: inline-block;
-	margin-left: 6px;
-	padding: 1px 6px;
-	font-size: 10px;
-	font-weight: 700;
-	color: #fff;
-	background: #e94560;
-	border-radius: 3px;
-	vertical-align: middle;
 }

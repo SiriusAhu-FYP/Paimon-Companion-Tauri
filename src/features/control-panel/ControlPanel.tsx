@@ -1,6 +1,12 @@
 import { useState } from "react";
-import { useRuntime } from "@/hooks";
-import { useCharacter } from "@/hooks";
+import {
+	Box, Button, Typography, Stack, Chip, Divider,
+} from "@mui/material";
+import StopIcon from "@mui/icons-material/Stop";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import MicIcon from "@mui/icons-material/Mic";
+import { useRuntime, useCharacter } from "@/hooks";
+import { HelpTooltip } from "@/components";
 import { getServices } from "@/services";
 import { mockVoicePipeline, mockExternalEvents } from "@/utils/mock";
 import { createLogger } from "@/services/logger";
@@ -49,62 +55,108 @@ export function ControlPanel() {
 	};
 
 	return (
-		<section className="control-panel">
-			<h2>控制面板</h2>
+		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
+			<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+				控制面板
+			</Typography>
 
-			<div className={`control-section ${mode === "stopped" ? "control-stopped" : ""}`}>
-				<h3>运行状态</h3>
-				<p>
-					模式：<strong>{mode}</strong>
-					{mode === "stopped" && <span className="badge-stopped"> STOPPED</span>}
-				</p>
-				<div className="control-actions">
-					<button onClick={stop} disabled={mode === "stopped"}>急停</button>
-					<button onClick={resume} disabled={mode === "auto"}>恢复</button>
-				</div>
-			</div>
+			{/* 运行状态 */}
+			<Box sx={{
+				bgcolor: "background.paper", borderRadius: 1, p: 1,
+				...(mode === "stopped" && { border: "1px solid", borderColor: "error.main", bgcolor: "#2a1020" }),
+			}}>
+				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>运行状态</Typography>
+					<HelpTooltip title="急停：立即停止所有活动；恢复：回到自动模式" />
+				</Stack>
+				<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 0.5 }}>
+					<Typography variant="body2">
+						模式：<strong>{mode}</strong>
+					</Typography>
+					{mode === "stopped" && (
+						<Chip label="STOPPED" size="small" color="error" sx={{ height: 18, fontSize: 10 }} />
+					)}
+				</Stack>
+				<Stack direction="row" spacing={0.5}>
+					<Button variant="outlined" size="small" onClick={stop} disabled={mode === "stopped"} startIcon={<StopIcon />} color="error">
+						急停
+					</Button>
+					<Button variant="outlined" size="small" onClick={resume} disabled={mode === "auto"} startIcon={<PlayArrowIcon />}>
+						恢复
+					</Button>
+				</Stack>
+			</Box>
 
-			<div className="control-section">
-				<h3>角色状态</h3>
-				<p>角色：{characterId || "未加载"}</p>
-				<p>情绪：{emotion}</p>
-				<p>说话中：{isSpeaking ? "是" : "否"}</p>
-			</div>
+			<Divider />
 
-			<div className="control-section">
-				<h3>表情切换</h3>
-				<div className="emotion-buttons">
+			{/* 角色状态 */}
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
+				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
+					角色状态
+				</Typography>
+				<Typography variant="body2">角色：{characterId || "未加载"}</Typography>
+				<Typography variant="body2">情绪：{emotion}</Typography>
+				<Typography variant="body2">说话中：{isSpeaking ? "是" : "否"}</Typography>
+			</Box>
+
+			<Divider />
+
+			{/* 表情切换 */}
+			<Box>
+				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
+					表情切换
+				</Typography>
+				<Stack direction="row" flexWrap="wrap" gap={0.5}>
 					{EMOTIONS.map((e) => (
-						<button
+						<Button
 							key={e}
+							size="small"
+							variant={emotion === e ? "contained" : "outlined"}
 							onClick={() => setEmotion(e)}
-							className={emotion === e ? "active" : ""}
 						>
 							{e}
-						</button>
+						</Button>
 					))}
-				</div>
-			</div>
+				</Stack>
+			</Box>
 
-			<div className="control-section">
-				<h3>Spike 验证</h3>
-				<div className="control-actions">
-					<button onClick={handleMicTest}>麦克风测试</button>
-					<span style={{ fontSize: 11, marginLeft: 6 }}>
+			<Divider />
+
+			{/* Spike 验证 */}
+			<Box>
+				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>Spike 验证</Typography>
+					<HelpTooltip title="测试麦克风硬件是否可用" />
+				</Stack>
+				<Stack direction="row" spacing={0.5} alignItems="center">
+					<Button variant="outlined" size="small" onClick={handleMicTest} startIcon={<MicIcon />}>
+						麦克风测试
+					</Button>
+					<Typography variant="caption" sx={{ fontSize: 11 }}>
 						{micStatus === "ok" && "✅ 成功"}
 						{micStatus === "denied" && "❌ 权限被拒绝"}
 						{micStatus === "error" && "❌ 出错"}
-					</span>
-				</div>
-			</div>
+					</Typography>
+				</Stack>
+			</Box>
 
-			<div className="control-section">
-				<h3>Mock 测试</h3>
-				<div className="control-actions">
-					<button onClick={handleMockPipeline}>模拟语音链路</button>
-					<button onClick={handleMockExternal}>模拟外部事件</button>
-				</div>
-			</div>
-		</section>
+			<Divider />
+
+			{/* Mock 测试 */}
+			<Box>
+				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>Mock 测试</Typography>
+					<HelpTooltip title="模拟语音链路和外部事件，用于测试管道流程" />
+				</Stack>
+				<Stack direction="row" spacing={0.5}>
+					<Button variant="outlined" size="small" onClick={handleMockPipeline}>
+						模拟语音链路
+					</Button>
+					<Button variant="outlined" size="small" onClick={handleMockExternal}>
+						模拟外部事件
+					</Button>
+				</Stack>
+			</Box>
+		</Box>
 	);
 }

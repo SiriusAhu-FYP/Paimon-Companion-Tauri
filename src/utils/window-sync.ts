@@ -13,6 +13,13 @@ export interface SyncPayload {
 
 export type StageDisplayMode = "clean" | "interactive";
 
+export interface StageState {
+	mode: "docked" | "floating";
+	alwaysOnTop: boolean;
+	displayMode: StageDisplayMode;
+	visible: boolean;
+}
+
 export type ControlCommand =
 	| { type: "request-state" }
 	| { type: "hide-stage" }
@@ -20,7 +27,8 @@ export type ControlCommand =
 	| { type: "reset-position" }
 	| { type: "set-mode"; mode: "docked" | "floating" }
 	| { type: "set-always-on-top"; value: boolean }
-	| { type: "set-display-mode"; displayMode: StageDisplayMode };
+	| { type: "set-display-mode"; displayMode: StageDisplayMode }
+	| { type: "sync-state"; state: StageState };
 
 // ── Tauri 事件 vs BroadcastChannel 自适应 ──
 
