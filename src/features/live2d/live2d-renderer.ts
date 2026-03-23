@@ -58,8 +58,8 @@ export class Live2DRenderer {
 	private mouthCurrent = 0;
 	private lipSyncHandler: (() => void) | null = null;
 
-	// 眼神模式
-	private eyeMode: EyeMode = "random-path";
+	// 眼神模式——默认 fixed，由外部通过 setEyeMode() 激活
+	private eyeMode: EyeMode = "fixed";
 	private randomEyeRafId = 0;
 	private randomEyeStartTime = 0;
 
@@ -115,7 +115,6 @@ export class Live2DRenderer {
 		}
 
 		this.setupLipSyncHandler();
-		this.applyEyeMode();
 
 		log.info(`model loaded (DPR=${this.dpr})`);
 	}
@@ -214,7 +213,6 @@ export class Live2DRenderer {
 	// ── 眼神模式 ──
 
 	setEyeMode(mode: EyeMode) {
-		if (mode === this.eyeMode) return;
 		this.stopRandomEye();
 		this.eyeMode = mode;
 		this.applyEyeMode();

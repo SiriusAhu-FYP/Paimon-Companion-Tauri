@@ -20,7 +20,14 @@ export function StageWindow() {
 	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("interactive");
 	const currentModelPath = useRef(DEFAULT_MODEL.path);
 	const [scaleLocked, setScaleLocked] = useState(false);
-	const [eyeMode, setEyeMode] = useState<EyeMode>("random-path");
+	const eyeModeRef = useRef<EyeMode>("random-path");
+	const [eyeMode, setEyeModeState] = useState<EyeMode>("random-path");
+
+	const setEyeMode = useCallback((mode: EyeMode) => {
+		eyeModeRef.current = mode;
+		setEyeModeState(mode);
+		rendererRef.current?.setEyeMode(mode);
+	}, []);
 
 	const syncStateToHost = useCallback((overrides?: Partial<{
 		mode: "docked" | "floating";
@@ -78,6 +85,7 @@ export function StageWindow() {
 		applyCursorEvents();
 	}, [displayMode, stageMode]);
 
+	// 稳定的 loadModel — 无外部 state 依赖，通过 ref 读取当前值
 	const loadModel = useCallback(async (modelPath: string) => {
 		const oldRenderer = rendererRef.current;
 		if (oldRenderer) {
@@ -103,7 +111,8 @@ export function StageWindow() {
 				modelPath,
 				autoFit: true,
 			});
-			renderer.setEyeMode(eyeMode);
+			// 通过 ref 读取当前眼神模式，避免 loadModel 对 eyeMode state 的依赖
+			renderer.setEyeMode(eyeModeRef.current);
 			setLoadStatus("ok");
 			log.info(`model loaded: ${modelPath}`);
 
@@ -113,73 +122,9 @@ export function StageWindow() {
 			setLoadStatus("error");
 			log.error("model load failed", err);
 		}
-	}, [eyeMode]);
+	}, []); // 空依赖——稳定引用
 
-	// 初始化
-	useEffect(() => {
-		document.documentElement.style.background = "transparent";
-		document.body.style.background = "transparent";
-
-		const cleanups: (() => void)[] = [];
-
-		async function setup() {
-			await loadModel(DEFAULT_MODEL.path);
-
-			broadcastControl({ type: "request-state" });
-
-			const unsubMouth = await onMouthSync((value: number) => {
-				rendererRef.current?.setMouthOpenY(value);
-			});
-			cleanups.push(unsubMouth);
-
-			const unsubControl = await onControlCommand((cmd: ControlCommand) => {
-				handleControlCommand(cmd);
-			});
-			cleanups.push(unsubControl);
-		}
-
-		setup();
-
-		const handleResize = () => {
-			rendererRef.current?.resize(window.innerWidth, window.innerHeight);
-		};
-		window.addEventListener("resize", handleResize);
-
-		return () => {
-			window.removeEventListener("resize", handleResize);
-			cleanups.forEach((fn) => fn());
-			rendererRef.current?.destroy();
-			rendererRef.current = null;
-		};
-	}, [loadModel]);
-
-	// 滚轮缩放
-	useEffect(() => {
-		const canvas = canvasRef.current;
-		if (!canvas) return;
-
-		const handleWheel = (e: WheelEvent) => {
-			if (scaleLocked) return;
-			e.preventDefault();
-			const delta = e.deltaY < 0 ? 1 : -1;
-			rendererRef.current?.applyZoomDelta(delta);
-		};
-
-		canvas.addEventListener("wheel", handleWheel, { passive: false });
-		return () => canvas.removeEventListener("wheel", handleWheel);
-	}, [scaleLocked]);
-
-	// 鼠标跟随（follow-mouse 模式）
-	useEffect(() => {
-		if (eyeMode !== "follow-mouse") return;
-
-		const handleMouseMove = (e: MouseEvent) => {
-			rendererRef.current?.focusMouse(e.clientX, e.clientY);
-		};
-		window.addEventListener("mousemove", handleMouseMove);
-		return () => window.removeEventListener("mousemove", handleMouseMove);
-	}, [eyeMode]);
-
+	// 稳定的 handleControlCommand — 通过 ref 读取 renderer
 	const handleControlCommand = useCallback(async (cmd: ControlCommand) => {
 		try {
 			const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -221,7 +166,6 @@ export function StageWindow() {
 					break;
 				case "set-eye-mode":
 					setEyeMode(cmd.mode);
-					rendererRef.current?.setEyeMode(cmd.mode);
 					break;
 				case "set-size":
 					try {
@@ -233,7 +177,72 @@ export function StageWindow() {
 		} catch {
 			if (cmd.type === "hide-stage") window.close();
 		}
-	}, [loadModel]);
+	}, [loadModel, setEyeMode]); // loadModel 和 setEyeMode 都是稳定引用
+
+	// 初始化——只运行一次
+	useEffect(() => {
+		document.documentElement.style.background = "transparent";
+		document.body.style.background = "transparent";
+
+		const cleanups: (() => void)[] = [];
+
+		async function setup() {
+			await loadModel(DEFAULT_MODEL.path);
+
+			broadcastControl({ type: "request-state" });
+
+			const unsubMouth = await onMouthSync((value: number) => {
+				rendererRef.current?.setMouthOpenY(value);
+			});
+			cleanups.push(unsubMouth);
+
+			const unsubControl = await onControlCommand((cmd: ControlCommand) => {
+				handleControlCommand(cmd);
+			});
+			cleanups.push(unsubControl);
+		}
+
+		setup();
+
+		const handleResize = () => {
+			rendererRef.current?.resize(window.innerWidth, window.innerHeight);
+		};
+		window.addEventListener("resize", handleResize);
+
+		return () => {
+			window.removeEventListener("resize", handleResize);
+			cleanups.forEach((fn) => fn());
+			rendererRef.current?.destroy();
+			rendererRef.current = null;
+		};
+	}, [loadModel, handleControlCommand]);
+
+	// 滚轮缩放
+	useEffect(() => {
+		const canvas = canvasRef.current;
+		if (!canvas) return;
+
+		const handleWheel = (e: WheelEvent) => {
+			if (scaleLocked) return;
+			e.preventDefault();
+			const delta = e.deltaY < 0 ? 1 : -1;
+			rendererRef.current?.applyZoomDelta(delta);
+		};
+
+		canvas.addEventListener("wheel", handleWheel, { passive: false });
+		return () => canvas.removeEventListener("wheel", handleWheel);
+	}, [scaleLocked]);
+
+	// 鼠标跟随（follow-mouse 模式）
+	useEffect(() => {
+		if (eyeMode !== "follow-mouse") return;
+
+		const handleMouseMove = (e: MouseEvent) => {
+			rendererRef.current?.focusMouse(e.clientX, e.clientY);
+		};
+		window.addEventListener("mousemove", handleMouseMove);
+		return () => window.removeEventListener("mousemove", handleMouseMove);
+	}, [eyeMode]);
 
 	const handleHide = useCallback(async () => {
 		try {
