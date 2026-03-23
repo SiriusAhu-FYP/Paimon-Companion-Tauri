@@ -50,15 +50,13 @@ export function StageSlot({ visible, mode, displayMode, onRectChange }: StageSlo
 				}),
 			}}
 		>
-			{isDocked && visible ? (
-				<Typography variant="caption" sx={{ color: "text.disabled", userSelect: "none" }}>
-					Stage 覆盖此区域
-				</Typography>
-			) : isDocked && !visible ? (
+			{/* docked + visible: 无文字（Stage 窗口覆盖此区域，文字会穿透显示） */}
+			{isDocked && !visible && (
 				<Typography variant="caption" sx={{ color: "text.disabled", userSelect: "none" }}>
 					启动 Stage 显示模型
 				</Typography>
-			) : (
+			)}
+			{!isDocked && (
 				<Typography variant="caption" sx={{ color: "text.disabled", userSelect: "none" }}>
 					浮动模式 — 独立窗口
 				</Typography>

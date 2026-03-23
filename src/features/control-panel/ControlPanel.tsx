@@ -19,9 +19,9 @@ export function ControlPanel() {
 	const { mode, stop, resume } = useRuntime();
 	const { characterId, emotion, isSpeaking, setEmotion } = useCharacter();
 
-	const handleMockPipeline = () => {
+	const handleMockPipeline = async () => {
 		const { bus, runtime } = getServices();
-		mockVoicePipeline(bus, runtime);
+		await mockVoicePipeline(bus, runtime);
 	};
 
 	const handleMockExternal = () => {

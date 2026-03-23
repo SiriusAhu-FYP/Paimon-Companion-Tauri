@@ -22,48 +22,31 @@ export const MOCK_CHARACTER_CONFIG: CharacterConfig = {
 	},
 };
 
-// 模拟完整的 ASR → LLM → 角色反馈链路（受 runtime 门控）
-export function mockVoicePipeline(bus: EventBus, runtime?: RuntimeService) {
+/**
+ * 模拟完整的 ASR → LLM → TTS → 音频播放 → 口型驱动链路。
+ * 使用 pipeline.run() 走完整链路（包括 mock LLM → mock TTS → AudioPlayer → 口型数据）。
+ */
+export async function mockVoicePipeline(bus: EventBus, runtime?: RuntimeService) {
 	if (runtime && !runtime.isAllowed()) {
 		log.warn("mock voice pipeline BLOCKED — runtime mode is: " + runtime.getMode());
 		return;
 	}
 
-	log.info("starting mock voice pipeline");
+	log.info("starting mock voice pipeline (full pipeline path)");
 
 	bus.emit("audio:asr-result", {
 		text: "你好，派蒙！今天有什么好吃的推荐吗？",
 		source: "voice",
 	});
 
-	setTimeout(() => {
-		bus.emit("llm:request-start", {
-			userText: "你好，派蒙！今天有什么好吃的推荐吗？",
-		});
-	}, 200);
-
-	setTimeout(() => {
-		bus.emit("llm:tool-call", {
-			name: "setExpression",
-			args: { emotion: "happy" },
-		});
-	}, 600);
-
-	setTimeout(() => {
-		bus.emit("llm:response-end", {
-			fullText: "嘿嘿，当然有啦！今天推荐蒙德的甜甜花酿鸡，超级好吃的！",
-		});
-	}, 1000);
-
-	setTimeout(() => {
-		bus.emit("audio:tts-start", {
-			text: "嘿嘿，当然有啦！今天推荐蒙德的甜甜花酿鸡，超级好吃的！",
-		});
-	}, 1200);
-
-	setTimeout(() => {
-		bus.emit("audio:tts-end");
-	}, 3000);
+	// 使用服务容器中的 pipeline 走完整链路
+	try {
+		const { getServices } = await import("@/services");
+		const { pipeline } = getServices();
+		await pipeline.run("你好，派蒙！今天有什么好吃的推荐吗？");
+	} catch (err) {
+		log.error("mock pipeline failed", err);
+	}
 }
 
 // 模拟外部事件注入

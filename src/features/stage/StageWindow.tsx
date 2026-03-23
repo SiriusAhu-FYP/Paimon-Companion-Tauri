@@ -268,7 +268,7 @@ export function StageWindow() {
 			) : (
 				<canvas
 					ref={canvasRef}
-					style={{ width: "100%", height: "100%", display: "block" }}
+					style={{ width: "100vw", height: "100vh", display: "block" }}
 				/>
 			)}
 		</div>
