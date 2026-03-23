@@ -48,8 +48,8 @@ export function Live2DPreview() {
 		};
 	}, []);
 
-	const onExpression = useCallback(({ emotion: newEmotion }: { emotion: string; expressionName: string }) => {
-		rendererRef.current?.setEmotion(newEmotion);
+	const onExpression = useCallback(({ expressionName }: { emotion: string; expressionName: string }) => {
+		rendererRef.current?.setExpression(expressionName);
 	}, []);
 
 	useEventBus("character:expression", onExpression);

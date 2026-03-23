@@ -28,7 +28,10 @@ export type ControlCommand =
 	| { type: "set-mode"; mode: "docked" | "floating" }
 	| { type: "set-always-on-top"; value: boolean }
 	| { type: "set-display-mode"; displayMode: StageDisplayMode }
-	| { type: "sync-state"; state: StageState };
+	| { type: "sync-state"; state: StageState }
+	| { type: "set-model"; modelPath: string }
+	| { type: "set-expression"; expressionName: string }
+	| { type: "report-expressions"; expressions: string[] };
 
 // ── Tauri 事件 vs BroadcastChannel 自适应 ──
 

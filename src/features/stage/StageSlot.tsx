@@ -41,8 +41,8 @@ export function StageSlot({ visible, mode, displayMode, onRectChange }: StageSlo
 				alignItems: "center",
 				justifyContent: "center",
 				bgcolor: "#0d1b2a",
-				border: isActive && !isClean ? "1px solid" : "1px dashed",
-				borderColor: isActive && !isClean ? "primary.main" : "secondary.main",
+				border: isActive && isClean ? "none" : isActive ? "1px solid" : "1px dashed",
+				borderColor: isActive ? "primary.main" : "secondary.main",
 				borderRadius: 0,
 				transition: "border-color 0.2s, background 0.2s",
 				...(isActive && !isClean && {
