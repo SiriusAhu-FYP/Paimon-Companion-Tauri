@@ -32,6 +32,7 @@ async function loadFromTauriStore(): Promise<Partial<AppConfig>> {
 		const { load } = await import("@tauri-apps/plugin-store");
 		const store = await load(STORE_PATH, { defaults: {}, autoSave: false });
 		const data = await store.get<Partial<AppConfig>>(STORE_KEY);
+		log.info("loaded from Tauri Store", { found: !!data, provider: data?.llm?.provider ?? "none" });
 		return data ?? {};
 	} catch (err) {
 		log.warn("failed to load from Tauri Store, using defaults", err);
@@ -45,6 +46,7 @@ async function saveToTauriStore(config: AppConfig): Promise<void> {
 		const store = await load(STORE_PATH, { defaults: {}, autoSave: false });
 		await store.set(STORE_KEY, config);
 		await store.save();
+		log.info("saved to Tauri Store", { provider: config.llm.provider });
 	} catch (err) {
 		log.error("failed to save to Tauri Store", err);
 	}
@@ -55,15 +57,25 @@ async function saveToTauriStore(config: AppConfig): Promise<void> {
 function loadFromLocalStorage(): Partial<AppConfig> {
 	try {
 		const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-		if (raw) return JSON.parse(raw) as Partial<AppConfig>;
-	} catch { /* ignore */ }
+		if (raw) {
+			const parsed = JSON.parse(raw) as Partial<AppConfig>;
+			log.info("loaded from localStorage", { provider: parsed?.llm?.provider ?? "none" });
+			return parsed;
+		}
+		log.info("localStorage empty, using defaults");
+	} catch (err) {
+		log.warn("failed to read localStorage", err);
+	}
 	return {};
 }
 
 function saveToLocalStorage(config: AppConfig): void {
 	try {
 		localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(config));
-	} catch { /* ignore */ }
+		log.info("saved to localStorage", { provider: config.llm.provider });
+	} catch (err) {
+		log.error("failed to write localStorage", err);
+	}
 }
 
 // ── 公共 API ──

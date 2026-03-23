@@ -29,27 +29,31 @@ export interface ServiceContainer {
 let services: ServiceContainer | null = null;
 
 function resolveLLMProvider(config: AppConfig): ILLMService {
-	switch (config.llm.provider) {
-		case "openai-compatible":
-			// 真实 LLM provider 将在 M1 中实现，当前降级到 mock
-			log.warn("openai-compatible LLM provider not yet implemented, falling back to mock");
-			return new MockLLMService();
-		case "mock":
-		default:
-			return new MockLLMService();
+	if (config.llm.provider === "mock") {
+		log.info("using mock LLM provider");
+		return new MockLLMService();
 	}
+	// 真实 LLM provider 将在 M1 中实现
+	log.info(`LLM provider "${config.llm.provider}" configured but real implementation pending (M1), using mock fallback`);
+	return new MockLLMService();
 }
 
 function resolveTTSProvider(config: AppConfig): ITTSService {
-	switch (config.tts.provider) {
-		case "http-api":
-			// 真实 TTS provider 将在 M2 中实现，当前降级到 mock
-			log.warn("http-api TTS provider not yet implemented, falling back to mock");
-			return new MockTTSService();
-		case "mock":
-		default:
-			return new MockTTSService();
+	if (config.tts.provider === "mock") {
+		log.info("using mock TTS provider");
+		return new MockTTSService();
 	}
+	if (config.tts.provider === "gpt-sovits") {
+		if (!config.tts.baseUrl) {
+			log.info("GPT-SoVITS configured but baseUrl missing, using mock fallback");
+			return new MockTTSService();
+		}
+		// GPT-SoVITS provider 将在 M2 中实现
+		log.info(`GPT-SoVITS provider configured (${config.tts.baseUrl}) but real implementation pending (M2), using mock fallback`);
+		return new MockTTSService();
+	}
+	log.info(`unknown TTS provider "${config.tts.provider}", using mock fallback`);
+	return new MockTTSService();
 }
 
 export function initServices(): ServiceContainer {

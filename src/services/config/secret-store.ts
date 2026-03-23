@@ -54,15 +54,25 @@ export async function setSecret(key: string, value: string): Promise<void> {
 
 export async function getSecret(key: string): Promise<string | null> {
 	if (isTauriEnvironment()) {
-		const result = await invokeSecret<string | null>("secret_get", { key });
-		return result;
+		try {
+			const result = await invokeSecret<string | null>("secret_get", { key });
+			return result;
+		} catch (err) {
+			log.warn(`failed to get secret '${key}' from keyring`, err);
+			return null;
+		}
 	}
 	return sessionGet(key);
 }
 
 export async function hasSecret(key: string): Promise<boolean> {
 	if (isTauriEnvironment()) {
-		return invokeSecret<boolean>("secret_has", { key });
+		try {
+			return await invokeSecret<boolean>("secret_has", { key });
+		} catch (err) {
+			log.warn(`failed to check secret '${key}' in keyring`, err);
+			return false;
+		}
 	}
 	return sessionGet(key) !== null;
 }
