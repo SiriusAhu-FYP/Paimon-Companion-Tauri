@@ -12,6 +12,8 @@ const LIP_SYNC_CONFIG = {
 	mouthParam: "ParamMouthOpenY",
 };
 
+export type EyeMode = "fixed" | "follow-mouse" | "random-path";
+
 export interface Live2DRendererOptions {
 	canvas: HTMLCanvasElement;
 	width: number;
@@ -44,14 +46,25 @@ export class Live2DRenderer {
 	private destroyed = false;
 	private autoFit = false;
 	private dpr = 1;
+	private canvasW = 0;
+	private canvasH = 0;
+
+	// 用户缩放倍率（叠加在 autoFit 计算的 baseScale 之上）
+	private userZoom = 1;
+	private baseScale = 1;
 
 	// 口型平滑
 	private mouthTarget = 0;
 	private mouthCurrent = 0;
 	private lipSyncHandler: (() => void) | null = null;
 
+	// 眼神模式
+	private eyeMode: EyeMode = "random-path";
+	private randomEyeRafId = 0;
+	private randomEyeStartTime = 0;
+
 	async init(options: Live2DRendererOptions): Promise<void> {
-		if (this.destroyed) return;
+		this.destroyed = false;
 
 		this.autoFit = options.autoFit ?? false;
 		this.dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -86,11 +99,15 @@ export class Live2DRenderer {
 
 		this.app.stage.addChild(model as unknown as import("pixi.js").DisplayObject);
 		this.model = model;
+		this.canvasW = options.width;
+		this.canvasH = options.height;
+		this.userZoom = 1;
 
 		if (this.autoFit) {
 			this.fitModel(options.width, options.height);
 		} else {
 			const scale = options.scale ?? 0.15;
+			this.baseScale = scale;
 			model.scale.set(scale);
 			model.anchor.set(0.5, 0.5);
 			model.x = options.width / 2;
@@ -98,6 +115,7 @@ export class Live2DRenderer {
 		}
 
 		this.setupLipSyncHandler();
+		this.applyEyeMode();
 
 		log.info(`model loaded (DPR=${this.dpr})`);
 	}
@@ -177,9 +195,50 @@ export class Live2DRenderer {
 		this.mouthTarget = Math.max(0, Math.min(1, value));
 	}
 
+	// ── 缩放控制 ──
+
+	/**
+	 * 应用滚轮缩放增量。delta > 0 放大，delta < 0 缩小。
+	 */
+	applyZoomDelta(delta: number) {
+		if (!this.model) return;
+		const step = delta > 0 ? 1.08 : 1 / 1.08;
+		this.userZoom = Math.max(0.2, Math.min(5, this.userZoom * step));
+		this.model.scale.set(this.baseScale * this.userZoom);
+	}
+
+	getZoom(): number {
+		return this.userZoom;
+	}
+
+	// ── 眼神模式 ──
+
+	setEyeMode(mode: EyeMode) {
+		if (mode === this.eyeMode) return;
+		this.stopRandomEye();
+		this.eyeMode = mode;
+		this.applyEyeMode();
+	}
+
+	getEyeMode(): EyeMode {
+		return this.eyeMode;
+	}
+
+	/**
+	 * 外部传入鼠标相对于 canvas 的坐标，仅在 follow-mouse 模式下生效
+	 */
+	focusMouse(canvasX: number, canvasY: number) {
+		if (this.eyeMode !== "follow-mouse" || !this.model) return;
+		const x = (canvasX / this.canvasW) * 2 - 1;
+		const y = (canvasY / this.canvasH) * 2 - 1;
+		this.model.focus(x, y);
+	}
+
 	resize(width: number, height: number) {
 		if (!this.app || !this.model) return;
 		this.dpr = Math.max(1, window.devicePixelRatio || 1);
+		this.canvasW = width;
+		this.canvasH = height;
 		this.app.renderer.resize(width, height);
 		if (this.autoFit) {
 			this.fitModel(width, height);
@@ -199,16 +258,61 @@ export class Live2DRenderer {
 
 	destroy() {
 		this.destroyed = true;
+		this.stopRandomEye();
 		if (this.lipSyncHandler && this.model) {
 			try {
 				this.model.internalModel?.off("beforeModelUpdate", this.lipSyncHandler);
 			} catch { /* */ }
 		}
 		this.lipSyncHandler = null;
-		this.model = null;
+		if (this.model) {
+			try { this.model.destroy(); } catch { /* */ }
+			this.model = null;
+		}
 		if (this.app) {
-			try { this.app.destroy(true); } catch { /* */ }
+			try { this.app.destroy(false, { children: true, texture: true, baseTexture: true }); } catch { /* */ }
 			this.app = null;
+		}
+	}
+
+	private applyEyeMode() {
+		this.stopRandomEye();
+		if (!this.model) return;
+
+		switch (this.eyeMode) {
+			case "fixed":
+				this.model.focus(0, 0, true);
+				break;
+			case "follow-mouse":
+				// 由外部调用 focusMouse() 驱动
+				break;
+			case "random-path":
+				this.startRandomEye();
+				break;
+		}
+	}
+
+	private startRandomEye() {
+		this.randomEyeStartTime = performance.now();
+		const tick = () => {
+			if (this.destroyed || !this.model || this.eyeMode !== "random-path") return;
+			const t = (performance.now() - this.randomEyeStartTime) / 1000;
+			// 多频率正弦叠加，产生自然缓慢的注视路径
+			const x = Math.sin(t * 0.3) * 0.4 + Math.sin(t * 0.7 + 1.2) * 0.25 + Math.sin(t * 1.3 + 3.7) * 0.1;
+			const y = Math.sin(t * 0.2 + 0.5) * 0.3 + Math.sin(t * 0.5 + 2.1) * 0.2 + Math.sin(t * 1.1 + 4.3) * 0.08;
+			this.model.focus(
+				Math.max(-1, Math.min(1, x)),
+				Math.max(-1, Math.min(1, y)),
+			);
+			this.randomEyeRafId = requestAnimationFrame(tick);
+		};
+		this.randomEyeRafId = requestAnimationFrame(tick);
+	}
+
+	private stopRandomEye() {
+		if (this.randomEyeRafId) {
+			cancelAnimationFrame(this.randomEyeRafId);
+			this.randomEyeRafId = 0;
 		}
 	}
 
@@ -250,7 +354,8 @@ export class Live2DRenderer {
 		const modelH = this.model.height / (this.model.scale?.y || 1);
 
 		if (modelW <= 0 || modelH <= 0) {
-			this.model.scale.set(0.15);
+			this.baseScale = 0.15;
+			this.model.scale.set(this.baseScale * this.userZoom);
 			this.model.anchor.set(0.5, 0.5);
 			this.model.x = canvasW / 2;
 			this.model.y = canvasH * 0.6;
@@ -263,9 +368,9 @@ export class Live2DRenderer {
 
 		const scaleX = availableW / modelW;
 		const scaleY = availableH / modelH;
-		const scale = Math.min(scaleX, scaleY);
+		this.baseScale = Math.min(scaleX, scaleY);
 
-		this.model.scale.set(scale);
+		this.model.scale.set(this.baseScale * this.userZoom);
 		this.model.anchor.set(0.5, 0.5);
 		this.model.x = canvasW / 2;
 		this.model.y = canvasH * 0.52;

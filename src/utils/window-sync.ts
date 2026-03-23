@@ -20,6 +20,8 @@ export interface StageState {
 	visible: boolean;
 }
 
+export type EyeMode = "fixed" | "follow-mouse" | "random-path";
+
 export type ControlCommand =
 	| { type: "request-state" }
 	| { type: "hide-stage" }
@@ -31,7 +33,10 @@ export type ControlCommand =
 	| { type: "sync-state"; state: StageState }
 	| { type: "set-model"; modelPath: string }
 	| { type: "set-expression"; expressionName: string }
-	| { type: "report-expressions"; expressions: string[] };
+	| { type: "report-expressions"; expressions: string[] }
+	| { type: "set-scale-lock"; locked: boolean }
+	| { type: "set-eye-mode"; mode: EyeMode }
+	| { type: "set-size"; width: number; height: number };
 
 // ── Tauri 事件 vs BroadcastChannel 自适应 ──
 

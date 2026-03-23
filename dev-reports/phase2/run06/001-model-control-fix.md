@@ -86,4 +86,4 @@ clean 模式下 `border: "none"`。
 
 ## Commit
 
-待提交后补充 hash。
+`e19916f` fix(live2d): rewrite renderer with correct expression/lipsync API, add multi-model support

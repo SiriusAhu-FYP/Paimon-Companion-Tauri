@@ -17,16 +17,16 @@ export function MainWindow() {
 	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("interactive");
 	const [eventLogOpen, setEventLogOpen] = useState(false);
 
-	// docked 跟随所需的 refs
 	const slotRectRef = useRef<DOMRect | null>(null);
 	const unlistenMoveRef = useRef<(() => void) | null>(null);
 	const unlistenResizeRef = useRef<(() => void) | null>(null);
+	const syncDebounceRef = useRef(0);
+	const stageModeRef = useRef(stageMode);
+	const stageVisibleRef = useRef(stageVisible);
 
-	const handleSlotRectChange = useCallback((rect: DOMRect) => {
-		slotRectRef.current = rect;
-	}, []);
+	stageModeRef.current = stageMode;
+	stageVisibleRef.current = stageVisible;
 
-	// syncStagePosition 使用 StageSlot 的实际 DOM rect
 	const syncStagePosition = useCallback(async () => {
 		const rect = slotRectRef.current;
 		if (!rect) return;
@@ -44,8 +44,6 @@ export function MainWindow() {
 			const mainLogX = mainPos.x / sf;
 			const mainLogY = mainPos.y / sf;
 
-			// rect.x/y 是相对于 viewport 的，加上主窗口逻辑位置得到屏幕位置
-			// Tauri 窗口有标题栏偏移——decorations:true 时约 30px
 			const titleBarH = 30;
 			const stageX = mainLogX + rect.x;
 			const stageY = mainLogY + rect.y + titleBarH;
@@ -61,7 +59,22 @@ export function MainWindow() {
 		}
 	}, []);
 
-	// docked 跟随
+	const debouncedSync = useCallback(() => {
+		if (syncDebounceRef.current) cancelAnimationFrame(syncDebounceRef.current);
+		syncDebounceRef.current = requestAnimationFrame(() => {
+			syncDebounceRef.current = 0;
+			if (stageModeRef.current === "docked" && stageVisibleRef.current) {
+				syncStagePosition();
+			}
+		});
+	}, [syncStagePosition]);
+
+	const handleSlotRectChange = useCallback((rect: DOMRect) => {
+		slotRectRef.current = rect;
+		debouncedSync();
+	}, [debouncedSync]);
+
+	// docked 跟随主窗口 move/resize
 	useEffect(() => {
 		if (stageMode !== "docked" || !stageVisible) {
 			unlistenMoveRef.current?.();
@@ -82,23 +95,13 @@ export function MainWindow() {
 				const mainWin = getCurrentWindow();
 				const { listen } = await import("@tauri-apps/api/event");
 
-				let rafId = 0;
-				const scheduleSync = () => {
-					if (rafId) return;
-					rafId = requestAnimationFrame(async () => {
-						rafId = 0;
-						if (cancelled) return;
-						await syncStagePosition();
-					});
-				};
-
 				if (cancelled) return;
 
 				const unMove = await listen("tauri://move", () => {
-					if (mainWin.label === "main") scheduleSync();
+					if (mainWin.label === "main") debouncedSync();
 				});
 				const unResize = await listen("tauri://resize", () => {
-					if (mainWin.label === "main") scheduleSync();
+					if (mainWin.label === "main") debouncedSync();
 				});
 
 				if (cancelled) {
@@ -125,7 +128,7 @@ export function MainWindow() {
 			unlistenResizeRef.current?.();
 			unlistenResizeRef.current = null;
 		};
-	}, [stageMode, stageVisible, syncStagePosition]);
+	}, [stageMode, stageVisible, syncStagePosition, debouncedSync]);
 
 	const handleShowStage = useCallback(async () => {
 		try {
@@ -146,9 +149,9 @@ export function MainWindow() {
 
 	const handleModeChange = useCallback(async (mode: "docked" | "floating") => {
 		setStageMode(mode);
-		// docked→floating: 保留当前 Stage 窗口尺寸，不强制覆盖
-		// floating→docked: syncStagePosition 会在 useEffect 中自动调整到 StageSlot 区域
 	}, []);
+
+	const showSlot = stageVisible && stageMode === "docked";
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
@@ -165,7 +168,7 @@ export function MainWindow() {
 				</Box>
 			</Box>
 
-			{/* Main content — 四栏 */}
+			{/* Main content */}
 			<Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
 				{/* 左栏: Stage 控制面板 */}
 				<Box sx={{
@@ -186,18 +189,20 @@ export function MainWindow() {
 					/>
 				</Box>
 
-				{/* 中间左: Stage 模型贴靠区 */}
-				<Box sx={{
-					width: 350, minWidth: 280, flexShrink: 0,
-					borderRight: "1px solid", borderColor: "secondary.main",
-				}}>
-					<StageSlot
-						visible={stageVisible}
-						mode={stageMode}
-						displayMode={displayMode}
-						onRectChange={handleSlotRectChange}
-					/>
-				</Box>
+				{/* 中间左: Stage 模型贴靠区（仅 docked + visible 时显示） */}
+				{showSlot && (
+					<Box sx={{
+						width: 350, minWidth: 280, flexShrink: 0,
+						borderRight: "1px solid", borderColor: "secondary.main",
+					}}>
+						<StageSlot
+							visible={stageVisible}
+							mode={stageMode}
+							displayMode={displayMode}
+							onRectChange={handleSlotRectChange}
+						/>
+					</Box>
+				)}
 
 				{/* 中间: 对话面板 */}
 				<Box sx={{

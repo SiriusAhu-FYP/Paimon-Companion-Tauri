@@ -39,7 +39,7 @@ export function ControlPanel() {
 	const handleModelChange = (event: SelectChangeEvent) => {
 		const path = event.target.value;
 		setSelectedModel(path);
-		setExpressions([]); // 切模型时清空旧表情
+		setExpressions([]);
 		broadcastControl({ type: "set-model", modelPath: path });
 	};
 
