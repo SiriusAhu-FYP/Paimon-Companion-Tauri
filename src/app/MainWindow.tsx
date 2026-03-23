@@ -5,7 +5,7 @@ import { ControlPanel } from "@/features/control-panel";
 import { ChatPanel } from "@/features/chat";
 import { EventLog } from "@/app/EventLog";
 import { StatusBar } from "@/app/StatusBar";
-import { type StageDisplayMode } from "@/utils/window-sync";
+import { type StageDisplayMode, isTauriEnvironment } from "@/utils/window-sync";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("main-window");
@@ -87,8 +87,7 @@ export function MainWindow() {
 		let cancelled = false;
 
 		async function startFollow() {
-			const hasTauri = "__TAURI_INTERNALS__" in window;
-			if (!hasTauri) return;
+			if (!isTauriEnvironment()) return;
 
 			try {
 				const { getCurrentWindow } = await import("@tauri-apps/api/window");
