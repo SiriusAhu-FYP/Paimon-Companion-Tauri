@@ -86,6 +86,8 @@
 
 ## Commit
 
+`4b72741` feat(ui): integrate MUI v6 + refactor MainWindow to four-column layout
+
 ```
 feat(ui): integrate MUI v6 + refactor MainWindow to four-column layout
 

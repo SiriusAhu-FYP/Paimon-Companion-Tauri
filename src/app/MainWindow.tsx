@@ -146,17 +146,9 @@ export function MainWindow() {
 
 	const handleModeChange = useCallback(async (mode: "docked" | "floating") => {
 		setStageMode(mode);
-		if (mode === "floating" && stageVisible) {
-			try {
-				const { Window } = await import("@tauri-apps/api/window");
-				const { LogicalSize } = await import("@tauri-apps/api/dpi");
-				const stageWin = await Window.getByLabel("stage");
-				if (stageWin) {
-					await stageWin.setSize(new LogicalSize(800, 600));
-				}
-			} catch { /* browser */ }
-		}
-	}, [stageVisible]);
+		// docked→floating: 保留当前 Stage 窗口尺寸，不强制覆盖
+		// floating→docked: syncStagePosition 会在 useEffect 中自动调整到 StageSlot 区域
+	}, []);
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
