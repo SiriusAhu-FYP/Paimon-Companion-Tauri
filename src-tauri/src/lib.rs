@@ -14,6 +14,7 @@ pub fn run() {
 			commands::secret::secret_has,
 			commands::secret::secret_delete,
 			commands::http_proxy::proxy_http_request,
+			commands::http_proxy::proxy_binary_request,
 			commands::http_proxy::proxy_sse_request,
 		])
 		.on_window_event(|window, event| {

@@ -121,6 +121,74 @@ pub async fn proxy_http_request(
 	})
 }
 
+/// 二进制代理——返回原始字节（用于 TTS 等返回二进制音频的接口）
+#[tauri::command]
+pub async fn proxy_binary_request(
+	app: AppHandle,
+	request: ProxyRequest,
+) -> Result<Vec<u8>, String> {
+	let client = Client::new();
+
+	let method = match request
+		.method
+		.as_deref()
+		.unwrap_or("GET")
+		.to_uppercase()
+		.as_str()
+	{
+		"GET" => Method::GET,
+		"POST" => Method::POST,
+		"PUT" => Method::PUT,
+		"DELETE" => Method::DELETE,
+		other => return Err(format!("unsupported HTTP method: {other}")),
+	};
+
+	let mut req_builder = client.request(method, &request.url);
+
+	if let Some(headers) = &request.headers {
+		for (k, v) in headers {
+			req_builder = req_builder.header(k, v);
+		}
+	}
+
+	if let Some(secret_key) = &request.secret_key {
+		let service = format!("{SERVICE_PREFIX}:{secret_key}");
+		match app.keyring().get_password(&service, secret_key) {
+			Ok(Some(token)) => {
+				req_builder =
+					req_builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
+			}
+			Ok(None) | Err(_) => {
+				return Err(format!(
+					"secret '{secret_key}' not found — configure in Settings"
+				));
+			}
+		}
+	}
+
+	if let Some(body) = request.body {
+		req_builder = req_builder.body(body);
+	}
+
+	let response = req_builder
+		.send()
+		.await
+		.map_err(|e| format!("HTTP request failed: {e}"))?;
+
+	let status = response.status().as_u16();
+	if status >= 400 {
+		let body = response.text().await.unwrap_or_default();
+		return Err(format!("HTTP {status}: {body}"));
+	}
+
+	let bytes = response
+		.bytes()
+		.await
+		.map_err(|e| format!("failed to read response bytes: {e}"))?;
+
+	Ok(bytes.to_vec())
+}
+
 /// SSE 流式代理——通过 Tauri event channel 向前端推送 chunks
 #[tauri::command]
 pub async fn proxy_sse_request(

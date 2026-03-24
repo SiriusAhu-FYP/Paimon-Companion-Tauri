@@ -4,13 +4,15 @@ import type { CharacterService } from "@/services/character";
 import type { LLMService } from "@/services/llm";
 import type { ITTSService } from "@/services/tts";
 import { AudioPlayer } from "@/services/audio";
+import { SpeechQueue } from "@/services/tts/speech-queue";
+import { splitText } from "@/services/tts/text-splitter";
 import { broadcastMouth } from "@/utils/window-sync";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("pipeline");
 
 /**
- * 主链路编排：文本输入 → LLM → TTS → 音频播放 → 口型同步 → 角色反馈。
+ * 主链路编排：文本输入 → LLM → 文本切片 → 合成队列+播放队列 → 口型同步 → 角色反馈。
  * 不管理服务生命周期，只负责串联已有服务。
  */
 export class PipelineService {
@@ -18,8 +20,7 @@ export class PipelineService {
 	private runtime: RuntimeService;
 	private character: CharacterService;
 	private llm: LLMService;
-	private tts: ITTSService;
-	private player: AudioPlayer;
+	private speechQueue: SpeechQueue;
 
 	constructor(deps: {
 		bus: EventBus;
@@ -33,16 +34,28 @@ export class PipelineService {
 		this.runtime = deps.runtime;
 		this.character = deps.character;
 		this.llm = deps.llm;
-		this.tts = deps.tts;
-		this.player = deps.player;
 
 		// 口型数据 → 主窗口 Live2D + BroadcastChannel → Stage 窗口
-		this.player.onMouthData((value) => {
+		deps.player.onMouthData((value) => {
 			broadcastMouth(value);
 		});
+
+		// SpeechQueue 统一管理 speaking 状态，段间不抖动
+		this.speechQueue = new SpeechQueue(
+			deps.tts,
+			deps.player,
+			(speaking) => {
+				this.character.setSpeaking(speaking);
+				if (speaking) {
+					this.bus.emit("audio:tts-start", { text: "" });
+				} else {
+					this.bus.emit("audio:tts-end");
+				}
+			},
+		);
 	}
 
-	/** 执行完整主链路：文本 → LLM → TTS → 播放 */
+	/** 执行完整主链路：文本 → LLM → 分段合成+播放 */
 	async run(userText: string): Promise<void> {
 		if (!this.runtime.isAllowed()) {
 			log.warn("pipeline blocked — runtime stopped");
@@ -51,12 +64,10 @@ export class PipelineService {
 
 		log.info(`pipeline start: "${userText.slice(0, 30)}..."`);
 
-		// 1. LLM（内部会发 llm:request-start, llm:stream-chunk, llm:tool-call, llm:response-end）
 		await this.llm.sendMessage(userText);
 
 		if (!this.runtime.isAllowed()) return;
 
-		// 2. 获取完整回复文本用于 TTS
 		const history = this.llm.getHistory();
 		const lastAssistant = [...history].reverse().find((m) => m.role === "assistant");
 		if (!lastAssistant?.content) {
@@ -64,25 +75,18 @@ export class PipelineService {
 			return;
 		}
 
-		// 3. TTS 合成
-		this.character.setSpeaking(true);
-		this.bus.emit("audio:tts-start", { text: lastAssistant.content });
+		const segments = splitText(lastAssistant.content);
+		if (!segments.length) {
+			log.warn("text splitting produced no segments");
+			return;
+		}
+		log.info(`split into ${segments.length} segments`);
 
 		try {
-			const audioData = await this.tts.synthesize(lastAssistant.content);
-
-			if (!this.runtime.isAllowed()) {
-				this.character.setSpeaking(false);
-				return;
-			}
-
-			// 4. 播放音频（会自动驱动口型数据）
-			await this.player.play(audioData);
+			await this.speechQueue.speakAll(segments);
 		} catch (err) {
-			log.error("TTS/play failed", err);
+			log.error("speech queue failed", err);
 		} finally {
-			this.character.setSpeaking(false);
-			this.bus.emit("audio:tts-end");
 			log.info("pipeline complete");
 		}
 	}

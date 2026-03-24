@@ -5,7 +5,7 @@ import { KnowledgeService } from "./knowledge";
 import { ExternalInputService } from "./external-input";
 import { LLMService, MockLLMService, OpenAILLMService } from "./llm";
 import type { ILLMService } from "./llm/types";
-import { MockTTSService } from "./tts";
+import { MockTTSService, GptSovitsTTSService } from "./tts";
 import type { ITTSService } from "./tts/types";
 import { AudioPlayer } from "./audio";
 import { PipelineService } from "./pipeline";
@@ -55,9 +55,8 @@ function resolveTTSProvider(config: AppConfig): ITTSService {
 			log.info("GPT-SoVITS configured but baseUrl missing, using mock fallback");
 			return new MockTTSService();
 		}
-		// GPT-SoVITS provider 将在 M2 中实现
-		log.info(`GPT-SoVITS provider configured (${config.tts.baseUrl}) but real implementation pending (M2), using mock fallback`);
-		return new MockTTSService();
+		log.info(`using GPT-SoVITS TTS provider: ${config.tts.baseUrl}`);
+		return new GptSovitsTTSService(config.tts);
 	}
 	log.info(`unknown TTS provider "${config.tts.provider}", using mock fallback`);
 	return new MockTTSService();
