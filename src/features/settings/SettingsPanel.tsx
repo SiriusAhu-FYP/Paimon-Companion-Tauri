@@ -134,18 +134,19 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		setTesting("tts");
 		setTtsTestResult(null);
 		try {
-			const url = config.tts.baseUrl.replace(/\/+$/, "");
+			const base = (config.tts.baseUrl || "http://localhost:9880").replace(/\/+$/, "");
+
+			// GPT-SoVITS /set_gpt_weights 需要 weights_path 参数才返回 200，空参数返回 400
+			// 用一个肯定存在的路径做探测即可（路径是否存在不影响 HTTP 状态码）
+			const testUrl = `${base}/set_gpt_weights?weights_path=/tmp/dummy`;
 			const resp = await proxyRequest({
-				url,
+				url: testUrl,
 				method: "GET",
-				timeoutMs: 10000,
+				timeoutMs: 8000,
 			});
-			if (resp.status >= 200 && resp.status < 400) {
-				setTtsTestResult({ ok: true, text: `连接成功 (HTTP ${resp.status})` });
-				log.info("TTS connection test passed", { status: resp.status });
-			} else {
-				setTtsTestResult({ ok: false, text: `HTTP ${resp.status}` });
-			}
+			// 任何 HTTP 响应都说明服务器可达（GPT-SoVITS 不认识路径但会返回 200）
+			setTtsTestResult({ ok: true, text: `服务可达 (HTTP ${resp.status})` });
+			log.info("TTS connection test passed", { status: resp.status });
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			setTtsTestResult({ ok: false, text: msg });
