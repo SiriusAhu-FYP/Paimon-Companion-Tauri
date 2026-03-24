@@ -151,3 +151,56 @@ export async function proxySSERequest(
 
 	return unlisten;
 }
+
+/**
+ * 二进制代理——用于获取 WAV 等二进制响应体。
+ * Tauri 下走 Rust invoke，返回 Uint8Array -> ArrayBuffer。
+ * 浏览器 dev 下走 fetch -> arrayBuffer。
+ */
+export async function proxyBinaryRequest(options: ProxyRequestOptions): Promise<ArrayBuffer> {
+	if (isTauriEnvironment()) {
+		const { invoke } = await import("@tauri-apps/api/core");
+
+		const request = {
+			url: options.url,
+			method: options.method ?? "GET",
+			headers: options.headers ?? {},
+			body: options.body ?? null,
+			secretKey: options.secretKey ?? null,
+		};
+
+		log.debug(`binary proxy request: ${request.method} ${request.url}`);
+
+		const bytes = await invoke<number[]>("proxy_binary_request", { request });
+		return new Uint8Array(bytes).buffer;
+	}
+
+	const controller = new AbortController();
+	const timeout = options.timeoutMs ?? 60000;
+	const timer = setTimeout(() => controller.abort(), timeout);
+
+	try {
+		log.debug(`binary direct fetch: ${options.method ?? "GET"} ${options.url}`);
+
+		const resp = await fetch(options.url, {
+			method: options.method ?? "GET",
+			headers: options.headers,
+			body: options.body,
+			signal: controller.signal,
+		});
+
+		if (!resp.ok) {
+			const errBody = await resp.text();
+			throw new Error(`HTTP ${resp.status}: ${errBody}`);
+		}
+
+		return await resp.arrayBuffer();
+	} catch (err) {
+		if (err instanceof DOMException && err.name === "AbortError") {
+			throw new Error(`binary request timed out after ${timeout}ms`);
+		}
+		throw err;
+	} finally {
+		clearTimeout(timer);
+	}
+}
