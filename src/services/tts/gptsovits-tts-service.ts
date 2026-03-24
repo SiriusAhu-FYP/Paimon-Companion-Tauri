@@ -18,12 +18,13 @@ export class GptSovitsTTSService implements ITTSService {
 		this.config = config;
 	}
 
-	async synthesize(text: string, _config?: VoiceConfig): Promise<ArrayBuffer> {
+	async synthesize(text: string, config?: VoiceConfig): Promise<ArrayBuffer> {
 		const baseUrl = this.config.baseUrl.replace(/\/+$/, "");
 
 		await this.ensureWeightsLoaded(baseUrl);
 
-		const textLang = this.config.textLang || "zh";
+		// 调用方传入的 lang（来自 text-splitter 中英分离）优先于全局配置
+		const textLang = config?.lang || this.config.textLang || "zh";
 
 		const params = new URLSearchParams({
 			text,
