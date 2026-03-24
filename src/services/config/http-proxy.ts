@@ -33,9 +33,11 @@ export interface ProxyResponse {
  * 无 secretKey 且目标为本地/局域网时，可走前端 fetch。
  */
 export async function proxyRequest(options: ProxyRequestOptions): Promise<ProxyResponse> {
-	const needsProxy = !!options.secretKey && isTauriEnvironment();
-
-	if (needsProxy) {
+	// Tauri 环境下，所有 HTTP 请求都走 Rust invoke 代理。
+	// 原因：WebView 在 dev 模式下仍受浏览器 CORS 约束，直接 fetch 会被拦截。
+	// Rust 侧 reqwest 不受 CORS 影响，密钥也始终不进入前端 JS 运行时。
+	// 非 Tauri 环境（浏览器 dev server）降级到直接 fetch。
+	if (isTauriEnvironment()) {
 		return invokeProxy(options);
 	}
 
