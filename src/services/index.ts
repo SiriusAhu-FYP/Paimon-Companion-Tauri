@@ -3,7 +3,7 @@ import { RuntimeService } from "./runtime";
 import { CharacterService } from "./character";
 import { KnowledgeService } from "./knowledge";
 import { ExternalInputService } from "./external-input";
-import { LLMService, MockLLMService } from "./llm";
+import { LLMService, MockLLMService, OpenAILLMService } from "./llm";
 import type { ILLMService } from "./llm/types";
 import { MockTTSService } from "./tts";
 import type { ITTSService } from "./tts/types";
@@ -33,8 +33,15 @@ function resolveLLMProvider(config: AppConfig): ILLMService {
 		log.info("using mock LLM provider");
 		return new MockLLMService();
 	}
-	// 真实 LLM provider 将在 M1 中实现
-	log.info(`LLM provider "${config.llm.provider}" configured but real implementation pending (M1), using mock fallback`);
+	if (config.llm.provider === "openai-compatible") {
+		if (!config.llm.baseUrl || !config.llm.model) {
+			log.info("openai-compatible configured but baseUrl/model missing, using mock fallback");
+			return new MockLLMService();
+		}
+		log.info(`using OpenAI-compatible LLM provider: ${config.llm.baseUrl}, model=${config.llm.model}`);
+		return new OpenAILLMService(config.llm);
+	}
+	log.info(`unknown LLM provider "${config.llm.provider}", using mock fallback`);
 	return new MockLLMService();
 }
 

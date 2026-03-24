@@ -59,6 +59,19 @@ export function ChatPanel() {
 		});
 	});
 
+	useEventBus("llm:error", (payload) => {
+		streamBufferRef.current = "";
+		setMessages((prev) => {
+			const copy = [...prev];
+			const last = copy[copy.length - 1];
+			if (last?.streaming) {
+				copy[copy.length - 1] = { ...last, content: `[错误] ${payload.error}`, streaming: false };
+			}
+			return copy;
+		});
+		setStatus("idle");
+	});
+
 	useEventBus("audio:tts-start", () => setStatus("speaking"));
 	useEventBus("audio:tts-end", () => setStatus("idle"));
 
