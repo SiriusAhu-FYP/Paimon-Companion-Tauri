@@ -6,6 +6,7 @@ import type { ITTSService } from "@/services/tts";
 import { AudioPlayer } from "@/services/audio";
 import { SpeechQueue } from "@/services/tts/speech-queue";
 import { splitText } from "@/services/tts/text-splitter";
+import { normalizeForSpeech } from "@/services/tts/spoken-text-normalizer";
 import { broadcastMouth } from "@/utils/window-sync";
 import { createLogger } from "@/services/logger";
 
@@ -55,6 +56,11 @@ export class PipelineService {
 		);
 	}
 
+	/** 获取 SpeechQueue 实例（供调试工具使用） */
+	getSpeechQueue(): SpeechQueue {
+		return this.speechQueue;
+	}
+
 	/** 执行完整主链路：文本 → LLM → 分段合成+播放 */
 	async run(userText: string): Promise<void> {
 		if (!this.runtime.isAllowed()) {
@@ -75,12 +81,14 @@ export class PipelineService {
 			return;
 		}
 
-		const segments = splitText(lastAssistant.content);
+		// display_text → spoken_text → 切片
+		const spokenText = normalizeForSpeech(lastAssistant.content);
+		const segments = splitText(spokenText);
 		if (!segments.length) {
 			log.warn("text splitting produced no segments");
 			return;
 		}
-		log.info(`split into ${segments.length} segments`);
+		log.info(`split into ${segments.length} segments: ${segments.map((s) => `[${s.lang}]"${s.text.slice(0, 20)}"`).join(", ")}`);
 
 		try {
 			await this.speechQueue.speakAll(segments);

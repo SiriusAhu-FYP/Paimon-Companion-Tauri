@@ -101,6 +101,16 @@ export function exposeMockTools(bus: EventBus, character: CharacterService, exte
 				type: "danmaku",
 				data: { user, text },
 			}),
+		// TTS 调试：设置合成失败注入索引（null 清除）
+		setTTSFailIndex: async (index: number | null) => {
+			try {
+				const { getServices } = await import("@/services");
+				const { pipeline } = getServices();
+				pipeline.getSpeechQueue().setDebugFailIndex(index);
+			} catch (err) {
+				log.error("setTTSFailIndex failed", err);
+			}
+		},
 		// Phase 3 M6: 网络能力测试
 		testProxy: async (url: string) => {
 			const { proxyRequest } = await import("@/services/config");
