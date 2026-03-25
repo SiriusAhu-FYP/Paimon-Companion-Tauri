@@ -151,6 +151,12 @@ export function MainWindow() {
 		}
 	}, [stageMode, syncStagePosition]);
 
+	// Tauri 环境下自动启动 Stage（clean + docked 默认展示 L2D）
+	useEffect(() => {
+		if (!isTauriEnvironment()) return;
+		handleShowStage();
+	}, [handleShowStage]);
+
 	const handleModeChange = useCallback(async (mode: "docked" | "floating") => {
 		setStageMode(mode);
 	}, []);

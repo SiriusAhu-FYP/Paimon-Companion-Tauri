@@ -2,27 +2,39 @@
 
 ## 概述
 
-本次 run 修复了 3 个 blocker，使 M2.x 达到 close-out 条件。
+本次 run 修复了 L2D 加载失败的真正根因（Cubism Core SDK 缺失）、Stage 窗口关闭后无法恢复、语言路由问题，以及自动启动 Stage 的 UX 改进。
 
-## Blocker 1: L2D 模型加载失败 / 关闭永久杀死窗口
+## Blocker 1: L2D 模型加载失败
 
-### 根因
+### 真正根因
 
-`StageWindow.tsx` 中 `hide-stage` 命令和 `handleClose` 都调用了 Tauri `win.close()`。Tauri 窗口一旦 `close()` 就被销毁，无法再通过 `show()` 恢复。再次点击"启动"时，`Window.getByLabel("stage")` 虽然能找到窗口配置，但窗口实例已不存在，导致模型无法显示。
+**`public/Core/live2dcubismcore.min.js` 缺失**。
+
+`pixi-live2d-display/cubism4` 依赖全局加载的 Cubism 4 Core 运行时。该文件在 `.gitignore` 中（`public/Core/` 和 `public/Resources/` 被排除以遵守 Live2D 许可证），因此不会被 `git clone` 或 `pnpm install` 恢复。旧项目 `VoiceL2D-MVP` 中有这些文件，但新项目中丢失了。
+
+报错信息：`Error: Could not find Cubism 4 runtime. This plugin requires live2dcubismcore.js to be loaded.`
 
 ### 修复
 
-| 位置 | 改动 |
-|------|------|
-| `StageWindow.tsx` `hide-stage` 命令 | `win.close()` → `win.hide()` |
-| `StageWindow.tsx` `show-stage` 命令 | 如果 renderer 已销毁，重新调用 `initRenderer` |
-| `StageWindow.tsx` `handleClose` | `getCurrentWindow().close()` → `getCurrentWindow().hide()` |
-| `MainWindow.tsx` `handleShowStage` | 发送 `broadcastControl({ type: "show-stage" })` 通知 Stage 重建 renderer |
+1. 从旧项目 `VoiceL2D-MVP/frontend/public/Core/` 复制完整 Cubism SDK Core 文件（8 个文件，含 `live2dcubismcore.min.js`、`.d.ts`、LICENSE 等）
+2. 将 `index.html` 中 Cubism Core `<script>` 标签从 `<body>` 移到 `<head>`，与旧项目一致，确保在模块脚本之前同步加载
+
+### 关于关闭/重新启动
+
+- `hide-stage` 命令使用 `win.hide()` 而非 `win.close()`（上一轮 commit 已修复）
+- `show-stage` 命令在 renderer 已销毁时重新 `initRenderer`
+- `handleClose` 使用 `getCurrentWindow().hide()` 而非 `close()`
+
+### 自动启动
+
+- `MainWindow` 新增 `useEffect`：Tauri 环境下自动调用 `handleShowStage`
+- 确保应用启动时 Stage 窗口自动可见，默认 clean + docked 模式
 
 ### 改动文件
 
-- `src/features/stage/StageWindow.tsx`
-- `src/app/MainWindow.tsx`
+- `public/Core/`（从旧项目复制，8 个文件）
+- `index.html`（Cubism Core script 移到 `<head>`）
+- `src/app/MainWindow.tsx`（自动启动 Stage）
 
 ## Blocker 2: 语言路由修复
 
@@ -94,6 +106,15 @@
 5. TTS 直测输入框已可用
 
 下一步建议进入 M3（知识注入/角色卡方案设计）。
+
+## 重要说明：Cubism Core SDK
+
+`public/Core/` 和 `public/Resources/` 在 `.gitignore` 中，**不会被 git 跟踪**。新环境设置时必须：
+
+1. 从旧项目 `VoiceL2D-MVP/frontend/public/Core/` 复制 Cubism SDK Core
+2. 确保 `public/Resources/` 下有 Live2D 模型文件
+
+这不是代码 bug，而是 Live2D 许可证要求。
 
 ## 分支信息
 
