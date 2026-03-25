@@ -19,15 +19,15 @@ import { fileURLToPath } from "url";
 // ============== CONFIG ==============
 // ⚠️ 需要根据实际环境修改以下配置
 const CONFIG = {
-	baseUrl: "http://localhost:9880",
+	baseUrl: "http://192.168.31.64:9880",
 	//  GPT 权重路径（GPT-SoVITS 服务端路径）
-	gptWeightsPath: "",
+	gptWeightsPath: "/home/ahu/fyp-tts/GPT-SoVITS-Inference/派蒙/派蒙-e10.ckpt",
 	//  SoVITS 权重路径（GPT-SoVITS 服务端路径）
-	sovitsWeightsPath: "",
+	sovitsWeightsPath: "/home/ahu/fyp-tts/GPT-SoVITS-Inference/派蒙/派蒙_e10_s19390.pth",
 	//  参考音频路径（GPT-SoVITS 服务端路径）
-	refAudioPath: "",
+	refAudioPath: "/home/ahu/fyp-tts/GPT-SoVITS-Inference/派蒙/平静-好耶！《特尔克西的奇幻历险》出发咯！.wav",
 	//  参考音频文本
-	promptText: "",
+	promptText: "好耶！《特尔克西的奇幻历险》出发咯！",
 	//  参考音频语言
 	promptLang: "zh",
 	//  超时（毫秒）
@@ -40,15 +40,15 @@ const SAMPLES = [
 	{ id: "A2", text: "今天天气真好，我们一起去公园散步吧。", lang: "zh", note: "中文长句" },
 	{ id: "A3", text: "Hello, how are you today.", lang: "en", note: "英文句子" },
 	{ id: "A4", text: "你好hello世界world", lang: "mixed", note: "中英混合" },
-	{ id: "A5", text: "안녕하세요", lang: "ko", note: "韩文（验证 fallback）" },
-	{ id: "A6", text: "Bonjour, comment allez-vous?", lang: "fr", note: "法文（验证 fallback）" },
+	{ id: "A5", text: "こんにちは", lang: "ja", note: "日文句子" },
 ];
+
 
 // ============== HELPERS ==============
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, "..", "dev-reports", "phase3", "m2-1-silence-validation", "samples");
 
-async function fetch(url, options = {}) {
+async function fetchWithTimeout(url, options = {}) {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), CONFIG.timeout);
 	try {
@@ -61,14 +61,14 @@ async function fetch(url, options = {}) {
 
 async function apiGet(path) {
 	const url = `${CONFIG.baseUrl}${path}`;
-	const resp = await fetch(url);
+	const resp = await fetchWithTimeout(url);
 	const text = await resp.text();
 	return { status: resp.status, body: text };
 }
 
 async function apiGetBinary(path) {
 	const url = `${CONFIG.baseUrl}${path}`;
-	const resp = await fetch(url);
+	const resp = await fetchWithTimeout(url);
 	const buf = await resp.arrayBuffer();
 	return { status: resp.status, data: buf };
 }
@@ -140,10 +140,10 @@ function trimSilence(arrayBuffer) {
 	const trailingMs = ((totalFrames - 1 - endFrame) / sampleRate) * 1000;
 	const totalMs = (totalFrames / sampleRate) * 1000;
 
-	return { trimmed: trimFrames(arrayBuffer, dataOffset, startFrame, endFrame, bytesPerFrame, channels, bitsPerSample, sampleRate, dataSize), leadingMs, trailingMs, totalMs };
+	return { trimmed: trimFrames(arrayBuffer, dataOffset, startFrame, endFrame, bytesPerFrame, channels, bitsPerSample, sampleRate, dataSize, totalFrames), leadingMs, trailingMs, totalMs };
 }
 
-function trimFrames(srcBuffer, dataOffset, startFrame, endFrame, bytesPerFrame, channels, bitsPerSample, sampleRate, dataSize) {
+function trimFrames(srcBuffer, dataOffset, startFrame, endFrame, bytesPerFrame, channels, bitsPerSample, sampleRate, dataSize, totalFrames) {
 	const marginFrames = Math.floor((10 / 1000) * sampleRate); // 10ms margin
 	const trimStart = Math.max(0, startFrame - marginFrames);
 	const trimEnd = Math.min(totalFrames - 1, endFrame + marginFrames);
@@ -211,9 +211,13 @@ async function main() {
 		console.log(`  语言标签: ${sample.lang}`);
 
 		// 映射语言标签
-		const unsupported = ["ko", "fr", "ja"];
-		const textLang = unsupported.includes(sample.lang) ? "UNSUPPORTED" : sample.lang;
-		if (textLang === "UNSUPPORTED") {
+		const unsupported = ["ko", "fr"];
+		let textLang = unsupported.includes(sample.lang) ? "UNSUPPORTED" : sample.lang;
+		// 处理混合语言
+		if (sample.lang === "mixed") {
+			textLang = "zh";
+			console.log(`  ⚠️ 混合语言将使用中文模型处理`);
+		} else if (textLang === "UNSUPPORTED") {
 			console.log(`  ⚠️ 语言 ${sample.lang} 不被 GPT-SoVITS 支持，将用 fallback`);
 		}
 
