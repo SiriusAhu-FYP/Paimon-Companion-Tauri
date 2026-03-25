@@ -135,8 +135,10 @@ export function MainWindow() {
 	const handleShowStage = useCallback(async () => {
 		try {
 			const { Window } = await import("@tauri-apps/api/window");
+			const { broadcastControl } = await import("@/utils/window-sync");
 			const stageWin = await Window.getByLabel("stage");
 			if (stageWin) {
+				broadcastControl({ type: "show-stage" });
 				await stageWin.show();
 				await stageWin.setFocus();
 				setStageVisible(true);

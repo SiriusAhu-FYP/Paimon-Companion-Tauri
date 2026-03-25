@@ -133,11 +133,17 @@ function mergeShortSegments(parts: string[], minLen: number): string[] {
 
 /**
  * 判断非 CJK 为主的文本应该标记为哪种语言。
- * 韩文等不在 CN/EN/JP 范围内的标记为 unsupported。
+ *
+ * 优先级：假名存在→ja，含汉字→zh，韩文/西里尔/阿拉伯/泰文→unsupported，
+ * 其余拉丁文字（含法文等带重音字符）统一归为 en（GPT-SoVITS 可处理）。
  */
 function detectNonCJKLang(text: string): SplitSegment["lang"] {
+	// 含假名 → 即使占比不高也标为 ja（短日文片段可能夹杂标点）
+	if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) {
+		return "ja";
+	}
+	// 含汉字但 CJK 占比不足 30%，保守标记为 zh
 	if (/[\u4e00-\u9fff]/.test(text)) {
-		// 含汉字但 CJK 占比不足 30%，保守标记为 zh
 		return "zh";
 	}
 	// 韩文 Hangul
@@ -148,11 +154,7 @@ function detectNonCJKLang(text: string): SplitSegment["lang"] {
 	if (/[\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F]/.test(text)) {
 		return "unsupported";
 	}
-	// 检查是否包含非英文的拉丁字符（如法文、德文等带重音的字符）
-	if (/[^a-zA-Z0-9\s,.!?;:'"()\-]/.test(text)) {
-		return "unsupported";
-	}
-	// 默认视为英文
+	// 拉丁文字（含法文/德文等带重音字符）统一视为 en
 	return "en";
 }
 

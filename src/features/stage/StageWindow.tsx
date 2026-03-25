@@ -149,12 +149,14 @@ export function StageWindow() {
 
 			switch (cmd.type) {
 				case "hide-stage":
-					// 销毁渲染器，真正关闭渲染
 					rendererRef.current?.destroy();
 					rendererRef.current = null;
-					await win.close();
+					await win.hide();
 					break;
 				case "show-stage":
+					if (!rendererRef.current) {
+						await initRenderer(currentModelPath.current);
+					}
 					await win.show();
 					await win.setFocus();
 					break;
@@ -202,10 +204,10 @@ export function StageWindow() {
 			if (cmd.type === "hide-stage") {
 				rendererRef.current?.destroy();
 				rendererRef.current = null;
-				window.close();
+				try { window.close(); } catch { /* fallback */ }
 			}
 		}
-	}, [switchModel, setEyeMode]);
+	}, [switchModel, setEyeMode, initRenderer]);
 
 	// 初始化——只运行一次
 	useEffect(() => {
@@ -276,17 +278,16 @@ export function StageWindow() {
 
 	const handleClose = useCallback(async () => {
 		try {
-			// 销毁渲染器，真正关闭渲染
 			rendererRef.current?.destroy();
 			rendererRef.current = null;
-			
-			const { getCurrentWindow } = await import("@tauri-apps/api/window");
-			await getCurrentWindow().close();
+
 			syncStateToHost({ visible: false });
+			const { getCurrentWindow } = await import("@tauri-apps/api/window");
+			await getCurrentWindow().hide();
 		} catch {
 			rendererRef.current?.destroy();
 			rendererRef.current = null;
-			window.close();
+			try { window.close(); } catch { /* fallback */ }
 		}
 	}, [syncStateToHost]);
 
