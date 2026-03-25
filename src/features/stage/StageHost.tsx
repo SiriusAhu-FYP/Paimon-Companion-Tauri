@@ -8,7 +8,6 @@ import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import PushPinIcon from "@mui/icons-material/PushPin";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import CloseIcon from "@mui/icons-material/Close";
 import SaveIcon from "@mui/icons-material/Save";
@@ -100,7 +99,7 @@ export function StageHost({
 		broadcastControl({ type: "set-expression", expressionName: name });
 	}, []);
 
-	const handleHide = useCallback(() => {
+	const handleClose = useCallback(() => {
 		broadcastControl({ type: "hide-stage" });
 		onVisibilityChange(false);
 	}, [onVisibilityChange]);
@@ -236,9 +235,9 @@ export function StageHost({
 							启动
 						</Button>
 					) : (
-						<Button variant="outlined" size="small" onClick={handleHide} startIcon={<VisibilityOffIcon />}>
-							隐藏
-						</Button>
+						<Button variant="outlined" size="small" onClick={handleClose} startIcon={<CloseIcon />}>
+								关闭
+							</Button>
 					)}
 					<Tooltip title="将 Stage 窗口移回默认位置">
 						<span>
