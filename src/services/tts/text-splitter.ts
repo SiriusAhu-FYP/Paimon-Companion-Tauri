@@ -10,7 +10,7 @@
 
 export interface SplitSegment {
 	text: string;
-	lang: "zh" | "en" | "auto";
+	lang: "zh" | "en" | "ja" | "unsupported";
 }
 
 const DEFAULT_MAX_LEN = 80;
@@ -26,10 +26,26 @@ const SOFT_BOUNDARY_RE = /([，、：,:])/;
 // 英文片段检测：连续英文字符、数字、空格、常见标点
 const ENGLISH_BLOCK_RE = /[A-Za-z][A-Za-z0-9\s,.!?;:'"()\-]+/g;
 
-// 判断文本是否以中文为主（含 CJK 字符比例 > 30%）
-function isMostlyChinese(text: string): boolean {
-	const cjk = text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g);
-	return !!cjk && cjk.length / text.length > 0.3;
+// CJK 汉字（中日共用）
+const CJK_RE = /[\u4e00-\u9fff\u3400-\u4dbf]/g;
+// 平假名 + 片假名
+const KANA_RE = /[\u3040-\u309F\u30A0-\u30FF]/g;
+
+// 判断文本是否以 CJK 字符为主（含汉字+假名比例 > 30%）
+function isMostlyCJK(text: string): boolean {
+	const cjk = text.match(CJK_RE);
+	const kana = text.match(KANA_RE);
+	const total = (cjk?.length ?? 0) + (kana?.length ?? 0);
+	return total / text.length > 0.3;
+}
+
+// 判断文本是否含大量假名（占 CJK+假名 总量 > 30%）→ 标记为日文
+function isJapanese(text: string): boolean {
+	const kana = text.match(KANA_RE);
+	if (!kana || kana.length === 0) return false;
+	const cjk = text.match(CJK_RE);
+	const total = (cjk?.length ?? 0) + kana.length;
+	return kana.length / total > 0.3;
 }
 
 export function splitText(
@@ -114,17 +130,43 @@ function mergeShortSegments(parts: string[], minLen: number): string[] {
 }
 
 /**
- * 对每个片段进行中英分离。
+ * 判断非 CJK 为主的文本应该标记为哪种语言。
+ * 韩文等不在 CN/EN/JP 范围内的标记为 unsupported。
+ */
+function detectNonCJKLang(text: string): SplitSegment["lang"] {
+	if (/[\u4e00-\u9fff]/.test(text)) {
+		// 含汉字但 CJK 占比不足 30%，保守标记为 zh
+		return "zh";
+	}
+	// 韩文 Hangul
+	if (/[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/.test(text)) {
+		return "unsupported";
+	}
+	// 西里尔、阿拉伯、泰文等非拉丁非 CJK → unsupported
+	if (/[\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F]/.test(text)) {
+		return "unsupported";
+	}
+	// 默认视为英文
+	return "en";
+}
+
+/**
+ * 对每个片段进行中英日分离。
  * 扫描连续英文块，将其独立切出并标注 lang。
+ * 含大量假名的段标记为 ja，其余 CJK 为主的段标记为 zh。
  */
 function separateLanguages(parts: string[]): SplitSegment[] {
 	const result: SplitSegment[] = [];
 
 	for (const part of parts) {
-		if (!isMostlyChinese(part)) {
-			// 整段非中文为主，标记为 en 或 auto
-			const hasAnyCJK = /[\u4e00-\u9fff]/.test(part);
-			result.push({ text: part, lang: hasAnyCJK ? "auto" : "en" });
+		if (!isMostlyCJK(part)) {
+			result.push({ text: part, lang: detectNonCJKLang(part) });
+			continue;
+		}
+
+		// 含大量假名 → 整段标记为 ja，不再做中英分离
+		if (isJapanese(part)) {
+			result.push({ text: part, lang: "ja" });
 			continue;
 		}
 
@@ -154,11 +196,6 @@ function separateLanguages(parts: string[]): SplitSegment[] {
 		if (lastIndex < part.length) {
 			const tail = part.slice(lastIndex).trim();
 			if (tail) result.push({ text: tail, lang: "zh" });
-		}
-
-		// 如果没有任何英文块被提取，整段标记为 zh
-		if (matches.length === 0 || result.length === 0 || result[result.length - 1].text !== part) {
-			// 已在循环中处理
 		}
 	}
 

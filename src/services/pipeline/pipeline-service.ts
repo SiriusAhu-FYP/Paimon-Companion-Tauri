@@ -82,13 +82,20 @@ export class PipelineService {
 		}
 
 		// display_text → spoken_text → 切片
-		const spokenText = normalizeForSpeech(lastAssistant.content);
+		const displayText = lastAssistant.content;
+		const spokenText = normalizeForSpeech(displayText);
+		if (spokenText !== displayText) {
+			log.info(`[text] normalizer changed output (display ${displayText.length} chars → spoken ${spokenText.length} chars)`);
+			log.debug(`[text] display: "${displayText.slice(0, 80)}..."`);
+			log.debug(`[text] spoken:  "${spokenText.slice(0, 80)}..."`);
+		}
+
 		const segments = splitText(spokenText);
 		if (!segments.length) {
 			log.warn("text splitting produced no segments");
 			return;
 		}
-		log.info(`split into ${segments.length} segments: ${segments.map((s) => `[${s.lang}]"${s.text.slice(0, 20)}"`).join(", ")}`);
+		log.info(`[split] ${segments.length} segments: ${segments.map((s) => `[${s.lang}]"${s.text.slice(0, 20)}"`).join(", ")}`);
 
 		try {
 			await this.speechQueue.speakAll(segments);

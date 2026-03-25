@@ -6,6 +6,18 @@ import { createLogger } from "@/services/logger";
 const log = createLogger("gptsovits-tts");
 
 /**
+ * GPT-SoVITS 语言路由表。
+ * 正式支持 zh / en / ja，其余语言视为 unsupported。
+ * auto 保守回退到 zh（GPT-SoVITS 部分版本不支持 auto）。
+ */
+const LANG_ROUTE: Record<string, string> = {
+	zh: "zh",
+	en: "en",
+	ja: "ja",
+	auto: "zh",
+};
+
+/**
  * GPT-SoVITS TTS 实现。
  * 三步流程：加载 GPT 权重 -> 加载 SoVITS 权重 -> 调用 /tts 合成。
  * 权重路径有变化时才重新加载，避免重复加载开销。
@@ -21,20 +33,17 @@ export class GptSovitsTTSService implements ITTSService {
 	async synthesize(text: string, config?: VoiceConfig): Promise<ArrayBuffer> {
 		const baseUrl = this.config.baseUrl.replace(/\/+$/, "");
 
-		await this.ensureWeightsLoaded(baseUrl);
-
-		// EXP-LOG: validate and log lang routing
 		const rawLang = config?.lang || this.config.textLang || "zh";
-		// Map to GPT-SoVITS supported values: zh, en, auto, ja (JP not directly supported)
-		const unsupportedLangs = ["jp", "ja", "kr", "ko"];
-		const textLang = unsupportedLangs.includes(rawLang.toLowerCase())
-			? "UNSUPPORTED"
-			: (rawLang === "auto" ? "auto" : rawLang);
+		const textLang = LANG_ROUTE[rawLang.toLowerCase()];
 
-		if (textLang === "UNSUPPORTED") {
-			log.warn(`[EXP-lang] unsupported lang="${rawLang}" for text="${text.slice(0, 30)}..." — will use fallback`);
+		if (!textLang) {
+			log.warn(`[lang] unsupported lang="${rawLang}" for text="${text.slice(0, 30)}..." — skipping synthesis`);
+			return new ArrayBuffer(0);
 		}
-		log.info(`[EXP-lang] synthesize: text="${text.slice(0, 40)}...", rawLang=${rawLang}, textLang=${textLang}`);
+
+		log.debug(`[lang] synthesize: rawLang=${rawLang}, textLang=${textLang}, text="${text.slice(0, 40)}..."`);
+
+		await this.ensureWeightsLoaded(baseUrl);
 
 		const params = new URLSearchParams({
 			text,
@@ -45,7 +54,7 @@ export class GptSovitsTTSService implements ITTSService {
 		});
 
 		const url = `${baseUrl}/tts?${params.toString()}`;
-		log.info(`synthesize: ${text.length} chars, lang=${textLang}`);
+		log.info(`[synth] ${text.length} chars, lang=${textLang}`);
 
 		const audioData = await proxyBinaryRequest({
 			url,
@@ -53,7 +62,7 @@ export class GptSovitsTTSService implements ITTSService {
 			timeoutMs: 60000,
 		});
 
-		log.info(`synthesize done: ${audioData.byteLength} bytes`);
+		log.info(`[synth] done: ${audioData.byteLength} bytes`);
 		return audioData;
 	}
 
