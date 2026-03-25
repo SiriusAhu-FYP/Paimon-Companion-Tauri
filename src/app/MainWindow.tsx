@@ -16,7 +16,7 @@ export function MainWindow() {
 	const [stageVisible, setStageVisible] = useState(false);
 	const [stageMode, setStageMode] = useState<"docked" | "floating">("docked");
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
-	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("interactive");
+	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("clean");
 	const [eventLogOpen, setEventLogOpen] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
 
