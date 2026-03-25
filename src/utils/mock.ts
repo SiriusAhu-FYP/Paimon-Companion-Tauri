@@ -111,6 +111,16 @@ export function exposeMockTools(bus: EventBus, character: CharacterService, exte
 				log.error("setTTSFailIndex failed", err);
 			}
 		},
+		// TTS 调试：开关静音裁剪（默认关闭）
+		setTrimEnabled: async (enabled: boolean) => {
+			try {
+				const { getServices } = await import("@/services");
+				const { pipeline } = getServices();
+				pipeline.getSpeechQueue().setTrimEnabled(enabled);
+			} catch (err) {
+				log.error("setTrimEnabled failed", err);
+			}
+		},
 		// Phase 3 M6: 网络能力测试
 		testProxy: async (url: string) => {
 			const { proxyRequest } = await import("@/services/config");

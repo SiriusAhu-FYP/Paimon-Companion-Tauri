@@ -6,36 +6,40 @@ import { createLogger } from "@/services/logger";
 
 const log = createLogger("speech-queue");
 
+/** 正式支持的语言列表，与 GptSovitsTTSService 的 LANG_ROUTE 保持一致 */
+const SUPPORTED_LANGS = new Set(["zh", "en", "ja"]);
+
 interface SynthResult {
 	index: number;
 	audio: ArrayBuffer | null;
 	error?: string;
-	/** EXP-LOG: synthesis timing */
-	synthStartMs?: number;
-	synthDoneMs?: number;
+	synthStartMs: number;
+	synthDoneMs: number;
 }
 
-/** EXP-LOG: per-segment timing record */
 interface SegmentTiming {
 	index: number;
 	text: string;
 	lang: string;
-	synthStartMs: number;
-	synthDoneMs: number;
-	playStartMs: number;
-	playDoneMs: number;
+	synthMs: number;
+	playMs: number;
+	gapMs: number;
 }
 
 /**
  * 合成+播放队列：1 段预缓冲并发合成、严格顺序播放。
- * 某段合成失败时跳过该段，继续后续段。
- * speaking 状态由 onSpeakingChange 回调统一管理，段间不抖动。
+ *
+ * - 播放 slot[i] 的同时，slot[i+1] 的合成已经启动
+ * - 合成失败或 unsupported 语言的段会被跳过
+ * - speaking 状态由 onSpeakingChange 回调统一管理，段间不抖动
+ * - trim 默认关闭，可通过 setTrimEnabled 开启
  */
 export class SpeechQueue {
 	private tts: ITTSService;
 	private player: AudioPlayer;
 	private onSpeakingChange: (speaking: boolean) => void;
 	private _debugFailIndex: number | null = null;
+	private _trimEnabled = false;
 
 	constructor(
 		tts: ITTSService,
@@ -51,40 +55,48 @@ export class SpeechQueue {
 	setDebugFailIndex(index: number | null) {
 		this._debugFailIndex = index;
 		if (index !== null) {
-			log.info(`debug: will fail synthesis at index ${index}`);
+			log.info(`[debug] will fail synthesis at index ${index}`);
 		}
+	}
+
+	/** 设置是否启用静音裁剪（默认关闭） */
+	setTrimEnabled(enabled: boolean) {
+		this._trimEnabled = enabled;
+		log.info(`[trim] ${enabled ? "enabled" : "disabled"}`);
+	}
+
+	getTrimEnabled(): boolean {
+		return this._trimEnabled;
 	}
 
 	/**
 	 * 对传入的文本片段数组执行"1 段预缓冲"合成 + 严格顺序播放。
 	 *
-	 * 流程：
-	 * - 在播放 slot[i] 的同时，启动 slot[i+1] 的合成
-	 * - 播放严格按序，slot[i] 播完才播 slot[i+1]
-	 * - 合成失败的段跳过
+	 * 审计确认的关键行为：
+	 * 1. 播放 slot[i] 的同时，slot[i+1] 的合成已在后台进行（异步并发）
+	 * 2. 播放严格按序，slot[i] 播完才播 slot[i+1]
+	 * 3. unsupported 语言的段直接跳过
+	 * 4. 合成失败的段跳过，后续段继续
 	 */
 	async speakAll(segments: SplitSegment[]): Promise<void> {
 		if (!segments.length) return;
 
-		log.info(`speakAll: ${segments.length} segments`);
+		log.info(`[queue] speakAll: ${segments.length} segments`);
+		const queueStartMs = performance.now();
 		let anyPlayed = false;
-
-		// EXP-LOG: timing records for all segments
 		const timings: SegmentTiming[] = [];
 
-		// 启动第一段合成
+		// 启动第一段合成（跳过 unsupported）
 		let nextSynthPromise: Promise<SynthResult> | null =
-			this.synthesizeSegment(segments[0], 0);
+			this.prepareSegment(segments[0], 0);
 
 		for (let i = 0; i < segments.length; i++) {
-			const t0 = performance.now();
-
 			// 等待当前段合成完成
 			const current = await nextSynthPromise!;
 
 			// 启动下一段的预缓冲合成（如果有）
 			if (i + 1 < segments.length) {
-				nextSynthPromise = this.synthesizeSegment(segments[i + 1], i + 1);
+				nextSynthPromise = this.prepareSegment(segments[i + 1], i + 1);
 			} else {
 				nextSynthPromise = null;
 			}
@@ -92,9 +104,7 @@ export class SpeechQueue {
 			// 处理当前段
 			if (!current.audio || current.audio.byteLength === 0) {
 				if (current.error) {
-					log.warn(`[${i + 1}/${segments.length}] synthesis failed, skipping: ${current.error}`);
-				} else {
-					log.warn(`[${i + 1}/${segments.length}] empty audio, skipping`);
+					log.warn(`[queue][${i + 1}/${segments.length}] skipped: ${current.error}`);
 				}
 				continue;
 			}
@@ -104,64 +114,85 @@ export class SpeechQueue {
 				this.onSpeakingChange(true);
 			}
 
-			// EXP-LOG: record synth timing
-			const segTiming: SegmentTiming = {
+			// trim 可选
+			let audioToPlay = current.audio;
+			if (this._trimEnabled) {
+				try {
+					audioToPlay = trimSilence(current.audio);
+				} catch (err) {
+					log.warn(`[trim][${i + 1}/${segments.length}] trim failed, using original: ${err}`);
+				}
+			}
+
+			// 播放
+			const playStartMs = performance.now();
+			try {
+				await this.player.play(audioToPlay);
+			} catch (err) {
+				log.warn(`[queue][${i + 1}/${segments.length}] playback failed: ${err}`);
+			}
+			const playDoneMs = performance.now();
+
+			// 性能日志
+			const synthMs = current.synthDoneMs - current.synthStartMs;
+			const playMs = playDoneMs - playStartMs;
+			const gapMs = playStartMs - (timings.length > 0 ? playDoneMs - playMs : current.synthDoneMs);
+
+			const timing: SegmentTiming = {
 				index: i,
 				text: segments[i].text.slice(0, 40),
 				lang: segments[i].lang,
-				synthStartMs: current.synthStartMs ?? 0,
-				synthDoneMs: current.synthDoneMs ?? t0,
-				playStartMs: 0,
-				playDoneMs: 0,
+				synthMs,
+				playMs,
+				gapMs: Math.max(0, gapMs),
 			};
+			timings.push(timing);
 
-			// 裁剪静音后播放
-			let audioToPlay = current.audio;
-			try {
-				audioToPlay = trimSilence(current.audio);
-			} catch (err) {
-				log.warn(`[${i + 1}/${segments.length}] trim failed, using original: ${err}`);
-			}
-
-			try {
-				// EXP-LOG: play start
-				segTiming.playStartMs = performance.now();
-				await this.player.play(audioToPlay);
-				// EXP-LOG: play done
-				segTiming.playDoneMs = performance.now();
-			} catch (err) {
-				log.warn(`[${i + 1}/${segments.length}] playback failed, skipping: ${err}`);
-			}
-
-			// EXP-LOG: log segment timing
-			const synthDur = segTiming.synthDoneMs - segTiming.synthStartMs;
-			const playDur = segTiming.playDoneMs - segTiming.playStartMs;
-			const prevEnd = i > 0 ? timings[i - 1].playDoneMs : segTiming.synthStartMs;
-			const gap = segTiming.playStartMs - prevEnd;
 			log.info(
-				`[EXP-timing][${i + 1}/${segments.length}] ` +
-				`synth=${synthDur.toFixed(0)}ms, play=${playDur.toFixed(0)}ms, gap=${gap.toFixed(0)}ms, ` +
-				`text="${segTiming.text}" lang=${segTiming.lang}`,
+				`[perf][${i + 1}/${segments.length}] ` +
+				`synth=${synthMs.toFixed(0)}ms play=${playMs.toFixed(0)}ms gap=${timing.gapMs.toFixed(0)}ms ` +
+				`lang=${segments[i].lang} text="${segments[i].text.slice(0, 30)}"`,
 			);
-
-			timings.push(segTiming);
 		}
 
-		// EXP-LOG: summary
+		// 整轮汇总
 		if (timings.length > 0) {
-			const total = timings[timings.length - 1].playDoneMs - timings[0].synthStartMs;
-			log.info(`[EXP-timing] TOTAL: ${total.toFixed(0)}ms for ${timings.length} segments`);
-			// Check if pre-buffering is working: play_start[i+1] should be < synth_done[i+1]
-			for (let i = 0; i < timings.length - 1; i++) {
-				const buffered = timings[i + 1].synthDoneMs < timings[i].playStartMs;
-				log.info(`[EXP-timing] segment ${i + 1} pre-buffer: ${buffered ? "OK" : "FAILED"} (play_start=${timings[i].playStartMs.toFixed(0)}, next_synth_done=${timings[i + 1].synthDoneMs.toFixed(0)})`);
-			}
+			const totalMs = performance.now() - queueStartMs;
+			const totalSynth = timings.reduce((s, t) => s + t.synthMs, 0);
+			const totalPlay = timings.reduce((s, t) => s + t.playMs, 0);
+			const totalGap = timings.reduce((s, t) => s + t.gapMs, 0);
+			log.info(
+				`[perf] TOTAL: ${totalMs.toFixed(0)}ms ` +
+				`(synth=${totalSynth.toFixed(0)}ms play=${totalPlay.toFixed(0)}ms gap=${totalGap.toFixed(0)}ms) ` +
+				`${timings.length}/${segments.length} segments played`,
+			);
 		}
 
 		if (anyPlayed) {
 			this.onSpeakingChange(false);
 		}
-		log.info("speakAll done");
+		log.info("[queue] speakAll done");
+	}
+
+	/**
+	 * 准备一个段的合成。unsupported 语言直接返回空结果。
+	 */
+	private prepareSegment(
+		segment: SplitSegment,
+		index: number,
+	): Promise<SynthResult> {
+		if (!SUPPORTED_LANGS.has(segment.lang)) {
+			log.info(`[lang][${index + 1}] unsupported lang="${segment.lang}", skipping: "${segment.text.slice(0, 30)}"`);
+			const now = performance.now();
+			return Promise.resolve({
+				index,
+				audio: null,
+				error: `unsupported lang: ${segment.lang}`,
+				synthStartMs: now,
+				synthDoneMs: now,
+			});
+		}
+		return this.synthesizeSegment(segment, index);
 	}
 
 	private async synthesizeSegment(
@@ -169,9 +200,8 @@ export class SpeechQueue {
 		index: number,
 	): Promise<SynthResult> {
 		const synthStartMs = performance.now();
-		log.debug(`[${index + 1}] synthesizing: "${segment.text.slice(0, 40)}..." lang=${segment.lang}`);
+		log.debug(`[synth][${index + 1}] start: "${segment.text.slice(0, 40)}..." lang=${segment.lang}`);
 
-		// 调试失败注入
 		if (this._debugFailIndex === index) {
 			return {
 				index,
@@ -186,8 +216,8 @@ export class SpeechQueue {
 			const audio = await this.tts.synthesize(segment.text, { lang: segment.lang });
 			const synthDoneMs = performance.now();
 			log.info(
-				`[EXP-synth][${index + 1}] done: ${audio.byteLength} bytes, ` +
-				`duration=${(synthDoneMs - synthStartMs).toFixed(0)}ms, lang=${segment.lang}`,
+				`[synth][${index + 1}] done: ${audio.byteLength} bytes ` +
+				`${(synthDoneMs - synthStartMs).toFixed(0)}ms lang=${segment.lang}`,
 			);
 			return { index, audio, synthStartMs, synthDoneMs };
 		} catch (err) {
