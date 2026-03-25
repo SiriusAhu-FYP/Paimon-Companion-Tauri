@@ -98,17 +98,20 @@ export function trimSilence(audioData: ArrayBuffer, options?: TrimOptions): Arra
 		}
 	}
 
+	// EXP-LOG: enhanced silence analysis with per-segment tracking
 	const leadingSilenceMs = (startFrame / sampleRate) * 1000;
 	const trailingSilenceMs = ((totalFrames - 1 - endFrame) / sampleRate) * 1000;
+	const totalMs = (totalFrames / sampleRate) * 1000;
 
-	log.debug(
-		`silence analysis: leading=${leadingSilenceMs.toFixed(0)}ms, trailing=${trailingSilenceMs.toFixed(0)}ms, ` +
-		`total=${(totalFrames / sampleRate * 1000).toFixed(0)}ms`,
+	log.info(
+		`[EXP-trim] leading=${leadingSilenceMs.toFixed(0)}ms, trailing=${trailingSilenceMs.toFixed(0)}ms, ` +
+		`total=${totalMs.toFixed(0)}ms`,
 	);
 
 	// 如果静音区域很小（< 2 * margin），不裁剪
 	const minSilenceMs = marginMs * 2;
 	if (leadingSilenceMs < minSilenceMs && trailingSilenceMs < minSilenceMs) {
+		log.info(`[EXP-trim] SKIP — silence below threshold (${minSilenceMs}ms total), returning original`);
 		return audioData;
 	}
 
@@ -165,9 +168,11 @@ export function trimSilence(audioData: ArrayBuffer, options?: TrimOptions): Arra
 	}
 
 	const removedMs = ((totalFrames - trimmedFrames) / sampleRate) * 1000;
+	const trimmedMs = (trimmedFrames / sampleRate) * 1000;
 	log.info(
-		`trimmed ${removedMs.toFixed(0)}ms silence ` +
-		`(leading=${leadingSilenceMs.toFixed(0)}ms, trailing=${trailingSilenceMs.toFixed(0)}ms)`,
+		`[EXP-trim] TRIMMED ${removedMs.toFixed(0)}ms silence ` +
+		`(original=${totalMs.toFixed(0)}ms -> trimmed=${trimmedMs.toFixed(0)}ms, ` +
+		`leading=${leadingSilenceMs.toFixed(0)}ms, trailing=${trailingSilenceMs.toFixed(0)}ms)`,
 	);
 
 	return newBuffer;

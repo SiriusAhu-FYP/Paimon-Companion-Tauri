@@ -23,8 +23,18 @@ export class GptSovitsTTSService implements ITTSService {
 
 		await this.ensureWeightsLoaded(baseUrl);
 
-		// 调用方传入的 lang（来自 text-splitter 中英分离）优先于全局配置
-		const textLang = config?.lang || this.config.textLang || "zh";
+		// EXP-LOG: validate and log lang routing
+		const rawLang = config?.lang || this.config.textLang || "zh";
+		// Map to GPT-SoVITS supported values: zh, en, auto, ja (JP not directly supported)
+		const unsupportedLangs = ["jp", "ja", "kr", "ko"];
+		const textLang = unsupportedLangs.includes(rawLang.toLowerCase())
+			? "UNSUPPORTED"
+			: (rawLang === "auto" ? "auto" : rawLang);
+
+		if (textLang === "UNSUPPORTED") {
+			log.warn(`[EXP-lang] unsupported lang="${rawLang}" for text="${text.slice(0, 30)}..." — will use fallback`);
+		}
+		log.info(`[EXP-lang] synthesize: text="${text.slice(0, 40)}...", rawLang=${rawLang}, textLang=${textLang}`);
 
 		const params = new URLSearchParams({
 			text,
