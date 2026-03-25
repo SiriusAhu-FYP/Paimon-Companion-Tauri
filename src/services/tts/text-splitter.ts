@@ -45,6 +45,8 @@ function isJapanese(text: string): boolean {
 	if (!kana || kana.length === 0) return false;
 	const cjk = text.match(CJK_RE);
 	const total = (cjk?.length ?? 0) + kana.length;
+	// 如果只有假名没有汉字，也应该标记为日文
+	if (total === kana.length) return true;
 	return kana.length / total > 0.3;
 }
 
@@ -144,6 +146,10 @@ function detectNonCJKLang(text: string): SplitSegment["lang"] {
 	}
 	// 西里尔、阿拉伯、泰文等非拉丁非 CJK → unsupported
 	if (/[\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F]/.test(text)) {
+		return "unsupported";
+	}
+	// 检查是否包含非英文的拉丁字符（如法文、德文等带重音的字符）
+	if (/[^a-zA-Z0-9\s,.!?;:'"()\-]/.test(text)) {
 		return "unsupported";
 	}
 	// 默认视为英文

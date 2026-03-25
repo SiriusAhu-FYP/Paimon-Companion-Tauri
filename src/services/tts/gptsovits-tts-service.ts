@@ -14,6 +14,7 @@ const LANG_ROUTE: Record<string, string> = {
 	zh: "zh",
 	en: "en",
 	ja: "ja",
+	jp: "ja", // 兼容 jp 标签
 	auto: "zh",
 };
 
