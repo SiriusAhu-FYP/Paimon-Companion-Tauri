@@ -10,6 +10,7 @@ import SaveIcon from "@mui/icons-material/Save";
 import RestoreIcon from "@mui/icons-material/Restore";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import NetworkCheckIcon from "@mui/icons-material/NetworkCheck";
+import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import {
 	type AppConfig, type LLMProviderType, type TTSProviderType,
 	DEFAULT_CONFIG, SECRET_KEYS,
@@ -18,6 +19,8 @@ import {
 	proxyRequest,
 } from "@/services/config";
 import { createLogger } from "@/services/logger";
+import { GptSovitsTTSService, MockTTSService } from "@/services/tts";
+import { AudioPlayer } from "@/services/audio/audio-player";
 
 const log = createLogger("settings");
 
@@ -36,6 +39,8 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	const [llmTestResult, setLlmTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 	const [ttsTestResult, setTtsTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 	const [testing, setTesting] = useState<"llm" | "tts" | null>(null);
+	const [ttsTestText, setTtsTestText] = useState("你好，我是测试文本");
+	const [ttsTesting, setTtsTesting] = useState(false);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -155,6 +160,35 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 			setTesting(null);
 		}
 	}, [config.tts.baseUrl]);
+
+	const handleTestTTSDirect = useCallback(async () => {
+		if (!ttsTestText.trim()) return;
+		
+		setTtsTesting(true);
+		try {
+			let ttsService;
+			if (config.tts.provider === "gpt-sovits") {
+				ttsService = new GptSovitsTTSService(config.tts);
+			} else {
+				ttsService = new MockTTSService();
+			}
+			const player = new AudioPlayer();
+			
+			log.info("Testing TTS direct synthesis", { text: ttsTestText, lang: config.tts.textLang });
+			const audio = await ttsService.synthesize(ttsTestText, { lang: config.tts.textLang });
+			
+			log.info("TTS synthesis successful", { audioLength: audio.byteLength });
+			await player.play(audio);
+			
+			setMessage({ type: "success", text: "TTS 合成播放成功" });
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			setMessage({ type: "error", text: `TTS 测试失败: ${msg}` });
+			log.error("TTS direct test failed", err);
+		} finally {
+			setTtsTesting(false);
+		}
+	}, [config.tts, ttsTestText]);
 
 	const needsLlmKey = config.llm.provider !== "mock" && !llmKeyExists && !llmApiKey.trim();
 
@@ -371,8 +405,27 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 								{ttsTestResult.text}
 							</Alert>
 						)}
+
+						<Divider sx={{ my: 1 }} />
+
+						<FieldLabel>TTS 直测输入框</FieldLabel>
+						<TextField
+							size="small" fullWidth
+							placeholder="输入测试文本"
+							value={ttsTestText}
+							onChange={(e) => setTtsTestText(e.target.value)}
+						/>
+						<Button
+							size="small" variant="contained"
+							startIcon={<VolumeUpIcon />}
+							onClick={handleTestTTSDirect}
+							disabled={!config.tts.baseUrl || ttsTesting}
+						>
+							{ttsTesting ? "合成中..." : "合成并播放"}
+						</Button>
 					</>
-				)}
+				)
+				}
 			</Box>
 
 			<Divider />
