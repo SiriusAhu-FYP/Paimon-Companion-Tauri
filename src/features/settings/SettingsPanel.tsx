@@ -19,7 +19,7 @@ import {
 	proxyRequest,
 } from "@/services/config";
 import { createLogger } from "@/services/logger";
-import { GptSovitsTTSService, MockTTSService } from "@/services/tts";
+import { GptSovitsTTSService, MockTTSService, splitText, normalizeForSpeech, SpeechQueue } from "@/services/tts";
 import { AudioPlayer } from "@/services/audio/audio-player";
 
 const log = createLogger("settings");
@@ -163,24 +163,44 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 
 	const handleTestTTSDirect = useCallback(async () => {
 		if (!ttsTestText.trim()) return;
-		
+
 		setTtsTesting(true);
+		setMessage(null);
 		try {
-			let ttsService;
+			let ttsService: GptSovitsTTSService | MockTTSService;
 			if (config.tts.provider === "gpt-sovits") {
 				ttsService = new GptSovitsTTSService(config.tts);
 			} else {
 				ttsService = new MockTTSService();
 			}
 			const player = new AudioPlayer();
-			
-			log.info("Testing TTS direct synthesis", { text: ttsTestText, lang: config.tts.textLang });
-			const audio = await ttsService.synthesize(ttsTestText, { lang: config.tts.textLang });
-			
-			log.info("TTS synthesis successful", { audioLength: audio.byteLength });
-			await player.play(audio);
-			
-			setMessage({ type: "success", text: "TTS 合成播放成功" });
+			const queue = new SpeechQueue(ttsService, player, (speaking) => {
+				/* Settings 测试入口不需要更新 UI 状态 */
+			});
+
+			// 复用正式链路前处理：normalize → 切片 → 语言路由
+			const spokenText = normalizeForSpeech(ttsTestText);
+			const segments = splitText(spokenText);
+
+			log.info("TTS test with full pipeline", {
+				original: ttsTestText,
+				spoken: spokenText,
+				segments: segments.map((s) => `[${s.lang}]"${s.text.slice(0, 20)}"`),
+			});
+
+			if (!segments.length) {
+				setMessage({ type: "error", text: "切片结果为空，请检查输入文本" });
+				return;
+			}
+
+			// 显示切片结果预览
+			const preview = segments
+				.map((s) => `[${s.lang}]${s.text.slice(0, 15)}${s.text.length > 15 ? "…" : ""}`)
+				.join(" | ");
+			setMessage({ type: "success", text: `切片完成：${segments.length} 段 — ${preview}` });
+
+			// 实际合成并播放
+			await queue.speakAll(segments);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			setMessage({ type: "error", text: `TTS 测试失败: ${msg}` });
