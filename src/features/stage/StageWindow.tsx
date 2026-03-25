@@ -18,7 +18,7 @@ export function StageWindow() {
 	const [showControls, setShowControls] = useState(false);
 	const [stageMode, setStageMode] = useState<"docked" | "floating">("docked");
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
-	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("interactive");
+	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("clean");
 	const currentModelPath = useRef(DEFAULT_MODEL.path);
 	const [scaleLocked, setScaleLocked] = useState(false);
 	const eyeModeRef = useRef<EyeMode>("random-path");
@@ -149,7 +149,10 @@ export function StageWindow() {
 
 			switch (cmd.type) {
 				case "hide-stage":
-					await win.hide();
+					// 销毁渲染器，真正关闭渲染
+					rendererRef.current?.destroy();
+					rendererRef.current = null;
+					await win.close();
 					break;
 				case "show-stage":
 					await win.show();
@@ -196,7 +199,11 @@ export function StageWindow() {
 					break;
 			}
 		} catch {
-			if (cmd.type === "hide-stage") window.close();
+			if (cmd.type === "hide-stage") {
+				rendererRef.current?.destroy();
+				rendererRef.current = null;
+				window.close();
+			}
 		}
 	}, [switchModel, setEyeMode]);
 
@@ -267,12 +274,18 @@ export function StageWindow() {
 		return () => window.removeEventListener("mousemove", handleMouseMove);
 	}, [eyeMode]);
 
-	const handleHide = useCallback(async () => {
+	const handleClose = useCallback(async () => {
 		try {
+			// 销毁渲染器，真正关闭渲染
+			rendererRef.current?.destroy();
+			rendererRef.current = null;
+			
 			const { getCurrentWindow } = await import("@tauri-apps/api/window");
-			await getCurrentWindow().hide();
+			await getCurrentWindow().close();
 			syncStateToHost({ visible: false });
 		} catch {
+			rendererRef.current?.destroy();
+			rendererRef.current = null;
 			window.close();
 		}
 	}, [syncStateToHost]);
@@ -318,9 +331,9 @@ export function StageWindow() {
 						<button className="stage-tb-btn" onClick={toggleDisplayMode} title="切换为 clean 模式">
 							clean
 						</button>
-						<button className="stage-tb-btn stage-tb-close" onClick={handleHide} title="隐藏">
-							✕
-						</button>
+						<button className="stage-tb-btn stage-tb-close" onClick={handleClose} title="关闭">
+								✕
+							</button>
 					</div>
 				</div>
 			)}
