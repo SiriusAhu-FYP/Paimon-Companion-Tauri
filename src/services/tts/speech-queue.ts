@@ -40,6 +40,7 @@ export class SpeechQueue {
 	private onSpeakingChange: (speaking: boolean) => void;
 	private _debugFailIndex: number | null = null;
 	private _trimEnabled = false;
+	private _stopped = false;
 
 	constructor(
 		tts: ITTSService,
@@ -57,6 +58,18 @@ export class SpeechQueue {
 		if (index !== null) {
 			log.info(`[debug] will fail synthesis at index ${index}`);
 		}
+	}
+
+	/** 中断当前 speakAll，停止所有进行中的合成+播放 */
+	stop() {
+		this._stopped = true;
+		this.player.stop();
+		log.info("[queue] stopped");
+	}
+
+	/** 重置中断标志（新一次 speakAll 前自动调用） */
+	private resetStopped() {
+		this._stopped = false;
 	}
 
 	/** 设置是否启用静音裁剪（默认关闭） */
@@ -81,6 +94,7 @@ export class SpeechQueue {
 	async speakAll(segments: SplitSegment[]): Promise<void> {
 		if (!segments.length) return;
 
+		this.resetStopped();
 		log.info(`[queue] speakAll: ${segments.length} segments`);
 		const queueStartMs = performance.now();
 		let anyPlayed = false;
@@ -91,8 +105,20 @@ export class SpeechQueue {
 			this.prepareSegment(segments[0], 0);
 
 		for (let i = 0; i < segments.length; i++) {
+			// 检查停止标志
+			if (this._stopped) {
+				log.info(`[queue] stopped at segment ${i + 1}, breaking`);
+				break;
+			}
+
 			// 等待当前段合成完成
 			const current = await nextSynthPromise!;
+
+			// 停止标志可能在等待中被打断
+			if (this._stopped) {
+				log.info(`[queue] stopped during synth at segment ${i + 1}, breaking`);
+				break;
+			}
 
 			// 启动下一段的预缓冲合成（如果有）
 			if (i + 1 < segments.length) {
@@ -171,7 +197,7 @@ export class SpeechQueue {
 		if (anyPlayed) {
 			this.onSpeakingChange(false);
 		}
-		log.info("[queue] speakAll done");
+		log.info(`[queue] speakAll done (stopped=${this._stopped}, played=${timings.length}/${segments.length})`);
 	}
 
 	/**
