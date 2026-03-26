@@ -1,5 +1,5 @@
 import type { EventBus } from "@/services/event-bus";
-import type { CharacterConfig } from "@/types";
+import type { CharacterProfile } from "@/types";
 import type { CharacterService } from "@/services/character";
 import type { ExternalInputService } from "@/services/external-input";
 import type { RuntimeService } from "@/services/runtime";
@@ -7,11 +7,15 @@ import { createLogger } from "@/services/logger";
 
 const log = createLogger("mock");
 
-// Mock 角色配置
-export const MOCK_CHARACTER_CONFIG: CharacterConfig = {
-	id: "paimon",
+/** 无角色卡时的默认手动档案（派蒙占位） */
+export const MOCK_CHARACTER_PROFILE: CharacterProfile = {
+	id: "paimon-manual",
 	name: "派蒙",
 	persona: "你是旅行者的好伙伴派蒙，说话活泼可爱，喜欢吃东西。",
+	scenario: "",
+	firstMessage: "",
+	messageExamples: "",
+	systemPrompt: "",
 	defaultEmotion: "neutral",
 	expressionMap: {
 		neutral: "exp_neutral",
@@ -20,6 +24,7 @@ export const MOCK_CHARACTER_CONFIG: CharacterConfig = {
 		angry: "exp_angry",
 		surprised: "exp_surprised",
 	},
+	source: "manual",
 };
 
 /**
@@ -80,10 +85,10 @@ export function mockExternalEvents(externalInput: ExternalInputService) {
 	}, 1000);
 }
 
-// 初始化 mock 角色
+// 初始化默认角色档案（无卡或未选卡时）
 export function mockCharacterInit(character: CharacterService) {
-	character.loadConfig(MOCK_CHARACTER_CONFIG);
-	log.info("mock character loaded");
+	character.loadFromProfile(MOCK_CHARACTER_PROFILE);
+	log.info("mock character profile loaded");
 }
 
 // 将 mock 工具挂载到 window 上，方便在开发者工具中使用

@@ -1,17 +1,17 @@
-import type { CharacterConfig, CharacterState } from "@/types";
+import type { CharacterProfile, CharacterState } from "@/types";
 import type { EventBus } from "@/services/event-bus";
 import { createLogger } from "@/services/logger";
+import { loadCharacterProfilesFromPublic } from "./character-cards";
 
 const log = createLogger("character");
 
 /**
- * Phase 1 最小占位：角色状态的权威真源。
- * 管理角色配置加载和情绪/表情状态。
- * 真实的配置文件读取和 Live2D 集成留到后续。
+ * 角色状态真源：当前档案、表情/说话状态、可用角色卡列表。
  */
 export class CharacterService {
 	private state: CharacterState;
-	private config: CharacterConfig | null = null;
+	private profile: CharacterProfile | null = null;
+	private catalog: CharacterProfile[] = [];
 	private bus: EventBus;
 
 	constructor(bus: EventBus) {
@@ -35,16 +35,31 @@ export class CharacterService {
 		return { ...this.state };
 	}
 
-	getConfig(): Readonly<CharacterConfig> | null {
-		return this.config ? { ...this.config } : null;
+	/** 当前生效的角色档案（供 LLM prompt 等使用） */
+	getProfile(): Readonly<CharacterProfile> | null {
+		return this.profile ? { ...this.profile } : null;
 	}
 
-	// Phase 1：mock 加载，传入内存配置
-	loadConfig(config: CharacterConfig) {
-		this.config = config;
-		this.state.characterId = config.id;
-		this.state.emotion = config.defaultEmotion;
-		log.info(`loaded character: ${config.name}`);
+	/** 已加载的可用角色卡（来自 public/cards） */
+	getAvailableProfiles(): readonly CharacterProfile[] {
+		return [...this.catalog];
+	}
+
+	findProfileById(id: string): CharacterProfile | undefined {
+		return this.catalog.find((p) => p.id === id);
+	}
+
+	/** 从网络拉取 manifest 与 JSON，填充 catalog */
+	async refreshCatalogFromPublic(): Promise<void> {
+		this.catalog = await loadCharacterProfilesFromPublic();
+		log.info(`character catalog loaded: ${this.catalog.length} profile(s)`);
+	}
+
+	loadFromProfile(profile: CharacterProfile) {
+		this.profile = { ...profile };
+		this.state.characterId = profile.id;
+		this.state.emotion = profile.defaultEmotion;
+		log.info(`loaded character profile: ${profile.name} (${profile.id})`);
 		this.notifyStateChange();
 	}
 
@@ -52,7 +67,7 @@ export class CharacterService {
 		if (emotion === this.state.emotion) return;
 
 		this.state.emotion = emotion;
-		const expressionName = this.config?.expressionMap[emotion] ?? emotion;
+		const expressionName = this.profile?.expressionMap[emotion] ?? emotion;
 
 		this.bus.emit("character:expression", { emotion, expressionName });
 		this.notifyStateChange();

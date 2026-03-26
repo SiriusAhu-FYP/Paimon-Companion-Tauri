@@ -174,7 +174,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				ttsService = new MockTTSService();
 			}
 			const player = new AudioPlayer();
-			const queue = new SpeechQueue(ttsService, player, (speaking) => {
+			const queue = new SpeechQueue(ttsService, player, (_speaking) => {
 				/* Settings 测试入口不需要更新 UI 状态 */
 			});
 
@@ -453,11 +453,14 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 			{/* 角色设置 */}
 			<SectionTitle>角色设置</SectionTitle>
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-				<FieldLabel>角色人设</FieldLabel>
+				<FieldLabel>自定义人设（附加）</FieldLabel>
+				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+					拼入 LLM system prompt，优先级低于角色卡内设定；当前角色请在控制面板切换。
+				</Typography>
 				<TextField
 					size="small" fullWidth multiline minRows={3} maxRows={6}
-					value={config.character.persona}
-					onChange={(e) => updateCharacter({ persona: e.target.value })}
+					value={config.character.customPersona}
+					onChange={(e) => updateCharacter({ customPersona: e.target.value })}
 				/>
 			</Box>
 

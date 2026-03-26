@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { ThemeProvider, CssBaseline } from "@mui/material";
-import { loadConfig } from "@/services/config";
+import { loadConfig, getConfig } from "@/services/config";
 import { initServices } from "@/services";
 import { mockCharacterInit, exposeMockTools } from "@/utils/mock";
 import { broadcastState, broadcastControl, onControlCommand } from "@/utils/window-sync";
@@ -17,7 +17,15 @@ async function bootstrap() {
 	const services = initServices();
 
 	if (windowLabel === "main") {
-		mockCharacterInit(services.character);
+		await services.character.refreshCatalogFromPublic();
+		const charCfg = getConfig().character;
+		const savedId = charCfg.activeProfileId?.trim() ?? "";
+		const fromCard = savedId ? services.character.findProfileById(savedId) : undefined;
+		if (fromCard) {
+			services.character.loadFromProfile(fromCard);
+		} else {
+			mockCharacterInit(services.character);
+		}
 		exposeMockTools(services.bus, services.character, services.externalInput, services.runtime);
 
 		const broadcastFullState = (expressionEmotion?: string) => {

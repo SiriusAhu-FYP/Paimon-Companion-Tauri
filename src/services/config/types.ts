@@ -33,10 +33,13 @@ export interface TTSProviderConfig {
 	textLang: string;
 }
 
-// ── Character ──
+// ── Character（应用设置：当前卡 ID、用户附加人设）──
 
-export interface CharacterConfig {
-	persona: string;
+export interface CharacterSettingsConfig {
+	/** 当前选中的角色档案 id，空串表示未选卡（仅用 customPersona） */
+	activeProfileId: string;
+	/** 用户自定义附加人设，拼入 system prompt（优先级低于卡内 system_prompt / persona） */
+	customPersona: string;
 }
 
 // ── 顶层 AppConfig ──
@@ -44,7 +47,7 @@ export interface CharacterConfig {
 export interface AppConfig {
 	llm: LLMProviderConfig;
 	tts: TTSProviderConfig;
-	character: CharacterConfig;
+	character: CharacterSettingsConfig;
 }
 
 // ── 敏感配置 key 约定 ──
@@ -79,6 +82,7 @@ export const DEFAULT_CONFIG: AppConfig = {
 		textLang: "zh",
 	},
 	character: {
-		persona: "你是旅行者的好伙伴派蒙，说话活泼可爱，喜欢吃东西。",
+		activeProfileId: "",
+		customPersona: "你是旅行者的好伙伴派蒙，说话活泼可爱，喜欢吃东西。",
 	},
 };

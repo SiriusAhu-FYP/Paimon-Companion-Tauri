@@ -1,6 +1,10 @@
 import type { EventBus } from "@/services/event-bus";
 import type { RuntimeService } from "@/services/runtime";
+import type { CharacterService } from "@/services/character";
+import type { KnowledgeService } from "@/services/knowledge";
+import { getConfig } from "@/services/config";
 import type { ILLMService, ChatMessage } from "./types";
+import { buildSystemMessage, summarizePromptContext } from "./prompt-builder";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("llm");
@@ -13,13 +17,23 @@ export class LLMService {
 	private bus: EventBus;
 	private runtime: RuntimeService;
 	private provider: ILLMService;
+	private character: CharacterService;
+	private knowledge: KnowledgeService;
 	private history: ChatMessage[] = [];
 	private processing = false;
 
-	constructor(bus: EventBus, runtime: RuntimeService, provider: ILLMService) {
+	constructor(
+		bus: EventBus,
+		runtime: RuntimeService,
+		provider: ILLMService,
+		character: CharacterService,
+		knowledge: KnowledgeService,
+	) {
 		this.bus = bus;
 		this.runtime = runtime;
 		this.provider = provider;
+		this.character = character;
+		this.knowledge = knowledge;
 	}
 
 	isProcessing(): boolean {
@@ -44,9 +58,27 @@ export class LLMService {
 		this.history.push({ role: "user", content: userText });
 		this.bus.emit("llm:request-start", { userText });
 
+		const appCharacter = getConfig().character;
+		const systemMsg = buildSystemMessage({
+			characterProfile: this.character.getProfile(),
+			knowledgeContext: this.knowledge.getAssembledContext(),
+			customPersona: appCharacter.customPersona,
+		});
+		const messages: ChatMessage[] = systemMsg
+			? [systemMsg, ...this.history]
+			: [...this.history];
+
+		if (systemMsg) {
+			log.info("LLM system prompt assembled", summarizePromptContext({
+				characterProfile: this.character.getProfile(),
+				knowledgeContext: this.knowledge.getAssembledContext(),
+				customPersona: appCharacter.customPersona,
+			}));
+		}
+
 		try {
 			let fullText = "";
-			for await (const chunk of this.provider.chat(this.history)) {
+			for await (const chunk of this.provider.chat(messages)) {
 				// 在流式处理中也检查 runtime 状态
 				if (!this.runtime.isAllowed()) {
 					log.warn("LLM stream aborted — runtime stopped");

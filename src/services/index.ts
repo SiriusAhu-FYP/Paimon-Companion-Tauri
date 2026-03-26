@@ -77,7 +77,7 @@ export function initServices(): ServiceContainer {
 	externalInput.setRuntime(runtime);
 
 	const llmProvider = resolveLLMProvider(config);
-	const llm = new LLMService(eventBus, runtime, llmProvider);
+	const llm = new LLMService(eventBus, runtime, llmProvider, character, knowledge);
 	const ttsProvider = resolveTTSProvider(config);
 	const player = new AudioPlayer();
 
