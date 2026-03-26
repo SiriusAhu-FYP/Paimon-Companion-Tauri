@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
 	Box, Button, Typography, Stack, TextField, Select, MenuItem,
 	Divider, Alert, IconButton, Tooltip,
-	Dialog, DialogTitle, DialogContent, DialogActions,
+	Popover,
 	type SelectChangeEvent,
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
@@ -427,8 +427,9 @@ interface LLMProfilesSectionProps {
 function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onSelect }: LLMProfilesSectionProps) {
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingProfile, setEditingProfile] = useState<LLMProfile | null>(null);
+	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
-	const handleEdit = () => {
+	const handleEdit = (event: React.MouseEvent<HTMLElement>) => {
 		if (activeId) {
 			setEditingProfile(profiles.find((p) => p.id === activeId) ?? null);
 		} else {
@@ -442,10 +443,11 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 				maxTokens: 2048,
 			});
 		}
+		setAnchorEl(event.currentTarget);
 		setDialogOpen(true);
 	};
 
-	const handleNew = () => {
+	const handleNew = (event: React.MouseEvent<HTMLElement>) => {
 		setEditingProfile({
 			id: `llm-${Date.now()}`,
 			name: "",
@@ -455,6 +457,7 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 			temperature: 0.7,
 			maxTokens: 2048,
 		});
+		setAnchorEl(event.currentTarget);
 		setDialogOpen(true);
 	};
 
@@ -474,6 +477,7 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 	const handleDialogClose = () => {
 		setDialogOpen(false);
 		setEditingProfile(null);
+		setAnchorEl(null);
 	};
 
 	const handleDelete = (id: string) => {
@@ -481,6 +485,7 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 		if (id === activeId) onSelect("");
 		setDialogOpen(false);
 		setEditingProfile(null);
+		setAnchorEl(null);
 	};
 
 	return (
@@ -515,11 +520,18 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 				</Tooltip>
 			</Stack>
 
-			<Dialog open={dialogOpen} onClose={handleDialogClose} maxWidth="sm" fullWidth>
-				<DialogTitle>LLM 配置档案</DialogTitle>
-				<DialogContent dividers>
+			<Popover
+				open={dialogOpen}
+				anchorEl={anchorEl}
+				onClose={handleDialogClose}
+				anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+				transformOrigin={{ vertical: "top", horizontal: "right" }}
+				slotProps={{ paper: { sx: { width: 360, maxHeight: 480, overflowY: "auto" } } }}
+			>
+				<Box sx={{ p: 1.5 }}>
+					<Typography variant="subtitle2" sx={{ mb: 1 }}>LLM 配置档案</Typography>
 					{editingProfile && (
-						<Stack spacing={1} sx={{ pt: 0.5 }}>
+						<Stack spacing={1}>
 							<TextField
 								size="small" fullWidth label="档案名称"
 								value={editingProfile.name}
@@ -562,14 +574,15 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 									</Button>
 								</Box>
 							)}
+
+							<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+								<Button size="small" onClick={handleDialogClose}>取消</Button>
+								<Button size="small" variant="contained" onClick={handleDialogSave}>保存</Button>
+							</Stack>
 						</Stack>
 					)}
-				</DialogContent>
-				<DialogActions>
-					<Button size="small" onClick={handleDialogClose}>取消</Button>
-					<Button size="small" variant="contained" onClick={handleDialogSave}>保存</Button>
-				</DialogActions>
-			</Dialog>
+				</Box>
+			</Popover>
 		</>
 	);
 }
@@ -588,6 +601,7 @@ interface TTSProfilesSectionProps {
 function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onSelect }: TTSProfilesSectionProps) {
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingProfile, setEditingProfile] = useState<TTSProfile | null>(null);
+	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
 	const defaultTTS = (): TTSProfile => ({
 		id: `tts-${Date.now()}`,
@@ -604,17 +618,19 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 		textLang: "zh",
 	});
 
-	const handleEdit = () => {
+	const handleEdit = (event: React.MouseEvent<HTMLElement>) => {
 		if (activeId) {
 			setEditingProfile(profiles.find((p) => p.id === activeId) ?? null);
 		} else {
 			setEditingProfile(defaultTTS());
 		}
+		setAnchorEl(event.currentTarget);
 		setDialogOpen(true);
 	};
 
-	const handleNew = () => {
+	const handleNew = (event: React.MouseEvent<HTMLElement>) => {
 		setEditingProfile(defaultTTS());
+		setAnchorEl(event.currentTarget);
 		setDialogOpen(true);
 	};
 
@@ -634,6 +650,7 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 	const handleDialogClose = () => {
 		setDialogOpen(false);
 		setEditingProfile(null);
+		setAnchorEl(null);
 	};
 
 	const handleDelete = (id: string) => {
@@ -641,6 +658,7 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 		if (id === activeId) onSelect("");
 		setDialogOpen(false);
 		setEditingProfile(null);
+		setAnchorEl(null);
 	};
 
 	const isGptSovits = editingProfile?.provider === "gpt-sovits";
@@ -677,11 +695,18 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 				</Tooltip>
 			</Stack>
 
-			<Dialog open={dialogOpen} onClose={handleDialogClose} maxWidth="sm" fullWidth>
-				<DialogTitle>TTS 配置档案</DialogTitle>
-				<DialogContent dividers>
+			<Popover
+				open={dialogOpen}
+				anchorEl={anchorEl}
+				onClose={handleDialogClose}
+				anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+				transformOrigin={{ vertical: "top", horizontal: "right" }}
+				slotProps={{ paper: { sx: { width: 360, maxHeight: 480, overflowY: "auto" } } }}
+			>
+				<Box sx={{ p: 1.5 }}>
+					<Typography variant="subtitle2" sx={{ mb: 1 }}>TTS 配置档案</Typography>
 					{editingProfile && (
-						<Stack spacing={1} sx={{ pt: 0.5 }}>
+						<Stack spacing={1}>
 							<TextField size="small" fullWidth label="档案名称"
 								value={editingProfile.name}
 								onChange={(e) => setEditingProfile({ ...editingProfile, name: e.target.value })} />
@@ -742,14 +767,15 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 									</Button>
 								</Box>
 							)}
+
+							<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+								<Button size="small" onClick={handleDialogClose}>取消</Button>
+								<Button size="small" variant="contained" onClick={handleDialogSave}>保存</Button>
+							</Stack>
 						</Stack>
 					)}
-				</DialogContent>
-				<DialogActions>
-					<Button size="small" onClick={handleDialogClose}>取消</Button>
-					<Button size="small" variant="contained" onClick={handleDialogSave}>保存</Button>
-				</DialogActions>
-			</Dialog>
+				</Box>
+			</Popover>
 		</>
 	);
 }
