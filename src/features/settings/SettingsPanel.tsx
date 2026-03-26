@@ -208,7 +208,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				onUpdate={(p) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.map((x) => x.id === p.id ? p : x) }))}
 				onDelete={(id) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.filter((x) => x.id !== id), activeLlmProfileId: c.activeLlmProfileId === id ? "" : c.activeLlmProfileId }))}
 				onSelect={(id) => setConfig((c) => ({ ...c, activeLlmProfileId: id }))}
-				onPersist={() => updateConfig(config)}
+				onPersist={(newProfiles, newActiveId) => updateConfig({ llmProfiles: newProfiles, activeLlmProfileId: newActiveId })}
 			/>
 
 			<Divider />
@@ -251,7 +251,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				onUpdate={(p) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.map((x) => x.id === p.id ? p : x) }))}
 				onDelete={(id) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.filter((x) => x.id !== id), activeTtsProfileId: c.activeTtsProfileId === id ? "" : c.activeTtsProfileId }))}
 				onSelect={(id) => setConfig((c) => ({ ...c, activeTtsProfileId: id }))}
-				onPersist={() => updateConfig(config)}
+				onPersist={(newProfiles, newActiveId) => updateConfig({ ttsProfiles: newProfiles, activeTtsProfileId: newActiveId })}
 			/>
 
 			<Divider />
@@ -356,8 +356,8 @@ interface LLMProfilesSectionProps {
 	onUpdate: (p: LLMProfile) => void;
 	onDelete: (id: string) => void;
 	onSelect: (id: string) => void;
-	/** Popover 保存/删除后立即持久化 */
-	onPersist: () => Promise<unknown>;
+	/** Popover 保存/删除后立即持久化（传入更新后的完整 profiles 数组） */
+	onPersist: (newProfiles: LLMProfile[], newActiveId: string) => Promise<unknown>;
 }
 
 function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onSelect, onPersist }: LLMProfilesSectionProps) {
@@ -400,16 +400,21 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 	const handleDialogSave = async () => {
 		if (!editingProfile) return;
 		const exists = profiles.some((p) => p.id === editingProfile.id);
+		let newProfiles: LLMProfile[];
+		let newActiveId = activeId;
 		if (exists) {
 			onUpdate(editingProfile);
+			newProfiles = profiles.map((p) => p.id === editingProfile.id ? editingProfile : p);
 		} else {
 			onAdd(editingProfile);
 			onSelect(editingProfile.id);
+			newActiveId = editingProfile.id;
+			newProfiles = [...profiles, editingProfile];
 		}
 		setDialogOpen(false);
 		setEditingProfile(null);
 		setAnchorEl(null);
-		await onPersist();
+		await onPersist(newProfiles, newActiveId);
 	};
 
 	const handleDialogClose = () => {
@@ -424,7 +429,8 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 		setDialogOpen(false);
 		setEditingProfile(null);
 		setAnchorEl(null);
-		await onPersist();
+		const newProfiles = profiles.filter((p) => p.id !== id);
+		await onPersist(newProfiles, id === activeId ? "" : activeId);
 	};
 
 	return (
@@ -535,8 +541,8 @@ interface TTSProfilesSectionProps {
 	onUpdate: (p: TTSProfile) => void;
 	onDelete: (id: string) => void;
 	onSelect: (id: string) => void;
-	/** Popover 保存/删除后立即持久化 */
-	onPersist: () => Promise<unknown>;
+	/** Popover 保存/删除后立即持久化（传入更新后的完整 profiles 数组） */
+	onPersist: (newProfiles: TTSProfile[], newActiveId: string) => Promise<unknown>;
 }
 
 function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onSelect, onPersist }: TTSProfilesSectionProps) {
@@ -578,16 +584,21 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 	const handleDialogSave = async () => {
 		if (!editingProfile) return;
 		const exists = profiles.some((p) => p.id === editingProfile.id);
+		let newProfiles: TTSProfile[];
+		let newActiveId = activeId;
 		if (exists) {
 			onUpdate(editingProfile);
+			newProfiles = profiles.map((p) => p.id === editingProfile.id ? editingProfile : p);
 		} else {
 			onAdd(editingProfile);
 			onSelect(editingProfile.id);
+			newActiveId = editingProfile.id;
+			newProfiles = [...profiles, editingProfile];
 		}
 		setDialogOpen(false);
 		setEditingProfile(null);
 		setAnchorEl(null);
-		await onPersist();
+		await onPersist(newProfiles, newActiveId);
 	};
 
 	const handleDialogClose = () => {
@@ -602,7 +613,8 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 		setDialogOpen(false);
 		setEditingProfile(null);
 		setAnchorEl(null);
-		await onPersist();
+		const newProfiles = profiles.filter((p) => p.id !== id);
+		await onPersist(newProfiles, id === activeId ? "" : activeId);
 	};
 
 	const isGptSovits = editingProfile?.provider === "gpt-sovits";
