@@ -4,7 +4,7 @@ export type {
 	LLMProviderType,
 	TTSProviderConfig,
 	TTSProviderType,
-	CharacterConfig,
+	CharacterSettingsConfig,
 	SecretKeyName,
 } from "./types";
 export { DEFAULT_CONFIG, SECRET_KEYS } from "./types";

@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
 	Box, Button, Typography, Stack, Chip, Divider,
+	Select, MenuItem, TextField,
+	type SelectChangeEvent,
 } from "@mui/material";
 import StopIcon from "@mui/icons-material/Stop";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
@@ -8,15 +10,84 @@ import MicIcon from "@mui/icons-material/Mic";
 import { useRuntime, useCharacter } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { getServices } from "@/services";
-import { mockVoicePipeline, mockExternalEvents } from "@/utils/mock";
+import { updateConfig, getConfig } from "@/services/config";
+import { mockVoicePipeline, mockExternalEvents, MOCK_CHARACTER_PROFILE } from "@/utils/mock";
+import type { CharacterProfile } from "@/types";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("control-panel");
 
 export function ControlPanel() {
 	const { mode, stop, resume } = useRuntime();
-	const { characterId, emotion, isSpeaking } = useCharacter();
+	const { emotion, isSpeaking } = useCharacter();
 
+	// ── 角色切换 ──
+	const [profiles, setProfiles] = useState<CharacterProfile[]>([]);
+	const [selectedId, setSelectedId] = useState<string>("");
+
+	useEffect(() => {
+		const { character } = getServices();
+		const available = character.getAvailableProfiles();
+		setProfiles([...available]);
+
+		const current = character.getProfile();
+		setSelectedId(current?.id ?? "");
+	}, []);
+
+	const handleCharacterSwitch = useCallback(async (e: SelectChangeEvent<string>) => {
+		const id = e.target.value;
+		const { character, llm } = getServices();
+
+		if (id === "__manual__") {
+			character.loadFromProfile(MOCK_CHARACTER_PROFILE);
+			setSelectedId(MOCK_CHARACTER_PROFILE.id);
+			llm.clearHistory();
+			await updateConfig({ character: { ...getConfig().character, activeProfileId: "" } });
+			log.info("switched to manual/default character");
+			return;
+		}
+
+		const profile = character.findProfileById(id);
+		if (!profile) return;
+
+		character.loadFromProfile(profile);
+		setSelectedId(profile.id);
+		llm.clearHistory();
+
+		await updateConfig({ character: { ...getConfig().character, activeProfileId: profile.id } });
+		log.info(`switched to character: ${profile.name} (${profile.id})`);
+	}, []);
+
+	// ── 上下文注入 ──
+	const [productText, setProductText] = useState("");
+	const [liveContextText, setLiveContextText] = useState("");
+
+	const handleAddProduct = useCallback(() => {
+		const text = productText.trim();
+		if (!text) return;
+		const { knowledge } = getServices();
+		knowledge.addKnowledge({ id: `product-${Date.now()}`, content: text });
+		setProductText("");
+		log.info("product knowledge added");
+	}, [productText]);
+
+	const handleAddLiveContext = useCallback(() => {
+		const text = liveContextText.trim();
+		if (!text) return;
+		const { knowledge } = getServices();
+		knowledge.addLiveContext({ id: `live-${Date.now()}`, content: text, priority: 10, expiresAt: null });
+		setLiveContextText("");
+		log.info("live context added");
+	}, [liveContextText]);
+
+	const handleClearKnowledge = useCallback(() => {
+		const { knowledge } = getServices();
+		knowledge.clearLongTermKnowledge();
+		knowledge.clearLiveContext();
+		log.info("knowledge + live context cleared");
+	}, []);
+
+	// ── Mock 测试 ──
 	const handleMockPipeline = async () => {
 		const { bus, runtime } = getServices();
 		await mockVoicePipeline(bus, runtime);
@@ -87,14 +158,73 @@ export function ControlPanel() {
 
 			<Divider />
 
-			{/* 角色状态 */}
+			{/* 角色切换 */}
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
 				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
-					角色状态
+					角色
 				</Typography>
-				<Typography variant="body2">角色：{characterId || "未加载"}</Typography>
+				<Select
+					size="small" fullWidth
+					value={selectedId}
+					onChange={handleCharacterSwitch}
+					displayEmpty
+					sx={{ fontSize: 13, mb: 0.5 }}
+				>
+					<MenuItem value="__manual__">
+						<em>默认（手动人设）</em>
+					</MenuItem>
+					{profiles.map((p) => (
+						<MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+					))}
+				</Select>
 				<Typography variant="body2">情绪：{emotion}</Typography>
 				<Typography variant="body2">说话中：{isSpeaking ? "是" : "否"}</Typography>
+			</Box>
+
+			<Divider />
+
+			{/* 上下文注入 */}
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
+				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>上下文注入</Typography>
+					<HelpTooltip title="将商品资料或运营口径注入 LLM 上下文，影响回复内容" />
+				</Stack>
+
+				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", mb: 0.5 }}>
+					商品/资料
+				</Typography>
+				<Stack direction="row" spacing={0.5} sx={{ mb: 0.75 }}>
+					<TextField
+						size="small" fullWidth multiline maxRows={3}
+						placeholder="例：原神周边摆件，限时8折"
+						value={productText}
+						onChange={(e) => setProductText(e.target.value)}
+						sx={{ "& .MuiInputBase-input": { fontSize: 12 } }}
+					/>
+					<Button variant="outlined" size="small" onClick={handleAddProduct} disabled={!productText.trim()} sx={{ minWidth: 48 }}>
+						注入
+					</Button>
+				</Stack>
+
+				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", mb: 0.5 }}>
+					运营口径 / 直播上下文
+				</Typography>
+				<Stack direction="row" spacing={0.5} sx={{ mb: 0.75 }}>
+					<TextField
+						size="small" fullWidth multiline maxRows={3}
+						placeholder="例：当前是晚间互动环节"
+						value={liveContextText}
+						onChange={(e) => setLiveContextText(e.target.value)}
+						sx={{ "& .MuiInputBase-input": { fontSize: 12 } }}
+					/>
+					<Button variant="outlined" size="small" onClick={handleAddLiveContext} disabled={!liveContextText.trim()} sx={{ minWidth: 48 }}>
+						注入
+					</Button>
+				</Stack>
+
+				<Button variant="text" size="small" color="warning" onClick={handleClearKnowledge} sx={{ fontSize: 11 }}>
+					清空全部注入
+				</Button>
 			</Box>
 
 			<Divider />

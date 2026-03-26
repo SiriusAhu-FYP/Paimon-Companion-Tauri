@@ -4,7 +4,7 @@
  * 敏感配置（API Key）走 SecretStore（见 secret-store.ts）。
  */
 
-import type { AppConfig } from "./types";
+import type { AppConfig, CharacterSettingsConfig } from "./types";
 import { DEFAULT_CONFIG } from "./types";
 import { createLogger } from "@/services/logger";
 import { isTauriEnvironment } from "@/utils/window-sync";
@@ -22,6 +22,21 @@ function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfi
 		llm: { ...defaults.llm, ...overrides.llm },
 		tts: { ...defaults.tts, ...overrides.tts },
 		character: { ...defaults.character, ...overrides.character },
+	};
+}
+
+/** 旧版仅含 persona 的 character 配置 → CharacterSettingsConfig */
+function normalizeCharacterSettings(
+	character: CharacterSettingsConfig & { persona?: string },
+): CharacterSettingsConfig {
+	const legacyPersona = typeof character.persona === "string" ? character.persona : "";
+	const customPersona =
+		character.customPersona !== undefined && character.customPersona !== ""
+			? character.customPersona
+			: legacyPersona || DEFAULT_CONFIG.character.customPersona;
+	return {
+		activeProfileId: character.activeProfileId ?? DEFAULT_CONFIG.character.activeProfileId,
+		customPersona,
 	};
 }
 
@@ -86,6 +101,12 @@ export async function loadConfig(): Promise<AppConfig> {
 		: loadFromLocalStorage();
 
 	cachedConfig = deepMerge(DEFAULT_CONFIG, overrides);
+	cachedConfig = {
+		...cachedConfig,
+		character: normalizeCharacterSettings(
+			cachedConfig.character as CharacterSettingsConfig & { persona?: string },
+		),
+	};
 	log.info("config loaded", {
 		llmProvider: cachedConfig.llm.provider,
 		ttsProvider: cachedConfig.tts.provider,
