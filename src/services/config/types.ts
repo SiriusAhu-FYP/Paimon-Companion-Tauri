@@ -100,7 +100,7 @@ export const DEFAULT_CONFIG: AppConfig = {
 		baseUrl: "",
 		model: "",
 		temperature: 0.7,
-		maxTokens: 2048,
+		maxTokens: 4096,
 	},
 	tts: {
 		provider: "mock",
