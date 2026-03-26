@@ -1,12 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import {
 	Box, Button, Typography, Stack, TextField, Select, MenuItem,
-	Divider, Alert, InputAdornment, IconButton, Tooltip,
+	Divider, Alert, IconButton, Tooltip,
 	Dialog, DialogTitle, DialogContent, DialogActions,
 	type SelectChangeEvent,
 } from "@mui/material";
-import VisibilityIcon from "@mui/icons-material/Visibility";
-import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import SaveIcon from "@mui/icons-material/Save";
 import RestoreIcon from "@mui/icons-material/Restore";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -15,6 +13,7 @@ import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import {
 	type AppConfig, type LLMProviderType, type TTSProviderType,
 	type LLMProfile, type TTSProfile,
+	type TTSProviderConfig,
 	DEFAULT_CONFIG, SECRET_KEYS,
 	loadConfig, updateConfig, resetConfig,
 	hasSecret, setSecret, deleteSecret,
@@ -23,6 +22,7 @@ import {
 import { createLogger } from "@/services/logger";
 import { GptSovitsTTSService, MockTTSService, splitText, normalizeForSpeech, SpeechQueue } from "@/services/tts";
 import { AudioPlayer } from "@/services/audio/audio-player";
+import { broadcastControl } from "@/utils/window-sync";
 
 const log = createLogger("settings");
 
@@ -33,9 +33,7 @@ interface SettingsPanelProps {
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
 	const [llmApiKey, setLlmApiKey] = useState("");
-	const [ttsApiKey, setTtsApiKey] = useState("");
 	const [llmKeyExists, setLlmKeyExists] = useState(false);
-	const [showLlmKey, setShowLlmKey] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 	const [llmTestResult, setLlmTestResult] = useState<{ ok: boolean; text: string } | null>(null);
@@ -43,6 +41,14 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	const [testing, setTesting] = useState<"llm" | "tts" | null>(null);
 	const [ttsTestText, setTtsTestText] = useState("你好，我是测试文本");
 	const [ttsTesting, setTtsTesting] = useState(false);
+
+	// Settings 打开时暂时解除 Stage 置顶，关闭时恢复
+	useEffect(() => {
+		broadcastControl({ type: "set-always-on-top", value: false });
+		return () => {
+			broadcastControl({ type: "restore-always-on-top" });
+		};
+	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -53,7 +59,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 			const llmHas = await hasSecret(SECRET_KEYS.LLM_API_KEY);
 			if (cancelled) return;
 			setLlmKeyExists(llmHas);
-			log.info("settings loaded", { provider: loaded.llm.provider, llmKeyExists: llmHas });
+			log.info("settings loaded", { llmKeyExists: llmHas });
 		})();
 		return () => { cancelled = true; };
 	}, []);
@@ -70,11 +76,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				setLlmApiKey("");
 			}
 
-			if (ttsApiKey.trim()) {
-				await setSecret(SECRET_KEYS.TTS_API_KEY, ttsApiKey.trim());
-				setTtsApiKey("");
-			}
-
 			setMessage({ type: "success", text: "设置已保存" });
 			log.info("settings saved");
 		} catch (err) {
@@ -84,7 +85,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		} finally {
 			setSaving(false);
 		}
-	}, [config, llmApiKey, ttsApiKey]);
+	}, [config, llmApiKey]);
 
 	const handleReset = useCallback(async () => {
 		const defaults = await resetConfig();
@@ -93,28 +94,42 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		await deleteSecret(SECRET_KEYS.TTS_API_KEY);
 		setLlmKeyExists(false);
 		setLlmApiKey("");
-		setTtsApiKey("");
 		setMessage({ type: "success", text: "已恢复默认设置" });
-	}, []);
-
-	const updateLLM = useCallback((patch: Partial<AppConfig["llm"]>) => {
-		setConfig((c) => ({ ...c, llm: { ...c.llm, ...patch } }));
-	}, []);
-
-	const updateTTS = useCallback((patch: Partial<AppConfig["tts"]>) => {
-		setConfig((c) => ({ ...c, tts: { ...c.tts, ...patch } }));
 	}, []);
 
 	const updateCharacter = useCallback((patch: Partial<AppConfig["character"]>) => {
 		setConfig((c) => ({ ...c, character: { ...c.character, ...patch } }));
 	}, []);
 
+	/** 从激活的 LLM 档案或根配置中获取当前 LLM 配置 */
+	const getActiveLlmConfig = useCallback(() => {
+		if (config.activeLlmProfileId) {
+			const profile = config.llmProfiles.find((p) => p.id === config.activeLlmProfileId);
+			if (profile) return profile;
+		}
+		return config.llm;
+	}, [config]);
+
+	/** 从激活的 TTS 档案或根配置中获取当前 TTS 配置 */
+	const getActiveTtsConfig = useCallback(() => {
+		if (config.activeTtsProfileId) {
+			const profile = config.ttsProfiles.find((p) => p.id === config.activeTtsProfileId);
+			if (profile) return profile;
+		}
+		return config.tts;
+	}, [config]);
+
 	const handleTestLLM = useCallback(async () => {
 		setTesting("llm");
 		setLlmTestResult(null);
 		try {
-			const url = config.llm.baseUrl.replace(/\/+$/, "") + "/models";
-			const needsKey = !isLocalUrl(config.llm.baseUrl);
+			const llmCfg = getActiveLlmConfig();
+			const url = (llmCfg.baseUrl || "").replace(/\/+$/, "") + "/models";
+			if (!url || url === "/models") {
+				setLlmTestResult({ ok: false, text: "请先在档案中配置 Base URL" });
+				return;
+			}
+			const needsKey = !isLocalUrl(llmCfg.baseUrl);
 			const resp = await proxyRequest({
 				url,
 				method: "GET",
@@ -135,13 +150,14 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		} finally {
 			setTesting(null);
 		}
-	}, [config.llm.baseUrl]);
+	}, [getActiveLlmConfig]);
 
 	const handleTestTTS = useCallback(async () => {
 		setTesting("tts");
 		setTtsTestResult(null);
 		try {
-			const base = (config.tts.baseUrl || "http://localhost:9880").replace(/\/+$/, "");
+			const ttsCfg = getActiveTtsConfig();
+			const base = (ttsCfg.baseUrl || "http://localhost:9880").replace(/\/+$/, "");
 			const testUrl = `${base}/set_gpt_weights?weights_path=/tmp/dummy`;
 			const resp = await proxyRequest({
 				url: testUrl,
@@ -157,7 +173,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		} finally {
 			setTesting(null);
 		}
-	}, [config.tts.baseUrl]);
+	}, [getActiveTtsConfig]);
 
 	const handleTestTTSDirect = useCallback(async () => {
 		if (!ttsTestText.trim()) return;
@@ -165,9 +181,10 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		setTtsTesting(true);
 		setMessage(null);
 		try {
+			const ttsCfg = getActiveTtsConfig();
 			let ttsService: GptSovitsTTSService | MockTTSService;
-			if (config.tts.provider === "gpt-sovits") {
-				ttsService = new GptSovitsTTSService(config.tts);
+			if (ttsCfg.provider === "gpt-sovits") {
+				ttsService = new GptSovitsTTSService(ttsCfg as unknown as TTSProviderConfig);
 			} else {
 				ttsService = new MockTTSService();
 			}
@@ -203,9 +220,9 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		} finally {
 			setTtsTesting(false);
 		}
-	}, [config.tts, ttsTestText]);
+	}, [getActiveTtsConfig, ttsTestText]);
 
-	const needsLlmKey = config.llm.provider !== "mock" && !llmKeyExists && !llmApiKey.trim();
+	const needsLlmKey = getActiveLlmConfig().provider !== "mock" && !llmKeyExists && !llmApiKey.trim();
 
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1, height: "100%", overflowY: "auto" }}>
@@ -226,220 +243,72 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				</Alert>
 			)}
 
-			{/* LLM 设置 */}
-			<SectionTitle>LLM 设置</SectionTitle>
+			{/* LLM 测试（从激活档案读取） */}
+			<SectionTitle>LLM 测试</SectionTitle>
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-				<FieldLabel>Provider</FieldLabel>
-				<Select
-					size="small"
-					value={config.llm.provider}
-					onChange={(e: SelectChangeEvent) => updateLLM({ provider: e.target.value as LLMProviderType })}
-					fullWidth
+				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+					当前读取{config.activeLlmProfileId ? "激活档案" : "根配置"}：{getActiveLlmConfig().model || getActiveLlmConfig().provider}
+				</Typography>
+				<Button
+					size="small" variant="outlined"
+					startIcon={<NetworkCheckIcon />}
+					onClick={handleTestLLM}
+					disabled={testing === "llm"}
 				>
-					<MenuItem value="mock">Mock（模拟）</MenuItem>
-					<MenuItem value="openai-compatible">OpenAI 兼容 API</MenuItem>
-				</Select>
+					{testing === "llm" ? "测试中..." : "测试连接"}
+				</Button>
+				{llmTestResult && (
+					<Alert severity={llmTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
+						{llmTestResult.text}
+					</Alert>
+				)}
 
-				{config.llm.provider !== "mock" && (
-					<>
-						<FieldLabel>Base URL</FieldLabel>
-						<TextField
-							size="small" fullWidth
-							placeholder="https://api.openai.com/v1"
-							value={config.llm.baseUrl}
-							onChange={(e) => updateLLM({ baseUrl: e.target.value })}
-						/>
-
-						<FieldLabel>模型名称</FieldLabel>
-						<TextField
-							size="small" fullWidth
-							placeholder="gpt-4o"
-							value={config.llm.model}
-							onChange={(e) => updateLLM({ model: e.target.value })}
-						/>
-
-						<FieldLabel>API Key {llmKeyExists && <KeyBadge />}</FieldLabel>
-						<TextField
-							size="small" fullWidth
-							type={showLlmKey ? "text" : "password"}
-							placeholder={llmKeyExists ? "已保存（输入新值覆盖）" : "请输入 API Key"}
-							value={llmApiKey}
-							onChange={(e) => setLlmApiKey(e.target.value)}
-							slotProps={{
-								input: {
-									endAdornment: (
-										<InputAdornment position="end">
-											<IconButton size="small" onClick={() => setShowLlmKey(!showLlmKey)}>
-												{showLlmKey ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
-											</IconButton>
-										</InputAdornment>
-									),
-								},
-							}}
-						/>
-
-						{needsLlmKey && (
-							<Alert severity="warning" sx={{ py: 0, fontSize: 12 }}>
-								选择真实 LLM provider 需要配置 API Key
-							</Alert>
-						)}
-
-						<Stack direction="row" spacing={1}>
-							<Box sx={{ flex: 1 }}>
-								<FieldLabel>Temperature</FieldLabel>
-								<TextField
-									size="small" fullWidth type="number"
-									slotProps={{ htmlInput: { min: 0, max: 2, step: 0.1 } }}
-									value={config.llm.temperature}
-									onChange={(e) => updateLLM({ temperature: parseFloat(e.target.value) || 0.7 })}
-								/>
-							</Box>
-							<Box sx={{ flex: 1 }}>
-								<FieldLabel>Max Tokens</FieldLabel>
-								<TextField
-									size="small" fullWidth type="number"
-									slotProps={{ htmlInput: { min: 100, max: 16384, step: 256 } }}
-									value={config.llm.maxTokens}
-									onChange={(e) => updateLLM({ maxTokens: parseInt(e.target.value) || 2048 })}
-								/>
-							</Box>
-						</Stack>
-
-						<Button
-							size="small" variant="outlined"
-							startIcon={<NetworkCheckIcon />}
-							onClick={handleTestLLM}
-							disabled={!config.llm.baseUrl || testing === "llm"}
-						>
-							{testing === "llm" ? "测试中..." : "测试连接"}
-						</Button>
-						{llmTestResult && (
-							<Alert severity={llmTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
-								{llmTestResult.text}
-							</Alert>
-						)}
-					</>
+				{needsLlmKey && (
+					<Alert severity="warning" sx={{ py: 0, fontSize: 12 }}>
+						真实 LLM 需要配置 API Key（档案中配置）
+					</Alert>
 				)}
 			</Box>
 
 			<Divider />
 
-			{/* TTS 设置 */}
-			<SectionTitle>TTS 设置</SectionTitle>
+			{/* TTS 测试（从激活档案读取） */}
+			<SectionTitle>TTS 测试</SectionTitle>
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-				<FieldLabel>Provider</FieldLabel>
-				<Select
-					size="small"
-					value={config.tts.provider}
-					onChange={(e: SelectChangeEvent) => updateTTS({ provider: e.target.value as TTSProviderType })}
-					fullWidth
+				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+					当前读取{config.activeTtsProfileId ? "激活档案" : "根配置"}：{getActiveTtsConfig().provider}
+				</Typography>
+				<Button
+					size="small" variant="outlined"
+					startIcon={<NetworkCheckIcon />}
+					onClick={handleTestTTS}
+					disabled={testing === "tts"}
 				>
-					<MenuItem value="mock">Mock（模拟）</MenuItem>
-					<MenuItem value="gpt-sovits">GPT-SoVITS</MenuItem>
-				</Select>
-
-				{config.tts.provider === "gpt-sovits" && (
-					<>
-						<FieldLabel>GPT-SoVITS 服务地址</FieldLabel>
-						<TextField
-							size="small" fullWidth
-							placeholder="http://localhost:9880"
-							value={config.tts.baseUrl}
-							onChange={(e) => updateTTS({ baseUrl: e.target.value })}
-						/>
-
-						<FieldLabel>GPT 权重路径（服务端路径）</FieldLabel>
-						<TextField
-							size="small" fullWidth
-							placeholder="/path/to/model.ckpt"
-							value={config.tts.gptWeightsPath}
-							onChange={(e) => updateTTS({ gptWeightsPath: e.target.value })}
-						/>
-
-						<FieldLabel>SoVITS 权重路径（服务端路径）</FieldLabel>
-						<TextField
-							size="small" fullWidth
-							placeholder="/path/to/model.pth"
-							value={config.tts.sovitsWeightsPath}
-							onChange={(e) => updateTTS({ sovitsWeightsPath: e.target.value })}
-						/>
-
-						<FieldLabel>参考音频路径（服务端路径）</FieldLabel>
-						<TextField
-							size="small" fullWidth
-							placeholder="/path/to/ref_audio.wav"
-							value={config.tts.refAudioPath}
-							onChange={(e) => updateTTS({ refAudioPath: e.target.value })}
-						/>
-
-						<FieldLabel>参考音频文本</FieldLabel>
-						<TextField
-							size="small" fullWidth
-							placeholder="参考音频对应的文字内容"
-							value={config.tts.promptText}
-							onChange={(e) => updateTTS({ promptText: e.target.value })}
-						/>
-
-						<Stack direction="row" spacing={1}>
-							<Box sx={{ flex: 1 }}>
-								<FieldLabel>参考音频语言</FieldLabel>
-								<Select
-									size="small" fullWidth
-									value={config.tts.promptLang}
-									onChange={(e: SelectChangeEvent) => updateTTS({ promptLang: e.target.value })}
-								>
-									<MenuItem value="zh">中文</MenuItem>
-									<MenuItem value="en">English</MenuItem>
-									<MenuItem value="ja">日本語</MenuItem>
-								</Select>
-							</Box>
-							<Box sx={{ flex: 1 }}>
-								<FieldLabel>合成语言</FieldLabel>
-								<Select
-									size="small" fullWidth
-									value={config.tts.textLang}
-									onChange={(e: SelectChangeEvent) => updateTTS({ textLang: e.target.value })}
-								>
-									<MenuItem value="zh">中文</MenuItem>
-									<MenuItem value="en">English</MenuItem>
-									<MenuItem value="ja">日本語</MenuItem>
-								</Select>
-							</Box>
-						</Stack>
-
-						<Button
-							size="small" variant="outlined"
-							startIcon={<NetworkCheckIcon />}
-							onClick={handleTestTTS}
-							disabled={!config.tts.baseUrl || testing === "tts"}
-						>
-							{testing === "tts" ? "测试中..." : "测试连接"}
-						</Button>
-						{ttsTestResult && (
-							<Alert severity={ttsTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
-								{ttsTestResult.text}
-							</Alert>
-						)}
-
-						<Divider sx={{ my: 1 }} />
-
-						<FieldLabel>TTS 直测输入框</FieldLabel>
-						<TextField
-							size="small" fullWidth
-							placeholder="输入测试文本"
-							value={ttsTestText}
-							onChange={(e) => setTtsTestText(e.target.value)}
-						/>
-						<Button
-							size="small" variant="contained"
-							startIcon={<VolumeUpIcon />}
-							onClick={handleTestTTSDirect}
-							disabled={!config.tts.baseUrl || ttsTesting}
-						>
-							{ttsTesting ? "合成中..." : "合成并播放"}
-						</Button>
-					</>
+					{testing === "tts" ? "测试中..." : "测试连接"}
+				</Button>
+				{ttsTestResult && (
+					<Alert severity={ttsTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
+						{ttsTestResult.text}
+					</Alert>
 				)}
+
+				<Divider sx={{ my: 0.5 }} />
+
+				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>TTS 直测</Typography>
+				<TextField
+					size="small" fullWidth
+					placeholder="输入测试文本"
+					value={ttsTestText}
+					onChange={(e) => setTtsTestText(e.target.value)}
+				/>
+				<Button
+					size="small" variant="contained"
+					startIcon={<VolumeUpIcon />}
+					onClick={handleTestTTSDirect}
+					disabled={ttsTesting}
+				>
+					{ttsTesting ? "合成中..." : "合成并播放"}
+				</Button>
 			</Box>
 
 			<Divider />
@@ -519,14 +388,6 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 	return (
 		<Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
 			{children}
-		</Typography>
-	);
-}
-
-function KeyBadge() {
-	return (
-		<Typography component="span" sx={{ fontSize: 10, color: "success.main", ml: 0.5 }}>
-			(已保存)
 		</Typography>
 	);
 }

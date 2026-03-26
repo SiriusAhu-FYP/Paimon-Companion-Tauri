@@ -169,9 +169,14 @@ export function StageWindow() {
 				case "set-mode":
 					setStageMode(cmd.mode);
 					break;
-				case "set-always-on-top":
-					setAlwaysOnTop(cmd.value);
-					break;
+			case "set-always-on-top":
+				setAlwaysOnTop(cmd.value);
+				break;
+			case "restore-always-on-top":
+				if (stageMode === "floating") {
+					await win.setAlwaysOnTop(alwaysOnTop);
+				}
+				break;
 				case "set-display-mode":
 					setDisplayMode(cmd.displayMode);
 					break;
@@ -207,7 +212,7 @@ export function StageWindow() {
 				try { window.close(); } catch { /* fallback */ }
 			}
 		}
-	}, [switchModel, setEyeMode, initRenderer]);
+	}, [switchModel, setEyeMode, initRenderer, stageMode, alwaysOnTop]);
 
 	// 初始化——只运行一次
 	useEffect(() => {
