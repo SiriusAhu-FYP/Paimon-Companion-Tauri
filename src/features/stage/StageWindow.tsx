@@ -25,6 +25,12 @@ export function StageWindow() {
 	const [eyeMode, setEyeModeState] = useState<EyeMode>("random-path");
 	/** 记录被 Settings 等临时抑制前的 alwaysOnTop 值 */
 	const suppressedRef = useRef<boolean | null>(null);
+	/** 持有 alwaysOnTop 的最新值（用于 handleControlCommand，避免 stale closure） */
+	const alwaysOnTopRef = useRef(alwaysOnTop);
+	/** 持有 stageMode 的最新值 */
+	const stageModeRef = useRef(stageMode);
+	useEffect(() => { alwaysOnTopRef.current = alwaysOnTop; }, [alwaysOnTop]);
+	useEffect(() => { stageModeRef.current = stageMode; }, [stageMode]);
 
 	const setEyeMode = useCallback((mode: EyeMode) => {
 		eyeModeRef.current = mode;
@@ -150,11 +156,11 @@ export function StageWindow() {
 			const win = getCurrentWindow();
 
 			switch (cmd.type) {
-				case "hide-stage":
-					rendererRef.current?.destroy();
-					rendererRef.current = null;
-					await win.hide();
-					break;
+			case "hide-stage":
+				rendererRef.current?.destroy();
+				rendererRef.current = null;
+				await win.hide();
+				break;
 				case "show-stage":
 					if (!rendererRef.current) {
 						await initRenderer(currentModelPath.current);
@@ -222,7 +228,7 @@ export function StageWindow() {
 				try { window.close(); } catch { /* fallback */ }
 			}
 		}
-	}, [switchModel, setEyeMode, initRenderer, stageMode, alwaysOnTop]);
+	}, [switchModel, setEyeMode, initRenderer]);
 
 	// 初始化——只运行一次
 	useEffect(() => {
