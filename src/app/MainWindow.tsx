@@ -222,7 +222,6 @@ export function MainWindow() {
 							mode={stageMode}
 							displayMode={displayMode}
 							onRectChange={handleSlotRectChange}
-							hiddenBySettings={showSettings}
 						/>
 					</Box>
 				)}
@@ -236,12 +235,15 @@ export function MainWindow() {
 					<ChatPanel />
 				</Box>
 
-				{/* 右栏: 控制面板 / 设置 */}
-				<Box sx={{ width: 280, minWidth: 220, flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-					{showSettings ? (
+				{/* 右栏: 控制面板 + 设置展开面板 */}
+				<Box sx={{
+					width: 280, minWidth: 220, flexShrink: 0,
+					display: "flex", flexDirection: "column",
+					overflowY: "auto",
+				}}>
+					<ControlPanel />
+					{showSettings && (
 						<SettingsPanel onClose={() => setShowSettings(false)} />
-					) : (
-						<ControlPanel />
 					)}
 				</Box>
 			</Box>
