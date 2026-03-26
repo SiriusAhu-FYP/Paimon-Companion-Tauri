@@ -222,6 +222,7 @@ export function MainWindow() {
 							mode={stageMode}
 							displayMode={displayMode}
 							onRectChange={handleSlotRectChange}
+							hiddenBySettings={showSettings}
 						/>
 					</Box>
 				)}
