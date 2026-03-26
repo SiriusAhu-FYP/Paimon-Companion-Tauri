@@ -5,8 +5,6 @@ import {
 	Popover,
 	type SelectChangeEvent,
 } from "@mui/material";
-import SaveIcon from "@mui/icons-material/Save";
-import RestoreIcon from "@mui/icons-material/Restore";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import NetworkCheckIcon from "@mui/icons-material/NetworkCheck";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
@@ -15,8 +13,7 @@ import {
 	type LLMProfile, type TTSProfile,
 	type TTSProviderConfig,
 	DEFAULT_CONFIG, SECRET_KEYS,
-	loadConfig, updateConfig, resetConfig,
-	hasSecret, setSecret, deleteSecret,
+	loadConfig, updateConfig,
 	proxyRequest,
 } from "@/services/config";
 import { createLogger } from "@/services/logger";
@@ -32,9 +29,6 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
-	const [llmApiKey, setLlmApiKey] = useState("");
-	const [llmKeyExists, setLlmKeyExists] = useState(false);
-	const [saving, setSaving] = useState(false);
 	const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 	const [llmTestResult, setLlmTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 	const [ttsTestResult, setTtsTestResult] = useState<{ ok: boolean; text: string } | null>(null);
@@ -48,45 +42,9 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 			const loaded = await loadConfig();
 			if (cancelled) return;
 			setConfig(loaded);
-			const llmHas = await hasSecret(SECRET_KEYS.LLM_API_KEY);
-			if (cancelled) return;
-			setLlmKeyExists(llmHas);
-			log.info("settings loaded", { llmKeyExists: llmHas });
+			log.info("settings loaded");
 		})();
 		return () => { cancelled = true; };
-	}, []);
-
-	const handleSave = useCallback(async () => {
-		setSaving(true);
-		setMessage(null);
-		try {
-			await updateConfig(config);
-
-			if (llmApiKey.trim()) {
-				await setSecret(SECRET_KEYS.LLM_API_KEY, llmApiKey.trim());
-				setLlmKeyExists(true);
-				setLlmApiKey("");
-			}
-
-			setMessage({ type: "success", text: "设置已保存" });
-			log.info("settings saved");
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
-			setMessage({ type: "error", text: `保存失败: ${msg}` });
-			log.error("settings save failed", err);
-		} finally {
-			setSaving(false);
-		}
-	}, [config, llmApiKey]);
-
-	const handleReset = useCallback(async () => {
-		const defaults = await resetConfig();
-		setConfig(defaults);
-		await deleteSecret(SECRET_KEYS.LLM_API_KEY);
-		await deleteSecret(SECRET_KEYS.TTS_API_KEY);
-		setLlmKeyExists(false);
-		setLlmApiKey("");
-		setMessage({ type: "success", text: "已恢复默认设置" });
 	}, []);
 
 	const updateCharacter = useCallback((patch: Partial<AppConfig["character"]>) => {
@@ -222,8 +180,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		}
 	}, [getActiveTtsConfig, ttsTestText]);
 
-	const needsLlmKey = getActiveLlmConfig().provider !== "mock" && !llmKeyExists && !llmApiKey.trim();
-
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1, height: "100%", overflowY: "auto" }}>
 			<Stack direction="row" alignItems="center" spacing={1}>
@@ -252,6 +208,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				onUpdate={(p) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.map((x) => x.id === p.id ? p : x) }))}
 				onDelete={(id) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.filter((x) => x.id !== id), activeLlmProfileId: c.activeLlmProfileId === id ? "" : c.activeLlmProfileId }))}
 				onSelect={(id) => setConfig((c) => ({ ...c, activeLlmProfileId: id }))}
+				onPersist={() => updateConfig(config)}
 			/>
 
 			<Divider />
@@ -281,11 +238,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 						{llmTestResult.text}
 					</Alert>
 				)}
-				{needsLlmKey && (
-					<Alert severity="warning" sx={{ py: 0, fontSize: 12 }}>
-						真实 LLM 需要配置 API Key（档案中配置）
-					</Alert>
-				)}
 			</Box>
 
 			<Divider />
@@ -299,6 +251,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				onUpdate={(p) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.map((x) => x.id === p.id ? p : x) }))}
 				onDelete={(id) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.filter((x) => x.id !== id), activeTtsProfileId: c.activeTtsProfileId === id ? "" : c.activeTtsProfileId }))}
 				onSelect={(id) => setConfig((c) => ({ ...c, activeTtsProfileId: id }))}
+				onPersist={() => updateConfig(config)}
 			/>
 
 			<Divider />
@@ -364,25 +317,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 					onChange={(e) => updateCharacter({ customPersona: e.target.value })}
 				/>
 			</Box>
-
-			{/* 操作按钮 */}
-			<Stack direction="row" spacing={1} sx={{ mt: 1, flexShrink: 0 }}>
-				<Button
-					variant="contained" size="small" fullWidth
-					startIcon={<SaveIcon />}
-					onClick={handleSave}
-					disabled={saving}
-				>
-					{saving ? "保存中..." : "保存"}
-				</Button>
-				<Button
-					variant="outlined" size="small" color="warning"
-					startIcon={<RestoreIcon />}
-					onClick={handleReset}
-				>
-					重置
-				</Button>
-			</Stack>
 		</Box>
 	);
 }
@@ -422,9 +356,11 @@ interface LLMProfilesSectionProps {
 	onUpdate: (p: LLMProfile) => void;
 	onDelete: (id: string) => void;
 	onSelect: (id: string) => void;
+	/** Popover 保存/删除后立即持久化 */
+	onPersist: () => Promise<unknown>;
 }
 
-function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onSelect }: LLMProfilesSectionProps) {
+function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onSelect, onPersist }: LLMProfilesSectionProps) {
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingProfile, setEditingProfile] = useState<LLMProfile | null>(null);
 	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
@@ -461,7 +397,7 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 		setDialogOpen(true);
 	};
 
-	const handleDialogSave = () => {
+	const handleDialogSave = async () => {
 		if (!editingProfile) return;
 		const exists = profiles.some((p) => p.id === editingProfile.id);
 		if (exists) {
@@ -472,6 +408,8 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 		}
 		setDialogOpen(false);
 		setEditingProfile(null);
+		setAnchorEl(null);
+		await onPersist();
 	};
 
 	const handleDialogClose = () => {
@@ -480,12 +418,13 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 		setAnchorEl(null);
 	};
 
-	const handleDelete = (id: string) => {
+	const handleDelete = async (id: string) => {
 		onDelete(id);
 		if (id === activeId) onSelect("");
 		setDialogOpen(false);
 		setEditingProfile(null);
 		setAnchorEl(null);
+		await onPersist();
 	};
 
 	return (
@@ -596,9 +535,11 @@ interface TTSProfilesSectionProps {
 	onUpdate: (p: TTSProfile) => void;
 	onDelete: (id: string) => void;
 	onSelect: (id: string) => void;
+	/** Popover 保存/删除后立即持久化 */
+	onPersist: () => Promise<unknown>;
 }
 
-function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onSelect }: TTSProfilesSectionProps) {
+function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onSelect, onPersist }: TTSProfilesSectionProps) {
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingProfile, setEditingProfile] = useState<TTSProfile | null>(null);
 	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
@@ -634,7 +575,7 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 		setDialogOpen(true);
 	};
 
-	const handleDialogSave = () => {
+	const handleDialogSave = async () => {
 		if (!editingProfile) return;
 		const exists = profiles.some((p) => p.id === editingProfile.id);
 		if (exists) {
@@ -645,6 +586,8 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 		}
 		setDialogOpen(false);
 		setEditingProfile(null);
+		setAnchorEl(null);
+		await onPersist();
 	};
 
 	const handleDialogClose = () => {
@@ -653,12 +596,13 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 		setAnchorEl(null);
 	};
 
-	const handleDelete = (id: string) => {
+	const handleDelete = async (id: string) => {
 		onDelete(id);
 		if (id === activeId) onSelect("");
 		setDialogOpen(false);
 		setEditingProfile(null);
 		setAnchorEl(null);
+		await onPersist();
 	};
 
 	const isGptSovits = editingProfile?.provider === "gpt-sovits";
