@@ -54,6 +54,13 @@ export class PipelineService {
 				}
 			},
 		);
+
+		// 监听 runtime 模式变化：急停时立即停止语音播放
+		this.bus.on("runtime:mode-change", ({ mode }) => {
+			if (mode === "stopped") {
+				this.speechQueue.stop();
+			}
+		});
 	}
 
 	/** 获取 SpeechQueue 实例（供调试工具使用） */
