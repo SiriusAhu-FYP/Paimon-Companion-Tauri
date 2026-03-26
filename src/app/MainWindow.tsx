@@ -172,10 +172,22 @@ export function MainWindow() {
 				borderBottom: "1px solid",
 				borderColor: "secondary.main",
 				flexShrink: 0,
+				display: "flex",
+				alignItems: "center",
+				justifyContent: "space-between",
 			}}>
 				<Box component="h1" sx={{ fontSize: 18, fontWeight: 600, color: "primary.main", m: 0 }}>
 					Paimon Live
 				</Box>
+				<Tooltip title="设置">
+					<IconButton
+						size="small"
+						onClick={() => setShowSettings(true)}
+						sx={{ color: "text.secondary" }}
+					>
+						<SettingsIcon fontSize="small" />
+					</IconButton>
+				</Tooltip>
 			</Box>
 
 			{/* Main content */}
@@ -228,16 +240,7 @@ export function MainWindow() {
 					{showSettings ? (
 						<SettingsPanel onClose={() => setShowSettings(false)} />
 					) : (
-						<>
-							<ControlPanel />
-							<Box sx={{ px: 1.5, pb: 1 }}>
-								<Tooltip title="打开设置">
-									<IconButton size="small" onClick={() => setShowSettings(true)} sx={{ color: "text.secondary" }}>
-										<SettingsIcon fontSize="small" />
-									</IconButton>
-								</Tooltip>
-							</Box>
-						</>
+						<ControlPanel />
 					)}
 				</Box>
 			</Box>

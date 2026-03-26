@@ -33,6 +33,35 @@ export interface TTSProviderConfig {
 	textLang: string;
 }
 
+// ── LLM Profile（可复用的配置档案）──
+
+export interface LLMProfile {
+	id: string;
+	name: string;
+	provider: LLMProviderType;
+	baseUrl: string;
+	model: string;
+	temperature: number;
+	maxTokens: number;
+}
+
+// ── TTS Profile（可复用的配置档案，TTS 不等于 GPT-SoVITS）──
+
+export interface TTSProfile {
+	id: string;
+	name: string;
+	provider: TTSProviderType;
+	baseUrl: string;
+	speakerId: string;
+	speed: number;
+	gptWeightsPath: string;
+	sovitsWeightsPath: string;
+	refAudioPath: string;
+	promptText: string;
+	promptLang: string;
+	textLang: string;
+}
+
 // ── Character（应用设置：当前卡 ID、用户附加人设）──
 
 export interface CharacterSettingsConfig {
@@ -48,6 +77,10 @@ export interface AppConfig {
 	llm: LLMProviderConfig;
 	tts: TTSProviderConfig;
 	character: CharacterSettingsConfig;
+	llmProfiles: LLMProfile[];
+	ttsProfiles: TTSProfile[];
+	activeLlmProfileId: string;
+	activeTtsProfileId: string;
 }
 
 // ── 敏感配置 key 约定 ──
@@ -85,4 +118,8 @@ export const DEFAULT_CONFIG: AppConfig = {
 		activeProfileId: "",
 		customPersona: "你是旅行者的好伙伴派蒙，说话活泼可爱，喜欢吃东西。",
 	},
+	llmProfiles: [],
+	ttsProfiles: [],
+	activeLlmProfileId: "",
+	activeTtsProfileId: "",
 };

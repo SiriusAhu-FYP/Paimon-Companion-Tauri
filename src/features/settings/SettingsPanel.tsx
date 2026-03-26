@@ -13,6 +13,7 @@ import NetworkCheckIcon from "@mui/icons-material/NetworkCheck";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import {
 	type AppConfig, type LLMProviderType, type TTSProviderType,
+	type LLMProfile, type TTSProfile,
 	DEFAULT_CONFIG, SECRET_KEYS,
 	loadConfig, updateConfig, resetConfig,
 	hasSecret, setSecret, deleteSecret,
@@ -453,9 +454,10 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 			{/* 角色设置 */}
 			<SectionTitle>角色设置</SectionTitle>
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-				<FieldLabel>自定义人设（附加）</FieldLabel>
+				<FieldLabel>自定义人设（无角色卡时生效）</FieldLabel>
 				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-					拼入 LLM system prompt，优先级低于角色卡内设定；当前角色请在控制面板切换。
+					仅在"当前角色"未选择任何角色卡时拼入 system prompt。优先级最低：
+					角色卡内设定 &gt; 自定义人设。
 				</Typography>
 				<TextField
 					size="small" fullWidth multiline minRows={3} maxRows={6}
@@ -463,6 +465,32 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 					onChange={(e) => updateCharacter({ customPersona: e.target.value })}
 				/>
 			</Box>
+
+			<Divider />
+
+			{/* LLM Profiles */}
+			<SectionTitle>LLM 配置档案</SectionTitle>
+			<LLMProfilesSection
+				profiles={config.llmProfiles}
+				activeId={config.activeLlmProfileId}
+				onAdd={(p) => setConfig((c) => ({ ...c, llmProfiles: [...c.llmProfiles, p] }))}
+				onUpdate={(p) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.map((x) => x.id === p.id ? p : x) }))}
+				onDelete={(id) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.filter((x) => x.id !== id), activeLlmProfileId: c.activeLlmProfileId === id ? "" : c.activeLlmProfileId }))}
+				onSelect={(id) => setConfig((c) => ({ ...c, activeLlmProfileId: id }))}
+			/>
+
+			<Divider />
+
+			{/* TTS Profiles */}
+			<SectionTitle>TTS 配置档案</SectionTitle>
+			<TTSProfilesSection
+				profiles={config.ttsProfiles}
+				activeId={config.activeTtsProfileId}
+				onAdd={(p) => setConfig((c) => ({ ...c, ttsProfiles: [...c.ttsProfiles, p] }))}
+				onUpdate={(p) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.map((x) => x.id === p.id ? p : x) }))}
+				onDelete={(id) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.filter((x) => x.id !== id), activeTtsProfileId: c.activeTtsProfileId === id ? "" : c.activeTtsProfileId }))}
+				onSelect={(id) => setConfig((c) => ({ ...c, activeTtsProfileId: id }))}
+			/>
 
 			{/* 操作按钮 */}
 			<Stack direction="row" spacing={1} sx={{ mt: 1, flexShrink: 0 }}>
@@ -518,4 +546,261 @@ function isLocalUrl(url: string): boolean {
 	} catch {
 		return false;
 	}
+}
+
+// ── LLM Profile 管理组件 ───────────────────────────────────────────────────
+
+interface LLMProfilesSectionProps {
+	profiles: LLMProfile[];
+	activeId: string;
+	onAdd: (p: LLMProfile) => void;
+	onUpdate: (p: LLMProfile) => void;
+	onDelete: (id: string) => void;
+	onSelect: (id: string) => void;
+}
+
+function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onSelect }: LLMProfilesSectionProps) {
+	const [editing, setEditing] = useState<LLMProfile | null>(null);
+
+	const startAdd = () => {
+		setEditing({
+			id: `llm-${Date.now()}`,
+			name: "",
+			provider: "openai-compatible",
+			baseUrl: "",
+			model: "",
+			temperature: 0.7,
+			maxTokens: 2048,
+		});
+	};
+
+	const startEdit = (p: LLMProfile) => {
+		setEditing({ ...p });
+	};
+
+	const cancelEdit = () => setEditing(null);
+
+	const saveEdit = () => {
+		if (!editing) return;
+		const exists = profiles.some((p) => p.id === editing.id);
+		if (exists) {
+			onUpdate(editing);
+		} else {
+			onAdd(editing);
+		}
+		setEditing(null);
+	};
+
+	return (
+		<Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+			{profiles.length > 0 && (
+				<Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+					{profiles.map((p) => (
+						<Stack key={p.id} direction="row" spacing={0.5} alignItems="center">
+							<Box
+								sx={{
+									flex: 1,
+									bgcolor: "background.paper",
+									borderRadius: 1,
+									px: 1,
+									py: 0.5,
+									cursor: "pointer",
+									border: p.id === activeId ? "1px solid" : "1px solid transparent",
+									borderColor: p.id === activeId ? "primary.main" : "transparent",
+								}}
+								onClick={() => onSelect(p.id)}
+							>
+								<Typography variant="body2" sx={{ fontSize: 12, fontWeight: p.id === activeId ? 700 : 400 }}>
+									{p.name || "(未命名)"}
+								</Typography>
+								<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+									{p.provider} · {p.model || "未设置模型"}
+								</Typography>
+							</Box>
+							<IconButton size="small" onClick={() => startEdit(p)} sx={{ color: "text.secondary" }}>
+								<Box sx={{ fontSize: 14 }}>✏️</Box>
+							</IconButton>
+							<IconButton size="small" onClick={() => onDelete(p.id)} sx={{ color: "error.main" }}>
+								<Box sx={{ fontSize: 14 }}>🗑️</Box>
+							</IconButton>
+						</Stack>
+					))}
+				</Box>
+			)}
+
+			{editing ? (
+				<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+					<TextField
+						size="small" fullWidth label="档案名称"
+						value={editing.name}
+						onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+					/>
+					<Select
+						size="small" fullWidth label="Provider"
+						value={editing.provider}
+						onChange={(e: SelectChangeEvent) => setEditing({ ...editing, provider: e.target.value as LLMProviderType })}
+					>
+						<MenuItem value="mock">Mock（模拟）</MenuItem>
+						<MenuItem value="openai-compatible">OpenAI 兼容 API</MenuItem>
+					</Select>
+					<TextField size="small" fullWidth label="Base URL" value={editing.baseUrl}
+						onChange={(e) => setEditing({ ...editing, baseUrl: e.target.value })} />
+					<TextField size="small" fullWidth label="模型名称" value={editing.model}
+						onChange={(e) => setEditing({ ...editing, model: e.target.value })} />
+					<Stack direction="row" spacing={0.5}>
+						<TextField size="small" fullWidth label="Temperature" type="number"
+							slotProps={{ htmlInput: { min: 0, max: 2, step: 0.1 } }}
+							value={editing.temperature}
+							onChange={(e) => setEditing({ ...editing, temperature: parseFloat(e.target.value) || 0.7 })} />
+						<TextField size="small" fullWidth label="Max Tokens" type="number"
+							slotProps={{ htmlInput: { min: 100, max: 16384, step: 256 } }}
+							value={editing.maxTokens}
+							onChange={(e) => setEditing({ ...editing, maxTokens: parseInt(e.target.value) || 2048 })} />
+					</Stack>
+					<Stack direction="row" spacing={0.5}>
+						<Button size="small" variant="contained" onClick={saveEdit} sx={{ flex: 1 }}>保存</Button>
+						<Button size="small" variant="outlined" onClick={cancelEdit} sx={{ flex: 1 }}>取消</Button>
+					</Stack>
+				</Box>
+			) : (
+				<Button size="small" variant="outlined" onClick={startAdd} sx={{ fontSize: 11 }}>
+					+ 新增 LLM 档案
+				</Button>
+			)}
+		</Box>
+	);
+}
+
+// ── TTS Profile 管理组件 ───────────────────────────────────────────────────
+
+interface TTSProfilesSectionProps {
+	profiles: TTSProfile[];
+	activeId: string;
+	onAdd: (p: TTSProfile) => void;
+	onUpdate: (p: TTSProfile) => void;
+	onDelete: (id: string) => void;
+	onSelect: (id: string) => void;
+}
+
+function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onSelect }: TTSProfilesSectionProps) {
+	const [editing, setEditing] = useState<TTSProfile | null>(null);
+
+	const defaultTTS: TTSProfile = {
+		id: `tts-${Date.now()}`,
+		name: "",
+		provider: "gpt-sovits",
+		baseUrl: "http://localhost:9880",
+		speakerId: "",
+		speed: 1.0,
+		gptWeightsPath: "",
+		sovitsWeightsPath: "",
+		refAudioPath: "",
+		promptText: "",
+		promptLang: "zh",
+		textLang: "zh",
+	};
+
+	const startAdd = () => setEditing({ ...defaultTTS, id: `tts-${Date.now()}` });
+	const startEdit = (p: TTSProfile) => setEditing({ ...p });
+	const cancelEdit = () => setEditing(null);
+
+	const saveEdit = () => {
+		if (!editing) return;
+		const exists = profiles.some((x) => x.id === editing.id);
+		if (exists) onUpdate(editing);
+		else onAdd(editing);
+		setEditing(null);
+	};
+
+	return (
+		<Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+			{profiles.length > 0 && (
+				<Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+					{profiles.map((p) => (
+						<Stack key={p.id} direction="row" spacing={0.5} alignItems="center">
+							<Box
+								sx={{
+									flex: 1,
+									bgcolor: "background.paper",
+									borderRadius: 1,
+									px: 1,
+									py: 0.5,
+									cursor: "pointer",
+									border: p.id === activeId ? "1px solid" : "1px solid transparent",
+									borderColor: p.id === activeId ? "primary.main" : "transparent",
+								}}
+								onClick={() => onSelect(p.id)}
+							>
+								<Typography variant="body2" sx={{ fontSize: 12, fontWeight: p.id === activeId ? 700 : 400 }}>
+									{p.name || "(未命名)"}
+								</Typography>
+								<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+									{p.provider} · {p.baseUrl || "localhost"}
+								</Typography>
+							</Box>
+							<IconButton size="small" onClick={() => startEdit(p)} sx={{ color: "text.secondary" }}>
+								<Box sx={{ fontSize: 14 }}>✏️</Box>
+							</IconButton>
+							<IconButton size="small" onClick={() => onDelete(p.id)} sx={{ color: "error.main" }}>
+								<Box sx={{ fontSize: 14 }}>🗑️</Box>
+							</IconButton>
+						</Stack>
+					))}
+				</Box>
+			)}
+
+			{editing ? (
+				<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+					<TextField size="small" fullWidth label="档案名称"
+						value={editing.name}
+						onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+					<Select size="small" fullWidth label="Provider"
+						value={editing.provider}
+						onChange={(e: SelectChangeEvent) => setEditing({ ...editing, provider: e.target.value as TTSProviderType })}>
+						<MenuItem value="mock">Mock（模拟）</MenuItem>
+						<MenuItem value="gpt-sovits">GPT-SoVITS</MenuItem>
+					</Select>
+					<TextField size="small" fullWidth label="服务地址"
+						value={editing.baseUrl}
+						onChange={(e) => setEditing({ ...editing, baseUrl: e.target.value })} />
+					<TextField size="small" fullWidth label="GPT 权重路径"
+						value={editing.gptWeightsPath}
+						onChange={(e) => setEditing({ ...editing, gptWeightsPath: e.target.value })} />
+					<TextField size="small" fullWidth label="SoVITS 权重路径"
+						value={editing.sovitsWeightsPath}
+						onChange={(e) => setEditing({ ...editing, sovitsWeightsPath: e.target.value })} />
+					<TextField size="small" fullWidth label="参考音频路径"
+						value={editing.refAudioPath}
+						onChange={(e) => setEditing({ ...editing, refAudioPath: e.target.value })} />
+					<TextField size="small" fullWidth label="参考音频文本"
+						value={editing.promptText}
+						onChange={(e) => setEditing({ ...editing, promptText: e.target.value })} />
+					<Stack direction="row" spacing={0.5}>
+						<Select size="small" sx={{ flex: 1 }} label="参考语言"
+							value={editing.promptLang}
+							onChange={(e: SelectChangeEvent) => setEditing({ ...editing, promptLang: e.target.value })}>
+							<MenuItem value="zh">中文</MenuItem>
+							<MenuItem value="en">English</MenuItem>
+							<MenuItem value="ja">日本語</MenuItem>
+						</Select>
+						<Select size="small" sx={{ flex: 1 }} label="合成语言"
+							value={editing.textLang}
+							onChange={(e: SelectChangeEvent) => setEditing({ ...editing, textLang: e.target.value })}>
+							<MenuItem value="zh">中文</MenuItem>
+							<MenuItem value="en">English</MenuItem>
+							<MenuItem value="ja">日本語</MenuItem>
+						</Select>
+					</Stack>
+					<Stack direction="row" spacing={0.5}>
+						<Button size="small" variant="contained" onClick={saveEdit} sx={{ flex: 1 }}>保存</Button>
+						<Button size="small" variant="outlined" onClick={cancelEdit} sx={{ flex: 1 }}>取消</Button>
+					</Stack>
+				</Box>
+			) : (
+				<Button size="small" variant="outlined" onClick={startAdd} sx={{ fontSize: 11 }}>
+					+ 新增 TTS 档案
+				</Button>
+			)}
+		</Box>
+	);
 }
