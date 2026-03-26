@@ -23,6 +23,8 @@ export function StageWindow() {
 	const [scaleLocked, setScaleLocked] = useState(false);
 	const eyeModeRef = useRef<EyeMode>("random-path");
 	const [eyeMode, setEyeModeState] = useState<EyeMode>("random-path");
+	/** 记录被 Settings 等临时抑制前的 alwaysOnTop 值 */
+	const suppressedRef = useRef<boolean | null>(null);
 
 	const setEyeMode = useCallback((mode: EyeMode) => {
 		eyeModeRef.current = mode;
@@ -172,9 +174,17 @@ export function StageWindow() {
 			case "set-always-on-top":
 				setAlwaysOnTop(cmd.value);
 				break;
-			case "restore-always-on-top":
+			case "suppress-always-on-top":
 				if (stageMode === "floating") {
-					await win.setAlwaysOnTop(alwaysOnTop);
+					suppressedRef.current = alwaysOnTop;
+					await win.setAlwaysOnTop(false);
+				}
+				break;
+			case "restore-always-on-top":
+				if (stageMode === "floating" && suppressedRef.current !== null) {
+					const restored = suppressedRef.current;
+					suppressedRef.current = null;
+					await win.setAlwaysOnTop(restored);
 				}
 				break;
 				case "set-display-mode":

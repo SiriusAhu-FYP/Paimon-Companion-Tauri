@@ -43,9 +43,9 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	const [ttsTestText, setTtsTestText] = useState("你好，我是测试文本");
 	const [ttsTesting, setTtsTesting] = useState(false);
 
-	// Settings 打开时暂时解除 Stage 置顶，关闭时恢复
+	// Settings 打开时暂时抑制 Stage 置顶（记录当前值），关闭时恢复
 	useEffect(() => {
-		broadcastControl({ type: "set-always-on-top", value: false });
+		broadcastControl({ type: "suppress-always-on-top" });
 		return () => {
 			broadcastControl({ type: "restore-always-on-top" });
 		};
