@@ -5,7 +5,6 @@ export type {
 	TTSProviderConfig,
 	TTSProviderType,
 	CharacterSettingsConfig,
-	SecretKeyName,
 	LLMProfile,
 	TTSProfile,
 } from "./types";
