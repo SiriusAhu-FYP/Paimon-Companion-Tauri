@@ -29,7 +29,6 @@ export type ControlCommand =
 	| { type: "reset-position" }
 	| { type: "set-mode"; mode: "docked" | "floating" }
 	| { type: "set-always-on-top"; value: boolean }
-	| { type: "suppress-always-on-top" }
 	| { type: "restore-always-on-top" }
 	| { type: "set-display-mode"; displayMode: StageDisplayMode }
 	| { type: "sync-state"; state: StageState }
