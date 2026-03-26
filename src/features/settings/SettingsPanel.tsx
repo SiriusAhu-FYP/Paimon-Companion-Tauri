@@ -22,7 +22,6 @@ import {
 import { createLogger } from "@/services/logger";
 import { GptSovitsTTSService, MockTTSService, splitText, normalizeForSpeech, SpeechQueue } from "@/services/tts";
 import { AudioPlayer } from "@/services/audio/audio-player";
-import { broadcastControl } from "@/utils/window-sync";
 import { HelpTooltip } from "@/components";
 
 const log = createLogger("settings");
@@ -42,14 +41,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	const [testing, setTesting] = useState<"llm" | "tts" | null>(null);
 	const [ttsTestText, setTtsTestText] = useState("你好，我是测试文本");
 	const [ttsTesting, setTtsTesting] = useState(false);
-
-	// Settings 打开时暂时将 Stage 切换为 docked（脱离置顶层级），关闭时恢复之前的模式
-	useEffect(() => {
-		broadcastControl({ type: "set-mode", mode: "docked" });
-		return () => {
-			broadcastControl({ type: "set-mode", mode: "floating" });
-		};
-	}, []);
 
 	useEffect(() => {
 		let cancelled = false;

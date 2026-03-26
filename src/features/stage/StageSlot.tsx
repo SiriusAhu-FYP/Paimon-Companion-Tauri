@@ -7,8 +7,6 @@ interface StageSlotProps {
 	mode: "docked" | "floating";
 	displayMode: StageDisplayMode;
 	onRectChange?: (rect: DOMRect) => void;
-	/** 正在配置界面，Stage 被半透明遮罩覆盖 */
-	hiddenBySettings?: boolean;
 }
 
 /**
@@ -16,7 +14,7 @@ interface StageSlotProps {
  * 自身不渲染 Live2D，仅作为定位目标和视觉占位。
  * 使用 ResizeObserver 精确追踪尺寸变化（包括兄弟元素变化导致的 flex 重排）。
  */
-export function StageSlot({ visible, mode, displayMode, onRectChange, hiddenBySettings }: StageSlotProps) {
+export function StageSlot({ visible, mode, displayMode, onRectChange }: StageSlotProps) {
 	const slotRef = useRef<HTMLDivElement>(null);
 
 	const reportRect = useCallback(() => {
@@ -61,36 +59,7 @@ export function StageSlot({ visible, mode, displayMode, onRectChange, hiddenBySe
 				borderColor: isDocked && visible ? "primary.main" : "secondary.main",
 				borderRadius: 0,
 				transition: "border-color 0.2s, background 0.2s",
-				position: "relative",
-				overflow: "hidden",
-				...(isDocked && visible && !isClean && {
-					bgcolor: "rgba(233, 69, 96, 0.03)",
-				}),
 			}}
-		>
-			{/* Settings 配置时覆盖遮罩 */}
-			{hiddenBySettings && (
-				<Box sx={{
-					position: "absolute",
-					inset: 0,
-					bgcolor: "rgba(13, 27, 42, 0.88)",
-					display: "flex",
-					flexDirection: "column",
-					alignItems: "center",
-					justifyContent: "center",
-					gap: 1,
-					zIndex: 10,
-					backdropFilter: "blur(2px)",
-				}}>
-					<Box sx={{ fontSize: 28, lineHeight: 1 }}>⚙️</Box>
-					<Box sx={{ color: "text.secondary", fontSize: 12, textAlign: "center", px: 2 }}>
-						正在配置...
-					</Box>
-					<Box sx={{ color: "text.disabled", fontSize: 10, textAlign: "center", px: 2 }}>
-						L2D 模型保持运行
-					</Box>
-				</Box>
-			)}
-		</Box>
+		/>
 	);
 }
