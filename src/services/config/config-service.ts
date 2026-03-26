@@ -22,6 +22,10 @@ function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfi
 		llm: { ...defaults.llm, ...overrides.llm },
 		tts: { ...defaults.tts, ...overrides.tts },
 		character: { ...defaults.character, ...overrides.character },
+		llmProfiles: overrides.llmProfiles ?? defaults.llmProfiles,
+		ttsProfiles: overrides.ttsProfiles ?? defaults.ttsProfiles,
+		activeLlmProfileId: overrides.activeLlmProfileId ?? defaults.activeLlmProfileId,
+		activeTtsProfileId: overrides.activeTtsProfileId ?? defaults.activeTtsProfileId,
 	};
 }
 
@@ -141,7 +145,16 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
 }
 
 export async function resetConfig(): Promise<AppConfig> {
-	cachedConfig = { ...DEFAULT_CONFIG, llm: { ...DEFAULT_CONFIG.llm }, tts: { ...DEFAULT_CONFIG.tts }, character: { ...DEFAULT_CONFIG.character } };
+	cachedConfig = {
+		...DEFAULT_CONFIG,
+		llm: { ...DEFAULT_CONFIG.llm },
+		tts: { ...DEFAULT_CONFIG.tts },
+		character: { ...DEFAULT_CONFIG.character },
+		llmProfiles: [],
+		ttsProfiles: [],
+		activeLlmProfileId: "",
+		activeTtsProfileId: "",
+	};
 
 	if (isTauriEnvironment()) {
 		await saveToTauriStore(cachedConfig);

@@ -198,28 +198,37 @@ export function StageHost({
 				</FormControl>
 			</Box>
 
-			{/* 表情切换 */}
-			{expressions.length > 0 && (
-				<Box>
-					<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-						<Typography variant="caption" color="text.secondary" fontWeight={600}>表情</Typography>
-						<HelpTooltip title="模型自带的表情文件。点击后 Stage 中的模型会切换表情" />
-					</Stack>
-					<Stack direction="row" flexWrap="wrap" gap={0.5}>
-						{expressions.map((e) => (
-							<Button
-								key={e}
-								size="small"
-								variant="outlined"
-								onClick={() => handleExpression(e)}
-								sx={{ fontSize: 10, px: 1, py: 0.25, minWidth: 0, textTransform: "none" }}
-							>
-								{e}
-							</Button>
-						))}
-					</Stack>
+		{/* 表情切换 */}
+		{expressions.length > 0 && (
+			<Box>
+				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>表情</Typography>
+					<HelpTooltip title="模型自带的表情文件。点击后 Stage 中的模型会切换表情" />
+				</Stack>
+				<Box sx={{
+					display: "flex",
+					flexWrap: "wrap",
+					gap: 0.5,
+					maxHeight: 80,
+					overflowY: "auto",
+					p: 0.5,
+					bgcolor: "background.paper",
+					borderRadius: 1,
+				}}>
+					{expressions.map((e) => (
+						<Button
+							key={e}
+							size="small"
+							variant="outlined"
+							onClick={() => handleExpression(e)}
+							sx={{ fontSize: 10, px: 1, py: 0.25, minWidth: 0, textTransform: "none" }}
+						>
+							{e}
+						</Button>
+					))}
 				</Box>
-			)}
+			</Box>
+		)}
 
 			<Divider />
 
