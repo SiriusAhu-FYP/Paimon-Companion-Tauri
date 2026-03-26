@@ -1,0 +1,66 @@
+# M3.1 UX Run 3 报告
+
+## 本次目标
+
+针对用户反馈的 Settings 面板三个问题进行修复：
+1. 布局顺序不符合使用直觉（配置和测试分离）
+2. 无配置时 TTS 连接仍然"成功"（隐式 fallback）
+3. LLM/TTS 测试区缺少帮助说明
+
+## 本次完成内容
+
+### 1. 面板布局重组
+
+新顺序（符合用户使用直觉）：
+```
+LLM 配置 → LLM 测试 → TTS 配置 → TTS 测试 → 角色设置
+```
+
+每个配置区后面紧跟对应的测试区，形成"配置 → 验证"的自然工作流。
+
+### 2. 孤立 fallback 根除
+
+**根因**：`handleTestTTS` 和 `handleTestTTSDirect` 中存在 `baseUrl || "http://localhost:9880"` 的隐式 fallback。用户未配置任何档案时，根配置 `baseUrl` 为空字符串，fallback 到 `localhost:9880`，恰好本地跑着 GPT-SoVITS，所以连接"成功"了——但这不是用户主动配置的结果，属于虚假成功。
+
+**修复**：
+- `handleTestTTS`：在获取 `baseUrl` 后立即检查，空则返回明确错误 `"请先在档案中配置服务地址"`
+- `handleTestTTSDirect`：同样在获取配置后检查，空则返回明确错误
+
+### 3. 帮助图标
+
+在"LLM 测试"和"TTS 测试"的 `SectionTitle` 右侧添加 `HelpTooltip`（圆圈问号），tooltip 内容简要说明操作方法：
+- LLM 测试：`"在左侧选择或新建 LLM 档案并保存后，点击此处测试连接是否可达。测试结果仅供参考。"`
+- TTS 测试：`"在左侧选择或新建 TTS 档案（配置服务地址、权重路径等）并保存后，点击此处测试连接是否可达。测试结果仅供参考。"`
+
+## 关键改动
+
+| 文件 | 改动摘要 |
+|------|---------|
+| `src/features/settings/SettingsPanel.tsx` | 布局重组（配置→测试顺序）；移除 baseUrl 隐式 fallback；添加 HelpTooltip 帮助说明 |
+
+## 验证情况
+
+| 层次 | 状态 | 说明 |
+|------|------|------|
+| 编译 / lint | ✅ | `pnpm tsc --noEmit` 通过，无 lint 错误 |
+| 浏览器端验证 | 未手测 | 需启动 `pnpm tauri dev` 亲自验证 |
+| 无配置时 TTS 连接正确报错 | 未手测 | 需验证未配置时点击 TTS 连接返回"请先在档案中配置服务地址" |
+
+> 证据：`pnpm tsc --noEmit` 通过 / 尚未进行 `pnpm tauri dev` 手测
+
+## 风险 / 限制 / 未完成项
+
+- `SectionTitle` 组件现在通过 `display: flex; alignItems: center` 内嵌 HelpTooltip，兼容性好（HelpTooltip 内部已经是 flex row）
+- Profile 选择后尚未联动到实际 LLM/TTS provider 实例
+
+## 结论
+
+- 本轮代码改动就绪，TypeScript 编译通过
+- 建议尽快进行 `pnpm tauri dev` 手测验证
+
+## 元信息
+
+- Commit: `b2f9e4d`
+- Branch: `feature/phase3-integration`
+- 报告路径: `dev-reports/phase3/m3-1-ux-run3.md`
+- 相关文档路径: `blueprints/phase3/phase3-blueprint.md`
