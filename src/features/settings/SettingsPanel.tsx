@@ -43,11 +43,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	const [ttsTestText, setTtsTestText] = useState("你好，我是测试文本");
 	const [ttsTesting, setTtsTesting] = useState(false);
 
-	// Settings 打开时暂时抑制 Stage 置顶（记录当前值），关闭时恢复
+	// Settings 打开时暂时将 Stage 切换为 docked（脱离置顶层级），关闭时恢复之前的模式
 	useEffect(() => {
-		broadcastControl({ type: "suppress-always-on-top" });
+		broadcastControl({ type: "set-mode", mode: "docked" });
 		return () => {
-			broadcastControl({ type: "restore-always-on-top" });
+			broadcastControl({ type: "set-mode", mode: "floating" });
 		};
 	}, []);
 
