@@ -15,6 +15,7 @@ import {
 	DEFAULT_CONFIG, SECRET_KEYS,
 	loadConfig, updateConfig,
 	proxyRequest,
+	setSecret, getSecret, deleteSecret,
 } from "@/services/config";
 import { createLogger } from "@/services/logger";
 import { GptSovitsTTSService, MockTTSService, splitText, normalizeForSpeech, SpeechQueue } from "@/services/tts";
@@ -74,17 +75,20 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		setLlmTestResult(null);
 		try {
 			const llmCfg = getActiveLlmConfig();
-			const url = (llmCfg.baseUrl || "").replace(/\/+$/, "") + "/models";
-			if (!url || url === "/models") {
+			let base = (llmCfg.baseUrl || "").replace(/\/+$/, "");
+			if (!base) {
 				setLlmTestResult({ ok: false, text: "请先在档案中配置 Base URL" });
 				return;
 			}
-			const needsKey = !isLocalUrl(llmCfg.baseUrl);
+			// 兼容有无 /v1 后缀
+			if (!base.endsWith("/v1")) base += "/v1";
+			const url = base + "/models";
+			const profileId = config.activeLlmProfileId || null;
 			const resp = await proxyRequest({
 				url,
 				method: "GET",
 				headers: { "Content-Type": "application/json" },
-				secretKey: needsKey ? SECRET_KEYS.LLM_API_KEY : undefined,
+				secretKey: profileId ? SECRET_KEYS.LLM_API_KEY(profileId) : undefined,
 				timeoutMs: 10000,
 			});
 			if (resp.status >= 200 && resp.status < 400) {
@@ -100,7 +104,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		} finally {
 			setTesting(null);
 		}
-	}, [getActiveLlmConfig]);
+	}, [getActiveLlmConfig, config.activeLlmProfileId]);
 
 	const handleTestTTS = useCallback(async () => {
 		setTesting("tts");
@@ -337,16 +341,6 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 	);
 }
 
-function isLocalUrl(url: string): boolean {
-	try {
-		const u = new URL(url);
-		const host = u.hostname;
-		return host === "localhost" || host === "127.0.0.1" || host.startsWith("192.168.") || host.startsWith("10.") || host.endsWith(".local");
-	} catch {
-		return false;
-	}
-}
-
 // ── LLM Profile 管理组件 ───────────────────────────────────────────────────
 
 interface LLMProfilesSectionProps {
@@ -365,18 +359,31 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 	const [editingProfile, setEditingProfile] = useState<LLMProfile | null>(null);
 	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
-	const handleEdit = (event: React.MouseEvent<HTMLElement>) => {
+	// 组件挂载时清理旧版全局 keyring 条目（key = "llm-api-key"）
+	useEffect(() => {
+		deleteSecret("llm-api-key").catch(() => { /* ignore if not exists */ });
+	}, []);
+
+	const handleEdit = async (event: React.MouseEvent<HTMLElement>) => {
 		if (activeId) {
-			setEditingProfile(profiles.find((p) => p.id === activeId) ?? null);
+			const profile = profiles.find((p) => p.id === activeId) ?? null;
+			if (profile) {
+				// 从 keyring 读取 API key 填入表单
+				const apiKey = await getSecret(SECRET_KEYS.LLM_API_KEY(profile.id)) ?? "";
+				setEditingProfile({ ...profile, apiKey });
+			} else {
+				setEditingProfile(null);
+			}
 		} else {
 			setEditingProfile({
 				id: `llm-${Date.now()}`,
 				name: "",
 				provider: "openai-compatible",
+				apiKey: "",
 				baseUrl: "",
 				model: "",
 				temperature: 0.7,
-				maxTokens: 2048,
+				maxTokens: 4096,
 			});
 		}
 		setAnchorEl(event.currentTarget);
@@ -388,10 +395,11 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 			id: `llm-${Date.now()}`,
 			name: "",
 			provider: "openai-compatible",
+			apiKey: "",
 			baseUrl: "",
 			model: "",
 			temperature: 0.7,
-			maxTokens: 2048,
+			maxTokens: 4096,
 		});
 		setAnchorEl(event.currentTarget);
 		setDialogOpen(true);
@@ -399,17 +407,23 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 
 	const handleDialogSave = async () => {
 		if (!editingProfile) return;
+		// API key 写入 per-profile keyring
+		if (editingProfile.apiKey) {
+			await setSecret(SECRET_KEYS.LLM_API_KEY(editingProfile.id), editingProfile.apiKey);
+		}
 		const exists = profiles.some((p) => p.id === editingProfile.id);
 		let newProfiles: LLMProfile[];
 		let newActiveId = activeId;
+		// 保存时剔除 apiKey 明文（key 已在 keyring）
+		const profileToSave = { ...editingProfile, apiKey: "" };
 		if (exists) {
-			onUpdate(editingProfile);
-			newProfiles = profiles.map((p) => p.id === editingProfile.id ? editingProfile : p);
+			onUpdate(profileToSave);
+			newProfiles = profiles.map((p) => p.id === editingProfile.id ? profileToSave : p);
 		} else {
-			onAdd(editingProfile);
+			onAdd(profileToSave);
 			onSelect(editingProfile.id);
 			newActiveId = editingProfile.id;
-			newProfiles = [...profiles, editingProfile];
+			newProfiles = [...profiles, profileToSave];
 		}
 		setDialogOpen(false);
 		setEditingProfile(null);
@@ -426,6 +440,8 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 	const handleDelete = async (id: string) => {
 		onDelete(id);
 		if (id === activeId) onSelect("");
+		// 删除 keyring 中的 key
+		await deleteSecret(SECRET_KEYS.LLM_API_KEY(id));
 		setDialogOpen(false);
 		setEditingProfile(null);
 		setAnchorEl(null);
@@ -490,8 +506,12 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 								<MenuItem value="mock">Mock（模拟）</MenuItem>
 								<MenuItem value="openai-compatible">OpenAI 兼容 API</MenuItem>
 							</Select>
+							<TextField size="small" fullWidth label="API Key" type="password" value={editingProfile.apiKey ?? ""}
+								onChange={(e) => setEditingProfile({ ...editingProfile, apiKey: e.target.value })}
+								helperText="密钥将安全存储在系统钥匙串中" />
 							<TextField size="small" fullWidth label="Base URL" value={editingProfile.baseUrl}
-								onChange={(e) => setEditingProfile({ ...editingProfile, baseUrl: e.target.value })} />
+								onChange={(e) => setEditingProfile({ ...editingProfile, baseUrl: e.target.value })}
+								helperText="支持是否带 /v1 后缀" />
 							<TextField size="small" fullWidth label="模型名称" value={editingProfile.model}
 								onChange={(e) => setEditingProfile({ ...editingProfile, model: e.target.value })} />
 							<Stack direction="row" spacing={0.5}>

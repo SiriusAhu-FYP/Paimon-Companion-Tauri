@@ -39,6 +39,7 @@ export interface LLMProfile {
 	id: string;
 	name: string;
 	provider: LLMProviderType;
+	apiKey: string;
 	baseUrl: string;
 	model: string;
 	temperature: number;
@@ -84,13 +85,12 @@ export interface AppConfig {
 }
 
 // ── 敏感配置 key 约定 ──
+// llm-api-key:{profileId}  实现 per-profile 隔离
 
 export const SECRET_KEYS = {
-	LLM_API_KEY: "llm-api-key",
+	LLM_API_KEY: (profileId: string) => `llm-api-key:${profileId}`,
 	TTS_API_KEY: "tts-api-key",
 } as const;
-
-export type SecretKeyName = (typeof SECRET_KEYS)[keyof typeof SECRET_KEYS];
 
 // ── 默认值 ──
 

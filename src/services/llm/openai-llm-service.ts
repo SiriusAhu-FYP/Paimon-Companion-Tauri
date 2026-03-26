@@ -35,14 +35,30 @@ interface OpenAISSEPayload {
 
 export class OpenAILLMService implements ILLMService {
 	private config: LLMProviderConfig;
+	private profileId: string | null;
 
-	constructor(config: LLMProviderConfig) {
+	constructor(config: LLMProviderConfig, profileId: string | null = null) {
 		this.config = config;
-		log.info("initialized", { baseUrl: config.baseUrl, model: config.model });
+		this.profileId = profileId;
+		log.info("initialized", { baseUrl: config.baseUrl, model: config.model, profileId });
+	}
+
+	/**
+	 * 规范化 baseUrl：确保以 /v1 结尾且不带尾斜杠。
+	 * 用户可能填写 "https://api.example.com" 或 "https://api.example.com/v1"，
+	 * 两种形式都应正确解析。
+	 */
+	private normalizeBaseUrl(raw: string): string {
+		let url = raw.replace(/\/+$/, "");
+		if (!url.endsWith("/v1")) {
+			url += "/v1";
+		}
+		return url;
 	}
 
 	async *chat(messages: ChatMessage[], tools?: ToolDef[]): AsyncGenerator<LLMChunk> {
-		const url = `${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+		const base = this.normalizeBaseUrl(this.config.baseUrl);
+		const url = `${base}/chat/completions`;
 
 		const openaiTools = tools?.length
 			? tools.map((t) => ({
@@ -81,7 +97,7 @@ export class OpenAILLMService implements ILLMService {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: requestBody,
-			secretKey: SECRET_KEYS.LLM_API_KEY,
+			secretKey: this.profileId ? SECRET_KEYS.LLM_API_KEY(this.profileId) : undefined,
 		};
 
 		let fullText = "";

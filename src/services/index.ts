@@ -29,19 +29,34 @@ export interface ServiceContainer {
 let services: ServiceContainer | null = null;
 
 function resolveLLMProvider(config: AppConfig): ILLMService {
-	if (config.llm.provider === "mock") {
+	// 优先使用活跃 LLM Profile
+	const activeProfile = config.activeLlmProfileId
+		? config.llmProfiles.find((p) => p.id === config.activeLlmProfileId)
+		: null;
+
+	const provider = activeProfile?.provider ?? config.llm.provider;
+	const baseUrl = activeProfile?.baseUrl ?? config.llm.baseUrl;
+	const model = activeProfile?.model ?? config.llm.model;
+	const temperature = activeProfile?.temperature ?? config.llm.temperature;
+	const maxTokens = activeProfile?.maxTokens ?? config.llm.maxTokens;
+	const profileId = activeProfile?.id ?? null;
+
+	if (provider === "mock") {
 		log.info("using mock LLM provider");
 		return new MockLLMService();
 	}
-	if (config.llm.provider === "openai-compatible") {
-		if (!config.llm.baseUrl || !config.llm.model) {
+	if (provider === "openai-compatible") {
+		if (!baseUrl || !model) {
 			log.info("openai-compatible configured but baseUrl/model missing, using mock fallback");
 			return new MockLLMService();
 		}
-		log.info(`using OpenAI-compatible LLM provider: ${config.llm.baseUrl}, model=${config.llm.model}`);
-		return new OpenAILLMService(config.llm);
+		log.info(`using OpenAI-compatible LLM provider: ${baseUrl}, model=${model}`);
+		return new OpenAILLMService(
+			{ provider, baseUrl, model, temperature, maxTokens },
+			profileId,
+		);
 	}
-	log.info(`unknown LLM provider "${config.llm.provider}", using mock fallback`);
+	log.info(`unknown LLM provider "${provider}", using mock fallback`);
 	return new MockLLMService();
 }
 
