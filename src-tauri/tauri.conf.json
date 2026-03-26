@@ -26,7 +26,6 @@
         "decorations": false,
         "shadow": false,
         "visible": false,
-        "parent": "main",
         "skipTaskbar": true
       }
     ],
