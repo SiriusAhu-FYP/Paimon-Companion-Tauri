@@ -23,6 +23,7 @@ import { createLogger } from "@/services/logger";
 import { GptSovitsTTSService, MockTTSService, splitText, normalizeForSpeech, SpeechQueue } from "@/services/tts";
 import { AudioPlayer } from "@/services/audio/audio-player";
 import { broadcastControl } from "@/utils/window-sync";
+import { HelpTooltip } from "@/components";
 
 const log = createLogger("settings");
 
@@ -157,7 +158,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		setTtsTestResult(null);
 		try {
 			const ttsCfg = getActiveTtsConfig();
-			const base = (ttsCfg.baseUrl || "http://localhost:9880").replace(/\/+$/, "");
+			if (!ttsCfg.baseUrl || !ttsCfg.baseUrl.trim()) {
+				setTtsTestResult({ ok: false, text: "请先在档案中配置服务地址" });
+				return;
+			}
+			const base = ttsCfg.baseUrl.replace(/\/+$/, "");
 			const testUrl = `${base}/set_gpt_weights?weights_path=/tmp/dummy`;
 			const resp = await proxyRequest({
 				url: testUrl,
@@ -182,6 +187,10 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		setMessage(null);
 		try {
 			const ttsCfg = getActiveTtsConfig();
+			if (!ttsCfg.baseUrl || !ttsCfg.baseUrl.trim()) {
+				setMessage({ type: "error", text: "请先在档案中配置服务地址" });
+				return;
+			}
 			let ttsService: GptSovitsTTSService | MockTTSService;
 			if (ttsCfg.provider === "gpt-sovits") {
 				ttsService = new GptSovitsTTSService(ttsCfg as unknown as TTSProviderConfig);
@@ -243,11 +252,30 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				</Alert>
 			)}
 
-			{/* LLM 测试（从激活档案读取） */}
-			<SectionTitle>LLM 测试</SectionTitle>
+			{/* ── LLM 配置档案 ── */}
+			<SectionTitle>LLM 配置</SectionTitle>
+			<LLMProfilesSection
+				profiles={config.llmProfiles}
+				activeId={config.activeLlmProfileId}
+				onAdd={(p) => setConfig((c) => ({ ...c, llmProfiles: [...c.llmProfiles, p] }))}
+				onUpdate={(p) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.map((x) => x.id === p.id ? p : x) }))}
+				onDelete={(id) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.filter((x) => x.id !== id), activeLlmProfileId: c.activeLlmProfileId === id ? "" : c.activeLlmProfileId }))}
+				onSelect={(id) => setConfig((c) => ({ ...c, activeLlmProfileId: id }))}
+			/>
+
+			<Divider />
+
+			{/* ── LLM 测试 ── */}
+			<SectionTitle>
+				LLM 测试
+				<HelpTooltip title="在左侧选择或新建 LLM 档案并保存后，点击此处测试连接是否可达。测试结果仅供参考。" />
+			</SectionTitle>
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
 				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-					当前读取{config.activeLlmProfileId ? "激活档案" : "根配置"}：{getActiveLlmConfig().model || getActiveLlmConfig().provider}
+					当前读取：{config.activeLlmProfileId
+						? `档案「${config.llmProfiles.find((p) => p.id === config.activeLlmProfileId)?.name || "(未命名)"}」`
+						: "根配置（无激活档案）"}
+					· {getActiveLlmConfig().model || getActiveLlmConfig().provider}
 				</Typography>
 				<Button
 					size="small" variant="outlined"
@@ -262,7 +290,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 						{llmTestResult.text}
 					</Alert>
 				)}
-
 				{needsLlmKey && (
 					<Alert severity="warning" sx={{ py: 0, fontSize: 12 }}>
 						真实 LLM 需要配置 API Key（档案中配置）
@@ -272,11 +299,30 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 
 			<Divider />
 
-			{/* TTS 测试（从激活档案读取） */}
-			<SectionTitle>TTS 测试</SectionTitle>
+			{/* ── TTS 配置档案 ── */}
+			<SectionTitle>TTS 配置</SectionTitle>
+			<TTSProfilesSection
+				profiles={config.ttsProfiles}
+				activeId={config.activeTtsProfileId}
+				onAdd={(p) => setConfig((c) => ({ ...c, ttsProfiles: [...c.ttsProfiles, p] }))}
+				onUpdate={(p) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.map((x) => x.id === p.id ? p : x) }))}
+				onDelete={(id) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.filter((x) => x.id !== id), activeTtsProfileId: c.activeTtsProfileId === id ? "" : c.activeTtsProfileId }))}
+				onSelect={(id) => setConfig((c) => ({ ...c, activeTtsProfileId: id }))}
+			/>
+
+			<Divider />
+
+			{/* ── TTS 测试 ── */}
+			<SectionTitle>
+				TTS 测试
+				<HelpTooltip title="在左侧选择或新建 TTS 档案（配置服务地址、权重路径等）并保存后，点击此处测试连接是否可达。测试结果仅供参考。" />
+			</SectionTitle>
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
 				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-					当前读取{config.activeTtsProfileId ? "激活档案" : "根配置"}：{getActiveTtsConfig().provider}
+					当前读取：{config.activeTtsProfileId
+						? `档案「${config.ttsProfiles.find((p) => p.id === config.activeTtsProfileId)?.name || "(未命名)"}」`
+						: "根配置（无激活档案）"}
+					· {getActiveTtsConfig().provider}
 				</Typography>
 				<Button
 					size="small" variant="outlined"
@@ -294,7 +340,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 
 				<Divider sx={{ my: 0.5 }} />
 
-				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>TTS 直测</Typography>
+				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>TTS 直测（合成并播放）</Typography>
 				<TextField
 					size="small" fullWidth
 					placeholder="输入测试文本"
@@ -313,7 +359,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 
 			<Divider />
 
-			{/* 角色设置 */}
+			{/* ── 角色设置 ── */}
 			<SectionTitle>角色设置</SectionTitle>
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
 				<FieldLabel>自定义人设（无角色卡时生效）</FieldLabel>
@@ -327,32 +373,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 					onChange={(e) => updateCharacter({ customPersona: e.target.value })}
 				/>
 			</Box>
-
-			<Divider />
-
-			{/* LLM Profiles */}
-			<SectionTitle>LLM 配置档案</SectionTitle>
-			<LLMProfilesSection
-				profiles={config.llmProfiles}
-				activeId={config.activeLlmProfileId}
-				onAdd={(p) => setConfig((c) => ({ ...c, llmProfiles: [...c.llmProfiles, p] }))}
-				onUpdate={(p) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.map((x) => x.id === p.id ? p : x) }))}
-				onDelete={(id) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.filter((x) => x.id !== id), activeLlmProfileId: c.activeLlmProfileId === id ? "" : c.activeLlmProfileId }))}
-				onSelect={(id) => setConfig((c) => ({ ...c, activeLlmProfileId: id }))}
-			/>
-
-			<Divider />
-
-			{/* TTS Profiles */}
-			<SectionTitle>TTS 配置档案</SectionTitle>
-			<TTSProfilesSection
-				profiles={config.ttsProfiles}
-				activeId={config.activeTtsProfileId}
-				onAdd={(p) => setConfig((c) => ({ ...c, ttsProfiles: [...c.ttsProfiles, p] }))}
-				onUpdate={(p) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.map((x) => x.id === p.id ? p : x) }))}
-				onDelete={(id) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.filter((x) => x.id !== id), activeTtsProfileId: c.activeTtsProfileId === id ? "" : c.activeTtsProfileId }))}
-				onSelect={(id) => setConfig((c) => ({ ...c, activeTtsProfileId: id }))}
-			/>
 
 			{/* 操作按钮 */}
 			<Stack direction="row" spacing={1} sx={{ mt: 1, flexShrink: 0 }}>
@@ -378,7 +398,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
 	return (
-		<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: "block" }}>
+		<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
 			{children}
 		</Typography>
 	);
