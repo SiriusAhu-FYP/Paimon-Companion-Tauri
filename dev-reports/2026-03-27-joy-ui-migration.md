@@ -1,41 +1,60 @@
-# Dev Report — Joy UI 配色迁移
+# Dev Report — Joy UI 配色迁移（完成）
 
-## 本次完成
+## 分支
 
-在 `feature/theme-joy-ui` 分支上完成了 Joy UI 配色迁移的基础设施搭建。
+`feature/theme-joy-ui`（从 `feature/phase3-integration` 检出）
 
-## 改动文件
+## 完成内容
 
-| 文件 | 变更 |
-|------|------|
-| `src/theme.ts` | 重构为 Joy UI `extendTheme` + MUI `createAppTheme` 双轨制。Joy UI 处理 CSS 变量，MUI 处理实际组件渲染 |
-| `src/contexts/JoyThemeProvider.tsx` | 新建。封装 `CssVarsProvider` + `useColorScheme` + `ThemeProvider` 联动，Joy UI 为驱动源，MUI 为渲染层 |
-| `src/main.tsx` | 移除旧的 `ThemeProvider`，替换为 `JoyThemeProvider` |
+### 1. 基础设施
+- 安装 `@mui/joy`
+- 新建 `src/contexts/JoyThemeProvider.tsx`
+- 重构 `src/theme.ts`：Joy UI `extendTheme` + MUI `createAppTheme` 双轨
 
-## 架构说明
+### 2. 主题切换按钮
+- 在 `MainWindow` header 加入太阳/月亮图标切换按钮
+- `useThemeMode()` hook 暴露 `mode` 和 `setMode`
+
+### 3. 专业调色板
+- 蓝灰色系（桌面应用友好）
+- Light: primary `#0B6EF5` / background `#F5F7FA` / text `#1A1A1A`
+- Dark: primary `#4D9FFF` / background `#0F1117` / text `#E8EAF0`
+- 完整的 50-900 色阶 + mainChannel/lightChannel/darkChannel
+
+### 4. CSS 变量渗透
+- `App.css` 中的硬编码颜色迁移为 `var(--joy-palette-*)`
+- 事件日志现在随主题自动变化
+
+## 架构
 
 ```
 JoyThemeProvider
 └── CssVarsProvider (Joy UI)
-    ├── data-joy-color-scheme="light|dark"  ← 驱动源
-    ├── setMode() 控制 HTML 属性变化
-    └── palette 通过 CSS 变量暴露
-        └── ThemeProvider (MUI)
-            └── createAppTheme(mode)  ← 读取同一 mode
-                └── 所有 MUI 组件使用统一 palette
+    ├── data-joy-color-scheme="light|dark"  ← HTML 属性驱动
+    ├── colorSchemes.light → palette
+    └── colorSchemes.dark → palette
+        └── InnerThemeProvider
+            └── ColorSchemeContext.Provider
+                └── ThemeProvider (MUI)
+                    └── createAppTheme(mode)  ← 同一 mode，MUI palette
+                        └── 所有 MUI 组件
 ```
 
-## 配色方案（待完善）
+## 提交记录
 
-当前使用硬编码的专业蓝灰调，后续可在 `JoyThemeProvider` 的 `colorSchemes` 配置中切换为 Joy UI 预设调色板（如 `joy.palette`）。
+| 提交 | 内容 |
+|------|------|
+| `de90f62` | feat(theme): introduce Joy UI CssVarsProvider... |
+| `afa84d9` | feat(ui): add theme toggle button... |
+| `e5a51a3` | feat(theme): upgrade JoyThemeProvider with professional palette... |
+| `1c28bf4` | refactor(css): migrate event-log hardcoded colors... |
 
 ## 验证
 
 - `pnpm tsc --noEmit` ✓
 - `pnpm build` ✓
 
-## 待办
+## 待后续完善
 
-- 将主题切换按钮（目前缺失）接入 `useThemeMode()` hook
-- 在 JoyThemeProvider 中完善 `colorSchemes` 配置，接入 Joy UI 预设调色板
-- 将 `App.css` 中的硬编码颜色迁移为 CSS 变量
+- 亮色模式下按钮 hover/active 状态视觉反馈
+- StageSlot 等组件中仍有部分硬编码背景色
