@@ -33,7 +33,10 @@ pub async fn proxy_http_request(
 	app: AppHandle,
 	request: ProxyRequest,
 ) -> Result<ProxyResponse, String> {
-	let client = Client::new();
+	let client = Client::builder()
+		.no_proxy()
+		.build()
+		.map_err(|e| format!("failed to create HTTP client: {e}"))?;
 
 	let method = match request
 		.method
@@ -127,7 +130,10 @@ pub async fn proxy_binary_request(
 	app: AppHandle,
 	request: ProxyRequest,
 ) -> Result<Vec<u8>, String> {
-	let client = Client::new();
+	let client = Client::builder()
+		.no_proxy()
+		.build()
+		.map_err(|e| format!("failed to create HTTP client: {e}"))?;
 
 	let method = match request
 		.method
@@ -199,7 +205,10 @@ pub async fn proxy_sse_request(
 ) -> Result<(), String> {
 	use futures_util::StreamExt;
 
-	let client = Client::new();
+	let client = Client::builder()
+		.no_proxy()
+		.build()
+		.map_err(|e| format!("failed to create HTTP client: {e}"))?;
 
 	let method = match request
 		.method

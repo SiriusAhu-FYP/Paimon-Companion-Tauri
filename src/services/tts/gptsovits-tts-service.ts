@@ -85,7 +85,7 @@ export class GptSovitsTTSService implements ITTSService {
 
 		log.info(`loading GPT weights: ${gptPath}`);
 		const gptResp = await proxyRequest({
-			url: `${baseUrl}/set_gpt_weights?weights_path=${encodeURIComponent(gptPath)}`,
+			url: `${baseUrl}/set_gpt_weights?weights_path=${gptPath}`,
 			method: "GET",
 			timeoutMs: 30000,
 		});
@@ -96,7 +96,7 @@ export class GptSovitsTTSService implements ITTSService {
 
 		log.info(`loading SoVITS weights: ${sovitsPath}`);
 		const sovitsResp = await proxyRequest({
-			url: `${baseUrl}/set_sovits_weights?weights_path=${encodeURIComponent(sovitsPath)}`,
+			url: `${baseUrl}/set_sovits_weights?weights_path=${sovitsPath}`,
 			method: "GET",
 			timeoutMs: 30000,
 		});
