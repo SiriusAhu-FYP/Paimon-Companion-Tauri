@@ -1,12 +1,11 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import Box from "@mui/material/Box";
 import { loadConfig, getConfig } from "@/services/config";
 import { initServices } from "@/services";
 import { mockCharacterInit, exposeMockTools } from "@/utils/mock";
 import { broadcastState, broadcastControl, onControlCommand } from "@/utils/window-sync";
 import { windowLabel } from "@/utils/window-label";
-import { JoyThemeProvider } from "./contexts/JoyThemeProvider";
+import { ThemeModeProvider } from "./contexts/JoyThemeProvider";
 import App from "./App";
 import "./App.css";
 
@@ -58,11 +57,9 @@ async function bootstrap() {
 
 	ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 		<React.StrictMode>
-			<JoyThemeProvider>
-				<Box sx={{ width: "100%", height: "100vh", display: "contents" }}>
-					<App />
-				</Box>
-			</JoyThemeProvider>
+			<ThemeModeProvider>
+				<App />
+			</ThemeModeProvider>
 		</React.StrictMode>,
 	);
 }
