@@ -28,7 +28,7 @@ export function StatusBar({
 			alignItems: "center",
 			px: 1.5,
 			gap: 2,
-			bgcolor: "#0f0f23",
+			bgcolor: "background.paper",
 			borderTop: "1px solid",
 			borderColor: "secondary.main",
 			userSelect: "none",

@@ -266,7 +266,7 @@ export function MainWindow() {
 					height: 180, flexShrink: 0,
 					borderTop: "1px solid", borderColor: "secondary.main",
 					overflowY: "auto",
-					bgcolor: "#0f0f23",
+					bgcolor: "background.default",
 				}}>
 					<EventLog />
 				</Box>

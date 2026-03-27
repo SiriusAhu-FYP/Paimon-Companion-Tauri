@@ -342,7 +342,7 @@ export function StageWindow() {
 			)}
 
 			{loadStatus === "error" ? (
-				<p style={{ color: "#e94560", textAlign: "center", marginTop: 40 }}>
+				<p style={{ color: "var(--joy-palette-danger-500, #C41C1C)", textAlign: "center", marginTop: 40 }}>
 					Live2D 加载失败
 				</p>
 			) : (

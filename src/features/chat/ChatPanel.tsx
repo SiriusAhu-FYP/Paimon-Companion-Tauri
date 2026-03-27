@@ -126,7 +126,7 @@ export function ChatPanel() {
 							elevation={0}
 							sx={{
 								p: 1, borderRadius: 1,
-								bgcolor: msg.role === "user" ? "background.paper" : "#1a2744",
+								bgcolor: msg.role === "user" ? "background.paper" : "background.default",
 								display: "flex", gap: 1,
 							}}
 						>
