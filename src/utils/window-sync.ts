@@ -43,7 +43,7 @@ export type ControlCommand =
 // ── Tauri 环境检测 ──
 
 export function isTauriEnvironment(): boolean {
-	return "__TAURI_INTERNALS__" in window;
+	return "__TAURI__" in window;
 }
 
 // ── Tauri 事件 vs BroadcastChannel 自适应 ──
