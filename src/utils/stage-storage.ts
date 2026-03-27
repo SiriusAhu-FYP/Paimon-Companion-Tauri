@@ -5,6 +5,7 @@
 
 const ZOOM_KEY = "paimon-live:stage-zoom";
 const CUSTOM_PRESETS_KEY = "paimon-live:custom-size-presets";
+const SCALE_LOCK_KEY = "paimon-live:stage-scale-lock";
 
 // ── 缩放比例 ──
 
@@ -18,6 +19,20 @@ export function loadZoom(): number {
 		if (v) { const n = parseFloat(v); if (n > 0) return n; }
 	} catch { /* */ }
 	return 1;
+}
+
+// ── 缩放锁定 ──
+
+export function saveScaleLock(locked: boolean): void {
+	try { localStorage.setItem(SCALE_LOCK_KEY, locked ? "1" : "0"); } catch { /* */ }
+}
+
+export function loadScaleLock(): boolean {
+	try {
+		return localStorage.getItem(SCALE_LOCK_KEY) === "1";
+	} catch {
+		return false;
+	}
 }
 
 // ── 自定义尺寸预设 ──
