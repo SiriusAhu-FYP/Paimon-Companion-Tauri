@@ -76,6 +76,12 @@ export class SpeechQueue {
 		log.info("[queue] stopped");
 	}
 
+	/** 热替换 TTS Provider（profile 切换后调用） */
+	setTTS(tts: ITTSService) {
+		this.tts = tts;
+		log.info("[queue] TTS provider swapped");
+	}
+
 	/** 重置中断标志（新一次 speakAll 前自动调用） */
 	private resetStopped() {
 		this._stopped = false;

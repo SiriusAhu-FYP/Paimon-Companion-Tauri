@@ -150,5 +150,30 @@ export function getServices(): ServiceContainer {
 	return services;
 }
 
+/**
+ * 根据当前 config 中的 activeLlmProfileId / activeTtsProfileId 热更新 providers。
+ * Settings 切换 profile 后调用此函数，使新 profile 立即生效。
+ */
+export function refreshProviders() {
+	if (!services) {
+		log.warn("refreshProviders called before initServices, skipping");
+		return;
+	}
+	const config = getConfig();
+
+	const newLLMProvider = resolveLLMProvider(config);
+	const newTTSProvider = resolveTTSProvider(config);
+
+	services.llm.setProvider(newLLMProvider);
+
+	const sq = services.pipeline.getSpeechQueue();
+	sq.setTTS(newTTSProvider);
+
+	log.info("providers refreshed", {
+		llmProvider: config.llm.provider,
+		ttsProvider: config.tts.provider,
+	});
+}
+
 export { eventBus } from "./event-bus";
 export { createLogger } from "./logger";

@@ -40,6 +40,11 @@ export class LLMService {
 		return this.processing;
 	}
 
+	/** 热替换 LLM Provider（profile 切换后调用） */
+	setProvider(provider: ILLMService) {
+		this.provider = provider;
+	}
+
 	getHistory(): readonly ChatMessage[] {
 		return this.history;
 	}
