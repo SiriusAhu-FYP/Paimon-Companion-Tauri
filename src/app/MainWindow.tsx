@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Box, IconButton, Tooltip } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
 import { StageHost, StageSlot } from "@/features/stage";
 import { ControlPanel } from "@/features/control-panel";
 import { SettingsPanel } from "@/features/settings";
@@ -9,10 +11,12 @@ import { EventLog } from "@/app/EventLog";
 import { StatusBar } from "@/app/StatusBar";
 import { type StageDisplayMode, isTauriEnvironment } from "@/utils/window-sync";
 import { createLogger } from "@/services/logger";
+import { useThemeMode } from "@/contexts/JoyThemeProvider";
 
 const log = createLogger("main-window");
 
 export function MainWindow() {
+	const { mode, setMode } = useThemeMode();
 	const [stageVisible, setStageVisible] = useState(false);
 	const [stageMode, setStageMode] = useState<"docked" | "floating">("docked");
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
@@ -179,15 +183,26 @@ export function MainWindow() {
 				<Box component="h1" sx={{ fontSize: 18, fontWeight: 600, color: "primary.main", m: 0 }}>
 					Paimon Live
 				</Box>
-				<Tooltip title="设置">
-					<IconButton
-						size="small"
-						onClick={() => setShowSettings(true)}
-						sx={{ color: "text.secondary" }}
-					>
-						<SettingsIcon fontSize="small" />
-					</IconButton>
-				</Tooltip>
+				<Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+					<Tooltip title={mode === "dark" ? "切换亮色" : "切换暗色"}>
+						<IconButton
+							size="small"
+							onClick={() => setMode(mode === "dark" ? "light" : "dark")}
+							sx={{ color: "text.secondary" }}
+						>
+							{mode === "dark" ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+						</IconButton>
+					</Tooltip>
+					<Tooltip title="设置">
+						<IconButton
+							size="small"
+							onClick={() => setShowSettings(true)}
+							sx={{ color: "text.secondary" }}
+						>
+							<SettingsIcon fontSize="small" />
+						</IconButton>
+					</Tooltip>
+				</Box>
 			</Box>
 
 			{/* Main content */}
