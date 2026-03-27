@@ -17,7 +17,7 @@ const log = createLogger("main-window");
 
 export function MainWindow() {
 	const { mode, setMode } = useThemeMode();
-	const [stageVisible, setStageVisible] = useState(false);
+	const [stageVisible, setStageVisible] = useState(true);
 	const [stageMode, setStageMode] = useState<"docked" | "floating">("docked");
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
 	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("clean");

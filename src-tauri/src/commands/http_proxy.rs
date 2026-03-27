@@ -72,22 +72,18 @@ pub async fn proxy_http_request(
 				req_builder =
 					req_builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
 			}
-			Ok(None) => {
-				return Err(format!(
-					"secret '{secret_key}' not found in keyring — please configure it in Settings"
-				));
-			}
+			// 密钥未配置时继续请求（不注入 header），由远端返回 401
+			Ok(None) => {}
 			Err(e) => {
 				let msg = e.to_string();
 				if msg.contains("No matching entry")
 					|| msg.contains("not found")
 					|| msg.contains("NoEntry")
 				{
-					return Err(format!(
-						"secret '{secret_key}' not found in keyring — please configure it in Settings"
-					));
+					// 同上：视为未配置，继续请求
+				} else {
+					return Err(format!("keyring read failed: {msg}"));
 				}
-				return Err(format!("keyring read failed: {msg}"));
 			}
 		}
 	}
@@ -159,16 +155,8 @@ pub async fn proxy_binary_request(
 
 	if let Some(secret_key) = &request.secret_key {
 		let service = format!("{SERVICE_PREFIX}:{secret_key}");
-		match app.keyring().get_password(&service, secret_key) {
-			Ok(Some(token)) => {
-				req_builder =
-					req_builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
-			}
-			Ok(None) | Err(_) => {
-				return Err(format!(
-					"secret '{secret_key}' not found — configure in Settings"
-				));
-			}
+		if let Ok(Some(token)) = app.keyring().get_password(&service, secret_key) {
+			req_builder = req_builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
 		}
 	}
 
@@ -233,16 +221,8 @@ pub async fn proxy_sse_request(
 	// 注入密钥
 	if let Some(secret_key) = &request.secret_key {
 		let service = format!("{SERVICE_PREFIX}:{secret_key}");
-		match app.keyring().get_password(&service, secret_key) {
-			Ok(Some(token)) => {
-				req_builder =
-					req_builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
-			}
-			Ok(None) | Err(_) => {
-				return Err(format!(
-					"secret '{secret_key}' not found — configure in Settings"
-				));
-			}
+		if let Ok(Some(token)) = app.keyring().get_password(&service, secret_key) {
+			req_builder = req_builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
 		}
 	}
 

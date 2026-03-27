@@ -19,6 +19,7 @@ import {
 } from "@/utils/window-sync";
 import {
 	loadCustomPresets, saveCustomPresets,
+	loadScaleLock, saveScaleLock,
 	type SizePreset,
 } from "@/utils/stage-storage";
 import { createLogger } from "@/services/logger";
@@ -56,7 +57,7 @@ export function StageHost({
 	onAlwaysOnTopChange,
 	onDisplayModeChange,
 }: StageHostProps) {
-	const [scaleLocked, setScaleLocked] = useState(false);
+	const [scaleLocked, setScaleLocked] = useState(loadScaleLock);
 	const [eyeMode, setEyeMode] = useState<EyeMode>("random-path");
 	const [customPresets, setCustomPresets] = useState<SizePreset[]>(loadCustomPresets);
 	const [showSaveInput, setShowSaveInput] = useState(false);
@@ -129,6 +130,7 @@ export function StageHost({
 	const handleToggleScaleLock = useCallback(() => {
 		const next = !scaleLocked;
 		setScaleLocked(next);
+		saveScaleLock(next);
 		broadcastControl({ type: "set-scale-lock", locked: next });
 	}, [scaleLocked]);
 
