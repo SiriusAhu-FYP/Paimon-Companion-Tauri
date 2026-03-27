@@ -176,18 +176,17 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				.join(" | ");
 			setMessage({ type: "success", text: `切片完成：${segments.length} 段，正在合成... — ${preview}` });
 
-			await queue.speakAll(segments);
+			const result = await queue.speakAll(segments);
 
-			// speakAll 完成后检查是否有段成功播放
-			if (player.isPlaying() === false) {
-				// 播放完毕或未播放
-				setMessage((prev) => {
-					if (prev?.type === "info") return { type: "success", text: "播放完成" };
-					if (prev?.type === "success" && prev.text.includes("正在合成")) {
-						return { type: "warning", text: "合成完成但未能播放任何段落，请检查 TTS 配置（权重路径、参考音频等）" };
-					}
-					return prev;
-				});
+			if (result.stopped) {
+				setMessage({ type: "warning", text: "播放已中断" });
+			} else if (result.playedSegments > 0) {
+				setMessage({ type: "success", text: `播放完成 (${result.playedSegments}/${result.totalSegments} 段)` });
+			} else if (result.errors.length > 0) {
+				const firstErr = result.errors[0].length > 120 ? result.errors[0].slice(0, 120) + "…" : result.errors[0];
+				setMessage({ type: "error", text: `合成失败: ${firstErr}` });
+			} else {
+				setMessage({ type: "warning", text: "合成完成但未能播放任何段落，请检查 TTS 配置" });
 			}
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);

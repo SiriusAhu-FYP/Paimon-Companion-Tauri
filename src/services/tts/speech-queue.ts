@@ -26,6 +26,15 @@ interface SegmentTiming {
 	gapMs: number;
 }
 
+/** speakAll 的返回摘要，供调用者显示诊断信息 */
+export interface SpeakAllResult {
+	totalSegments: number;
+	playedSegments: number;
+	skippedSegments: number;
+	errors: string[];
+	stopped: boolean;
+}
+
 /**
  * 合成+播放队列：1 段预缓冲并发合成、严格顺序播放。
  *
@@ -91,14 +100,15 @@ export class SpeechQueue {
 	 * 3. unsupported 语言的段直接跳过
 	 * 4. 合成失败的段跳过，后续段继续
 	 */
-	async speakAll(segments: SplitSegment[]): Promise<void> {
-		if (!segments.length) return;
+	async speakAll(segments: SplitSegment[]): Promise<SpeakAllResult> {
+		if (!segments.length) return { totalSegments: 0, playedSegments: 0, skippedSegments: 0, errors: [], stopped: false };
 
 		this.resetStopped();
 		log.info(`[queue] speakAll: ${segments.length} segments`);
 		const queueStartMs = performance.now();
 		let anyPlayed = false;
 		const timings: SegmentTiming[] = [];
+		const errors: string[] = [];
 
 		// 启动第一段合成（跳过 unsupported）
 		let nextSynthPromise: Promise<SynthResult> | null =
@@ -131,6 +141,7 @@ export class SpeechQueue {
 			if (!current.audio || current.audio.byteLength === 0) {
 				if (current.error) {
 					log.warn(`[queue][${i + 1}/${segments.length}] skipped: ${current.error}`);
+					errors.push(current.error);
 				}
 				continue;
 			}
@@ -198,6 +209,14 @@ export class SpeechQueue {
 			this.onSpeakingChange(false);
 		}
 		log.info(`[queue] speakAll done (stopped=${this._stopped}, played=${timings.length}/${segments.length})`);
+
+		return {
+			totalSegments: segments.length,
+			playedSegments: timings.length,
+			skippedSegments: segments.length - timings.length,
+			errors,
+			stopped: this._stopped,
+		};
 	}
 
 	/**
