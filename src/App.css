@@ -27,11 +27,11 @@
 	margin-bottom: 6px;
 	font-size: 12px;
 	font-weight: 600;
-	color: #999;
+	color: var(--joy-palette-neutral-500, #9FA6AD);
 }
 
 .event-log-empty {
-	color: #555;
+	color: var(--joy-palette-text-tertiary, #888);
 	font-size: 12px;
 }
 
@@ -49,17 +49,17 @@
 }
 
 .event-log-time {
-	color: #555;
+	color: var(--joy-palette-text-tertiary, #888);
 	min-width: 70px;
 }
 
 .event-log-name {
-	color: #e94560;
+	color: var(--joy-palette-primary-500, #4D9FFF);
 	min-width: 200px;
 }
 
 .event-log-payload {
-	color: #888;
+	color: var(--joy-palette-text-secondary, #9A9BB0);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
