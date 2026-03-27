@@ -65,8 +65,20 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	const getActiveTtsConfig = useCallback(() => {
 		if (config.activeTtsProfileId) {
 			const profile = config.ttsProfiles.find((p) => p.id === config.activeTtsProfileId);
-			if (profile) return profile;
+			if (profile) {
+				log.info("[settings] getActiveTtsConfig: using profile", {
+					profileId: profile.id,
+					name: profile.name,
+					baseUrl: profile.baseUrl,
+					gptPath: profile.gptWeightsPath,
+					sovitsPath: profile.sovitsWeightsPath,
+				});
+				return profile;
+			}
 		}
+		log.info("[settings] getActiveTtsConfig: no active profile, using config.tts", {
+			ttsBaseUrl: config.tts.baseUrl,
+		});
 		return config.tts;
 	}, [config]);
 

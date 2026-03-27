@@ -51,7 +51,13 @@ async function loadFromTauriStore(): Promise<Partial<AppConfig>> {
 		const { load } = await import("@tauri-apps/plugin-store");
 		const store = await load(STORE_PATH, { defaults: {}, autoSave: false });
 		const data = await store.get<Partial<AppConfig>>(STORE_KEY);
-		log.info("loaded from Tauri Store", { found: !!data, provider: data?.llm?.provider ?? "none" });
+		log.info("loaded from Tauri Store", {
+			found: !!data,
+			provider: data?.llm?.provider ?? "none",
+			ttsProfilesCount: data?.ttsProfiles?.length ?? 0,
+			activeTtsProfileId: data?.activeTtsProfileId ?? "",
+			ttsBaseUrl: data?.tts?.baseUrl ?? "none",
+		});
 		return data ?? {};
 	} catch (err) {
 		log.warn("failed to load from Tauri Store, using defaults", err);
@@ -65,7 +71,14 @@ async function saveToTauriStore(config: AppConfig): Promise<void> {
 		const store = await load(STORE_PATH, { defaults: {}, autoSave: false });
 		await store.set(STORE_KEY, config);
 		await store.save();
-		log.info("saved to Tauri Store", { provider: config.llm.provider });
+		log.info("saved to Tauri Store", {
+			provider: config.llm.provider,
+			ttsProvider: config.tts.provider,
+			ttsProfilesCount: config.ttsProfiles.length,
+			activeTtsProfileId: config.activeTtsProfileId,
+			ttsBaseUrl: config.tts.baseUrl,
+			firstProfile: config.ttsProfiles[0] ? { name: config.ttsProfiles[0].name, baseUrl: config.ttsProfiles[0].baseUrl } : null,
+		});
 	} catch (err) {
 		log.error("failed to save to Tauri Store", err);
 	}
