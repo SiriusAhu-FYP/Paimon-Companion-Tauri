@@ -1,17 +1,16 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { ThemeProvider, CssBaseline } from "@mui/material";
+import Box from "@mui/material/Box";
 import { loadConfig, getConfig } from "@/services/config";
 import { initServices } from "@/services";
 import { mockCharacterInit, exposeMockTools } from "@/utils/mock";
 import { broadcastState, broadcastControl, onControlCommand } from "@/utils/window-sync";
 import { windowLabel } from "@/utils/window-label";
-import theme from "./theme";
+import { JoyThemeProvider } from "./contexts/JoyThemeProvider";
 import App from "./App";
 import "./App.css";
 
 async function bootstrap() {
-	// 配置必须在服务初始化之前加载——services/index.ts 中会读取 getConfig()
 	await loadConfig();
 
 	const services = initServices();
@@ -59,10 +58,11 @@ async function bootstrap() {
 
 	ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 		<React.StrictMode>
-			<ThemeProvider theme={theme}>
-				<CssBaseline />
-				<App />
-			</ThemeProvider>
+			<JoyThemeProvider>
+				<Box sx={{ width: "100%", height: "100vh", display: "contents" }}>
+					<App />
+				</Box>
+			</JoyThemeProvider>
 		</React.StrictMode>,
 	);
 }
