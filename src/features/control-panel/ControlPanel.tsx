@@ -132,7 +132,7 @@ export function ControlPanel() {
 			{/* 运行状态 */}
 			<Box sx={{
 				bgcolor: "background.paper", borderRadius: 1, p: 1,
-				...(mode === "stopped" && { border: "1px solid", borderColor: "error.main", bgcolor: "#2a1020" }),
+				...(mode === "stopped" && { border: "1px solid", borderColor: "error.main", bgcolor: "error.dark" }),
 			}}>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
 					<Typography variant="caption" color="text.secondary" fontWeight={600}>运行状态</Typography>
