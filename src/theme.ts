@@ -1,47 +1,44 @@
-import { extendTheme } from "@mui/joy/styles";
 import { createTheme } from "@mui/material/styles";
 import type { PaletteMode } from "@mui/material";
 
-// ── Joy UI Theme（CssVarsProvider 使用）──────────────────────────
-export const joyTheme = extendTheme({
-	fontFamily: {
-		display: "Inter, Avenir, Helvetica, Arial, sans-serif",
-		body: "Inter, Avenir, Helvetica, Arial, sans-serif",
+// ── 调色板 ────────────────────────────────────────────────────────
+const palette = {
+	dark: {
+		primary: "#4D9FFF",
+		secondary: "#2D3748",
+		bgDefault: "#0F1117",
+		bgPaper: "#1C1F27",
+		textPrimary: "#E8EAF0",
+		textSecondary: "#9A9BB0",
+		success: "#3ECF8E",
+		error: "#F87171",
+		divider: "rgba(255,255,255,0.08)",
 	},
-
-	components: {
-		JoyButton: {
-			styleOverrides: {
-				root: { textTransform: "none" },
-			},
-		},
-		JoyTooltip: {
-			defaultProps: { arrow: true, enterDelay: 400 },
-		},
+	light: {
+		primary: "#0B6EF5",
+		secondary: "#E8ECF4",
+		bgDefault: "#F5F7FA",
+		bgPaper: "#FFFFFF",
+		textPrimary: "#1A1A1A",
+		textSecondary: "#555555",
+		success: "#388E3C",
+		error: "#C9274E",
+		divider: "rgba(0,0,0,0.08)",
 	},
-});
+} as const;
 
-// ── MUI Theme（ThemeProvider 使用，与 Joy UI 共享同一 palette）──
 export function createAppTheme(mode: PaletteMode) {
+	const p = palette[mode];
 	return createTheme({
 		palette: {
 			mode,
-			primary: {
-				main: mode === "dark" ? "#4D9FFF" : "#0B6EF5",
-			},
-			secondary: {
-				main: mode === "dark" ? "#2D3748" : "#E8ECF4",
-			},
-			background: {
-				default: mode === "dark" ? "#0F1117" : "#F5F7FA",
-				paper: mode === "dark" ? "#1C1F27" : "#FFFFFF",
-			},
-			text: {
-				primary: mode === "dark" ? "#E8EAF0" : "#1A1A1A",
-				secondary: mode === "dark" ? "#9A9BB0" : "#555555",
-			},
-			success: { main: mode === "dark" ? "#3ECF8E" : "#388E3C" },
-			error: { main: mode === "dark" ? "#F87171" : "#C9274E" },
+			primary: { main: p.primary },
+			secondary: { main: p.secondary },
+			background: { default: p.bgDefault, paper: p.bgPaper },
+			text: { primary: p.textPrimary, secondary: p.textSecondary },
+			success: { main: p.success },
+			error: { main: p.error },
+			divider: p.divider,
 		},
 		typography: {
 			fontFamily: "Inter, Avenir, Helvetica, Arial, sans-serif",
@@ -49,6 +46,14 @@ export function createAppTheme(mode: PaletteMode) {
 		},
 		shape: { borderRadius: 6 },
 		components: {
+			MuiCssBaseline: {
+				styleOverrides: {
+					body: {
+						backgroundColor: p.bgDefault,
+						color: p.textPrimary,
+					},
+				},
+			},
 			MuiButton: {
 				defaultProps: { size: "small", disableElevation: true },
 				styleOverrides: {
@@ -67,6 +72,20 @@ export function createAppTheme(mode: PaletteMode) {
 			MuiPaper: {
 				styleOverrides: {
 					root: { backgroundImage: "none" },
+				},
+			},
+			MuiSelect: {
+				styleOverrides: {
+					root: {
+						fontSize: 13,
+					},
+				},
+			},
+			MuiOutlinedInput: {
+				styleOverrides: {
+					root: {
+						fontSize: 13,
+					},
 				},
 			},
 		},
