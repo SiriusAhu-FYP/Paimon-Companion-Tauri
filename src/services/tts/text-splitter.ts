@@ -187,8 +187,8 @@ function separateLanguages(parts: string[]): SplitSegment[] {
 			const matchEnd = matchStart + match[0].length;
 			const englishText = match[0].trim();
 
-			// 跳过过短的英文（单个单词嵌在中文中不拆）
-			if (englishText.length < 4 || !/\s/.test(englishText)) continue;
+			// 短英文块留在中文段内，GPT-SoVITS zh 模式可自然读出
+			if (englishText.length < 20) continue;
 
 			// 英文块前面的中文部分
 			if (matchStart > lastIndex) {

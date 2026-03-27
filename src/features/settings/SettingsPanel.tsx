@@ -30,7 +30,7 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
-	const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+	const [message, setMessage] = useState<{ type: "success" | "error" | "info" | "warning"; text: string } | null>(null);
 	const [llmTestResult, setLlmTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 	const [ttsTestResult, setTtsTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 	const [testing, setTesting] = useState<"llm" | "tts" | null>(null);
@@ -151,8 +151,10 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				ttsService = new MockTTSService();
 			}
 			const player = new AudioPlayer();
-			const queue = new SpeechQueue(ttsService, player, (_speaking) => {
-				/* Settings 测试入口不需要更新 UI 状态 */
+			const queue = new SpeechQueue(ttsService, player, (speaking) => {
+				if (speaking) {
+					setMessage({ type: "info", text: "正在播放语音..." });
+				}
 			});
 
 			const spokenText = normalizeForSpeech(ttsTestText);
@@ -172,9 +174,21 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 			const preview = segments
 				.map((s) => `[${s.lang}]${s.text.slice(0, 15)}${s.text.length > 15 ? "…" : ""}`)
 				.join(" | ");
-			setMessage({ type: "success", text: `切片完成：${segments.length} 段 — ${preview}` });
+			setMessage({ type: "success", text: `切片完成：${segments.length} 段，正在合成... — ${preview}` });
 
 			await queue.speakAll(segments);
+
+			// speakAll 完成后检查是否有段成功播放
+			if (player.isPlaying() === false) {
+				// 播放完毕或未播放
+				setMessage((prev) => {
+					if (prev?.type === "info") return { type: "success", text: "播放完成" };
+					if (prev?.type === "success" && prev.text.includes("正在合成")) {
+						return { type: "warning", text: "合成完成但未能播放任何段落，请检查 TTS 配置（权重路径、参考音频等）" };
+					}
+					return prev;
+				});
+			}
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			setMessage({ type: "error", text: `TTS 测试失败: ${msg}` });
@@ -211,7 +225,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				onAdd={(p) => setConfig((c) => ({ ...c, llmProfiles: [...c.llmProfiles, p] }))}
 				onUpdate={(p) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.map((x) => x.id === p.id ? p : x) }))}
 				onDelete={(id) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.filter((x) => x.id !== id), activeLlmProfileId: c.activeLlmProfileId === id ? "" : c.activeLlmProfileId }))}
-				onSelect={(id) => setConfig((c) => ({ ...c, activeLlmProfileId: id }))}
+				onSelect={(id) => { setConfig((c) => ({ ...c, activeLlmProfileId: id })); updateConfig({ activeLlmProfileId: id }); }}
 				onPersist={(newProfiles, newActiveId) => updateConfig({ llmProfiles: newProfiles, activeLlmProfileId: newActiveId })}
 			/>
 
@@ -254,7 +268,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				onAdd={(p) => setConfig((c) => ({ ...c, ttsProfiles: [...c.ttsProfiles, p] }))}
 				onUpdate={(p) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.map((x) => x.id === p.id ? p : x) }))}
 				onDelete={(id) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.filter((x) => x.id !== id), activeTtsProfileId: c.activeTtsProfileId === id ? "" : c.activeTtsProfileId }))}
-				onSelect={(id) => setConfig((c) => ({ ...c, activeTtsProfileId: id }))}
+				onSelect={(id) => { setConfig((c) => ({ ...c, activeTtsProfileId: id })); updateConfig({ activeTtsProfileId: id }); }}
 				onPersist={(newProfiles, newActiveId) => updateConfig({ ttsProfiles: newProfiles, activeTtsProfileId: newActiveId })}
 			/>
 
@@ -310,11 +324,10 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 			{/* ── 角色设置 ── */}
 			<SectionTitle>角色设置</SectionTitle>
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-				<FieldLabel>自定义人设（无角色卡时生效）</FieldLabel>
-				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-					仅在"当前角色"未选择任何角色卡时拼入 system prompt。优先级最低：
-					角色卡内设定 &gt; 自定义人设。
-				</Typography>
+				<Stack direction="row" alignItems="center" spacing={0.5}>
+					<FieldLabel>自定义人设</FieldLabel>
+					<HelpTooltip title="仅在未选择角色卡时生效，优先级最低。角色卡内设定 > 自定义人设。" />
+				</Stack>
 				<TextField
 					size="small" fullWidth multiline minRows={3} maxRows={6}
 					value={config.character.customPersona}
@@ -358,11 +371,20 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingProfile, setEditingProfile] = useState<LLMProfile | null>(null);
 	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+	const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+	const [deleteCountdown, setDeleteCountdown] = useState(0);
 
 	// 组件挂载时清理旧版全局 keyring 条目（key = "llm-api-key"）
 	useEffect(() => {
 		deleteSecret("llm-api-key").catch(() => { /* ignore if not exists */ });
 	}, []);
+
+	// 删除倒计时
+	useEffect(() => {
+		if (deleteCountdown <= 0) return;
+		const timer = setTimeout(() => setDeleteCountdown((c) => c - 1), 1000);
+		return () => clearTimeout(timer);
+	}, [deleteCountdown]);
 
 	const handleEdit = async (event: React.MouseEvent<HTMLElement>) => {
 		if (activeId) {
@@ -525,25 +547,33 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 									onChange={(e) => setEditingProfile({ ...editingProfile, maxTokens: parseInt(e.target.value) || 2048 })} />
 							</Stack>
 
-							{profiles.length > 1 && (
-								<Box sx={{ bgcolor: "error.main", borderRadius: 1, p: 1 }}>
-									<Typography variant="caption" sx={{ color: "#fff", fontSize: 11 }}>
-										⚠️ 删除此档案将无法恢复
-									</Typography>
-									<Button
-										size="small" color="inherit" fullWidth
-										onClick={() => handleDelete(editingProfile.id)}
-										sx={{ mt: 0.5, color: "#fff" }}
-									>
+							<Stack direction="row" spacing={0.5} justifyContent="space-between" alignItems="center">
+								{profiles.length > 1 ? (
+									<Button size="small" color="error" onClick={() => { setConfirmDeleteOpen(true); setDeleteCountdown(2); }}>
 										删除档案
 									</Button>
+								) : <Box />}
+								<Stack direction="row" spacing={0.5}>
+									<Button size="small" onClick={handleDialogClose}>取消</Button>
+									<Button size="small" variant="contained" onClick={handleDialogSave}>保存</Button>
+								</Stack>
+							</Stack>
+
+							{confirmDeleteOpen && editingProfile && (
+								<Box sx={{ bgcolor: "background.default", border: "1px solid", borderColor: "error.main", borderRadius: 1, p: 1.5, mt: 0.5 }}>
+									<Typography variant="subtitle2" sx={{ mb: 1, color: "error.main" }}>⚠️ 删除此档案将无法恢复</Typography>
+									<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+										<Button
+											size="small" variant="contained" color="error"
+											disabled={deleteCountdown > 0}
+											onClick={() => { setConfirmDeleteOpen(false); handleDelete(editingProfile.id); }}
+										>
+											{deleteCountdown > 0 ? `确认删除 (${deleteCountdown}s)` : "确认删除"}
+										</Button>
+										<Button size="small" onClick={() => setConfirmDeleteOpen(false)}>取消</Button>
+									</Stack>
 								</Box>
 							)}
-
-							<Stack direction="row" spacing={0.5} justifyContent="flex-end">
-								<Button size="small" onClick={handleDialogClose}>取消</Button>
-								<Button size="small" variant="contained" onClick={handleDialogSave}>保存</Button>
-							</Stack>
 						</Stack>
 					)}
 				</Box>
@@ -569,6 +599,15 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingProfile, setEditingProfile] = useState<TTSProfile | null>(null);
 	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+	const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+	const [deleteCountdown, setDeleteCountdown] = useState(0);
+
+	// 删除倒计时
+	useEffect(() => {
+		if (deleteCountdown <= 0) return;
+		const timer = setTimeout(() => setDeleteCountdown((c) => c - 1), 1000);
+		return () => clearTimeout(timer);
+	}, [deleteCountdown]);
 
 	const defaultTTS = (): TTSProfile => ({
 		id: `tts-${Date.now()}`,
@@ -729,25 +768,33 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 								</>
 							)}
 
-							{profiles.length > 1 && (
-								<Box sx={{ bgcolor: "error.main", borderRadius: 1, p: 1 }}>
-									<Typography variant="caption" sx={{ color: "#fff", fontSize: 11 }}>
-										⚠️ 删除此档案将无法恢复
-									</Typography>
-									<Button
-										size="small" color="inherit" fullWidth
-										onClick={() => handleDelete(editingProfile.id)}
-										sx={{ mt: 0.5, color: "#fff" }}
-									>
+							<Stack direction="row" spacing={0.5} justifyContent="space-between" alignItems="center">
+								{profiles.length > 1 ? (
+									<Button size="small" color="error" onClick={() => { setConfirmDeleteOpen(true); setDeleteCountdown(2); }}>
 										删除档案
 									</Button>
+								) : <Box />}
+								<Stack direction="row" spacing={0.5}>
+									<Button size="small" onClick={handleDialogClose}>取消</Button>
+									<Button size="small" variant="contained" onClick={handleDialogSave}>保存</Button>
+								</Stack>
+							</Stack>
+
+							{confirmDeleteOpen && editingProfile && (
+								<Box sx={{ bgcolor: "background.default", border: "1px solid", borderColor: "error.main", borderRadius: 1, p: 1.5, mt: 0.5 }}>
+									<Typography variant="subtitle2" sx={{ mb: 1, color: "error.main" }}>⚠️ 删除此档案将无法恢复</Typography>
+									<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+										<Button
+											size="small" variant="contained" color="error"
+											disabled={deleteCountdown > 0}
+											onClick={() => { setConfirmDeleteOpen(false); handleDelete(editingProfile.id); }}
+										>
+											{deleteCountdown > 0 ? `确认删除 (${deleteCountdown}s)` : "确认删除"}
+										</Button>
+										<Button size="small" onClick={() => setConfirmDeleteOpen(false)}>取消</Button>
+									</Stack>
 								</Box>
 							)}
-
-							<Stack direction="row" spacing={0.5} justifyContent="flex-end">
-								<Button size="small" onClick={handleDialogClose}>取消</Button>
-								<Button size="small" variant="contained" onClick={handleDialogSave}>保存</Button>
-							</Stack>
 						</Stack>
 					)}
 				</Box>

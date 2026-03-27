@@ -11,7 +11,7 @@ import { AudioPlayer } from "./audio";
 import { PipelineService } from "./pipeline";
 import { createLogger } from "./logger";
 import { getConfig } from "./config";
-import type { AppConfig } from "./config";
+import type { AppConfig, TTSProviderConfig } from "./config";
 
 const log = createLogger("services");
 
@@ -61,19 +61,39 @@ function resolveLLMProvider(config: AppConfig): ILLMService {
 }
 
 function resolveTTSProvider(config: AppConfig): ITTSService {
-	if (config.tts.provider === "mock") {
+	// 优先使用活跃 TTS Profile
+	const activeProfile = config.activeTtsProfileId
+		? config.ttsProfiles.find((p) => p.id === config.activeTtsProfileId)
+		: null;
+
+	const ttsCfg: TTSProviderConfig = activeProfile
+		? {
+			provider: activeProfile.provider,
+			baseUrl: activeProfile.baseUrl,
+			speakerId: activeProfile.speakerId,
+			speed: activeProfile.speed,
+			gptWeightsPath: activeProfile.gptWeightsPath,
+			sovitsWeightsPath: activeProfile.sovitsWeightsPath,
+			refAudioPath: activeProfile.refAudioPath,
+			promptText: activeProfile.promptText,
+			promptLang: activeProfile.promptLang,
+			textLang: activeProfile.textLang,
+		}
+		: config.tts;
+
+	if (ttsCfg.provider === "mock") {
 		log.info("using mock TTS provider");
 		return new MockTTSService();
 	}
-	if (config.tts.provider === "gpt-sovits") {
-		if (!config.tts.baseUrl) {
+	if (ttsCfg.provider === "gpt-sovits") {
+		if (!ttsCfg.baseUrl) {
 			log.info("GPT-SoVITS configured but baseUrl missing, using mock fallback");
 			return new MockTTSService();
 		}
-		log.info(`using GPT-SoVITS TTS provider: ${config.tts.baseUrl}`);
-		return new GptSovitsTTSService(config.tts);
+		log.info(`using GPT-SoVITS TTS provider: ${ttsCfg.baseUrl}`);
+		return new GptSovitsTTSService(ttsCfg);
 	}
-	log.info(`unknown TTS provider "${config.tts.provider}", using mock fallback`);
+	log.info(`unknown TTS provider "${ttsCfg.provider}", using mock fallback`);
 	return new MockTTSService();
 }
 
