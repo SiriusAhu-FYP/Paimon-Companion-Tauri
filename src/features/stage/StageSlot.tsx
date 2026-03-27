@@ -1,6 +1,5 @@
 import { useRef, useEffect, useCallback } from "react";
 import { Box } from "@mui/material";
-import { useTheme } from "@mui/material";
 import type { StageDisplayMode } from "@/utils/window-sync";
 
 interface StageSlotProps {
@@ -16,7 +15,6 @@ interface StageSlotProps {
  * 使用 ResizeObserver 精确追踪尺寸变化（包括兄弟元素变化导致的 flex 重排）。
  */
 export function StageSlot({ visible, mode, displayMode, onRectChange }: StageSlotProps) {
-	const theme = useTheme();
 	const slotRef = useRef<HTMLDivElement>(null);
 
 	const reportRect = useCallback(() => {
@@ -56,7 +54,7 @@ export function StageSlot({ visible, mode, displayMode, onRectChange }: StageSlo
 				display: "flex",
 				alignItems: "center",
 				justifyContent: "center",
-				bgcolor: theme.palette.mode === "dark" ? "#1C1F27" : theme.palette.background.paper,
+				bgcolor: "background.paper",
 				border: isDocked && visible && isClean ? "none" : isDocked && visible ? "1px solid" : "1px dashed",
 				borderColor: isDocked && visible ? "primary.main" : "secondary.main",
 				borderRadius: 0,
