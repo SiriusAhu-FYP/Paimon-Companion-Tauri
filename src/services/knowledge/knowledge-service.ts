@@ -59,6 +59,18 @@ export class KnowledgeService {
 		this.liveContext = this.liveContext.filter((e) => e.id !== id);
 	}
 
+	/** 清空长期商品/资料条目（仅内存） */
+	clearLongTermKnowledge() {
+		this.longTermKnowledge = [];
+		log.info("cleared long-term knowledge");
+	}
+
+	/** 清空当前直播/运营上下文（仅内存） */
+	clearLiveContext() {
+		this.liveContext = [];
+		log.info("cleared live context");
+	}
+
 	// 组装上下文供 LLM 调用，按优先级排序
 	getAssembledContext(): string {
 		this.pruneExpired();

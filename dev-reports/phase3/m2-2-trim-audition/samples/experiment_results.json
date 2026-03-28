@@ -1,0 +1,99 @@
+{
+  "samples": [
+    {
+      "id": "S1",
+      "text": "你好，我是派蒙，你的旅行伙伴。",
+      "lang": "zh",
+      "note": "中文句子1",
+      "synthMs": "1250",
+      "rawDurationMs": "3340",
+      "trimBoth": {
+        "durationMs": "2955",
+        "leadingMs": "100",
+        "trailingMs": "314",
+        "trimRatio": "88.5"
+      },
+      "trimTail": {
+        "durationMs": "2945",
+        "leadingMs": "100",
+        "trailingMs": "314",
+        "trimRatio": "88.2"
+      },
+      "trimFrontLightTailHeavy": {
+        "durationMs": "2955",
+        "leadingMs": "100",
+        "trailingMs": "314",
+        "trimRatio": "88.5"
+      },
+      "error": null
+    },
+    {
+      "id": "S2",
+      "text": "今天天气真好，我们一起去冒险吧！",
+      "lang": "zh",
+      "note": "中文句子2",
+      "synthMs": "1275",
+      "rawDurationMs": "3500",
+      "trimBoth": {
+        "durationMs": "3137",
+        "leadingMs": "43",
+        "trailingMs": "350",
+        "trimRatio": "89.6"
+      },
+      "trimTail": {
+        "durationMs": "3127",
+        "leadingMs": "43",
+        "trailingMs": "350",
+        "trimRatio": "89.3"
+      },
+      "trimFrontLightTailHeavy": {
+        "durationMs": "3137",
+        "leadingMs": "43",
+        "trailingMs": "350",
+        "trimRatio": "89.6"
+      },
+      "error": null
+    },
+    {
+      "id": "S3",
+      "text": "我会一直陪在你身边，一起探索这个世界。",
+      "lang": "zh",
+      "note": "中文句子3",
+      "synthMs": "1481",
+      "rawDurationMs": "3740",
+      "trimBoth": {
+        "durationMs": "3319",
+        "leadingMs": "95",
+        "trailingMs": "356",
+        "trimRatio": "88.7"
+      },
+      "trimTail": {
+        "durationMs": "3309",
+        "leadingMs": "95",
+        "trailingMs": "356",
+        "trimRatio": "88.5"
+      },
+      "trimFrontLightTailHeavy": {
+        "durationMs": "3319",
+        "leadingMs": "95",
+        "trailingMs": "356",
+        "trimRatio": "88.7"
+      },
+      "error": null
+    }
+  ],
+  "concatDurations": {
+    "raw": "10580",
+    "trimBoth": "9411",
+    "trimTailOnly": "9381",
+    "trimFrontLightTailHeavy": "9411"
+  },
+  "trimSettings": {
+    "threshold": 0.01,
+    "marginFront": 10,
+    "marginTail": 20,
+    "marginFrontLight": 20,
+    "marginTailHeavy": 10
+  },
+  "timestamp": "2026-03-25T06:45:35.154Z"
+}

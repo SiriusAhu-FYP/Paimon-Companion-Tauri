@@ -1,45 +1,67 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { loadConfig, getConfig } from "@/services/config";
 import { initServices } from "@/services";
 import { mockCharacterInit, exposeMockTools } from "@/utils/mock";
-import { broadcastState } from "@/utils/window-sync";
+import { broadcastState, broadcastControl, onControlCommand } from "@/utils/window-sync";
+import { windowLabel } from "@/utils/window-label";
+import { ThemeModeProvider } from "./contexts/JoyThemeProvider";
 import App from "./App";
 import "./App.css";
 
-const services = initServices();
+async function bootstrap() {
+	await loadConfig();
 
-let windowLabel = "main";
-const urlParams = new URLSearchParams(window.location.search);
-const urlOverride = urlParams.get("window");
-if (urlOverride === "stage") {
-	windowLabel = "stage";
-} else {
-	try {
-		windowLabel = getCurrentWindow().label;
-	} catch {
-		// 非 Tauri 环境（浏览器调试），默认 main
-	}
-}
+	const services = initServices();
 
-if (windowLabel === "main") {
-	mockCharacterInit(services.character);
-	exposeMockTools(services.bus, services.character, services.externalInput, services.runtime);
+	if (windowLabel === "main") {
+		await services.character.refreshCatalogFromPublic();
+		const charCfg = getConfig().character;
+		const savedId = charCfg.activeProfileId?.trim() ?? "";
+		const fromCard = savedId ? services.character.findProfileById(savedId) : undefined;
+		if (fromCard) {
+			services.character.loadFromProfile(fromCard);
+		} else {
+			mockCharacterInit(services.character);
+		}
+		exposeMockTools(services.bus, services.character, services.externalInput, services.runtime);
 
-	// 主窗口：订阅状态变化并广播给 stage 窗口
-	const broadcast = () => {
-		broadcastState({
-			character: services.character.getState(),
-			runtimeMode: services.runtime.getMode(),
-			timestamp: Date.now(),
+		const broadcastFullState = (expressionEmotion?: string) => {
+			const charState = services.character.getState();
+			broadcastState({
+				character: charState,
+				runtimeMode: services.runtime.getMode(),
+				timestamp: Date.now(),
+				expressionEmotion: expressionEmotion ?? charState.emotion,
+			});
+		};
+
+		services.bus.on("character:state-change", () => broadcastFullState());
+		services.bus.on("runtime:mode-change", () => broadcastFullState());
+		services.bus.on("character:expression", (payload) => {
+			broadcastFullState(payload.emotion);
+			broadcastControl({ type: "set-expression", expressionName: payload.expressionName });
 		});
-	};
-	services.bus.on("character:state-change", broadcast);
-	services.bus.on("runtime:mode-change", broadcast);
+
+		onControlCommand((cmd) => {
+			if (cmd.type === "request-state") {
+				broadcastFullState();
+			}
+		});
+
+		const paimonTools = (window as unknown as Record<string, Record<string, unknown>>).__paimon;
+		if (paimonTools) {
+			paimonTools.pipeline = (text?: string) => services.pipeline.run(text ?? "你好，派蒙！");
+		}
+	}
+
+	ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+		<React.StrictMode>
+			<ThemeModeProvider>
+				<App />
+			</ThemeModeProvider>
+		</React.StrictMode>,
+	);
 }
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-	<React.StrictMode>
-		<App />
-	</React.StrictMode>,
-);
+bootstrap();

@@ -3,7 +3,15 @@ import { RuntimeService } from "./runtime";
 import { CharacterService } from "./character";
 import { KnowledgeService } from "./knowledge";
 import { ExternalInputService } from "./external-input";
+import { LLMService, MockLLMService, OpenAILLMService } from "./llm";
+import type { ILLMService } from "./llm/types";
+import { MockTTSService, GptSovitsTTSService } from "./tts";
+import type { ITTSService } from "./tts/types";
+import { AudioPlayer } from "./audio";
+import { PipelineService } from "./pipeline";
 import { createLogger } from "./logger";
+import { getConfig } from "./config";
+import type { AppConfig, TTSProviderConfig } from "./config";
 
 const log = createLogger("services");
 
@@ -13,9 +21,81 @@ export interface ServiceContainer {
 	character: CharacterService;
 	knowledge: KnowledgeService;
 	externalInput: ExternalInputService;
+	llm: LLMService;
+	player: AudioPlayer;
+	pipeline: PipelineService;
 }
 
 let services: ServiceContainer | null = null;
+
+function resolveLLMProvider(config: AppConfig): ILLMService {
+	// 优先使用活跃 LLM Profile
+	const activeProfile = config.activeLlmProfileId
+		? config.llmProfiles.find((p) => p.id === config.activeLlmProfileId)
+		: null;
+
+	const provider = activeProfile?.provider ?? config.llm.provider;
+	const baseUrl = activeProfile?.baseUrl ?? config.llm.baseUrl;
+	const model = activeProfile?.model ?? config.llm.model;
+	const temperature = activeProfile?.temperature ?? config.llm.temperature;
+	const maxTokens = activeProfile?.maxTokens ?? config.llm.maxTokens;
+	const profileId = activeProfile?.id ?? null;
+
+	if (provider === "mock") {
+		log.info("using mock LLM provider");
+		return new MockLLMService();
+	}
+	if (provider === "openai-compatible") {
+		if (!baseUrl || !model) {
+			log.info("openai-compatible configured but baseUrl/model missing, using mock fallback");
+			return new MockLLMService();
+		}
+		log.info(`using OpenAI-compatible LLM provider: ${baseUrl}, model=${model}`);
+		return new OpenAILLMService(
+			{ provider, baseUrl, model, temperature, maxTokens },
+			profileId,
+		);
+	}
+	log.info(`unknown LLM provider "${provider}", using mock fallback`);
+	return new MockLLMService();
+}
+
+function resolveTTSProvider(config: AppConfig): ITTSService {
+	// 优先使用活跃 TTS Profile
+	const activeProfile = config.activeTtsProfileId
+		? config.ttsProfiles.find((p) => p.id === config.activeTtsProfileId)
+		: null;
+
+	const ttsCfg: TTSProviderConfig = activeProfile
+		? {
+			provider: activeProfile.provider,
+			baseUrl: activeProfile.baseUrl,
+			speakerId: activeProfile.speakerId,
+			speed: activeProfile.speed,
+			gptWeightsPath: activeProfile.gptWeightsPath,
+			sovitsWeightsPath: activeProfile.sovitsWeightsPath,
+			refAudioPath: activeProfile.refAudioPath,
+			promptText: activeProfile.promptText,
+			promptLang: activeProfile.promptLang,
+			textLang: activeProfile.textLang,
+		}
+		: config.tts;
+
+	if (ttsCfg.provider === "mock") {
+		log.info("using mock TTS provider");
+		return new MockTTSService();
+	}
+	if (ttsCfg.provider === "gpt-sovits") {
+		if (!ttsCfg.baseUrl) {
+			log.info("GPT-SoVITS configured but baseUrl missing, using mock fallback");
+			return new MockTTSService();
+		}
+		log.info(`using GPT-SoVITS TTS provider: ${ttsCfg.baseUrl}`);
+		return new GptSovitsTTSService(ttsCfg);
+	}
+	log.info(`unknown TTS provider "${ttsCfg.provider}", using mock fallback`);
+	return new MockTTSService();
+}
 
 export function initServices(): ServiceContainer {
 	if (services) {
@@ -23,11 +103,27 @@ export function initServices(): ServiceContainer {
 		return services;
 	}
 
+	const config = getConfig();
+
 	const runtime = new RuntimeService(eventBus);
 	const character = new CharacterService(eventBus);
 	const knowledge = new KnowledgeService(eventBus);
 	const externalInput = new ExternalInputService(eventBus);
 	externalInput.setRuntime(runtime);
+
+	const llmProvider = resolveLLMProvider(config);
+	const llm = new LLMService(eventBus, runtime, llmProvider, character, knowledge);
+	const ttsProvider = resolveTTSProvider(config);
+	const player = new AudioPlayer();
+
+	const pipeline = new PipelineService({
+		bus: eventBus,
+		runtime,
+		character,
+		llm,
+		tts: ttsProvider,
+		player,
+	});
 
 	services = {
 		bus: eventBus,
@@ -35,9 +131,15 @@ export function initServices(): ServiceContainer {
 		character,
 		knowledge,
 		externalInput,
+		llm,
+		player,
+		pipeline,
 	};
 
-	log.info("all services initialized");
+	log.info("all services initialized", {
+		llmProvider: config.llm.provider,
+		ttsProvider: config.tts.provider,
+	});
 	return services;
 }
 
@@ -46,6 +148,31 @@ export function getServices(): ServiceContainer {
 		throw new Error("services not initialized — call initServices() first");
 	}
 	return services;
+}
+
+/**
+ * 根据当前 config 中的 activeLlmProfileId / activeTtsProfileId 热更新 providers。
+ * Settings 切换 profile 后调用此函数，使新 profile 立即生效。
+ */
+export function refreshProviders() {
+	if (!services) {
+		log.warn("refreshProviders called before initServices, skipping");
+		return;
+	}
+	const config = getConfig();
+
+	const newLLMProvider = resolveLLMProvider(config);
+	const newTTSProvider = resolveTTSProvider(config);
+
+	services.llm.setProvider(newLLMProvider);
+
+	const sq = services.pipeline.getSpeechQueue();
+	sq.setTTS(newTTSProvider);
+
+	log.info("providers refreshed", {
+		llmProvider: config.llm.provider,
+		ttsProvider: config.tts.provider,
+	});
 }
 
 export { eventBus } from "./event-bus";
