@@ -63,7 +63,7 @@ Phase 3.5 之所以被插入路线图，是因为 **Phase 4 Live Integration 需
 - **OpenAI Embeddings**（`text-embedding-3-small`）：
   - 1536 维度（可降至 256），$0.02/1M tokens
   - 项目已有 OpenAI 兼容 LLM provider + `proxyRequest` 安全代理
-  - 复用现有密钥管理（`SECRET_KEYS.LLM_API_KEY`）与 Rust 代理链路
+  - 可复用现有密钥管理与 Rust 代理链路（embedding 配置独立，key 来源可选，详见 §4.2）
 - **持久化**：
   - 使用 Tauri Store / localStorage 保存 Orama 数据库的 JSON dump
   - 独立 key（`"knowledge-db"`），与 AppConfig 分离
@@ -95,37 +95,73 @@ Phase 3.5 之所以被插入路线图，是因为 **Phase 4 Live Integration 需
 - 第一轮目标是验证语义检索闭环，不是解决离线部署问题
 - `text-embedding-3-small` 成本极低（$0.02/1M tokens），100 条知识的 embedding 成本可忽略
 
-### 4.2 配置位置
+### 4.2 配置位置与 Embedding Provider 独立性
+
+Embedding 配置在架构上必须是**独立概念**，不能被写死为当前 LLM profile 的附属物。原因：
+
+- Embedding model 与 chat model 是不同的服务能力，生命周期不同
+- 用户可能使用不同 provider 的 chat 与 embedding（例如 chat 用 DeepSeek、embedding 用 OpenAI）
+- 知识库的持久化索引不应因为 LLM provider 切换而失效
+- 后续可能引入本地 embedding（无 API key），此时不应依赖 LLM 配置
 
 在 `AppConfig` 中新增 `knowledge` 配置节：
 
 ```typescript
+export interface EmbeddingProviderConfig {
+	baseUrl: string;               // 默认 "https://api.openai.com/v1"
+	model: string;                 // 默认 "text-embedding-3-small"
+	dimension: number;             // 默认 1536
+	apiKeySource: "llm" | "dedicated"; // 默认 "llm"（复用 LLM key）
+}
+
 export interface KnowledgeConfig {
-	embeddingModel: string;         // "text-embedding-3-small"
-	embeddingDimension: number;     // 1536（或 256 降维）
+	embedding: EmbeddingProviderConfig;
 	retrievalTopK: number;          // 默认 5
-	searchMode: "vector" | "hybrid" | "fulltext"; // 默认 "hybrid"
+	searchMode: "vector" | "hybrid" | "fulltext"; // 默认 "vector"
 }
 ```
 
-embedding API 调用通过现有 `proxyRequest` + `SECRET_KEYS.LLM_API_KEY` 走 Rust 代理。
+**关键设计决策**：
 
-### 4.3 模型更换时的兼容性
+- `apiKeySource: "llm"` 表示复用当前 active LLM profile 的 API key（默认行为，减少用户配置负担）
+- `apiKeySource: "dedicated"` 表示使用独立的 embedding API key（存入 `SECRET_KEYS.EMBEDDING_API_KEY`）
+- 即使默认复用 LLM key，配置结构上 embedding 仍是独立节，不挂在 LLM provider 下
+- `baseUrl` 独立配置，允许 embedding 指向不同于 LLM 的 API 端点
 
-Orama 数据库 JSON dump 中保存 metadata：
+embedding API 调用通过现有 `proxyRequest` 走 Rust 代理，密钥来源由 `apiKeySource` 决定。
+
+### 4.3 索引元数据与不兼容检测
+
+索引快照中必须固化保存以下 metadata：
 
 ```typescript
 interface KnowledgeDBMetadata {
-	schemaVersion: number;          // 1
+	schemaVersion: number;          // 1，数据结构版本，用于未来迁移
 	embeddingModel: string;         // "text-embedding-3-small"
 	embeddingDimension: number;     // 1536
-	chunkStrategy: string;          // "fixed-512"
-	createdAt: number;
-	entryCount: number;
+	chunkStrategy: string;          // "fixed-512-overlap-50"
+	chunkSize: number;              // 512
+	chunkOverlap: number;           // 50
+	indexBuildVersion: number;      // 自增，每次全量重建 +1
+	createdAt: number;              // 索引首次建立时间
+	updatedAt: number;              // 最后更新时间
+	entryCount: number;             // 原始文档总数
+	chunkCount: number;             // chunk 总数
 }
 ```
 
-当检测到 `embeddingModel` 或 `embeddingDimension` 与当前配置不一致时，触发全量 re-embed + re-index（需要用户确认）。
+#### 不兼容检测规则
+
+应用启动加载索引快照时，校验以下字段：
+
+| 字段 | 检测方式 | 不匹配时的行为 |
+|------|----------|---------------|
+| `schemaVersion` | 与代码中 `CURRENT_SCHEMA_VERSION` 比较 | **阻断加载**，提示用户必须重建索引 |
+| `embeddingModel` | 与 `KnowledgeConfig.embedding.model` 比较 | **阻断加载**，提示"embedding 模型已变更，需要重建索引"，需用户确认 |
+| `embeddingDimension` | 与 `KnowledgeConfig.embedding.dimension` 比较 | **阻断加载**，同上 |
+| `chunkStrategy` / `chunkSize` | 与代码中当前 chunk 配置比较 | **警告但允许加载**（chunk 策略变更不影响已有 embedding 的可用性，但新导入的文档会使用新策略） |
+
+当触发"阻断加载"时，原始文档仍可从原始文档存储恢复，执行全量重建（re-chunk + re-embed + re-index）。
 
 ---
 
@@ -255,30 +291,70 @@ JSON 文件 / 手动输入
 触发持久化（save → JSON → store）
 ```
 
-### 7.2 持久化位置
+### 7.2 持久化架构：原始文档 vs 索引快照
 
-- **Tauri 环境**：Tauri Store `app-config.json`，key = `"knowledge-db"`
-- **浏览器开发**：`localStorage`，key = `"paimon-live:knowledge-db"`
-- **metadata** 与数据库 dump 一起保存
-- 与 AppConfig 完全独立（不在 `AppConfig` 接口中加 knowledge entries）
+持久化分为**两个独立存储**：
+
+#### A. 原始文档存储（Source of Truth）
+
+存储用户导入的 `KnowledgeDocument[]` 原文，不含 embedding 和 chunk 数据。
+
+- **Tauri 环境**：Tauri Store，key = `"knowledge-documents"`
+- **浏览器开发**：`localStorage`，key = `"paimon-live:knowledge-documents"`
+- 作用：当需要重建索引（embedding 模型变更、chunk 策略调整）时，无需用户重新导入文件
+- 格式：`{ documents: KnowledgeDocument[], updatedAt: number }`
+
+#### B. 索引快照存储
+
+存储 Orama 数据库的 JSON dump（含 embedding 向量）+ metadata。
+
+- **Tauri 环境**：Tauri Store，key = `"knowledge-index"`
+- **浏览器开发**：`localStorage`，key = `"paimon-live:knowledge-index"`
+- 格式：`{ metadata: KnowledgeDBMetadata, oramaData: RawData }`
+- 作用：应用启动时快速恢复 Orama 实例，无需重新 embed
+
+#### C. 数据量预期与上限
+
+| 场景 | 文档数 | 预估 chunk 数 | 索引快照大小（JSON） |
+|------|--------|--------------|---------------------|
+| 轻量使用 | 10-30 | 20-60 | ~500KB-2MB |
+| 中度使用 | 50-100 | 80-200 | ~3MB-8MB |
+| 第一轮上限 | 200 | ~400 | ~15MB |
+
+localStorage 通常限制为 5-10MB，Tauri Store 无硬限制但 JSON 序列化/反序列化在 >10MB 时会有明显延迟。
+
+**第一轮硬上限**：200 条文档。超过此限制提示用户"已达当前版本上限"。
+
+#### D. 后续迁移路径
+
+当数据量超过 Tauri Store / localStorage 的合理范围时，迁移策略为：
+
+1. 原始文档存储 → 迁移到 Tauri `appDataDir` 下的 JSON 文件（`knowledge-documents.json`）
+2. 索引快照 → 迁移到 Tauri `appDataDir` 下的独立文件（`knowledge-index.json`）
+3. 更远期 → 可引入 SQLite（Tauri 有 `tauri-plugin-sql`）或 Node.js sidecar + LanceDB
+
+迁移时只需替换存储后端的读写实现，`KnowledgeService` 接口不变。为此，实现时应将存储读写封装为独立的 `KnowledgePersistence` 模块，不直接在业务代码中硬编码 Tauri Store API。
 
 ### 7.3 知识更新 / 删除
 
-- 删除文档：从 Orama 中移除该 docId 的所有 chunks → 触发持久化
-- 更新文档：先删旧 chunks → 重新 chunk + embed + 插入 → 触发持久化
-- 全量重建：清空 Orama → 对所有原始文档重新 chunk + embed + 插入
+- 删除文档：从原始文档列表移除 + 从 Orama 中移除该 docId 的所有 chunks → 触发双重持久化
+- 更新文档：先删旧 chunks → 重新 chunk + embed + 插入 → 更新原始文档列表 → 触发双重持久化
+- 全量重建：保留原始文档列表 → 清空 Orama → 对所有原始文档重新 chunk + embed + 插入 → 触发索引快照持久化
 
 ### 7.4 必须保存的元数据
 
-| 元数据 | 用途 |
-|--------|------|
-| `schemaVersion` | 数据结构版本，用于未来迁移 |
-| `embeddingModel` | 当前使用的 embedding 模型名 |
-| `embeddingDimension` | 向量维度 |
-| `chunkStrategy` | 切块策略标识 |
-| `entryCount` | 文档总数（用于快速展示） |
-| `chunkCount` | chunk 总数 |
-| `lastUpdated` | 最后更新时间 |
+完整定义见 §4.3 `KnowledgeDBMetadata`。摘要：
+
+| 元数据 | 用途 | 不兼容时行为 |
+|--------|------|-------------|
+| `schemaVersion` | 数据结构版本 | 阻断加载，必须重建 |
+| `embeddingModel` | embedding 模型名 | 阻断加载，用户确认后重建 |
+| `embeddingDimension` | 向量维度 | 阻断加载，用户确认后重建 |
+| `chunkStrategy` | 切块策略标识 | 警告，允许加载 |
+| `chunkSize` / `chunkOverlap` | 切块参数 | 警告，允许加载 |
+| `indexBuildVersion` | 重建次数 | 仅记录 |
+| `createdAt` / `updatedAt` | 时间戳 | 仅记录 |
+| `entryCount` / `chunkCount` | 统计 | 用于 UI 展示 |
 
 ---
 
@@ -292,17 +368,24 @@ async query(queryText: string, options?: KnowledgeQueryOptions): Promise<Retriev
 
 流程：
 1. 将 `queryText` 调用 embedding API → 获得查询向量
-2. 调用 Orama `search(db, { mode: "hybrid", vector: { value: queryVector, property: "embedding" }, term: queryText })`
-3. Orama 内部同时做 BM25 全文匹配 + 余弦相似度向量匹配，归并结果
-4. 取 topK 结果，映射为 `RetrievalResult[]`
+2. 根据 `KnowledgeConfig.searchMode` 选择检索模式：
+   - `"vector"`（默认）：`search(db, { mode: "vector", vector: { value: queryVector, property: "embedding" } })`
+   - `"hybrid"`（可选）：`search(db, { mode: "hybrid", vector: { value: queryVector, property: "embedding" }, term: queryText })`
+   - `"fulltext"`（降级）：`search(db, { mode: "fulltext", term: queryText })`
+3. 取 topK 结果，映射为 `RetrievalResult[]`
 
-### 8.2 hybrid 还是 vector-only
+### 8.2 本轮检索主线：vector retrieval
 
-第一轮**默认使用 Orama 的 hybrid 模式**：
-- 短查询（如"派蒙"）从全文匹配获益更大
-- 长查询（如"有没有适合送女朋友的周边"）从向量匹配获益更大
-- Orama 的 hybrid 模式自动平衡两者，无需手动配权重
-- 这等于**内置了最小 hybrid search**，不需要额外实现
+本轮必须成立的核心链路是 **vector retrieval**（embedding → cosine similarity）。这是语义知识库区别于关键词检索的本质能力。
+
+**默认 searchMode 为 `"vector"`**。
+
+Orama 内置 hybrid 模式（BM25 + cosine 归并）作为**附赠能力**，可通过 `KnowledgeConfig.searchMode` 切换为 `"hybrid"` 或 `"fulltext"`。但本轮不围绕 hybrid search 设计额外逻辑、不做权重调参、不把 hybrid 作为验收条件。
+
+保留 hybrid 可选的原因：
+- 短查询（如"派蒙"）从全文匹配可能获益更大
+- Orama 的 hybrid 模式是内置一行参数切换，不增加任何实现复杂度
+- 后续可基于检索质量数据决定是否将默认值改为 hybrid
 
 ### 8.3 Rerank
 
@@ -436,6 +519,7 @@ T9: 验证 + 报告 + Git 提交
 | `src/services/knowledge/text-chunker.ts` | 文本切块器 |
 | `src/services/knowledge/orama-store.ts` | Orama 封装层（create/insert/search/save/load） |
 | `src/services/knowledge/knowledge-formatter.ts` | 检索结果格式化为 prompt 文本 |
+| `src/services/knowledge/knowledge-persistence.ts` | 持久化封装（原始文档 + 索引快照的读写，隔离 Tauri Store / localStorage） |
 | `public/sample-knowledge.json` | 测试用导入样例 |
 
 ### 必改文件
@@ -505,7 +589,11 @@ Pipeline / CharacterService / Stage / Live2D / TTS / OBS / ControlPanel（临时
 
 ## 17. 待确认项
 
-1. **Embedding API 复用**：当前 `SECRET_KEYS.LLM_API_KEY` 是 per-profile 的（`(profileId) => "llm-api-key:${profileId}"`）。Embedding 调用是否复用 active LLM profile 的 key，还是需要单独的 embedding API key？（建议：复用 active profile 的 key，因为 OpenAI 的 chat 和 embedding 共用同一个 API key）
-2. **Embedding dimension**：`text-embedding-3-small` 默认 1536 维。是否使用降维到 256 或 512 来减小存储体积？（建议：第一轮用 1536 默认值，降维是优化而非必需）
-3. **ControlPanel 临时注入保留方式**：当前 ControlPanel 的「上下文注入」区仍通过 `addKnowledge()` / `addLiveContext()` 工作。升级后 `addKnowledge()` 是否改为走 Orama 索引（含 embed），还是保留为临时纯文本注入？（建议：`liveContext` 保持纯内存临时注入不走 Orama，`addKnowledge()` 也保持临时注入语义，知识库走独立的 `importDocuments()` 路径）
-4. **Orama 版本锁定**：当前最新 `@orama/orama@3.1.18`。是否在 package.json 中锁定到 `^3.1.0` 以避免 breaking change？（建议：是）
+1. **Embedding dimension**：`text-embedding-3-small` 默认 1536 维。是否使用降维到 256 或 512 来减小存储体积？（建议：第一轮用 1536 默认值，降维是优化而非必需。降维会减小索引快照体积约 60-80%，但可能轻微影响召回质量。）
+2. **ControlPanel 临时注入保留方式**：当前 ControlPanel 的「上下文注入」区仍通过 `addKnowledge()` / `addLiveContext()` 工作。升级后 `addKnowledge()` 是否改为走 Orama 索引（含 embed），还是保留为临时纯文本注入？（建议：`liveContext` 保持纯内存临时注入不走 Orama，`addKnowledge()` 也保持临时注入语义，知识库走独立的 `importDocuments()` 路径。）
+3. **Orama 版本锁定**：当前最新 `@orama/orama@3.1.18`。是否在 package.json 中锁定到 `^3.1.0` 以避免 breaking change？（建议：是。）
+
+**已在正文中确定的决策**（不再作为待确认项）：
+- Embedding provider 配置独立于 LLM provider，默认复用 LLM key 但可切换为独立 key（§4.2）
+- 持久化分为原始文档存储和索引快照两层（§7.2）
+- 本轮 searchMode 默认 vector，hybrid 作为可选能力（§8.2）

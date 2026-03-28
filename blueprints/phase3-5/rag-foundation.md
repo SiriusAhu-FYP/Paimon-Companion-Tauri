@@ -51,10 +51,19 @@ Phase 3 已 close-out，控制面板、急停、运行时已稳定可用。Phase
 - LLM Pipeline 集成：在 PromptBuilder 中增加知识上下文注入钩子
 - 管理 UI 最小原型：知识库查看、新增、编辑面板（只做 read/edit，不做复杂权限管理）
 
-### 5.2 可选（时间允许则做）
+### 5.2 Run 01 实际技术路线（已确定）
 
-- Embedding 模型接入（使用 OpenAI Embedding API 或等效替代）
-- 持久化存储（SQLite 或文件持久化）
+> 注意：本节在 Run 01 计划确定后更新，反映实际采用的方案。
+> 详细实施计划见 `run01-semantic-knowledge-foundation.md`。
+
+Run 01 采用 **Semantic Knowledge Base Foundation** 路线，而非本文档初稿中描述的"可选 embedding + 关键词 fallback"方案：
+
+- **向量数据库**：Orama（`@orama/orama`，纯 TS，浏览器/Tauri webview 原生运行）
+- **Embedding**：OpenAI `text-embedding-3-small`，通过已有 Rust 代理调用
+- **检索**：vector retrieval（语义检索）为主线，hybrid 为可选补充
+- **持久化**：原始文档与索引快照分离存储（Tauri Store / localStorage），封装为可替换的持久化模块
+
+Embedding 和本地向量索引已从"可选"提升为 Run 01 的**必做项**。
 
 ---
 
