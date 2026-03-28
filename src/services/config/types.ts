@@ -72,6 +72,10 @@ export interface CharacterSettingsConfig {
 	customPersona: string;
 }
 
+// ── Knowledge（知识库配置，独立于 LLM / TTS） ──
+
+export type { KnowledgeConfig, EmbeddingProviderConfig, EmbeddingApiKeySource, KnowledgeSearchMode } from "@/types/knowledge";
+
 // ── 顶层 AppConfig ──
 
 export interface AppConfig {
@@ -82,6 +86,7 @@ export interface AppConfig {
 	ttsProfiles: TTSProfile[];
 	activeLlmProfileId: string;
 	activeTtsProfileId: string;
+	knowledge: import("@/types/knowledge").KnowledgeConfig;
 }
 
 // ── 敏感配置 key 约定 ──
@@ -90,6 +95,7 @@ export interface AppConfig {
 export const SECRET_KEYS = {
 	LLM_API_KEY: (profileId: string) => `llm-api-key:${profileId}`,
 	TTS_API_KEY: "tts-api-key",
+	EMBEDDING_API_KEY: "embedding-api-key",
 } as const;
 
 // ── 默认值 ──
@@ -122,4 +128,14 @@ export const DEFAULT_CONFIG: AppConfig = {
 	ttsProfiles: [],
 	activeLlmProfileId: "",
 	activeTtsProfileId: "",
+	knowledge: {
+		embedding: {
+			baseUrl: "https://api.openai.com/v1",
+			model: "text-embedding-3-small",
+			dimension: 1536,
+			apiKeySource: "llm" as const,
+		},
+		retrievalTopK: 5,
+		searchMode: "vector" as const,
+	},
 };

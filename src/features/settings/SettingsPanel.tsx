@@ -1,13 +1,18 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
 	Box, Button, Typography, Stack, TextField, Select, MenuItem,
 	Divider, Alert, IconButton, Tooltip,
-	Popover,
+	Popover, Chip, LinearProgress,
 	type SelectChangeEvent,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import NetworkCheckIcon from "@mui/icons-material/NetworkCheck";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
+import SearchIcon from "@mui/icons-material/Search";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
+import DeleteIcon from "@mui/icons-material/Delete";
+import AddIcon from "@mui/icons-material/Add";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import {
 	type AppConfig, type LLMProviderType, type TTSProviderType,
 	type LLMProfile, type TTSProfile,
@@ -21,7 +26,8 @@ import { createLogger } from "@/services/logger";
 import { GptSovitsTTSService, MockTTSService, splitText, normalizeForSpeech, SpeechQueue } from "@/services/tts";
 import { AudioPlayer } from "@/services/audio/audio-player";
 import { HelpTooltip } from "@/components";
-import { refreshProviders } from "@/services";
+import { refreshProviders, getServices } from "@/services";
+import type { KnowledgeDocument, KnowledgeCategory, RetrievalResult } from "@/types/knowledge";
 
 const log = createLogger("settings");
 
@@ -346,6 +352,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 					onChange={(e) => updateCharacter({ customPersona: e.target.value })}
 				/>
 			</Box>
+
+			<Divider />
+
+			{/* ── 知识库管理 ── */}
+			<KnowledgeSection />
 		</Box>
 	);
 }
@@ -811,6 +822,229 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 					)}
 				</Box>
 			</Popover>
+		</>
+	);
+}
+
+// ── 知识库管理组件 ───────────────────────────────────────────────────
+
+function KnowledgeSection() {
+	const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
+	const [chunkCount, setChunkCount] = useState(0);
+	const [hasIndex, setHasIndex] = useState(false);
+	const [message, setMessage] = useState<{ type: "success" | "error" | "info" | "warning"; text: string } | null>(null);
+	const [importing, setImporting] = useState(false);
+	const [searchQuery, setSearchQuery] = useState("");
+	const [searchResults, setSearchResults] = useState<RetrievalResult[] | null>(null);
+	const [searching, setSearching] = useState(false);
+	const [rebuilding, setRebuilding] = useState(false);
+
+	const [showAddForm, setShowAddForm] = useState(false);
+	const [addCategory, setAddCategory] = useState<KnowledgeCategory>("text");
+	const [addTitle, setAddTitle] = useState("");
+	const [addContent, setAddContent] = useState("");
+	const [adding, setAdding] = useState(false);
+
+	const fileInputRef = useRef<HTMLInputElement>(null);
+
+	const refreshState = useCallback(() => {
+		try {
+			const { knowledge } = getServices();
+			setDocuments([...knowledge.getDocuments()]);
+			setChunkCount(knowledge.getChunkCount());
+			setHasIndex(knowledge.hasIndex());
+		} catch {
+			// services not yet initialized
+		}
+	}, []);
+
+	useEffect(() => { refreshState(); }, [refreshState]);
+
+	const handleFileImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+		setImporting(true);
+		setMessage(null);
+		try {
+			const text = await file.text();
+			const parsed = JSON.parse(text);
+			let docs: KnowledgeDocument[];
+			if (Array.isArray(parsed)) { docs = parsed; }
+			else if (parsed.documents && Array.isArray(parsed.documents)) { docs = parsed.documents; }
+			else { throw new Error("JSON 格式不正确：需要 KnowledgeDocument[] 数组或 { documents: [...] }"); }
+			for (const doc of docs) {
+				if (!doc.id || !doc.title || !doc.content) throw new Error(`文档缺少必要字段 (id/title/content): ${JSON.stringify(doc).slice(0, 100)}`);
+				if (!doc.category) doc.category = "text";
+				if (!doc.source) doc.source = file.name;
+			}
+			const { knowledge } = getServices();
+			const result = await knowledge.importDocuments(docs);
+			if (result.imported > 0) {
+				setMessage({ type: result.errors.length > 0 ? "warning" : "success", text: `成功导入 ${result.imported} 条文档${result.errors.length > 0 ? `，${result.errors.length} 条失败` : ""}` });
+			} else {
+				setMessage({ type: "error", text: result.errors[0] ?? "导入失败" });
+			}
+			refreshState();
+		} catch (err) {
+			setMessage({ type: "error", text: `导入失败: ${err instanceof Error ? err.message : String(err)}` });
+		} finally {
+			setImporting(false);
+			if (fileInputRef.current) fileInputRef.current.value = "";
+		}
+	}, [refreshState]);
+
+	const handleDeleteDoc = useCallback(async (docId: string) => {
+		try {
+			const { knowledge } = getServices();
+			await knowledge.removeDocument(docId);
+			refreshState();
+			setMessage({ type: "success", text: "已删除" });
+		} catch (err) {
+			setMessage({ type: "error", text: `删除失败: ${err instanceof Error ? err.message : String(err)}` });
+		}
+	}, [refreshState]);
+
+	const handleSearch = useCallback(async () => {
+		if (!searchQuery.trim()) return;
+		setSearching(true);
+		setSearchResults(null);
+		try {
+			const { knowledge } = getServices();
+			const results = await knowledge.query(searchQuery.trim(), { topK: 5 });
+			setSearchResults(results);
+		} catch (err) {
+			setMessage({ type: "error", text: `搜索失败: ${err instanceof Error ? err.message : String(err)}` });
+		} finally {
+			setSearching(false);
+		}
+	}, [searchQuery]);
+
+	const handleAdd = useCallback(async () => {
+		if (!addTitle.trim() || !addContent.trim()) return;
+		setAdding(true);
+		try {
+			const doc: KnowledgeDocument = { id: `manual-${Date.now()}`, category: addCategory, title: addTitle.trim(), content: addContent.trim(), source: "manual" };
+			const { knowledge } = getServices();
+			const result = await knowledge.addDocument(doc);
+			if (result.success) {
+				setMessage({ type: "success", text: `已添加: "${doc.title}"` });
+				setAddTitle(""); setAddContent(""); setShowAddForm(false);
+				refreshState();
+			} else {
+				setMessage({ type: "error", text: result.error ?? "添加失败" });
+			}
+		} catch (err) {
+			setMessage({ type: "error", text: `添加失败: ${err instanceof Error ? err.message : String(err)}` });
+		} finally { setAdding(false); }
+	}, [addCategory, addTitle, addContent, refreshState]);
+
+	const handleRebuild = useCallback(async () => {
+		setRebuilding(true); setMessage(null);
+		try {
+			const { knowledge } = getServices();
+			const result = await knowledge.rebuildIndex();
+			setMessage(result.success ? { type: "success", text: "索引重建完成" } : { type: "error", text: result.error ?? "重建失败" });
+			refreshState();
+		} catch (err) {
+			setMessage({ type: "error", text: `重建失败: ${err instanceof Error ? err.message : String(err)}` });
+		} finally { setRebuilding(false); }
+	}, [refreshState]);
+
+	const catLabel = (c: KnowledgeCategory) => c === "faq" ? "FAQ" : c === "product" ? "商品" : "文本";
+
+	return (
+		<>
+			<SectionTitle>
+				知识库管理
+				<HelpTooltip title="导入 JSON 或手动添加知识条目。条目会被自动切块、向量化并建立索引，用于语义检索注入 LLM 上下文。" />
+			</SectionTitle>
+
+			{message && (
+				<Alert severity={message.type} onClose={() => setMessage(null)} sx={{ py: 0, fontSize: 11 }}>{message.text}</Alert>
+			)}
+
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
+				<Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+					<Chip label={`${documents.length} 文档`} size="small" variant="outlined" />
+					<Chip label={`${chunkCount} chunks`} size="small" variant="outlined" />
+					<Chip label={hasIndex ? "索引就绪" : "无索引"} size="small" color={hasIndex ? "success" : "default"} variant="outlined" />
+				</Stack>
+			</Box>
+
+			<Stack direction="row" spacing={0.5} flexWrap="wrap">
+				<input ref={fileInputRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleFileImport} />
+				<Button size="small" variant="outlined" startIcon={<UploadFileIcon />} onClick={() => fileInputRef.current?.click()} disabled={importing}>
+					{importing ? "导入中..." : "导入 JSON"}
+				</Button>
+				<Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => setShowAddForm(!showAddForm)}>手动添加</Button>
+				{documents.length > 0 && (
+					<Button size="small" variant="outlined" color="warning" startIcon={<RefreshIcon />} onClick={handleRebuild} disabled={rebuilding}>
+						{rebuilding ? "重建中..." : "重建索引"}
+					</Button>
+				)}
+			</Stack>
+
+			{(importing || rebuilding) && <LinearProgress sx={{ my: 0.5 }} />}
+
+			{showAddForm && (
+				<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+					<Typography variant="caption" fontWeight={600}>手动添加知识条目</Typography>
+					<Select size="small" fullWidth value={addCategory} onChange={(e: SelectChangeEvent) => setAddCategory(e.target.value as KnowledgeCategory)}>
+						<MenuItem value="text">普通文本</MenuItem>
+						<MenuItem value="faq">FAQ（问答）</MenuItem>
+						<MenuItem value="product">商品资料</MenuItem>
+					</Select>
+					<TextField size="small" fullWidth label={addCategory === "faq" ? "问题" : addCategory === "product" ? "商品名称" : "标题"} value={addTitle} onChange={(e) => setAddTitle(e.target.value)} />
+					<TextField size="small" fullWidth multiline minRows={2} maxRows={6} label={addCategory === "faq" ? "回答" : addCategory === "product" ? "商品描述" : "内容"} value={addContent} onChange={(e) => setAddContent(e.target.value)} />
+					<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+						<Button size="small" onClick={() => setShowAddForm(false)}>取消</Button>
+						<Button size="small" variant="contained" onClick={handleAdd} disabled={adding || !addTitle.trim() || !addContent.trim()}>{adding ? "添加中..." : "添加"}</Button>
+					</Stack>
+				</Box>
+			)}
+
+			{documents.length > 0 && (
+				<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+					<Typography variant="caption" fontWeight={600}>已导入文档</Typography>
+					{documents.map((doc) => (
+						<Stack key={doc.id} direction="row" alignItems="center" spacing={0.5} sx={{ py: 0.25 }}>
+							<Chip label={catLabel(doc.category)} size="small" sx={{ fontSize: 10, height: 18 }} />
+							<Typography variant="caption" sx={{ flex: 1, fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title}</Typography>
+							{doc.source && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 9 }}>{doc.source}</Typography>}
+							<IconButton size="small" onClick={() => handleDeleteDoc(doc.id)} sx={{ p: 0.25 }}><DeleteIcon sx={{ fontSize: 14 }} /></IconButton>
+						</Stack>
+					))}
+				</Box>
+			)}
+
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+				<Stack direction="row" alignItems="center" spacing={0.5}>
+					<Typography variant="caption" fontWeight={600}>搜索验证</Typography>
+					<HelpTooltip title="输入文本进行语义检索测试，验证知识库检索质量。" />
+				</Stack>
+				<Stack direction="row" spacing={0.5}>
+					<TextField size="small" fullWidth placeholder='输入搜索文本（如"好看的手办"）' value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }} />
+					<Button size="small" variant="contained" startIcon={<SearchIcon />} onClick={handleSearch} disabled={searching || !searchQuery.trim()}>{searching ? "..." : "搜索"}</Button>
+				</Stack>
+				{searching && <LinearProgress sx={{ my: 0.25 }} />}
+				{searchResults !== null && (
+					<Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+						{searchResults.length === 0 ? (
+							<Typography variant="caption" color="text.secondary">无匹配结果</Typography>
+						) : searchResults.map((r, i) => (
+							<Box key={`${r.docId}-${i}`} sx={{ borderLeft: "2px solid", borderColor: "primary.main", pl: 1, py: 0.25 }}>
+								<Stack direction="row" spacing={0.5} alignItems="center">
+									<Chip label={catLabel(r.category)} size="small" sx={{ fontSize: 9, height: 16 }} />
+									<Typography variant="caption" fontWeight={600} sx={{ fontSize: 11 }}>{r.title}</Typography>
+									<Typography variant="caption" color="text.secondary" sx={{ fontSize: 9 }}>score: {r.score.toFixed(4)}</Typography>
+								</Stack>
+								<Typography variant="caption" sx={{ fontSize: 10, color: "text.secondary", display: "block", mt: 0.25 }}>{r.chunkText.length > 200 ? r.chunkText.slice(0, 200) + "…" : r.chunkText}</Typography>
+								<Typography variant="caption" sx={{ fontSize: 9, color: "text.disabled" }}>来源: {r.source}</Typography>
+							</Box>
+						))}
+					</Box>
+				)}
+			</Box>
 		</>
 	);
 }

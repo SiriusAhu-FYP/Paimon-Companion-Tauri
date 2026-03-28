@@ -26,6 +26,14 @@ function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfi
 		ttsProfiles: overrides.ttsProfiles ?? defaults.ttsProfiles,
 		activeLlmProfileId: overrides.activeLlmProfileId ?? defaults.activeLlmProfileId,
 		activeTtsProfileId: overrides.activeTtsProfileId ?? defaults.activeTtsProfileId,
+		knowledge: {
+			embedding: {
+				...defaults.knowledge.embedding,
+				...(overrides.knowledge?.embedding ?? {}),
+			},
+			retrievalTopK: overrides.knowledge?.retrievalTopK ?? defaults.knowledge.retrievalTopK,
+			searchMode: overrides.knowledge?.searchMode ?? defaults.knowledge.searchMode,
+		},
 	};
 }
 
