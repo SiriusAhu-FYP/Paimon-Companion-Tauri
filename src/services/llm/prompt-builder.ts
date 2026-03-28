@@ -7,8 +7,8 @@ export interface PromptContext {
 	customPersona: string;
 }
 
-/** 知识块过长时截断，避免撑爆上下文（粗略按字符计） */
-const MAX_KNOWLEDGE_CHARS = 12000;
+/** 知识块过长时截断（Phase 3.5：精选检索结果，阈值调低） */
+const MAX_KNOWLEDGE_CHARS = 4000;
 
 function truncateKnowledge(text: string): string {
 	const t = text.trim();

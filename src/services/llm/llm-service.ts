@@ -5,6 +5,7 @@ import type { KnowledgeService } from "@/services/knowledge";
 import { getConfig } from "@/services/config";
 import type { ILLMService, ChatMessage } from "./types";
 import { buildSystemMessage, summarizePromptContext } from "./prompt-builder";
+import { formatRetrievalForPrompt, summarizeRetrieval } from "@/services/knowledge/knowledge-formatter";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("llm");
@@ -64,9 +65,25 @@ export class LLMService {
 		this.bus.emit("llm:request-start", { userText });
 
 		const appCharacter = getConfig().character;
+
+		// Phase 3.5：语义检索 + liveContext 格式化
+		let knowledgeContext = "";
+		try {
+			const retrievalResults = await this.knowledge.query(userText);
+			const liveContext = this.knowledge.getAssembledLiveContext();
+			knowledgeContext = formatRetrievalForPrompt(retrievalResults, liveContext);
+
+			if (retrievalResults.length > 0) {
+				log.info("knowledge retrieval results", summarizeRetrieval(retrievalResults));
+			}
+		} catch (err) {
+			log.warn("knowledge retrieval failed, using liveContext only", err);
+			knowledgeContext = this.knowledge.getAssembledLiveContext();
+		}
+
 		const systemMsg = buildSystemMessage({
 			characterProfile: this.character.getProfile(),
-			knowledgeContext: this.knowledge.getAssembledContext(),
+			knowledgeContext,
 			customPersona: appCharacter.customPersona,
 		});
 		const messages: ChatMessage[] = systemMsg
@@ -76,7 +93,7 @@ export class LLMService {
 		if (systemMsg) {
 			log.info("LLM system prompt assembled", summarizePromptContext({
 				characterProfile: this.character.getProfile(),
-				knowledgeContext: this.knowledge.getAssembledContext(),
+				knowledgeContext,
 				customPersona: appCharacter.customPersona,
 			}));
 		}

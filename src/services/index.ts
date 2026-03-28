@@ -1,7 +1,7 @@
 import { EventBus, eventBus } from "./event-bus";
 import { RuntimeService } from "./runtime";
 import { CharacterService } from "./character";
-import { KnowledgeService } from "./knowledge";
+import { KnowledgeService, OpenAIEmbeddingService } from "./knowledge";
 import { ExternalInputService } from "./external-input";
 import { LLMService, MockLLMService, OpenAILLMService } from "./llm";
 import type { ILLMService } from "./llm/types";
@@ -110,6 +110,15 @@ export function initServices(): ServiceContainer {
 	const knowledge = new KnowledgeService(eventBus);
 	const externalInput = new ExternalInputService(eventBus);
 	externalInput.setRuntime(runtime);
+
+	// Phase 3.5: 初始化 Embedding Service + Knowledge
+	const embeddingConfig = config.knowledge.embedding;
+	const embeddingService = new OpenAIEmbeddingService(embeddingConfig);
+	knowledge.setEmbeddingService(embeddingService);
+	// 异步初始化知识库（加载持久化数据），不阻塞主流程
+	knowledge.initialize().catch((err) => {
+		log.error("knowledge initialization failed", err);
+	});
 
 	const llmProvider = resolveLLMProvider(config);
 	const llm = new LLMService(eventBus, runtime, llmProvider, character, knowledge);
