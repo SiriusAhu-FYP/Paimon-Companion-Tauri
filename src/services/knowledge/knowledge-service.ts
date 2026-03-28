@@ -122,6 +122,17 @@ export class KnowledgeService {
 		}
 	}
 
+	/** 配置变更后完全重新初始化（dimension 可能变化） */
+	async reinitialize(): Promise<void> {
+		this.initialized = false;
+		this.initializing = false;
+		this.db = null;
+		this.metadata = null;
+		// 不清空 documents——持久化层会重新加载
+		this.documents = [];
+		await this.initialize();
+	}
+
 	// ── 导入文档 ──
 
 	async importDocuments(docs: KnowledgeDocument[]): Promise<{ imported: number; errors: string[] }> {

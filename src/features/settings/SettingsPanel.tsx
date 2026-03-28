@@ -26,8 +26,8 @@ import { createLogger } from "@/services/logger";
 import { GptSovitsTTSService, MockTTSService, splitText, normalizeForSpeech, SpeechQueue } from "@/services/tts";
 import { AudioPlayer } from "@/services/audio/audio-player";
 import { HelpTooltip } from "@/components";
-import { refreshProviders, getServices } from "@/services";
-import type { KnowledgeDocument, KnowledgeCategory, RetrievalResult } from "@/types/knowledge";
+import { refreshProviders, getServices, refreshEmbeddingService } from "@/services";
+import type { KnowledgeDocument, KnowledgeCategory, RetrievalResult, EmbeddingApiKeySource } from "@/types/knowledge";
 
 const log = createLogger("settings");
 
@@ -832,6 +832,7 @@ function KnowledgeSection() {
 	const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
 	const [chunkCount, setChunkCount] = useState(0);
 	const [hasIndex, setHasIndex] = useState(false);
+	const [knowledgeReady, setKnowledgeReady] = useState(false);
 	const [message, setMessage] = useState<{ type: "success" | "error" | "info" | "warning"; text: string } | null>(null);
 	const [importing, setImporting] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
@@ -845,6 +846,14 @@ function KnowledgeSection() {
 	const [addContent, setAddContent] = useState("");
 	const [adding, setAdding] = useState(false);
 
+	// Embedding 配置
+	const [embBaseUrl, setEmbBaseUrl] = useState("");
+	const [embModel, setEmbModel] = useState("");
+	const [embDimension, setEmbDimension] = useState(1536);
+	const [embKeySource, setEmbKeySource] = useState<EmbeddingApiKeySource>("llm");
+	const [embDedicatedKey, setEmbDedicatedKey] = useState("");
+	const [embSaving, setEmbSaving] = useState(false);
+
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	const refreshState = useCallback(() => {
@@ -853,12 +862,73 @@ function KnowledgeSection() {
 			setDocuments([...knowledge.getDocuments()]);
 			setChunkCount(knowledge.getChunkCount());
 			setHasIndex(knowledge.hasIndex());
+			setKnowledgeReady(knowledge.isInitialized());
 		} catch {
 			// services not yet initialized
 		}
 	}, []);
 
-	useEffect(() => { refreshState(); }, [refreshState]);
+	useEffect(() => {
+		// 加载 embedding 配置
+		(async () => {
+			const loaded = await loadConfig();
+			const emb = loaded.knowledge.embedding;
+			setEmbBaseUrl(emb.baseUrl);
+			setEmbModel(emb.model);
+			setEmbDimension(emb.dimension);
+			setEmbKeySource(emb.apiKeySource);
+			// 尝试读取已保存的 dedicated key
+			if (emb.apiKeySource === "dedicated") {
+				const key = await getSecret(SECRET_KEYS.EMBEDDING_API_KEY);
+				if (key) setEmbDedicatedKey(key);
+			}
+		})();
+		// 轮询等待知识库初始化完成
+		const timer = setInterval(() => {
+			refreshState();
+		}, 500);
+		refreshState();
+		return () => clearInterval(timer);
+	}, [refreshState]);
+
+	// 初始化完成后停止轮询
+	useEffect(() => {
+		if (knowledgeReady) {
+			refreshState();
+		}
+	}, [knowledgeReady, refreshState]);
+
+	const handleSaveEmbeddingConfig = useCallback(async () => {
+		setEmbSaving(true);
+		setMessage(null);
+		try {
+			// 保存 dedicated key
+			if (embKeySource === "dedicated" && embDedicatedKey) {
+				await setSecret(SECRET_KEYS.EMBEDDING_API_KEY, embDedicatedKey);
+			}
+			// 更新 config
+			await updateConfig({
+				knowledge: {
+					embedding: {
+						baseUrl: embBaseUrl,
+						model: embModel,
+						dimension: embDimension,
+						apiKeySource: embKeySource,
+					},
+					retrievalTopK: 5,
+					searchMode: "vector",
+				},
+			});
+			// 刷新 embedding service
+			await refreshEmbeddingService();
+			refreshState();
+			setMessage({ type: "success", text: "Embedding 配置已保存并生效" });
+		} catch (err) {
+			setMessage({ type: "error", text: `保存失败: ${err instanceof Error ? err.message : String(err)}` });
+		} finally {
+			setEmbSaving(false);
+		}
+	}, [embBaseUrl, embModel, embDimension, embKeySource, embDedicatedKey, refreshState]);
 
 	const handleFileImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
@@ -963,11 +1033,43 @@ function KnowledgeSection() {
 				<Alert severity={message.type} onClose={() => setMessage(null)} sx={{ py: 0, fontSize: 11 }}>{message.text}</Alert>
 			)}
 
+			{/* Embedding 配置 */}
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+				<Stack direction="row" alignItems="center" spacing={0.5}>
+					<Typography variant="caption" fontWeight={600}>Embedding 配置</Typography>
+					<HelpTooltip title="配置向量化服务端点。支持 OpenAI 兼容的 /v1/embeddings API（如 DMXAPI、SiliconFlow 等）。密钥来源可选复用 LLM 档案或独立配置。" />
+				</Stack>
+				<TextField size="small" fullWidth label="Base URL" value={embBaseUrl} onChange={(e) => setEmbBaseUrl(e.target.value)}
+					helperText="如 https://api.dmxapi.com/v1 或 https://api.openai.com/v1" />
+				<Stack direction="row" spacing={0.5}>
+					<TextField size="small" sx={{ flex: 2 }} label="模型名称" value={embModel} onChange={(e) => setEmbModel(e.target.value)}
+						helperText="如 text-embedding-3-small、text-embedding-v4" />
+					<TextField size="small" sx={{ flex: 1 }} label="维度" type="number" value={embDimension}
+						onChange={(e) => setEmbDimension(parseInt(e.target.value) || 1536)}
+						slotProps={{ htmlInput: { min: 64, max: 4096, step: 64 } }} />
+				</Stack>
+				<Select size="small" fullWidth value={embKeySource}
+					onChange={(e: SelectChangeEvent) => setEmbKeySource(e.target.value as EmbeddingApiKeySource)}>
+					<MenuItem value="llm">复用当前 LLM 档案的 API Key</MenuItem>
+					<MenuItem value="dedicated">使用独立的 Embedding API Key</MenuItem>
+				</Select>
+				{embKeySource === "dedicated" && (
+					<TextField size="small" fullWidth label="Embedding API Key" type="password" value={embDedicatedKey}
+						onChange={(e) => setEmbDedicatedKey(e.target.value)}
+						helperText="密钥将安全存储在系统钥匙串中" />
+				)}
+				<Button size="small" variant="contained" onClick={handleSaveEmbeddingConfig} disabled={embSaving || !embBaseUrl.trim() || !embModel.trim()}>
+					{embSaving ? "保存中..." : "保存 Embedding 配置"}
+				</Button>
+			</Box>
+
+			{/* 状态栏 */}
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
 				<Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
 					<Chip label={`${documents.length} 文档`} size="small" variant="outlined" />
 					<Chip label={`${chunkCount} chunks`} size="small" variant="outlined" />
-					<Chip label={hasIndex ? "索引就绪" : "无索引"} size="small" color={hasIndex ? "success" : "default"} variant="outlined" />
+					<Chip label={knowledgeReady ? (hasIndex ? "索引就绪" : "无索引") : "初始化中..."} size="small"
+						color={knowledgeReady ? (hasIndex ? "success" : "default") : "warning"} variant="outlined" />
 				</Stack>
 			</Box>
 

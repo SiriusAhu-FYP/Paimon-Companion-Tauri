@@ -184,5 +184,27 @@ export function refreshProviders() {
 	});
 }
 
+/**
+ * 知识库 Embedding 配置变更后调用——重建 EmbeddingService + 重新初始化 Orama DB。
+ * 因为 embedding dimension 变更会导致 Orama schema 不兼容，所以需要完全重新初始化。
+ */
+export async function refreshEmbeddingService() {
+	if (!services) {
+		log.warn("refreshEmbeddingService called before initServices, skipping");
+		return;
+	}
+	const config = getConfig();
+	const embeddingConfig = config.knowledge.embedding;
+	const embeddingService = new OpenAIEmbeddingService(embeddingConfig);
+	services.knowledge.setEmbeddingService(embeddingService);
+	// 重新初始化（会创建新 Orama DB + 加载持久化）
+	await services.knowledge.reinitialize();
+	log.info("embedding service refreshed", {
+		baseUrl: embeddingConfig.baseUrl,
+		model: embeddingConfig.model,
+		dimension: embeddingConfig.dimension,
+	});
+}
+
 export { eventBus } from "./event-bus";
 export { createLogger } from "./logger";
