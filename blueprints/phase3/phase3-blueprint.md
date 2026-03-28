@@ -611,6 +611,8 @@ Step 6: M5 — 弹幕/外部输入接口定义
 - Phase 3 不动事件总线核心和 Runtime 门控机制
 - Phase 3 的所有新增代码通过 `ILLMService` / `ITTSService` / `IExternalInputAdapter` 接口隔离，不侵入现有编排逻辑
 
+> **Phase 3 close-out 说明**：Phase 3 已完成 close-out（详见 `dev-reports/phase3/run07/report.md`）。由于知识库 / RAG 能力已成为后续测试与集成的前置依赖，项目在 Phase 4 之前插入 Phase 3.5，作为计划执行中的补充阶段。原 Phase 5 路线图中"RAG / 向量检索"条目已移至 Phase 3.5 范围。
+
 ---
 
 ## 附录 A：替换点一览

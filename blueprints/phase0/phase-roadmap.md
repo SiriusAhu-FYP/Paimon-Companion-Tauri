@@ -14,6 +14,7 @@
 | 1 | Foundation | Live2D 渲染 + 基础 UI + 事件总线 + runtime |
 | 2 | Voice Pipeline | ASR + LLM + TTS 语音链路 |
 | 3 | Control & Monitor | 控制面板 + 状态监控 + 急停 |
+| 3.5 | Knowledge Base / RAG Foundation | 知识导入、索引、检索、引用与注入闭环 |
 | 4 | Live Integration | OBS 输出 + 弹幕/礼物接入 |
 | 5 | Polish & Package | 配置管理 + 打包分发 + 体验打磨 |
 
@@ -81,9 +82,11 @@
 
 ---
 
-## Phase 3 — Control & Monitor
+## Phase 3 — Control & Monitor（已完成）
 
-> 详细施工文档在 Phase 2 完成后生成。
+> 详细施工文档：`blueprints/phase3/phase3-blueprint.md`
+>
+> Phase 3 已完成 close-out，详见 `dev-reports/phase3/run07/report.md`。
 
 **目标：** 提供完整的操作员控制台。
 
@@ -93,6 +96,14 @@
 - 人工接管模式
 - 日志查看面板
 - 全局快捷键
+
+---
+
+## Phase 3.5 — Knowledge Base / RAG Foundation
+
+> 详细施工文档：`blueprints/phase3-5/rag-foundation.md`
+
+**目标：** 知识导入、索引、检索、引用与注入闭环，为后续测试与 Live Integration 提供前置能力。
 
 ---
 
