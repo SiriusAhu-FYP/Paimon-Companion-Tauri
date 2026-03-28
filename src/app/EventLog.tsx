@@ -32,6 +32,8 @@ export function EventLog() {
 		"character:expression",
 		"character:state-change",
 		"audio:asr-result",
+		"audio:tts-start",
+		"audio:tts-end",
 		"llm:response-end",
 		"external:danmaku",
 		"external:gift",

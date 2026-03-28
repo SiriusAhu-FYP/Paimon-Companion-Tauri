@@ -1,17 +1,4 @@
-:root {
-	font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-	font-size: 14px;
-	line-height: 1.5;
-	font-weight: 400;
-
-	color: #e0e0e0;
-	background-color: #1a1a2e;
-
-	font-synthesis: none;
-	text-rendering: optimizeLegibility;
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
-}
+/* ── 全局 reset（MUI CssBaseline 覆盖大部分，仅保留补充） ── */
 
 * {
 	margin: 0;
@@ -19,194 +6,15 @@
 	box-sizing: border-box;
 }
 
-/* ── 主窗口布局 ── */
+/* ── 动画 keyframes ── */
 
-.main-window {
-	display: flex;
-	flex-direction: column;
-	height: 100vh;
-	overflow: hidden;
+@keyframes blink {
+	50% { opacity: 0; }
 }
 
-.main-header {
-	padding: 8px 16px;
-	background: #16213e;
-	border-bottom: 1px solid #0f3460;
-}
-
-.main-header h1 {
-	font-size: 18px;
-	font-weight: 600;
-	color: #e94560;
-}
-
-.main-layout {
-	display: flex;
-	flex: 1;
-	min-height: 0;
-}
-
-.main-left {
-	width: 300px;
-	min-width: 240px;
-	border-right: 1px solid #0f3460;
-	overflow-y: auto;
-}
-
-.main-center {
-	flex: 1;
-	min-width: 0;
-	border-right: 1px solid #0f3460;
-	overflow-y: auto;
-}
-
-.main-right {
-	width: 280px;
-	min-width: 220px;
-	overflow-y: auto;
-}
-
-.main-footer {
-	height: 180px;
-	border-top: 1px solid #0f3460;
-	overflow-y: auto;
-	background: #0f0f23;
-}
-
-/* ── 通用 section ── */
-
-section {
-	padding: 12px;
-}
-
-section h2 {
-	font-size: 14px;
-	font-weight: 600;
-	color: #e94560;
-	margin-bottom: 8px;
-	text-transform: uppercase;
-	letter-spacing: 0.5px;
-}
-
-section h3 {
-	font-size: 12px;
-	font-weight: 600;
-	color: #999;
-	margin-bottom: 4px;
-}
-
-/* ── Live2D 预览占位 ── */
-
-.live2d-placeholder {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	height: 280px;
-	background: #16213e;
-	border-radius: 8px;
-	border: 1px dashed #0f3460;
-}
-
-.placeholder-icon {
-	font-size: 48px;
-	margin-bottom: 8px;
-}
-
-.placeholder-info {
-	font-size: 12px;
-	color: #666;
-	margin-top: 4px;
-}
-
-/* ── 控制面板 ── */
-
-.control-section {
-	margin-bottom: 12px;
-	padding: 8px;
-	background: #16213e;
-	border-radius: 6px;
-}
-
-.control-section p {
-	font-size: 13px;
-	margin: 2px 0;
-}
-
-.control-actions {
-	display: flex;
-	gap: 6px;
-	margin-top: 6px;
-}
-
-button {
-	padding: 4px 12px;
-	font-size: 12px;
-	border: 1px solid #0f3460;
-	border-radius: 4px;
-	background: #1a1a2e;
-	color: #e0e0e0;
-	cursor: pointer;
-	transition: background 0.15s;
-}
-
-button:hover:not(:disabled) {
-	background: #0f3460;
-}
-
-button:disabled {
-	opacity: 0.4;
-	cursor: not-allowed;
-}
-
-button.active {
-	background: #e94560;
-	border-color: #e94560;
-	color: #fff;
-}
-
-.emotion-buttons {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	margin-top: 4px;
-}
-
-/* ── 对话面板 ── */
-
-.chat-messages {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-}
-
-.chat-empty {
-	color: #555;
-	font-size: 13px;
-	text-align: center;
-	padding: 24px;
-}
-
-.chat-message {
-	display: flex;
-	gap: 8px;
-	padding: 6px 8px;
-	border-radius: 4px;
-	font-size: 13px;
-}
-
-.chat-user {
-	background: #16213e;
-}
-
-.chat-assistant {
-	background: #1a2744;
-}
-
-.chat-role {
-	font-weight: 600;
-	color: #e94560;
-	min-width: 32px;
+@keyframes pulse {
+	0%, 100% { opacity: 0.6; }
+	50% { opacity: 1; }
 }
 
 /* ── 事件日志 ── */
@@ -217,10 +25,13 @@ button.active {
 
 .event-log h3 {
 	margin-bottom: 6px;
+	font-size: 12px;
+	font-weight: 600;
+	opacity: 0.5;
 }
 
 .event-log-empty {
-	color: #555;
+	opacity: 0.4;
 	font-size: 12px;
 }
 
@@ -238,61 +49,83 @@ button.active {
 }
 
 .event-log-time {
-	color: #555;
+	opacity: 0.4;
 	min-width: 70px;
 }
 
 .event-log-name {
-	color: #e94560;
+	color: #4D9FFF;
 	min-width: 200px;
 }
 
 .event-log-payload {
-	color: #888;
+	opacity: 0.6;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-/* ── 舞台窗口 ── */
+/* ── 舞台窗口（独立 Tauri Window 内） ── */
 
 .stage-window {
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	position: relative;
+	width: 100vw;
 	height: 100vh;
 	background: transparent;
+	overflow: hidden;
 }
 
-.stage-character {
-	text-align: center;
+.stage-toolbar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 100;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 3px 8px;
+	background: rgba(0, 0, 0, 0.45);
+	opacity: 0;
+	transition: opacity 0.2s;
+	pointer-events: none;
+	cursor: grab;
+	user-select: none;
 }
 
-.stage-placeholder-icon {
-	font-size: 96px;
+.stage-toolbar-visible {
+	opacity: 1;
+	pointer-events: auto;
 }
 
-.stage-info {
-	font-size: 14px;
-	color: #999;
-	margin-top: 8px;
+.stage-toolbar-label {
+	font-size: 11px;
+	color: rgba(255, 255, 255, 0.6);
+	letter-spacing: 0.5px;
 }
 
-/* ── 运行状态指示 ── */
-
-.control-stopped {
-	border: 1px solid #e94560;
-	background: #2a1020;
+.stage-toolbar-actions {
+	display: flex;
+	gap: 4px;
 }
 
-.badge-stopped {
-	display: inline-block;
-	margin-left: 6px;
-	padding: 1px 6px;
-	font-size: 10px;
-	font-weight: 700;
-	color: #fff;
-	background: #e94560;
+.stage-tb-btn {
+	padding: 1px 8px;
+	font-size: 11px;
+	background: rgba(255, 255, 255, 0.1);
+	border: 1px solid rgba(255, 255, 255, 0.2);
 	border-radius: 3px;
-	vertical-align: middle;
+	color: rgba(255, 255, 255, 0.7);
+	cursor: pointer;
+	line-height: 1.4;
+}
+
+.stage-tb-btn:hover {
+	background: rgba(255, 255, 255, 0.2);
+	color: #fff;
+}
+
+.stage-tb-close:hover {
+	background: rgba(233, 69, 96, 0.7);
+	border-color: rgba(233, 69, 96, 0.7);
 }
