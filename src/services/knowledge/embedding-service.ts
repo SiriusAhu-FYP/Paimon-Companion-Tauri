@@ -43,10 +43,9 @@ export class OpenAIEmbeddingService implements IEmbeddingService {
 		if (texts.length === 0) return [];
 
 		let baseUrl = this.config.baseUrl.replace(/\/+$/, "");
-		if (!baseUrl.endsWith("/v1")) {
-			baseUrl += "/v1";
-		}
-		const url = `${baseUrl}/embeddings`;
+		// 移除可能多余的 /v1 后缀再统一追加，避免重复
+		baseUrl = baseUrl.replace(/\/v1$/, "");
+		const url = `${baseUrl}/v1/embeddings`;
 
 		const body = JSON.stringify({
 			input: texts,
