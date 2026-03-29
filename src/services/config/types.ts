@@ -74,7 +74,7 @@ export interface CharacterSettingsConfig {
 
 // ── Knowledge（知识库配置，独立于 LLM / TTS） ──
 
-export type { KnowledgeConfig, EmbeddingProviderConfig, EmbeddingProfile, KnowledgeSearchMode } from "@/types/knowledge";
+export type { KnowledgeConfig, EmbeddingProviderConfig, EmbeddingProfile, KnowledgeSearchMode, RerankProviderConfig, RerankProfile } from "@/types/knowledge";
 
 // ── 顶层 AppConfig ──
 
@@ -96,6 +96,7 @@ export const SECRET_KEYS = {
 	LLM_API_KEY: (profileId: string) => `llm-api-key:${profileId}`,
 	TTS_API_KEY: "tts-api-key",
 	EMBEDDING_API_KEY: (profileId: string) => `embedding-api-key:${profileId}`,
+	RERANK_API_KEY: (profileId: string) => `rerank-api-key:${profileId}`,
 } as const;
 
 // ── 默认值 ──
@@ -137,6 +138,13 @@ export const DEFAULT_CONFIG: AppConfig = {
 		embeddingProfiles: [],
 		activeEmbeddingProfileId: "",
 		retrievalTopK: 5,
-		searchMode: "vector" as const,
+		searchMode: "hybrid" as const,
+		rerank: {
+			baseUrl: "",
+			model: "",
+		},
+		rerankProfiles: [],
+		activeRerankProfileId: "",
+		rerankEnabled: false,
 	},
 };

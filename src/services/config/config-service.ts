@@ -35,6 +35,13 @@ function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfi
 			activeEmbeddingProfileId: overrides.knowledge?.activeEmbeddingProfileId ?? defaults.knowledge.activeEmbeddingProfileId,
 			retrievalTopK: overrides.knowledge?.retrievalTopK ?? defaults.knowledge.retrievalTopK,
 			searchMode: overrides.knowledge?.searchMode ?? defaults.knowledge.searchMode,
+			rerank: {
+				...defaults.knowledge.rerank,
+				...(overrides.knowledge?.rerank ?? {}),
+			},
+			rerankProfiles: overrides.knowledge?.rerankProfiles ?? defaults.knowledge.rerankProfiles,
+			activeRerankProfileId: overrides.knowledge?.activeRerankProfileId ?? defaults.knowledge.activeRerankProfileId,
+			rerankEnabled: overrides.knowledge?.rerankEnabled ?? defaults.knowledge.rerankEnabled,
 		},
 	};
 }

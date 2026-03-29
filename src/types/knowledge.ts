@@ -63,6 +63,30 @@ export interface KnowledgeConfig {
 	activeEmbeddingProfileId: string;
 	retrievalTopK: number;
 	searchMode: KnowledgeSearchMode;
+	rerank: RerankProviderConfig;
+	rerankProfiles: RerankProfile[];
+	activeRerankProfileId: string;
+	rerankEnabled: boolean;
+}
+
+// ── Rerank Provider 配置 ──
+
+export interface RerankProviderConfig {
+	baseUrl: string;
+	model: string;
+}
+
+export interface RerankProfile {
+	id: string;
+	name: string;
+	baseUrl: string;
+	model: string;
+}
+
+export interface RerankResult {
+	index: number;
+	relevanceScore: number;
+	text: string;
 }
 
 // ── 索引元数据 ──
@@ -111,4 +135,11 @@ export const DEFAULT_KNOWLEDGE_CONFIG: KnowledgeConfig = {
 	activeEmbeddingProfileId: "",
 	retrievalTopK: 5,
 	searchMode: "hybrid",
+	rerank: {
+		baseUrl: "",
+		model: "",
+	},
+	rerankProfiles: [],
+	activeRerankProfileId: "",
+	rerankEnabled: false,
 };

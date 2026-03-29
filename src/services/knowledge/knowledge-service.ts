@@ -13,6 +13,7 @@ import {
 	DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_STRATEGY,
 } from "@/types/knowledge";
 import type { IEmbeddingService } from "./embedding-service";
+import type { IRerankService } from "./rerank-service";
 import { chunkText } from "./text-chunker";
 import {
 	createKnowledgeDB, insertChunks, searchKnowledge,
@@ -26,6 +27,10 @@ import {
 import type { RawData } from "@orama/orama";
 
 const log = createLogger("knowledge");
+
+// recall 阶段取较大候选，交给 rerank 精排后再截取 finalTopK
+const RECALL_TOP_K = 20;
+const RERANK_TOP_N = 10;
 
 // ── 旧接口兼容：liveContext（ControlPanel 临时注入保留原样） ──
 
@@ -41,6 +46,7 @@ export type IndexStatus = "ready" | "needs_rebuild" | "rebuilding" | "error";
 export class KnowledgeService {
 	private bus: EventBus;
 	private embeddingService: IEmbeddingService | null = null;
+	private rerankService: IRerankService | null = null;
 	private db: KnowledgeOrama | null = null;
 	private documents: KnowledgeDocument[] = [];
 	private metadata: KnowledgeDBMetadata | null = null;
@@ -81,6 +87,15 @@ export class KnowledgeService {
 			model: service.getModelName(),
 			dimension: service.getDimension(),
 		});
+	}
+
+	setRerankService(service: IRerankService | null) {
+		this.rerankService = service;
+		if (service) {
+			log.info("rerank service set", { model: service.getModelName() });
+		} else {
+			log.info("rerank service cleared");
+		}
 	}
 
 	async initialize(): Promise<void> {
@@ -249,28 +264,60 @@ export class KnowledgeService {
 		}
 
 		const config = getConfig().knowledge;
-		const topK = options?.topK ?? config.retrievalTopK;
+		const finalTopK = options?.topK ?? config.retrievalTopK;
 		const mode = options?.searchMode ?? config.searchMode;
+		const shouldRerank = config.rerankEnabled && this.rerankService !== null;
+
+		// recall 阶段：rerank 启用时取较大候选集，否则直接取 finalTopK
+		const recallTopK = shouldRerank ? RECALL_TOP_K : finalTopK;
 
 		let queryVector: number[] = [];
 
 		if (mode !== "fulltext") {
 			if (!this.embeddingService) {
 				log.warn("embedding service unavailable, falling back to fulltext");
-				return this.queryFulltext(queryText, topK);
+				return this.queryFulltext(queryText, finalTopK);
 			}
 			try {
 				queryVector = await this.embeddingService.embed(queryText);
 				log.debug(`query embedding done: dim=${queryVector.length}`);
 			} catch (err) {
 				log.warn("embedding failed, falling back to fulltext", err);
-				return this.queryFulltext(queryText, topK);
+				return this.queryFulltext(queryText, finalTopK);
 			}
 		}
 
-		const results = await searchKnowledge(this.db, queryVector, queryText, mode, topK);
-		log.info(`query "${queryText.slice(0, 30)}" → ${results.length} results (mode=${mode}, topK=${topK}, chunkCount=${getChunkCount(this.db)})`);
-		return results;
+		let results = await searchKnowledge(this.db, queryVector, queryText, mode, recallTopK);
+		log.info(`recall "${queryText.slice(0, 30)}" → ${results.length} results (mode=${mode}, recallTopK=${recallTopK})`);
+
+		// rerank 阶段
+		if (shouldRerank && results.length > 0) {
+			try {
+				const rerankStart = Date.now();
+				const documents = results.map((r) => r.chunkText);
+				const rerankResults = await this.rerankService!.rerank(queryText, documents, RERANK_TOP_N);
+				const rerankMs = Date.now() - rerankStart;
+
+				// 按 rerank 返回顺序（已按 relevanceScore 降序）重组结果
+				const reranked: RetrievalResult[] = rerankResults
+					.filter((rr) => rr.index >= 0 && rr.index < results.length)
+					.map((rr) => ({
+						...results[rr.index],
+						score: rr.relevanceScore,
+					}));
+
+				log.info(`rerank done: ${results.length} → ${reranked.length} results, ${rerankMs}ms, model=${this.rerankService!.getModelName()}`);
+				results = reranked;
+			} catch (err) {
+				log.warn("rerank failed, falling back to recall results", err);
+				// 降级：不 rerank，直接用 recall 结果截取
+			}
+		}
+
+		// final 阶段：截取 finalTopK
+		const finalResults = results.slice(0, finalTopK);
+		log.info(`query "${queryText.slice(0, 30)}" → ${finalResults.length} final results (rerank=${shouldRerank}, chunkCount=${getChunkCount(this.db)})`);
+		return finalResults;
 	}
 
 	private async queryFulltext(queryText: string, topK: number): Promise<RetrievalResult[]> {

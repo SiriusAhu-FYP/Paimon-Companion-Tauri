@@ -1,175 +1,192 @@
-# Phase 3.5 Run 02 — Embedding 配置 UI + 用户链路修复
+# Phase 3.5 Run 02 — Rerank Integration 实施报告
 
-## 本次目标
+## 本轮目标
 
-Run 01 完成了知识库的代码基础（embedding service、Orama 存储、持久化、LLM 注入），但从用户角度无法完成端到端操作：
+在不重写知识库架构的前提下，将检索链路升级为：
 
-1. **没有任何 UI 入口可以配置 embedding 的 Base URL / 模型 / 维度 / API Key**
-2. 默认配置 hardcode 为 `https://api.openai.com/v1` + `text-embedding-3-small`，使用 DMXAPI 等第三方转发服务时无法切换
-3. 配置变更后运行中的 EmbeddingService 实例不会刷新
-4. 知识库异步初始化期间 UI 显示空白，缺少加载状态
+**hybrid recall (topK=20) → rerank (topN=10) → final topK=5 → prompt 注入**
 
-本轮目标：**补齐上述缺口，让用户可以真正走通「配置 → 导入 → 检索 → LLM 注入」的完整链路。**
+同时完成 config/type drift 修正、Rerank 配置 UI、最小实验模板搭建。
 
-## 本次完成内容
+参考文档：`c:\Users\PlayerAhu\.cursor\plans\phase_3.5_run_02_rerank_c43404b5.plan.md`
 
-| # | 内容 | 状态 |
-|---|------|------|
-| R2-1 | SettingsPanel KnowledgeSection 新增 Embedding 配置区（Base URL / Model / Dimension / Key Source / Dedicated Key） | ✅ |
-| R2-2 | `refreshEmbeddingService()` — 配置保存后重建 EmbeddingService + 触发 KnowledgeService `reinitialize()` | ✅ |
-| R2-3 | 确认 DMXAPI 支持 `text-embedding-v4`（阿里通义，128K input，64~2048 维），验证端点兼容性 | ✅ |
-| R2-4 | KnowledgeSection 初始化未完成时显示「初始化中...」而非空白 | ✅ |
+---
 
-## 关键改动
+## 本轮实际完成内容
 
-### 新增
+| 任务 | 内容 | 状态 |
+|------|------|------|
+| T1 | Config / type drift 修正：searchMode 默认值统一为 hybrid，新增 rerank 类型 | ✅ |
+| T2 | 新建 rerank-service.ts：IRerankService 接口 + CompatibleRerankService 实现 | ✅ |
+| T3 | KnowledgeService 改造：setRerankService() 注入 + query() 内 recall→rerank→final 三段式 | ✅ |
+| T4 | initServices / refreshProviders 扩展：resolveRerankProfile() + rerank 初始化 + 热刷新 | ✅ |
+| T5 | KnowledgePanel Rerank 配置 UI（启用开关 + 档案管理）+ searchMode 收口（UI 中不暴露） | ✅ |
+| T6 | 编译验证：tsc --noEmit + vite build 零错误 | ✅ |
+| T7 | Baseline 实验记录模板创建 | ✅ |
+| T8 | Rerank 实验记录模板创建 | ✅ |
+| T9 | 本报告 | ✅ |
+
+---
+
+## 关键实现点
+
+### 1. Config / Type Drift 修正
+
+- `DEFAULT_CONFIG.knowledge.searchMode` 从 `"vector"` 统一为 `"hybrid"`（与 `DEFAULT_KNOWLEDGE_CONFIG` 对齐）
+- 新增 `RerankProviderConfig`、`RerankProfile`、`RerankResult` 三个类型到 `types/knowledge.ts`
+- `KnowledgeConfig` 扩展 `rerank` / `rerankProfiles` / `activeRerankProfileId` / `rerankEnabled` 四个字段
+- `SECRET_KEYS` 新增 `RERANK_API_KEY(profileId)` 支持 per-profile 隔离
+- `deepMerge` 扩展 rerank 节的合并逻辑
+
+### 2. CompatibleRerankService
+
+- 兼容 `/v1/rerank` 端点（Cohere / Jina / DMXAPI 等）
+- `POST {baseUrl}/v1/rerank`，请求体 `{ model, query, documents, top_n, return_documents: true }`
+- 通过 `proxyRequest` 走 Rust 代理，10s 超时
+- 密钥使用 `SECRET_KEYS.RERANK_API_KEY(profileId)`
+
+### 3. KnowledgeService 三段式检索
+
+- recall 阶段：`searchKnowledge(db, ..., recallTopK=20)` — rerank 启用时取较大候选集
+- rerank 阶段：`rerankService.rerank(queryText, documents, RERANK_TOP_N=10)` — 精排
+- final 阶段：`results.slice(0, finalTopK=5)` — 截取送入 formatter/prompt
+- rerank 失败时：降级为不 rerank，直接从 recall 结果截取前 finalTopK，打 warn 日志
+- 当 `rerankEnabled=false` 或无 rerankService 时：直接取 finalTopK，行为与 Run 01 一致
+
+### 4. searchMode 收口
+
+- `searchMode` 字段在 `KnowledgeConfig` 中保留（不删），默认值锁定为 `"hybrid"`
+- UI 中不暴露 `searchMode` 选择器
+- 调试途径：通过 devtools 直接修改 config store
+
+### 5. Rerank 配置 UI
+
+- KnowledgePanel 新增 Rerank 配置区：启用开关 + Profile 管理（baseUrl / model / API Key）
+- 沿用 EmbeddingProfile 体系一致的 Popover 编辑体验
+- 启用/禁用 rerank 后自动调用 `refreshEmbeddingService()` 刷新服务实例
+
+---
+
+## 改动文件清单
+
+### 新建文件
 
 | 文件 | 说明 |
 |------|------|
-| `dev-reports/phase3-5/run02/report.md` | 本报告 |
+| `src/services/knowledge/rerank-service.ts` | IRerankService 接口 + CompatibleRerankService 实现 |
+| `dev-reports/phase3-5/run02/baseline-experiment.md` | Baseline 实验记录模板 |
+| `dev-reports/phase3-5/run02/rerank-experiment.md` | Rerank 实验记录模板 |
 
-### 修改
+### 修改文件
 
 | 文件 | 说明 |
 |------|------|
-| `src/features/settings/SettingsPanel.tsx` | KnowledgeSection 新增 Embedding 配置区（~80 行 UI + state + handler）；状态栏增加初始化状态显示 |
-| `src/services/index.ts` | 新增 `refreshEmbeddingService()` 导出函数 |
-| `src/services/knowledge/knowledge-service.ts` | 新增 `reinitialize()` 方法（重置 DB + documents + 重新加载持久化） |
+| `src/types/knowledge.ts` | 新增 RerankProviderConfig / RerankProfile / RerankResult；KnowledgeConfig 扩展 rerank 字段；DEFAULT_KNOWLEDGE_CONFIG 新增 rerank 默认值 |
+| `src/types/index.ts` | 导出新增的 rerank 类型 |
+| `src/services/config/types.ts` | searchMode 默认值修为 hybrid；SECRET_KEYS 新增 RERANK_API_KEY；re-export rerank 类型；DEFAULT_CONFIG 新增 rerank 默认值 |
+| `src/services/config/config-service.ts` | deepMerge 扩展 rerank 节 |
+| `src/services/config/index.ts` | 导出 RerankProviderConfig / RerankProfile 类型 |
+| `src/services/knowledge/knowledge-service.ts` | 新增 rerankService 字段 + setRerankService()；query() 重写为三段式（recall→rerank→final）；新增 RECALL_TOP_K / RERANK_TOP_N 常量 |
+| `src/services/knowledge/index.ts` | 导出 CompatibleRerankService + IRerankService |
+| `src/services/index.ts` | 导入 CompatibleRerankService；新增 resolveRerankProfile()；initServices() 中初始化 rerank service；refreshEmbeddingService() 扩展为同时刷新 rerank |
+| `src/features/knowledge/KnowledgePanel.tsx` | 新增 Rerank 配置区（启用开关 + 档案 CRUD + Popover 编辑） |
 
-### 未改动
+### 明确未动的文件
 
-- Pipeline / CharacterService / Stage / Live2D / TTS / OBS / ControlPanel — 全部未动
-- EventBus 事件定义 — 未动
-- 角色卡解析 — 未动
-- prompt-builder / knowledge-formatter / text-chunker / orama-store — 未动
-- embedding-service.ts — 未改（配置变更通过 new 实例解决）
+- `src/services/llm/llm-service.ts` — 调用点不变
+- `src/services/llm/prompt-builder.ts` — 截断逻辑不变
+- `src/services/knowledge/knowledge-formatter.ts` — 格式化逻辑不变
+- `src/services/knowledge/orama-store.ts` — 召回层不变
+- `src/services/knowledge/embedding-service.ts` — embedding 逻辑不变
+- `src/services/knowledge/text-chunker.ts` — 切块不变
+- Pipeline / CharacterService / Stage / Live2D / TTS / OBS / ControlPanel / EventBus — 全部不动
+
+---
 
 ## 验证情况
 
-| 层次 | 状态 | 说明 | 证据 |
-|------|------|------|------|
-| TypeScript 编译 | ✅ | `npx tsc --noEmit` 零错误 | 编译通过 |
-| Vite build | ✅ | `npx vite build` 零错误 | 构建成功 |
-| Lint | ✅ | 零错误 | — |
-| 浏览器端功能验证 | ⏳ 待验证 | 需要配置真实 API Key 后手测 | — |
-| Tauri 桌面端 | ⏳ 待验证 | — | — |
+| 层次 | 状态 | 说明 |
+|------|------|------|
+| TypeScript 编译 | ✅ | `npx tsc --noEmit` 零错误 |
+| Vite build | ✅ | `npx vite build` 零错误 |
+| Lint | ✅ | 零错误 |
+| Rerank 功能手测 | ⏳ 待验证 | 需要配置 Rerank API Key + 真实 API 端点 |
+| Baseline 实验 | ⏳ 待填写 | 模板已创建，需手测填写 |
+| Rerank 实验 | ⏳ 待填写 | 模板已创建，需手测填写 |
+| 回归测试 | ⏳ 待验证 | TTS / Stage / OBS / 角色切换等不应受影响 |
 
-## 风险 / 限制 / 未完成项
+---
 
-1. **Embedding 维度变更需重建索引**：如果用户先用 1536 维的 `text-embedding-3-small` 导入了数据，再改为 1024 维的 `text-embedding-v4`，Orama DB 的 schema 会不兼容。当前逻辑会自动检测并提示用户"重建索引"，但已有索引的向量会失效需重新 embedding
-2. **DMXAPI `text-embedding-v4` 的 `dimensions` 参数**：DMXAPI 文档未明确 `dimensions` 参数是否支持（OpenAI 格式支持通过 `dimensions` 字段指定输出维度）。如果 DMXAPI 不支持 `dimensions` 参数，模型会返回默认维度的向量，需要确保 Orama schema 维度与实际返回维度一致
-3. **sessionStorage 开发模式下刷新丢失**：浏览器开发模式下 Embedding API Key 存在 sessionStorage 中，页面刷新后需重新输入
+## 已知限制
 
-## 引导操作（新用户第一次使用知识库）
+1. **rerank 默认关闭**：`rerankEnabled` 默认为 `false`，需要用户在 UI 中手动开启并配置 Rerank 档案
+2. **rerank 延迟叠加**：rerank 会在 recall 之后增加一次 API 调用（10s 超时），直播场景需关注总延迟
+3. **降级机制**：rerank API 失败时自动降级为不 rerank（直接截取 recall 结果），会打 warn 日志
+4. **实验数据待填写**：baseline 和 rerank 实验模板已创建，但需要手测才能填写实际数据
+
+---
+
+## 本轮状态
+
+**`implemented but not yet accepted`**
+
+- 代码实现已完成，编译验证通过
+- 运行时功能验证待手测
+- Baseline vs Rerank 对比实验待执行
+
+---
+
+## 建议手测步骤
 
 ### 前置条件
 
-- 已有可用的 DMXAPI 账号和 API Key（或其他 OpenAI 兼容的 embedding 服务）
-- 已配置至少一个 LLM Profile（如果选择"复用 LLM Key"）
+- 已配置好 Embedding 档案并成功导入 `sample-knowledge.json`
+- 有可用的 Rerank API 端点和 Key
 
 ### 步骤
 
-1. **打开设置面板** → 找到「知识库管理」区域
-2. **配置 Embedding**：
-   - **Base URL**: `https://api.dmxapi.com/v1`（DMXAPI）或 `https://api.openai.com/v1`（OpenAI 原生）
-   - **模型名称**: `text-embedding-v4`（DMXAPI 推荐）或 `text-embedding-3-small`（OpenAI 原生）
-   - **维度**: `1024`（text-embedding-v4 默认）或 `1536`（text-embedding-3-small 默认）
-   - **密钥来源**: 
-     - 「复用当前 LLM 档案的 API Key」— 适用于 DMXAPI 等全模型共用一个 key 的场景
-     - 「使用独立的 Embedding API Key」— 适用于 embedding 和 LLM 使用不同服务商的场景
-   - 如选择独立 key，在下方输入 API Key
-3. **点击「保存 Embedding 配置」** → 看到"Embedding 配置已保存并生效"的绿色提示
-4. **导入知识**：
-   - 点击「导入 JSON」→ 选择 `public/sample-knowledge.json`（项目自带 5 条示例）
-   - 或点击「手动添加」→ 填写标题/内容 → 添加
-5. **验证检索**：
-   - 在「搜索验证」框中输入 `"好看的手办推荐"`
-   - 点击搜索 → 应返回「原神 Q 版摆件套装」等相关结果，并显示 score
-6. **验证 LLM 注入**：
-   - 切到聊天面板，发送 `"有什么好看的手办吗？"`
-   - LLM 回复应包含从知识库检索到的商品信息
+1. **Baseline 记录**（rerankEnabled=false）
+   - 确保 Rerank 未启用
+   - 在搜索验证框中依次执行 Q1-Q8，记录结果到 `baseline-experiment.md`
 
-### 常见问题
+2. **配置 Rerank**
+   - 打开知识库面板 → Rerank 配置 → 点击"未启用"切换为"已启用"
+   - 新增 Rerank 档案：
+     - 名称：如 `DMXAPI Qwen3 Rerank`
+     - Base URL：`https://www.dmxapi.cn`
+     - 模型：`qwen3-reranker-8b`（或 `bge-reranker-v2-m3-free`）
+     - API Key：填入有效 key
+   - 保存
 
-| 问题 | 原因 | 解决 |
-|------|------|------|
-| 导入时报"Embedding 服务未配置" | 未保存 Embedding 配置 | 先保存配置再导入 |
-| 导入时报 HTTP 401 | API Key 无效或未配置 | 检查 key 是否正确，检查 key source 选择 |
-| 导入时报 HTTP 404 | Base URL 不正确 | 确认 URL 包含 `/v1` 后缀 |
-| 搜索无结果 | 未导入任何文档 | 先导入数据 |
-| 索引显示"无索引" | 首次导入或维度变更后 | 导入文档会自动建索引；或点"重建索引" |
-| 导入后维度报错 | 配置维度与模型实际返回不匹配 | 检查模型实际输出维度，调整配置 |
+3. **Rerank 记录**（rerankEnabled=true）
+   - 使用同一批知识数据，依次执行 Q1-Q8，记录结果到 `rerank-experiment.md`
+   - 对比 baseline，填写对比总结
 
-## 测试用例计划
+4. **回归验证**
+   - 确认 TTS / Stage / OBS / 角色切换等功能不受影响
 
-### TC-01: Embedding 配置保存与持久化
+### 验收 Checklist
 
-| 步骤 | 操作 | 预期结果 |
-|------|------|---------|
-| 1 | 打开设置 → 知识库管理 | 看到 Embedding 配置区，默认值为 `https://api.openai.com/v1` / `text-embedding-3-small` / `1536` |
-| 2 | 修改 Base URL 为 `https://api.dmxapi.com/v1`，Model 为 `text-embedding-v4`，维度为 `1024` | 字段值更新 |
-| 3 | 点击"保存 Embedding 配置" | 绿色提示"Embedding 配置已保存并生效" |
-| 4 | 刷新页面 | 配置回显仍为刚才保存的值 |
+| # | 验收项 | 通过 |
+|---|--------|------|
+| 1 | searchMode 默认值统一为 hybrid | ⏳ |
+| 2 | rerank-service.ts 编译通过 | ✅ |
+| 3 | query() 内 rerank 步骤正确插入 | ⏳ |
+| 4 | rerank 失败时优雅降级 | ⏳ |
+| 5 | Rerank 配置 UI 可用（启用开关 + profile 管理） | ⏳ |
+| 6 | searchMode 不在 UI 中暴露 | ✅ |
+| 7 | Baseline 实验记录完成 | ⏳ |
+| 8 | Rerank 实验记录完成 | ⏳ |
+| 9 | 搜索验证框 rerank 后排序改善 | ⏳ |
+| 10 | 不破坏现有链路 | ⏳ |
+| 11 | TypeScript + Vite build 通过 | ✅ |
 
-### TC-02: 使用独立 Key
-
-| 步骤 | 操作 | 预期结果 |
-|------|------|---------|
-| 1 | Key Source 切换为「使用独立的 Embedding API Key」 | 出现 Key 输入框 |
-| 2 | 输入有效 API Key → 保存 | 成功提示 |
-| 3 | 导入 `sample-knowledge.json` | 成功导入 5 条文档 |
-
-### TC-03: 知识导入全链路
-
-| 步骤 | 操作 | 预期结果 |
-|------|------|---------|
-| 1 | 配置好 Embedding → 点击「导入 JSON」 | 文件选择器打开 |
-| 2 | 选择 `public/sample-knowledge.json` | 显示"成功导入 5 条文档" |
-| 3 | 检查状态栏 | 文档数 = 5，chunks > 0，索引就绪 |
-| 4 | 重复导入同一文件 | 显示"已存在，跳过"（id 去重） |
-
-### TC-04: 语义检索验证
-
-| 步骤 | 操作 | 预期结果 |
-|------|------|---------|
-| 1 | 在搜索框输入 `"手办 摆件"` → 搜索 | 返回「原神 Q 版摆件套装」，score 最高 |
-| 2 | 输入 `"直播什么时候"` → 搜索 | 返回「直播时间安排」相关结果 |
-| 3 | 输入 `"退货怎么退"` → 搜索 | 返回「退换货政策」相关结果 |
-| 4 | 输入完全无关文本 `"量子力学基本原理"` → 搜索 | 返回结果 score 较低或无结果 |
-
-### TC-05: LLM 注入闭环
-
-| 步骤 | 操作 | 预期结果 |
-|------|------|---------|
-| 1 | 确保知识库已有数据 + LLM Profile 已配置 | — |
-| 2 | 在聊天面板发送 `"有什么推荐的手办吗？"` | LLM 回复中应包含知识库中的商品信息（Q 版摆件套装、价格 128 元等） |
-| 3 | 检查浏览器 devtools console 日志 | 应看到 `[knowledge] knowledge retrieval results` 日志 |
-
-### TC-06: 重建索引
-
-| 步骤 | 操作 | 预期结果 |
-|------|------|---------|
-| 1 | 修改 embedding 配置（如改维度） → 保存 | 索引状态可能变为"无索引" |
-| 2 | 点击"重建索引" | 进度条显示 → "索引重建完成" |
-| 3 | 重新搜索 | 结果正常返回 |
-
-### TC-07: 初始化状态显示
-
-| 步骤 | 操作 | 预期结果 |
-|------|------|---------|
-| 1 | 刷新页面后立即打开设置 → 知识库 | 状态栏显示"初始化中..." |
-| 2 | 等待 1-2 秒 | 状态变为"索引就绪"或"无索引" |
-
-## 结论
-
-- **代码实现完成**：Embedding 配置 UI + refreshEmbeddingService + reinitialize + 初始化状态显示 — 全部实现并通过编译
-- **验收未完成**：需要人工配置真实 API Key 后按上述测试用例手测
-- **本轮状态**：`implemented but not yet accepted`
-- **建议下一步**：按 TC-01 → TC-07 顺序执行手测验证
+---
 
 ## 元信息
 
-- Commit: `b1ab589`
+- Commit: `01db160`
 - Branch: `feature/phase3-5-rag-foundation`
 - 报告路径: `dev-reports/phase3-5/run02/report.md`
-- 相关文档: `blueprints/phase3-5/run01-semantic-knowledge-foundation.md`
+- 实验记录: `dev-reports/phase3-5/run02/baseline-experiment.md` / `rerank-experiment.md`
+- 计划文档: `phase_3.5_run_02_rerank_c43404b5.plan.md`
