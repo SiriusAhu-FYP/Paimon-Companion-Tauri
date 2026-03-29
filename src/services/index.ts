@@ -1,7 +1,7 @@
 import { EventBus, eventBus } from "./event-bus";
 import { RuntimeService } from "./runtime";
 import { CharacterService } from "./character";
-import { KnowledgeService, OpenAIEmbeddingService } from "./knowledge";
+import { KnowledgeService, OpenAIEmbeddingService, CompatibleRerankService } from "./knowledge";
 import { ExternalInputService } from "./external-input";
 import { LLMService, MockLLMService, OpenAILLMService } from "./llm";
 import type { ILLMService } from "./llm/types";
@@ -111,7 +111,7 @@ export function initServices(): ServiceContainer {
 	const externalInput = new ExternalInputService(eventBus);
 	externalInput.setRuntime(runtime);
 
-	// Phase 3.5: 初始化 Embedding Service + Knowledge
+	// Phase 3.5: 初始化 Embedding Service + Rerank Service + Knowledge
 	const embProfile = resolveEmbeddingProfile(config);
 	if (embProfile) {
 		const embeddingService = new OpenAIEmbeddingService(
@@ -119,6 +119,14 @@ export function initServices(): ServiceContainer {
 			embProfile.id,
 		);
 		knowledge.setEmbeddingService(embeddingService);
+	}
+	const rerankProfile = resolveRerankProfile(config);
+	if (rerankProfile) {
+		const rerankService = new CompatibleRerankService(
+			{ baseUrl: rerankProfile.baseUrl, model: rerankProfile.model },
+			rerankProfile.id,
+		);
+		knowledge.setRerankService(rerankService);
 	}
 	knowledge.initialize().catch((err) => {
 		log.error("knowledge initialization failed", err);
@@ -202,8 +210,23 @@ function resolveEmbeddingProfile(config: AppConfig) {
 	return null;
 }
 
+function resolveRerankProfile(config: AppConfig) {
+	if (!config.knowledge.rerankEnabled) return null;
+	const activeProfile = config.knowledge.activeRerankProfileId
+		? config.knowledge.rerankProfiles.find((p) => p.id === config.knowledge.activeRerankProfileId)
+		: null;
+	if (activeProfile && activeProfile.baseUrl && activeProfile.model) {
+		return activeProfile;
+	}
+	// fallback to inline rerank config
+	if (config.knowledge.rerank.baseUrl && config.knowledge.rerank.model) {
+		return { id: "__inline_rerank__", name: "inline", ...config.knowledge.rerank };
+	}
+	return null;
+}
+
 /**
- * Embedding profile 变更后调用——重建 EmbeddingService + 重新初始化 Orama DB。
+ * Embedding / Rerank profile 变更后调用——重建对应 service + 重新初始化知识库。
  */
 export async function refreshEmbeddingService() {
 	if (!services) {
@@ -211,6 +234,8 @@ export async function refreshEmbeddingService() {
 		return;
 	}
 	const config = getConfig();
+
+	// 刷新 embedding
 	const embProfile = resolveEmbeddingProfile(config);
 	if (embProfile) {
 		const embeddingService = new OpenAIEmbeddingService(
@@ -219,10 +244,26 @@ export async function refreshEmbeddingService() {
 		);
 		services.knowledge.setEmbeddingService(embeddingService);
 	}
+
+	// 刷新 rerank
+	const rerankProfile = resolveRerankProfile(config);
+	if (rerankProfile) {
+		const rerankService = new CompatibleRerankService(
+			{ baseUrl: rerankProfile.baseUrl, model: rerankProfile.model },
+			rerankProfile.id,
+		);
+		services.knowledge.setRerankService(rerankService);
+	} else {
+		services.knowledge.setRerankService(null);
+	}
+
 	await services.knowledge.reinitialize();
-	log.info("embedding service refreshed", {
-		profileId: embProfile?.id ?? "none",
-		model: embProfile?.model ?? "none",
+	log.info("knowledge providers refreshed", {
+		embeddingProfileId: embProfile?.id ?? "none",
+		embeddingModel: embProfile?.model ?? "none",
+		rerankProfileId: rerankProfile?.id ?? "none",
+		rerankModel: rerankProfile?.model ?? "none",
+		rerankEnabled: config.knowledge.rerankEnabled,
 	});
 }
 

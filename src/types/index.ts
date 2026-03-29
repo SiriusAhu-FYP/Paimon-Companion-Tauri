@@ -13,6 +13,9 @@ export type {
 	KnowledgeDBMetadata,
 	KnowledgeDocumentStore,
 	KnowledgeIndexStore,
+	RerankProviderConfig,
+	RerankProfile,
+	RerankResult,
 } from "./knowledge";
 export {
 	CURRENT_SCHEMA_VERSION,
