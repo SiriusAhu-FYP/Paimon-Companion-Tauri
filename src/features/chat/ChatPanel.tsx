@@ -53,10 +53,15 @@ export function ChatPanel() {
 			const copy = [...prev];
 			const last = copy[copy.length - 1];
 			if (last?.streaming) {
-				copy[copy.length - 1] = { ...last, content: payload.fullText, streaming: false };
+				const text = payload.fullText || "[AI 未返回有效内容]";
+				copy[copy.length - 1] = { ...last, content: text, streaming: false };
 			}
 			return copy;
 		});
+		// 空响应时 TTS 不会触发，需要手动恢复 idle 状态
+		if (!payload.fullText) {
+			setStatus("idle");
+		}
 	});
 
 	useEventBus("llm:error", (payload) => {

@@ -199,6 +199,34 @@ export class KnowledgeService {
 		return { success: false, error: result.errors[0] ?? "未知错误" };
 	}
 
+	// ── 更新文档（删除旧 chunks + 重新向量化） ──
+
+	async updateDocument(docId: string, updates: { title?: string; content?: string }): Promise<{ success: boolean; error?: string }> {
+		if (!this.db) return { success: false, error: "知识库未初始化" };
+		if (!this.embeddingService) return { success: false, error: "Embedding 服务未配置" };
+
+		const idx = this.documents.findIndex((d) => d.id === docId);
+		if (idx === -1) return { success: false, error: "文档不存在" };
+
+		const doc = { ...this.documents[idx] };
+		if (updates.title !== undefined) doc.title = updates.title;
+		if (updates.content !== undefined) doc.content = updates.content;
+
+		try {
+			await removeByDocId(this.db, docId);
+			const chunks = await this.processDocument(doc);
+			await insertChunks(this.db, chunks);
+			this.documents[idx] = doc;
+			await this.persistAll();
+			log.info(`updated document: "${doc.title}" → ${chunks.length} chunks`);
+			return { success: true };
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			log.error(`update failed for "${doc.title}"`, err);
+			return { success: false, error: msg };
+		}
+	}
+
 	// ── 删除文档 ──
 
 	async removeDocument(docId: string): Promise<boolean> {
