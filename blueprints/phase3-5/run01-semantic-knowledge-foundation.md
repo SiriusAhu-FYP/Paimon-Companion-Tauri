@@ -1,5 +1,17 @@
 # Phase 3.5 Run 01 — Semantic Knowledge Base Foundation
 
+> **文档定位**: Run 01 正式实施蓝图（canonical）。
+> 阶段总览见 `rag-foundation.md`。
+
+---
+
+## Patch 历史
+
+| Patch | 日期 | 变更摘要 |
+|-------|------|---------|
+| Patch A | 2026-03-29 | similarity 0.5→0.2, hybrid 默认, fulltext fallback, persona 冲突修复 |
+| Patch B | 2026-03-29 | title 纳入 embedding 输入, 索引生命周期 revision 门控, schema v2→v3 |
+
 ---
 
 ## 1. 为什么叫 Semantic Knowledge Base Foundation
@@ -378,7 +390,7 @@ async query(queryText: string, options?: KnowledgeQueryOptions): Promise<Retriev
 
 本轮必须成立的核心链路是 **vector retrieval**（embedding → cosine similarity）。这是语义知识库区别于关键词检索的本质能力。
 
-**默认 searchMode 为 `"vector"`**。
+**默认 searchMode 为 `"hybrid"`**（Patch A 后调整，原为 `"vector"`）。
 
 Orama 内置 hybrid 模式（BM25 + cosine 归并）作为**附赠能力**，可通过 `KnowledgeConfig.searchMode` 切换为 `"hybrid"` 或 `"fulltext"`。但本轮不围绕 hybrid search 设计额外逻辑、不做权重调参、不把 hybrid 作为验收条件。
 
