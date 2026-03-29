@@ -112,10 +112,14 @@ export function initServices(): ServiceContainer {
 	externalInput.setRuntime(runtime);
 
 	// Phase 3.5: 初始化 Embedding Service + Knowledge
-	const embeddingConfig = config.knowledge.embedding;
-	const embeddingService = new OpenAIEmbeddingService(embeddingConfig);
-	knowledge.setEmbeddingService(embeddingService);
-	// 异步初始化知识库（加载持久化数据），不阻塞主流程
+	const embProfile = resolveEmbeddingProfile(config);
+	if (embProfile) {
+		const embeddingService = new OpenAIEmbeddingService(
+			{ baseUrl: embProfile.baseUrl, model: embProfile.model, dimension: embProfile.dimension },
+			embProfile.id,
+		);
+		knowledge.setEmbeddingService(embeddingService);
+	}
 	knowledge.initialize().catch((err) => {
 		log.error("knowledge initialization failed", err);
 	});
@@ -184,9 +188,22 @@ export function refreshProviders() {
 	});
 }
 
+function resolveEmbeddingProfile(config: AppConfig) {
+	const activeProfile = config.knowledge.activeEmbeddingProfileId
+		? config.knowledge.embeddingProfiles.find((p) => p.id === config.knowledge.activeEmbeddingProfileId)
+		: null;
+	if (activeProfile && activeProfile.baseUrl && activeProfile.model) {
+		return activeProfile;
+	}
+	// fallback to inline embedding config (legacy)
+	if (config.knowledge.embedding.baseUrl && config.knowledge.embedding.model) {
+		return { id: "__inline__", ...config.knowledge.embedding };
+	}
+	return null;
+}
+
 /**
- * 知识库 Embedding 配置变更后调用——重建 EmbeddingService + 重新初始化 Orama DB。
- * 因为 embedding dimension 变更会导致 Orama schema 不兼容，所以需要完全重新初始化。
+ * Embedding profile 变更后调用——重建 EmbeddingService + 重新初始化 Orama DB。
  */
 export async function refreshEmbeddingService() {
 	if (!services) {
@@ -194,15 +211,18 @@ export async function refreshEmbeddingService() {
 		return;
 	}
 	const config = getConfig();
-	const embeddingConfig = config.knowledge.embedding;
-	const embeddingService = new OpenAIEmbeddingService(embeddingConfig);
-	services.knowledge.setEmbeddingService(embeddingService);
-	// 重新初始化（会创建新 Orama DB + 加载持久化）
+	const embProfile = resolveEmbeddingProfile(config);
+	if (embProfile) {
+		const embeddingService = new OpenAIEmbeddingService(
+			{ baseUrl: embProfile.baseUrl, model: embProfile.model, dimension: embProfile.dimension },
+			embProfile.id,
+		);
+		services.knowledge.setEmbeddingService(embeddingService);
+	}
 	await services.knowledge.reinitialize();
 	log.info("embedding service refreshed", {
-		baseUrl: embeddingConfig.baseUrl,
-		model: embeddingConfig.model,
-		dimension: embeddingConfig.dimension,
+		profileId: embProfile?.id ?? "none",
+		model: embProfile?.model ?? "none",
 	});
 }
 

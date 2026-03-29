@@ -31,6 +31,8 @@ function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfi
 				...defaults.knowledge.embedding,
 				...(overrides.knowledge?.embedding ?? {}),
 			},
+			embeddingProfiles: overrides.knowledge?.embeddingProfiles ?? defaults.knowledge.embeddingProfiles,
+			activeEmbeddingProfileId: overrides.knowledge?.activeEmbeddingProfileId ?? defaults.knowledge.activeEmbeddingProfileId,
 			retrievalTopK: overrides.knowledge?.retrievalTopK ?? defaults.knowledge.retrievalTopK,
 			searchMode: overrides.knowledge?.searchMode ?? defaults.knowledge.searchMode,
 		},

@@ -1,17 +1,11 @@
 // Phase 3.5 — 知识库共享类型定义
 
-// ── 知识分类 ──
-
-export type KnowledgeCategory = "faq" | "product" | "text";
-
 // ── 导入层文档结构（用户导入粒度） ──
 
 export interface KnowledgeDocument {
 	id: string;
-	category: KnowledgeCategory;
 	title: string;
 	content: string;
-	tags?: string[];
 	source?: string;
 }
 
@@ -21,7 +15,6 @@ export interface KnowledgeChunk {
 	docId: string;
 	chunkIndex: number;
 	text: string;
-	category: KnowledgeCategory;
 	title: string;
 	source: string;
 	embedding: number[];
@@ -33,7 +26,6 @@ export interface RetrievalResult {
 	chunkText: string;
 	docId: string;
 	title: string;
-	category: KnowledgeCategory;
 	source: string;
 	score: number;
 }
@@ -42,24 +34,33 @@ export interface RetrievalResult {
 
 export interface KnowledgeQueryOptions {
 	topK?: number;
-	category?: KnowledgeCategory;
 	searchMode?: KnowledgeSearchMode;
 }
 
-// ── Embedding Provider 配置 ──
+// ── Embedding Profile（类似 LLMProfile，独立管理 key/url） ──
 
-export type EmbeddingApiKeySource = "llm" | "dedicated";
+export interface EmbeddingProfile {
+	id: string;
+	name: string;
+	baseUrl: string;
+	model: string;
+	dimension: number;
+}
+
+// ── Embedding Provider 配置（运行时使用） ──
+
 export type KnowledgeSearchMode = "vector" | "hybrid" | "fulltext";
 
 export interface EmbeddingProviderConfig {
 	baseUrl: string;
 	model: string;
 	dimension: number;
-	apiKeySource: EmbeddingApiKeySource;
 }
 
 export interface KnowledgeConfig {
 	embedding: EmbeddingProviderConfig;
+	embeddingProfiles: EmbeddingProfile[];
+	activeEmbeddingProfileId: string;
 	retrievalTopK: number;
 	searchMode: KnowledgeSearchMode;
 }
@@ -102,11 +103,12 @@ export const DEFAULT_CHUNK_STRATEGY = "fixed-512-overlap-50";
 
 export const DEFAULT_KNOWLEDGE_CONFIG: KnowledgeConfig = {
 	embedding: {
-		baseUrl: "https://api.openai.com/v1",
-		model: "text-embedding-3-small",
+		baseUrl: "",
+		model: "",
 		dimension: 1536,
-		apiKeySource: "llm",
 	},
+	embeddingProfiles: [],
+	activeEmbeddingProfileId: "",
 	retrievalTopK: 5,
 	searchMode: "vector",
 };
