@@ -2,13 +2,12 @@ export type { EventMap, EventName } from "./events";
 export type { RuntimeMode, RuntimeState } from "./runtime";
 export type { CharacterProfile, CharacterProfileSource, CharacterState } from "./character";
 export type {
-	KnowledgeCategory,
 	KnowledgeDocument,
 	KnowledgeChunk,
 	RetrievalResult,
 	KnowledgeQueryOptions,
+	EmbeddingProfile,
 	EmbeddingProviderConfig,
-	EmbeddingApiKeySource,
 	KnowledgeConfig,
 	KnowledgeSearchMode,
 	KnowledgeDBMetadata,

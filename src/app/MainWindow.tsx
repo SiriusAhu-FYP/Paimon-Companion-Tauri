@@ -3,9 +3,11 @@ import { Box, IconButton, Tooltip } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
+import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import { StageHost, StageSlot } from "@/features/stage";
 import { ControlPanel } from "@/features/control-panel";
 import { SettingsPanel } from "@/features/settings";
+import { KnowledgePanel } from "@/features/knowledge";
 import { ChatPanel } from "@/features/chat";
 import { EventLog } from "@/app/EventLog";
 import { StatusBar } from "@/app/StatusBar";
@@ -23,6 +25,7 @@ export function MainWindow() {
 	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("clean");
 	const [eventLogOpen, setEventLogOpen] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
+	const [showKnowledge, setShowKnowledge] = useState(false);
 
 	const slotRectRef = useRef<DOMRect | null>(null);
 	const unlistenMoveRef = useRef<(() => void) | null>(null);
@@ -193,11 +196,20 @@ export function MainWindow() {
 							{mode === "dark" ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
 						</IconButton>
 					</Tooltip>
+					<Tooltip title="知识库">
+						<IconButton
+							size="small"
+							onClick={() => { setShowKnowledge(true); setShowSettings(false); }}
+							sx={{ color: showKnowledge ? "primary.main" : "text.secondary" }}
+						>
+							<AutoStoriesIcon fontSize="small" />
+						</IconButton>
+					</Tooltip>
 					<Tooltip title="设置">
 						<IconButton
 							size="small"
-							onClick={() => setShowSettings(true)}
-							sx={{ color: "text.secondary" }}
+							onClick={() => { setShowSettings(true); setShowKnowledge(false); }}
+							sx={{ color: showSettings ? "primary.main" : "text.secondary" }}
 						>
 							<SettingsIcon fontSize="small" />
 						</IconButton>
@@ -250,10 +262,12 @@ export function MainWindow() {
 					<ChatPanel />
 				</Box>
 
-				{/* 右栏: 控制面板 / 设置 */}
+				{/* 右栏: 控制面板 / 设置 / 知识库 */}
 				<Box sx={{ width: 280, minWidth: 220, flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
 					{showSettings ? (
 						<SettingsPanel onClose={() => setShowSettings(false)} />
+					) : showKnowledge ? (
+						<KnowledgePanel onClose={() => setShowKnowledge(false)} />
 					) : (
 						<ControlPanel />
 					)}

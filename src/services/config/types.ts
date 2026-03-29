@@ -74,7 +74,7 @@ export interface CharacterSettingsConfig {
 
 // ── Knowledge（知识库配置，独立于 LLM / TTS） ──
 
-export type { KnowledgeConfig, EmbeddingProviderConfig, EmbeddingApiKeySource, KnowledgeSearchMode } from "@/types/knowledge";
+export type { KnowledgeConfig, EmbeddingProviderConfig, EmbeddingProfile, KnowledgeSearchMode } from "@/types/knowledge";
 
 // ── 顶层 AppConfig ──
 
@@ -95,7 +95,7 @@ export interface AppConfig {
 export const SECRET_KEYS = {
 	LLM_API_KEY: (profileId: string) => `llm-api-key:${profileId}`,
 	TTS_API_KEY: "tts-api-key",
-	EMBEDDING_API_KEY: "embedding-api-key",
+	EMBEDDING_API_KEY: (profileId: string) => `embedding-api-key:${profileId}`,
 } as const;
 
 // ── 默认值 ──
@@ -130,11 +130,12 @@ export const DEFAULT_CONFIG: AppConfig = {
 	activeTtsProfileId: "",
 	knowledge: {
 		embedding: {
-			baseUrl: "https://api.openai.com/v1",
-			model: "text-embedding-3-small",
+			baseUrl: "",
+			model: "",
 			dimension: 1536,
-			apiKeySource: "llm" as const,
 		},
+		embeddingProfiles: [],
+		activeEmbeddingProfileId: "",
 		retrievalTopK: 5,
 		searchMode: "vector" as const,
 	},

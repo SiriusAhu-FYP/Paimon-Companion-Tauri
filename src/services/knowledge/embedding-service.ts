@@ -3,7 +3,6 @@
 
 import { createLogger } from "@/services/logger";
 import { proxyRequest } from "@/services/config/http-proxy";
-import { getConfig } from "@/services/config/config-service";
 import { SECRET_KEYS } from "@/services/config/types";
 import type { EmbeddingProviderConfig } from "@/types/knowledge";
 
@@ -22,13 +21,16 @@ export interface IEmbeddingService {
 
 export class OpenAIEmbeddingService implements IEmbeddingService {
 	private config: EmbeddingProviderConfig;
+	private profileId: string | null;
 
-	constructor(config: EmbeddingProviderConfig) {
+	constructor(config: EmbeddingProviderConfig, profileId: string | null = null) {
 		this.config = config;
+		this.profileId = profileId;
 		log.info("OpenAI embedding service initialized", {
 			baseUrl: config.baseUrl,
 			model: config.model,
 			dimension: config.dimension,
+			profileId,
 		});
 	}
 
@@ -40,7 +42,10 @@ export class OpenAIEmbeddingService implements IEmbeddingService {
 	async embedBatch(texts: string[]): Promise<number[][]> {
 		if (texts.length === 0) return [];
 
-		const baseUrl = this.config.baseUrl.replace(/\/+$/, "");
+		let baseUrl = this.config.baseUrl.replace(/\/+$/, "");
+		if (!baseUrl.endsWith("/v1")) {
+			baseUrl += "/v1";
+		}
 		const url = `${baseUrl}/embeddings`;
 
 		const body = JSON.stringify({
@@ -49,7 +54,7 @@ export class OpenAIEmbeddingService implements IEmbeddingService {
 			dimensions: this.config.dimension,
 		});
 
-		const secretKey = this.resolveSecretKey();
+		const secretKey = this.profileId ? SECRET_KEYS.EMBEDDING_API_KEY(this.profileId) : undefined;
 
 		log.debug(`embedding request: ${texts.length} texts, model=${this.config.model}`);
 
@@ -72,7 +77,6 @@ export class OpenAIEmbeddingService implements IEmbeddingService {
 			data: Array<{ embedding: number[]; index: number }>;
 		};
 
-		// 按 index 排序保证顺序一致
 		const sorted = data.data.sort((a, b) => a.index - b.index);
 		const embeddings = sorted.map((d) => d.embedding);
 
@@ -87,17 +91,5 @@ export class OpenAIEmbeddingService implements IEmbeddingService {
 
 	getModelName(): string {
 		return this.config.model;
-	}
-
-	private resolveSecretKey(): string | undefined {
-		if (this.config.apiKeySource === "dedicated") {
-			return SECRET_KEYS.EMBEDDING_API_KEY;
-		}
-		// apiKeySource === "llm"：复用当前活跃 LLM profile 的 key
-		const cfg = getConfig();
-		if (cfg.activeLlmProfileId) {
-			return SECRET_KEYS.LLM_API_KEY(cfg.activeLlmProfileId);
-		}
-		return undefined;
 	}
 }

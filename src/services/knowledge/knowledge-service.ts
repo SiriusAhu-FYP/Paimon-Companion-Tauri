@@ -110,6 +110,13 @@ export class KnowledgeService {
 				}
 			}
 
+			// 只有 embedding service 可用时才标记为初始化完成
+			// 否则后续 addDocument 会正确报错"Embedding 服务未配置"
+			if (!this.embeddingService) {
+				log.warn("knowledge service initialized without embedding service — waiting for configuration");
+				return;
+			}
+
 			this.initialized = true;
 			log.info("knowledge service initialized", {
 				documentCount: this.documents.length,
@@ -357,14 +364,12 @@ export class KnowledgeService {
 		const textChunks = chunkText(doc.content);
 		const texts = textChunks.map((c) => c.text);
 
-		// 批量 embedding
 		const embeddings = await this.embeddingService.embedBatch(texts);
 
 		return textChunks.map((chunk, i) => ({
 			docId: doc.id,
 			chunkIndex: chunk.index,
 			text: chunk.text,
-			category: doc.category,
 			title: doc.title,
 			source: doc.source ?? "manual",
 			embedding: embeddings[i],
