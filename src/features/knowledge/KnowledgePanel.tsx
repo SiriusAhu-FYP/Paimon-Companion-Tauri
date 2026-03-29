@@ -5,7 +5,6 @@ import {
 	type SelectChangeEvent,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import SearchIcon from "@mui/icons-material/Search";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
@@ -19,6 +18,8 @@ import {
 import { HelpTooltip } from "@/components";
 import { getServices, refreshEmbeddingService } from "@/services";
 import type { KnowledgeDocument, RetrievalResult, EmbeddingProfile } from "@/types/knowledge";
+import type { IndexStatus } from "@/services/knowledge";
+import { RebuildGate } from "./RebuildGate";
 
 interface KnowledgePanelProps {
 	onClose: () => void;
@@ -45,8 +46,13 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 	const [chunkCount, setChunkCount] = useState(0);
 	const [hasIndex, setHasIndex] = useState(false);
 	const [knowledgeReady, setKnowledgeReady] = useState(false);
+	const [indexStatus, setIndexStatus] = useState<IndexStatus>("ready");
 	const [importing, setImporting] = useState(false);
 	const [rebuilding, setRebuilding] = useState(false);
+
+	// 门控状态：当搜索被拦截时保存待执行动作
+	const [showRebuildGate, setShowRebuildGate] = useState(false);
+	const pendingSearchRef = useRef<string | null>(null);
 
 	// Add form
 	const [showAddForm, setShowAddForm] = useState(false);
@@ -74,6 +80,7 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 			setChunkCount(knowledge.getChunkCount());
 			setHasIndex(knowledge.hasIndex());
 			setKnowledgeReady(knowledge.isInitialized());
+			setIndexStatus(knowledge.getIndexStatus());
 		} catch { /* services not yet initialized */ }
 	}, []);
 
@@ -289,18 +296,43 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 		} finally { setRebuilding(false); }
 	}, [refreshState]);
 
-	const handleSearch = useCallback(async () => {
-		if (!searchQuery.trim()) return;
+	const executeSearch = useCallback(async (query: string) => {
 		setSearching(true);
 		setSearchResults(null);
 		try {
 			const { knowledge } = getServices();
-			const results = await knowledge.query(searchQuery.trim(), { topK: 5 });
+			const results = await knowledge.query(query, { topK: 5 });
 			setSearchResults(results);
 		} catch (err) {
 			setMessage({ type: "error", text: `搜索失败: ${err instanceof Error ? err.message : String(err)}` });
 		} finally { setSearching(false); }
-	}, [searchQuery]);
+	}, []);
+
+	const handleSearch = useCallback(async () => {
+		if (!searchQuery.trim()) return;
+		const { knowledge } = getServices();
+		if (knowledge.getIndexStatus() === "needs_rebuild") {
+			pendingSearchRef.current = searchQuery.trim();
+			setShowRebuildGate(true);
+			return;
+		}
+		executeSearch(searchQuery.trim());
+	}, [searchQuery, executeSearch]);
+
+	const handleGateRebuilt = useCallback(() => {
+		setShowRebuildGate(false);
+		refreshState();
+		setMessage({ type: "success", text: "索引重建完成" });
+		if (pendingSearchRef.current) {
+			executeSearch(pendingSearchRef.current);
+			pendingSearchRef.current = null;
+		}
+	}, [executeSearch, refreshState]);
+
+	const handleGateCancel = useCallback(() => {
+		setShowRebuildGate(false);
+		pendingSearchRef.current = null;
+	}, []);
 
 	return (
 		<Box sx={{ p: 1, display: "flex", flexDirection: "column", gap: 0.75, height: "100%", overflowY: "auto" }}>
@@ -386,10 +418,31 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 				<Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
 					<Chip label={`${documents.length} 文档`} size="small" variant="outlined" />
 					<Chip label={`${chunkCount} chunks`} size="small" variant="outlined" />
-					<Chip label={knowledgeReady ? (hasIndex ? "索引就绪" : "无索引") : "初始化中..."} size="small"
-						color={knowledgeReady ? (hasIndex ? "success" : "default") : "warning"} variant="outlined" />
+					<Chip
+						label={
+							!knowledgeReady ? "初始化中..."
+								: indexStatus === "needs_rebuild" ? "需要重建索引"
+									: indexStatus === "rebuilding" ? "重建中..."
+										: indexStatus === "error" ? "索引异常"
+											: hasIndex ? "索引就绪" : "无索引"
+						}
+						size="small"
+						color={
+							!knowledgeReady ? "warning"
+								: indexStatus === "needs_rebuild" ? "warning"
+									: indexStatus === "rebuilding" ? "info"
+										: indexStatus === "error" ? "error"
+											: hasIndex ? "success" : "default"
+						}
+						variant="outlined"
+					/>
 				</Stack>
 			</Box>
+
+			{/* Rebuild Gate */}
+			{showRebuildGate && (
+				<RebuildGate onRebuilt={handleGateRebuilt} onCancel={handleGateCancel} />
+			)}
 
 			{/* Actions */}
 			<Stack direction="row" spacing={0.5} flexWrap="wrap">
@@ -464,7 +517,7 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 				</Stack>
 				<Stack direction="row" spacing={0.5}>
 					<TextField size="small" fullWidth placeholder="输入搜索文本" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }} />
-					<Button size="small" variant="contained" startIcon={<SearchIcon />} onClick={handleSearch} disabled={searching || !searchQuery.trim()}>{searching ? "..." : "搜索"}</Button>
+					<Button size="small" variant="contained" onClick={handleSearch} disabled={searching || !searchQuery.trim()}>{searching ? "..." : "搜索"}</Button>
 				</Stack>
 				{searching && <LinearProgress sx={{ my: 0.25 }} />}
 				{searchResults !== null && (

@@ -16,7 +16,7 @@ import type { IEmbeddingService } from "./embedding-service";
 import { chunkText } from "./text-chunker";
 import {
 	createKnowledgeDB, insertChunks, searchKnowledge,
-	removeByDocId, saveDB, loadDB, getChunkCount,
+	saveDB, loadDB, getChunkCount,
 	type KnowledgeOrama,
 } from "./orama-store";
 import {
@@ -36,12 +36,19 @@ interface LiveContextEntry {
 	expiresAt: number | null;
 }
 
+export type IndexStatus = "ready" | "needs_rebuild" | "rebuilding" | "error";
+
 export class KnowledgeService {
 	private bus: EventBus;
 	private embeddingService: IEmbeddingService | null = null;
 	private db: KnowledgeOrama | null = null;
 	private documents: KnowledgeDocument[] = [];
 	private metadata: KnowledgeDBMetadata | null = null;
+
+	// revision 机制：文档变动递增 documentsRevision，索引重建后同步 indexedRevision
+	private documentsRevision = 0;
+	private indexedRevision = 0;
+	private _indexStatus: IndexStatus = "ready";
 
 	// liveContext 保留原样（ControlPanel 临时注入，不走 Orama）
 	private liveContext: LiveContextEntry[] = [];
@@ -110,18 +117,27 @@ export class KnowledgeService {
 				}
 			}
 
-			// 只有 embedding service 可用时才标记为初始化完成
-			// 否则后续 addDocument 会正确报错"Embedding 服务未配置"
-			if (!this.embeddingService) {
-				log.warn("knowledge service initialized without embedding service — waiting for configuration");
-				return;
-			}
+		// revision 状态初始化：如果有文档但无有效索引，标记 needs_rebuild
+		if (this.documents.length > 0 && !this.metadata) {
+			this.documentsRevision = 1;
+			this.indexedRevision = 0;
+		} else if (this.metadata) {
+			this.documentsRevision = 0;
+			this.indexedRevision = 0;
+		}
 
-			this.initialized = true;
-			log.info("knowledge service initialized", {
-				documentCount: this.documents.length,
-				hasIndex: !!this.metadata,
-			});
+		// 只有 embedding service 可用时才标记为初始化完成
+		if (!this.embeddingService) {
+			log.warn("knowledge service initialized without embedding service — waiting for configuration");
+			return;
+		}
+
+		this.initialized = true;
+		log.info("knowledge service initialized", {
+			documentCount: this.documents.length,
+			hasIndex: !!this.metadata,
+			indexStatus: this.getIndexStatus(),
+		});
 		} catch (err) {
 			log.error("knowledge service initialization failed", err);
 		} finally {
@@ -140,7 +156,23 @@ export class KnowledgeService {
 		await this.initialize();
 	}
 
-	// ── 导入文档 ──
+	// ── 索引状态管理 ──
+
+	getIndexStatus(): IndexStatus {
+		if (this._indexStatus === "rebuilding") return "rebuilding";
+		if (this.documentsRevision !== this.indexedRevision) return "needs_rebuild";
+		return this._indexStatus;
+	}
+
+	getDocumentsRevision(): number { return this.documentsRevision; }
+	getIndexedRevision(): number { return this.indexedRevision; }
+
+	private markDocumentsChanged() {
+		this.documentsRevision++;
+		log.info(`documents changed: documentsRevision=${this.documentsRevision}, indexedRevision=${this.indexedRevision}`);
+	}
+
+	// ── 导入文档（只更新文档列表 + 持久化，不触发 embedding / Orama） ──
 
 	async importDocuments(docs: KnowledgeDocument[]): Promise<{ imported: number; errors: string[] }> {
 		const errors: string[] = [];
@@ -150,42 +182,21 @@ export class KnowledgeService {
 			return { imported: 0, errors };
 		}
 
-		if (!this.embeddingService) {
-			errors.push("Embedding 服务未配置");
-			return { imported: 0, errors };
-		}
-
-		if (!this.db) {
-			errors.push("知识库未初始化");
-			return { imported: 0, errors };
-		}
-
 		let imported = 0;
 
 		for (const doc of docs) {
-			try {
-				// 检查 id 重复
-				if (this.documents.some((d) => d.id === doc.id)) {
-					errors.push(`文档 "${doc.title}" (id: ${doc.id}) 已存在，跳过`);
-					continue;
-				}
-
-				const chunks = await this.processDocument(doc);
-				await insertChunks(this.db, chunks);
-
-				this.documents.push(doc);
-				imported++;
-
-				log.info(`imported document: "${doc.title}" → ${chunks.length} chunks`);
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err);
-				errors.push(`导入 "${doc.title}" 失败: ${msg}`);
-				log.error(`import failed for "${doc.title}"`, err);
+			if (this.documents.some((d) => d.id === doc.id)) {
+				errors.push(`文档 "${doc.title}" (id: ${doc.id}) 已存在，跳过`);
+				continue;
 			}
+			this.documents.push(doc);
+			imported++;
+			log.info(`imported document (pending index): "${doc.title}"`);
 		}
 
 		if (imported > 0) {
-			await this.persistAll();
+			this.markDocumentsChanged();
+			await this.persistDocumentsOnly();
 		}
 
 		return { imported, errors };
@@ -199,12 +210,9 @@ export class KnowledgeService {
 		return { success: false, error: result.errors[0] ?? "未知错误" };
 	}
 
-	// ── 更新文档（删除旧 chunks + 重新向量化） ──
+	// ── 更新文档（只更新文档列表 + 持久化，不触发 embedding / Orama） ──
 
 	async updateDocument(docId: string, updates: { title?: string; content?: string }): Promise<{ success: boolean; error?: string }> {
-		if (!this.db) return { success: false, error: "知识库未初始化" };
-		if (!this.embeddingService) return { success: false, error: "Embedding 服务未配置" };
-
 		const idx = this.documents.findIndex((d) => d.id === docId);
 		if (idx === -1) return { success: false, error: "文档不存在" };
 
@@ -212,34 +220,23 @@ export class KnowledgeService {
 		if (updates.title !== undefined) doc.title = updates.title;
 		if (updates.content !== undefined) doc.content = updates.content;
 
-		try {
-			await removeByDocId(this.db, docId);
-			const chunks = await this.processDocument(doc);
-			await insertChunks(this.db, chunks);
-			this.documents[idx] = doc;
-			await this.persistAll();
-			log.info(`updated document: "${doc.title}" → ${chunks.length} chunks`);
-			return { success: true };
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
-			log.error(`update failed for "${doc.title}"`, err);
-			return { success: false, error: msg };
-		}
+		this.documents[idx] = doc;
+		this.markDocumentsChanged();
+		await this.persistDocumentsOnly();
+		log.info(`updated document (pending index): "${doc.title}"`);
+		return { success: true };
 	}
 
 	// ── 删除文档 ──
 
 	async removeDocument(docId: string): Promise<boolean> {
-		if (!this.db) return false;
-
 		const idx = this.documents.findIndex((d) => d.id === docId);
 		if (idx === -1) return false;
 
-		await removeByDocId(this.db, docId);
 		this.documents.splice(idx, 1);
-
-		await this.persistAll();
-		log.info(`removed document: ${docId}`);
+		this.markDocumentsChanged();
+		await this.persistDocumentsOnly();
+		log.info(`removed document (pending index): ${docId}`);
 		return true;
 	}
 
@@ -288,6 +285,7 @@ export class KnowledgeService {
 			return { success: false, error: "Embedding 服务未配置" };
 		}
 
+		this._indexStatus = "rebuilding";
 		const config = getConfig().knowledge;
 		const dimension = config.embedding.dimension;
 
@@ -304,12 +302,15 @@ export class KnowledgeService {
 				totalChunks += chunks.length;
 			} catch (err) {
 				log.error(`rebuild failed for "${doc.title}"`, err);
+				this._indexStatus = "error";
 				return { success: false, error: `重建文档 "${doc.title}" 失败: ${err instanceof Error ? err.message : String(err)}` };
 			}
 		}
 
 		await this.persistAll();
-		log.info(`index rebuilt: ${this.documents.length} docs, ${totalChunks} chunks`);
+		this.indexedRevision = this.documentsRevision;
+		this._indexStatus = "ready";
+		log.info(`index rebuilt: ${this.documents.length} docs, ${totalChunks} chunks, revision=${this.indexedRevision}`);
 		return { success: true };
 	}
 
@@ -392,13 +393,24 @@ export class KnowledgeService {
 
 	// ── 内部方法 ──
 
+	/**
+	 * 构建送入 embedding 的文本：将 title 前置拼入，使文档级语义参与向量化。
+	 * 这与 Orama 中存储的 text 字段（纯 chunk 正文）分开——embedding 输入 ≠ 存储文本。
+	 */
+	private buildEmbeddingInput(title: string, chunkText: string): string {
+		const t = title.trim();
+		if (!t) return chunkText;
+		return `${t}\n${chunkText}`;
+	}
+
 	private async processDocument(doc: KnowledgeDocument): Promise<KnowledgeChunk[]> {
 		if (!this.embeddingService) throw new Error("Embedding service not available");
 
 		const textChunks = chunkText(doc.content);
-		const texts = textChunks.map((c) => c.text);
+		// embedding 输入 = title + chunk 正文（title 提供文档级语义）
+		const embeddingInputs = textChunks.map((c) => this.buildEmbeddingInput(doc.title, c.text));
 
-		const embeddings = await this.embeddingService.embedBatch(texts);
+		const embeddings = await this.embeddingService.embedBatch(embeddingInputs);
 
 		return textChunks.map((chunk, i) => ({
 			docId: doc.id,
@@ -408,6 +420,14 @@ export class KnowledgeService {
 			source: doc.source ?? "manual",
 			embedding: embeddings[i],
 		}));
+	}
+
+	private async persistDocumentsOnly(): Promise<void> {
+		await saveDocuments({
+			documents: this.documents,
+			updatedAt: Date.now(),
+		});
+		log.info("documents persisted", { documentCount: this.documents.length });
 	}
 
 	private async persistAll(): Promise<void> {

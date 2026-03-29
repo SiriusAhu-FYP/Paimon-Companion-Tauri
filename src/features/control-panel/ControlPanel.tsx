@@ -161,17 +161,8 @@ export function ControlPanel() {
 			{/* 角色切换 */}
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
 				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
-					当前角色
+					当前读取：{profiles.find((p) => p.id === selectedId)?.name ?? "手动人设"}
 				</Typography>
-				<Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-					<Chip
-						label={profiles.find((p) => p.id === selectedId)?.name ?? selectedId === "__manual__" ? "默认角色" : "未选择"}
-						color="primary"
-						size="small"
-						variant="outlined"
-						sx={{ fontWeight: 600 }}
-					/>
-				</Box>
 				<Select
 					size="small" fullWidth
 					value={selectedId}
@@ -180,7 +171,7 @@ export function ControlPanel() {
 					sx={{ fontSize: 13, mb: 0.5 }}
 				>
 					<MenuItem value="__manual__">
-						<em>默认角色（手动人设）</em>
+						<em>手动人设</em>
 					</MenuItem>
 					{profiles.map((p) => (
 						<MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
