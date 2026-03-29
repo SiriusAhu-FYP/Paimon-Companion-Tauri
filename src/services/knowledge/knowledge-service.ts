@@ -218,7 +218,10 @@ export class KnowledgeService {
 	// ── 语义检索（核心能力） ──
 
 	async query(queryText: string, options?: KnowledgeQueryOptions): Promise<RetrievalResult[]> {
-		if (!this.db) return [];
+		if (!this.db) {
+			log.debug("query skipped — db not ready");
+			return [];
+		}
 
 		const config = getConfig().knowledge;
 		const topK = options?.topK ?? config.retrievalTopK;
@@ -233,13 +236,16 @@ export class KnowledgeService {
 			}
 			try {
 				queryVector = await this.embeddingService.embed(queryText);
+				log.debug(`query embedding done: dim=${queryVector.length}`);
 			} catch (err) {
 				log.warn("embedding failed, falling back to fulltext", err);
 				return this.queryFulltext(queryText, topK);
 			}
 		}
 
-		return searchKnowledge(this.db, queryVector, queryText, mode, topK);
+		const results = await searchKnowledge(this.db, queryVector, queryText, mode, topK);
+		log.info(`query "${queryText.slice(0, 30)}" → ${results.length} results (mode=${mode}, topK=${topK}, chunkCount=${getChunkCount(this.db)})`);
+		return results;
 	}
 
 	private async queryFulltext(queryText: string, topK: number): Promise<RetrievalResult[]> {

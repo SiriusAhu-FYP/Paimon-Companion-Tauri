@@ -66,10 +66,14 @@ export class LLMService {
 
 		const appCharacter = getConfig().character;
 
-		// Phase 3.5：语义检索 + liveContext 格式化
+		// Phase 3.5：语义检索 + liveContext 格式化（带超时保护，不阻塞主 LLM 流程）
 		let knowledgeContext = "";
 		try {
-			const retrievalResults = await this.knowledge.query(userText);
+			const queryPromise = this.knowledge.query(userText);
+			const timeoutPromise = new Promise<never>((_, reject) =>
+				setTimeout(() => reject(new Error("knowledge query timeout (10s)")), 10000),
+			);
+			const retrievalResults = await Promise.race([queryPromise, timeoutPromise]);
 			const liveContext = this.knowledge.getAssembledLiveContext();
 			knowledgeContext = formatRetrievalForPrompt(retrievalResults, liveContext);
 

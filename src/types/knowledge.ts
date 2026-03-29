@@ -95,7 +95,7 @@ export interface KnowledgeIndexStore {
 
 // ── 常量 ──
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 export const MAX_DOCUMENTS = 200;
 export const DEFAULT_CHUNK_SIZE = 512;
 export const DEFAULT_CHUNK_OVERLAP = 50;
