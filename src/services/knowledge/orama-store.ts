@@ -78,7 +78,7 @@ export async function searchKnowledge(
 		results = await searchVector(db, {
 			mode: "vector",
 			vector: { value: queryVector, property: "embedding" },
-			similarity: 0.5,
+			similarity: 0.2,
 			limit: topK,
 		});
 	} else if (mode === "hybrid") {
@@ -86,11 +86,21 @@ export async function searchKnowledge(
 			mode: "hybrid",
 			term: queryText,
 			vector: { value: queryVector, property: "embedding" },
-			similarity: 0.5,
+			similarity: 0.2,
 			limit: topK,
 		});
 	} else {
 		// fulltext
+		results = await search(db, {
+			mode: "fulltext",
+			term: queryText,
+			limit: topK,
+		});
+	}
+
+	// vector / hybrid 无结果时自动退回 fulltext
+	if ((results.hits ?? []).length === 0 && mode !== "fulltext" && queryText.trim()) {
+		log.info(`${mode} returned 0 hits, falling back to fulltext`);
 		results = await search(db, {
 			mode: "fulltext",
 			term: queryText,

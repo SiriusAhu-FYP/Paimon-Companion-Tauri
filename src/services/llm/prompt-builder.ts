@@ -38,8 +38,10 @@ export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 		sections.push(`【场景与世界观】\n${scenario}`);
 	}
 
+	// 仅在角色卡无 persona/systemPrompt 时才注入 customPersona，避免与卡内设定冲突
+	const hasCardPersona = !!((ctx.characterProfile?.systemPrompt ?? "").trim() || (ctx.characterProfile?.persona ?? "").trim());
 	const custom = (ctx.customPersona ?? "").trim();
-	if (custom) {
+	if (custom && !hasCardPersona) {
 		sections.push(`【附加人设】\n${custom}`);
 	}
 

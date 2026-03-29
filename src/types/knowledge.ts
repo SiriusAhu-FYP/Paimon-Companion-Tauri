@@ -95,7 +95,7 @@ export interface KnowledgeIndexStore {
 
 // ── 常量 ──
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 export const MAX_DOCUMENTS = 200;
 export const DEFAULT_CHUNK_SIZE = 512;
 export const DEFAULT_CHUNK_OVERLAP = 50;
@@ -110,5 +110,5 @@ export const DEFAULT_KNOWLEDGE_CONFIG: KnowledgeConfig = {
 	embeddingProfiles: [],
 	activeEmbeddingProfileId: "",
 	retrievalTopK: 5,
-	searchMode: "vector",
+	searchMode: "hybrid",
 };
