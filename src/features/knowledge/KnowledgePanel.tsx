@@ -54,6 +54,12 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 	const [addContent, setAddContent] = useState("");
 	const [adding, setAdding] = useState(false);
 
+	// Edit document
+	const [editingDocId, setEditingDocId] = useState<string | null>(null);
+	const [editTitle, setEditTitle] = useState("");
+	const [editContent, setEditContent] = useState("");
+	const [saving, setSaving] = useState(false);
+
 	// Search
 	const [searchQuery, setSearchQuery] = useState("");
 	const [searchResults, setSearchResults] = useState<RetrievalResult[] | null>(null);
@@ -239,6 +245,38 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 		} finally { setAdding(false); }
 	}, [addTitle, addContent, refreshState]);
 
+	const handleStartEdit = useCallback((doc: KnowledgeDocument) => {
+		setEditingDocId(doc.id);
+		setEditTitle(doc.title);
+		setEditContent(doc.content);
+	}, []);
+
+	const handleCancelEdit = useCallback(() => {
+		setEditingDocId(null);
+		setEditTitle("");
+		setEditContent("");
+	}, []);
+
+	const handleSaveEdit = useCallback(async () => {
+		if (!editingDocId || !editTitle.trim() || !editContent.trim()) return;
+		setSaving(true);
+		try {
+			const { knowledge } = getServices();
+			const result = await knowledge.updateDocument(editingDocId, { title: editTitle.trim(), content: editContent.trim() });
+			if (result.success) {
+				setMessage({ type: "success", text: `已更新: "${editTitle.trim()}"` });
+				setEditingDocId(null);
+				setEditTitle("");
+				setEditContent("");
+				refreshState();
+			} else {
+				setMessage({ type: "error", text: result.error ?? "更新失败" });
+			}
+		} catch (err) {
+			setMessage({ type: "error", text: `更新失败: ${err instanceof Error ? err.message : String(err)}` });
+		} finally { setSaving(false); }
+	}, [editingDocId, editTitle, editContent, refreshState]);
+
 	const handleRebuild = useCallback(async () => {
 		setRebuilding(true); setMessage(null);
 		try {
@@ -382,16 +420,38 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 				</Box>
 			)}
 
-			{/* Document list */}
+			{/* Document list with CRUD */}
 			{documents.length > 0 && (
 				<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
-					<Typography variant="caption" fontWeight={600}>已导入文档</Typography>
+					<Typography variant="caption" fontWeight={600}>已导入文档 ({documents.length})</Typography>
 					{documents.map((doc) => (
-						<Stack key={doc.id} direction="row" alignItems="center" spacing={0.5} sx={{ py: 0.25 }}>
-							<Typography variant="caption" sx={{ flex: 1, fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title}</Typography>
-							{doc.source && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 9 }}>{doc.source}</Typography>}
-							<IconButton size="small" onClick={() => handleDeleteDoc(doc.id)} sx={{ p: 0.25 }}><DeleteIcon sx={{ fontSize: 14 }} /></IconButton>
-						</Stack>
+						<Box key={doc.id}>
+							{editingDocId === doc.id ? (
+								<Box sx={{ border: "1px solid", borderColor: "primary.main", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+									<TextField size="small" fullWidth label="标题" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+									<TextField size="small" fullWidth multiline minRows={2} maxRows={6} label="内容" value={editContent} onChange={(e) => setEditContent(e.target.value)} />
+									<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+										<Button size="small" onClick={handleCancelEdit}>取消</Button>
+										<Button size="small" variant="contained" onClick={handleSaveEdit} disabled={saving || !editTitle.trim() || !editContent.trim()}>
+											{saving ? "保存中..." : "保存"}
+										</Button>
+									</Stack>
+								</Box>
+							) : (
+								<Box sx={{ cursor: "pointer", "&:hover": { bgcolor: "action.hover" }, borderRadius: 0.5, px: 0.5, py: 0.25 }}
+									onClick={() => handleStartEdit(doc)}>
+									<Stack direction="row" alignItems="center" spacing={0.5}>
+										<Typography variant="caption" sx={{ flex: 1, fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{doc.title}</Typography>
+										{doc.source && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 9 }}>{doc.source}</Typography>}
+										<IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartEdit(doc); }} sx={{ p: 0.25 }}><EditIcon sx={{ fontSize: 14 }} /></IconButton>
+										<IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc.id); }} sx={{ p: 0.25 }}><DeleteIcon sx={{ fontSize: 14 }} /></IconButton>
+									</Stack>
+									<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+										{doc.content.slice(0, 80)}{doc.content.length > 80 ? "…" : ""}
+									</Typography>
+								</Box>
+							)}
+						</Box>
 					))}
 				</Box>
 			)}

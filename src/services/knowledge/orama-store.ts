@@ -78,6 +78,7 @@ export async function searchKnowledge(
 		results = await searchVector(db, {
 			mode: "vector",
 			vector: { value: queryVector, property: "embedding" },
+			similarity: 0.5,
 			limit: topK,
 		});
 	} else if (mode === "hybrid") {
@@ -85,6 +86,7 @@ export async function searchKnowledge(
 			mode: "hybrid",
 			term: queryText,
 			vector: { value: queryVector, property: "embedding" },
+			similarity: 0.5,
 			limit: topK,
 		});
 	} else {
