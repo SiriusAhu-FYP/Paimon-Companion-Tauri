@@ -10,10 +10,12 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import EditIcon from "@mui/icons-material/Edit";
+import NetworkCheckIcon from "@mui/icons-material/NetworkCheck";
 import {
 	SECRET_KEYS,
 	loadConfig, updateConfig,
 	setSecret, getSecret, deleteSecret,
+	proxyRequest,
 } from "@/services/config";
 import { HelpTooltip } from "@/components";
 import { getServices, refreshEmbeddingService } from "@/services";
@@ -48,6 +50,8 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 	const [rerankEditAnchor, setRerankEditAnchor] = useState<HTMLElement | null>(null);
 	const [rerankEditProfile, setRerankEditProfile] = useState<RerankProfile | null>(null);
 	const [rerankEditApiKey, setRerankEditApiKey] = useState("");
+	const [embTesting, setEmbTesting] = useState(false);
+	const [rerankTesting, setRerankTesting] = useState(false);
 
 	// Knowledge state
 	const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
@@ -199,6 +203,42 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 		setMessage({ type: "info", text: "Embedding 档案已删除" });
 	}, [editProfile, refreshState]);
 
+	// ── Embedding 连接测试 ──
+
+	const handleTestEmbConnection = useCallback(async () => {
+		if (!editProfile?.baseUrl.trim() || !editProfile?.model.trim()) {
+			setMessage({ type: "error", text: "请先填写 Base URL 和模型名称" });
+			return;
+		}
+		setEmbTesting(true);
+		setMessage(null);
+		try {
+			const testKey = editApiKey || (editProfile.id
+				? await getSecret(SECRET_KEYS.EMBEDDING_API_KEY(editProfile.id)) ?? ""
+				: "");
+			let baseUrl = editProfile.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+			const url = `${baseUrl}/v1/embeddings`;
+			const body = JSON.stringify({ input: ["test"], model: editProfile.model, dimensions: editProfile.dimension });
+			const resp = await proxyRequest({
+				url,
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body,
+				secretKey: testKey ? SECRET_KEYS.EMBEDDING_API_KEY(editProfile.id) : undefined,
+				timeoutMs: 15000,
+			});
+			if (resp.status >= 200 && resp.status < 300) {
+				setMessage({ type: "success", text: `Embedding 连接成功 (HTTP ${resp.status})` });
+			} else {
+				setMessage({ type: "error", text: `连接失败: HTTP ${resp.status} — ${resp.body.slice(0, 100)}` });
+			}
+		} catch (err) {
+			setMessage({ type: "error", text: `连接失败: ${err instanceof Error ? err.message : String(err)}` });
+		} finally {
+			setEmbTesting(false);
+		}
+	}, [editProfile, editApiKey]);
+
 	// ── Rerank profile management ──
 
 	const handleToggleRerank = useCallback(async (enabled: boolean) => {
@@ -296,6 +336,48 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 		refreshState();
 		setMessage({ type: "info", text: "Rerank 档案已删除" });
 	}, [rerankEditProfile, refreshState]);
+
+	// ── Rerank 连接测试 ──
+
+	const handleTestRerankConnection = useCallback(async () => {
+		if (!rerankEditProfile?.baseUrl.trim() || !rerankEditProfile?.model.trim()) {
+			setMessage({ type: "error", text: "请先填写 Base URL 和模型名称" });
+			return;
+		}
+		setRerankTesting(true);
+		setMessage(null);
+		try {
+			const testKey = rerankEditApiKey || (rerankEditProfile.id
+				? await getSecret(SECRET_KEYS.RERANK_API_KEY(rerankEditProfile.id)) ?? ""
+				: "");
+			let baseUrl = rerankEditProfile.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+			const url = `${baseUrl}/v1/rerank`;
+			const body = JSON.stringify({
+				model: rerankEditProfile.model,
+				query: "test query",
+				documents: ["test document one", "test document two"],
+				top_n: 2,
+				return_documents: true,
+			});
+			const resp = await proxyRequest({
+				url,
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body,
+				secretKey: testKey ? SECRET_KEYS.RERANK_API_KEY(rerankEditProfile.id) : undefined,
+				timeoutMs: 15000,
+			});
+			if (resp.status >= 200 && resp.status < 300) {
+				setMessage({ type: "success", text: `Rerank 连接成功 (HTTP ${resp.status})` });
+			} else {
+				setMessage({ type: "error", text: `连接失败: HTTP ${resp.status} — ${resp.body.slice(0, 100)}` });
+			}
+		} catch (err) {
+			setMessage({ type: "error", text: `连接失败: ${err instanceof Error ? err.message : String(err)}` });
+		} finally {
+			setRerankTesting(false);
+		}
+	}, [rerankEditProfile, rerankEditApiKey]);
 
 	// ── Knowledge operations ──
 
@@ -512,6 +594,10 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 								<Button size="small" color="error" onClick={handleDeleteProfile}>删除</Button>
 							)}
 							<Box sx={{ flex: 1 }} />
+							<Button size="small" variant="outlined" startIcon={<NetworkCheckIcon />}
+								onClick={handleTestEmbConnection} disabled={embTesting}>
+								{embTesting ? "测试中..." : "测试连接"}
+							</Button>
 							<Button size="small" onClick={() => { setEditAnchor(null); setEditProfile(null); }}>取消</Button>
 							<Button size="small" variant="contained" onClick={handleSaveProfile}
 								disabled={!editProfile.name.trim() || !editProfile.baseUrl.trim() || !editProfile.model.trim()}>
@@ -522,84 +608,88 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 				)}
 			</Popover>
 
-		{/* Rerank 配置 */}
-		<SectionTitle>
-			Rerank 配置
-			<HelpTooltip title="Rerank 对初次召回结果进行二次精排，提升检索质量。支持兼容 /v1/rerank 端点的服务（DMXAPI、Jina、Cohere 等）。" />
-		</SectionTitle>
-		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-			<Stack direction="row" spacing={1} alignItems="center">
-				<Typography variant="caption" sx={{ fontSize: 11 }}>启用 Rerank</Typography>
-				<Button size="small" variant={rerankEnabled ? "contained" : "outlined"}
-					color={rerankEnabled ? "primary" : "inherit"}
-					onClick={() => handleToggleRerank(!rerankEnabled)}
-					sx={{ minWidth: 60, fontSize: 11 }}>
-					{rerankEnabled ? "已启用" : "未启用"}
-				</Button>
-			</Stack>
-			{rerankEnabled && (
-				<>
-					{rerankProfiles.length > 0 ? (
-						<Stack direction="row" spacing={0.5} alignItems="center">
-							<Select size="small" fullWidth value={activeRerankProfileId}
-								onChange={(e: SelectChangeEvent) => handleSelectRerankProfile(e.target.value)}>
-								{rerankProfiles.map((p) => (
-									<MenuItem key={p.id} value={p.id}>{p.name} ({p.model})</MenuItem>
-								))}
-							</Select>
-							<Tooltip title="编辑"><span>
-								<IconButton size="small" onClick={(e) => {
-									const profile = rerankProfiles.find((p) => p.id === activeRerankProfileId);
-									if (profile) handleOpenRerankEdit(e.currentTarget, profile);
-								}} disabled={!activeRerankProfileId}><EditIcon fontSize="small" /></IconButton>
-							</span></Tooltip>
-						</Stack>
-					) : (
-						<Typography variant="caption" color="text.secondary">尚未配置 Rerank 档案</Typography>
-					)}
-					<Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={(e) => handleOpenRerankEdit(e.currentTarget)}>
-						新增 Rerank 档案
+			{/* Rerank 配置 */}
+			<SectionTitle>
+				Rerank 配置
+				<HelpTooltip title="Rerank 对初次召回结果进行二次精排，提升检索质量。支持兼容 /v1/rerank 端点的服务（DMXAPI、Jina、Cohere 等）。" />
+			</SectionTitle>
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+				<Stack direction="row" spacing={1} alignItems="center">
+					<Typography variant="caption" sx={{ fontSize: 11 }}>启用 Rerank</Typography>
+					<Button size="small" variant={rerankEnabled ? "contained" : "outlined"}
+						color={rerankEnabled ? "primary" : "inherit"}
+						onClick={() => handleToggleRerank(!rerankEnabled)}
+						sx={{ minWidth: 60, fontSize: 11 }}>
+						{rerankEnabled ? "已启用" : "未启用"}
 					</Button>
-				</>
-			)}
-		</Box>
-
-		{/* Rerank Edit Popover */}
-		<Popover open={!!rerankEditAnchor} anchorEl={rerankEditAnchor} onClose={() => { setRerankEditAnchor(null); setRerankEditProfile(null); }}
-			anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-			slotProps={{ paper: { sx: { p: 1.5, width: 320, display: "flex", flexDirection: "column", gap: 1 } } }}>
-			{rerankEditProfile && (
-				<>
-					<Typography variant="subtitle2" fontWeight={600}>
-						{rerankProfiles.some((p) => p.id === rerankEditProfile.id) ? "编辑 Rerank 档案" : "新建 Rerank 档案"}
-					</Typography>
-					<TextField size="small" fullWidth label="档案名称" value={rerankEditProfile.name}
-						onChange={(e) => setRerankEditProfile({ ...rerankEditProfile, name: e.target.value })} />
-					<TextField size="small" fullWidth label="Base URL" value={rerankEditProfile.baseUrl}
-						onChange={(e) => setRerankEditProfile({ ...rerankEditProfile, baseUrl: e.target.value })}
-						helperText="如 https://www.dmxapi.cn" />
-					<TextField size="small" fullWidth label="模型名称" value={rerankEditProfile.model}
-						onChange={(e) => setRerankEditProfile({ ...rerankEditProfile, model: e.target.value })}
-						helperText="如 qwen3-reranker-8b 或 bge-reranker-v2-m3-free" />
-					<TextField size="small" fullWidth label="API Key" type="password" value={rerankEditApiKey}
-						onChange={(e) => setRerankEditApiKey(e.target.value)} helperText="密钥安全存储在系统钥匙串中" />
-					<Stack direction="row" spacing={0.5} justifyContent="space-between">
-						{rerankProfiles.some((p) => p.id === rerankEditProfile.id) && (
-							<Button size="small" color="error" onClick={handleDeleteRerankProfile}>删除</Button>
+				</Stack>
+				{rerankEnabled && (
+					<>
+						{rerankProfiles.length > 0 ? (
+							<Stack direction="row" spacing={0.5} alignItems="center">
+								<Select size="small" fullWidth value={activeRerankProfileId}
+									onChange={(e: SelectChangeEvent) => handleSelectRerankProfile(e.target.value)}>
+									{rerankProfiles.map((p) => (
+										<MenuItem key={p.id} value={p.id}>{p.name} ({p.model})</MenuItem>
+									))}
+								</Select>
+								<Tooltip title="编辑"><span>
+									<IconButton size="small" onClick={(e) => {
+										const profile = rerankProfiles.find((p) => p.id === activeRerankProfileId);
+										if (profile) handleOpenRerankEdit(e.currentTarget, profile);
+									}} disabled={!activeRerankProfileId}><EditIcon fontSize="small" /></IconButton>
+								</span></Tooltip>
+							</Stack>
+						) : (
+							<Typography variant="caption" color="text.secondary">尚未配置 Rerank 档案</Typography>
 						)}
-						<Box sx={{ flex: 1 }} />
-						<Button size="small" onClick={() => { setRerankEditAnchor(null); setRerankEditProfile(null); }}>取消</Button>
-						<Button size="small" variant="contained" onClick={handleSaveRerankProfile}
-							disabled={!rerankEditProfile.name.trim() || !rerankEditProfile.baseUrl.trim() || !rerankEditProfile.model.trim()}>
-							保存
+						<Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={(e) => handleOpenRerankEdit(e.currentTarget)}>
+							新增 Rerank 档案
 						</Button>
-					</Stack>
-				</>
-			)}
-		</Popover>
+					</>
+				)}
+			</Box>
 
-		{/* Status */}
-		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
+			{/* Rerank Edit Popover */}
+			<Popover open={!!rerankEditAnchor} anchorEl={rerankEditAnchor} onClose={() => { setRerankEditAnchor(null); setRerankEditProfile(null); }}
+				anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+				slotProps={{ paper: { sx: { p: 1.5, width: 320, display: "flex", flexDirection: "column", gap: 1 } } }}>
+				{rerankEditProfile && (
+					<>
+						<Typography variant="subtitle2" fontWeight={600}>
+							{rerankProfiles.some((p) => p.id === rerankEditProfile.id) ? "编辑 Rerank 档案" : "新建 Rerank 档案"}
+						</Typography>
+						<TextField size="small" fullWidth label="档案名称" value={rerankEditProfile.name}
+							onChange={(e) => setRerankEditProfile({ ...rerankEditProfile, name: e.target.value })} />
+						<TextField size="small" fullWidth label="Base URL" value={rerankEditProfile.baseUrl}
+							onChange={(e) => setRerankEditProfile({ ...rerankEditProfile, baseUrl: e.target.value })}
+							helperText="如 https://www.dmxapi.cn" />
+						<TextField size="small" fullWidth label="模型名称" value={rerankEditProfile.model}
+							onChange={(e) => setRerankEditProfile({ ...rerankEditProfile, model: e.target.value })}
+							helperText="如 qwen3-reranker-8b 或 bge-reranker-v2-m3-free" />
+						<TextField size="small" fullWidth label="API Key" type="password" value={rerankEditApiKey}
+							onChange={(e) => setRerankEditApiKey(e.target.value)} helperText="密钥安全存储在系统钥匙串中" />
+						<Stack direction="row" spacing={0.5} justifyContent="space-between">
+							{rerankProfiles.some((p) => p.id === rerankEditProfile.id) && (
+								<Button size="small" color="error" onClick={handleDeleteRerankProfile}>删除</Button>
+							)}
+							<Box sx={{ flex: 1 }} />
+							<Button size="small" variant="outlined" startIcon={<NetworkCheckIcon />}
+								onClick={handleTestRerankConnection} disabled={rerankTesting}>
+								{rerankTesting ? "测试中..." : "测试连接"}
+							</Button>
+							<Button size="small" onClick={() => { setRerankEditAnchor(null); setRerankEditProfile(null); }}>取消</Button>
+							<Button size="small" variant="contained" onClick={handleSaveRerankProfile}
+								disabled={!rerankEditProfile.name.trim() || !rerankEditProfile.baseUrl.trim() || !rerankEditProfile.model.trim()}>
+								保存
+							</Button>
+						</Stack>
+					</>
+				)}
+			</Popover>
+
+			{/* Status */}
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
 				<Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
 					<Chip label={`${documents.length} 文档`} size="small" variant="outlined" />
 					<Chip label={`${chunkCount} chunks`} size="small" variant="outlined" />
