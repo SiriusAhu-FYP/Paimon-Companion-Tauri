@@ -51,7 +51,9 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 	const [rerankEditProfile, setRerankEditProfile] = useState<RerankProfile | null>(null);
 	const [rerankEditApiKey, setRerankEditApiKey] = useState("");
 	const [embTesting, setEmbTesting] = useState(false);
+	const [embTestResult, setEmbTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 	const [rerankTesting, setRerankTesting] = useState(false);
+	const [rerankTestResult, setRerankTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 
 	// Knowledge state
 	const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
@@ -207,7 +209,7 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 
 	const testEmbConnection = useCallback(async (profile: EmbeddingProfile, apiKey: string) => {
 		setEmbTesting(true);
-		setMessage(null);
+		setEmbTestResult(null);
 		try {
 			let baseUrl = profile.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
 			const url = `${baseUrl}/v1/embeddings`;
@@ -221,12 +223,12 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 				timeoutMs: 15000,
 			});
 			if (resp.status >= 200 && resp.status < 300) {
-				setMessage({ type: "success", text: `Embedding 连接成功 (HTTP ${resp.status})` });
+				setEmbTestResult({ ok: true, text: `连接成功 (HTTP ${resp.status})` });
 			} else {
-				setMessage({ type: "error", text: `连接失败: HTTP ${resp.status} — ${resp.body.slice(0, 100)}` });
+				setEmbTestResult({ ok: false, text: `连接失败: HTTP ${resp.status} — ${resp.body.slice(0, 100)}` });
 			}
 		} catch (err) {
-			setMessage({ type: "error", text: `连接失败: ${err instanceof Error ? err.message : String(err)}` });
+			setEmbTestResult({ ok: false, text: `连接失败: ${err instanceof Error ? err.message : String(err)}` });
 		} finally {
 			setEmbTesting(false);
 		}
@@ -355,7 +357,7 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 
 	const testRerankConnection = useCallback(async (profile: RerankProfile, apiKey: string) => {
 		setRerankTesting(true);
-		setMessage(null);
+		setRerankTestResult(null);
 		try {
 			let baseUrl = profile.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
 			const url = `${baseUrl}/v1/rerank`;
@@ -375,12 +377,12 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 				timeoutMs: 15000,
 			});
 			if (resp.status >= 200 && resp.status < 300) {
-				setMessage({ type: "success", text: `Rerank 连接成功 (HTTP ${resp.status})` });
+				setRerankTestResult({ ok: true, text: `连接成功 (HTTP ${resp.status})` });
 			} else {
-				setMessage({ type: "error", text: `连接失败: HTTP ${resp.status} — ${resp.body.slice(0, 100)}` });
+				setRerankTestResult({ ok: false, text: `连接失败: HTTP ${resp.status} — ${resp.body.slice(0, 100)}` });
 			}
 		} catch (err) {
-			setMessage({ type: "error", text: `连接失败: ${err instanceof Error ? err.message : String(err)}` });
+			setRerankTestResult({ ok: false, text: `连接失败: ${err instanceof Error ? err.message : String(err)}` });
 		} finally {
 			setRerankTesting(false);
 		}
@@ -585,11 +587,6 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 								if (profile) handleOpenEdit(e.currentTarget, profile);
 							}} disabled={!activeEmbProfileId}><EditIcon fontSize="small" /></IconButton>
 						</span></Tooltip>
-						<Tooltip title="测试连接"><span>
-							<IconButton size="small" onClick={handleTestEmbFromMain} disabled={embTesting}>
-								<NetworkCheckIcon fontSize="small" />
-							</IconButton>
-						</span></Tooltip>
 					</Stack>
 				) : (
 					<Typography variant="caption" color="text.secondary">尚未配置 Embedding 档案</Typography>
@@ -597,6 +594,36 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 				<Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={(e) => handleOpenEdit(e.currentTarget)}>
 					新增 Embedding 档案
 				</Button>
+			</Box>
+
+			{/* Embedding 测试 */}
+			<SectionTitle>
+				Embedding 测试
+				<HelpTooltip title="在左侧选择或新建 Embedding 档案并保存后，点击此处测试连接是否可达。测试结果仅供参考。" />
+			</SectionTitle>
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+					当前读取：{activeEmbProfileId
+						? `档案「${embProfiles.find((p) => p.id === activeEmbProfileId)?.name || "(未命名)"}」`
+						: "无激活档案"}
+					{activeEmbProfileId && (() => {
+						const p = embProfiles.find((p) => p.id === activeEmbProfileId);
+						return p ? ` · ${p.baseUrl} · ${p.model}` : "";
+					})()}
+				</Typography>
+				<Button
+					size="small" variant="outlined"
+					startIcon={<NetworkCheckIcon />}
+					onClick={handleTestEmbFromMain}
+					disabled={embTesting || !activeEmbProfileId}
+				>
+					{embTesting ? "测试中..." : "测试连接"}
+				</Button>
+				{embTestResult && (
+					<Alert severity={embTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
+						{embTestResult.text}
+					</Alert>
+				)}
 			</Box>
 
 			{/* Edit Popover */}
@@ -660,24 +687,19 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 					<>
 						{rerankProfiles.length > 0 ? (
 							<Stack direction="row" spacing={0.5} alignItems="center">
-								<Select size="small" fullWidth value={activeRerankProfileId}
+							<Select size="small" fullWidth value={activeRerankProfileId}
 									onChange={(e: SelectChangeEvent) => handleSelectRerankProfile(e.target.value)}>
-									{rerankProfiles.map((p) => (
-										<MenuItem key={p.id} value={p.id}>{p.name} ({p.model})</MenuItem>
-									))}
-								</Select>
-								<Tooltip title="编辑"><span>
-									<IconButton size="small" onClick={(e) => {
-										const profile = rerankProfiles.find((p) => p.id === activeRerankProfileId);
-										if (profile) handleOpenRerankEdit(e.currentTarget, profile);
-									}} disabled={!activeRerankProfileId}><EditIcon fontSize="small" /></IconButton>
-								</span></Tooltip>
-								<Tooltip title="测试连接"><span>
-									<IconButton size="small" onClick={handleTestRerankFromMain} disabled={rerankTesting}>
-										<NetworkCheckIcon fontSize="small" />
-									</IconButton>
-								</span></Tooltip>
-							</Stack>
+								{rerankProfiles.map((p) => (
+									<MenuItem key={p.id} value={p.id}>{p.name} ({p.model})</MenuItem>
+								))}
+							</Select>
+							<Tooltip title="编辑"><span>
+								<IconButton size="small" onClick={(e) => {
+									const profile = rerankProfiles.find((p) => p.id === activeRerankProfileId);
+									if (profile) handleOpenRerankEdit(e.currentTarget, profile);
+								}} disabled={!activeRerankProfileId}><EditIcon fontSize="small" /></IconButton>
+							</span></Tooltip>
+						</Stack>
 						) : (
 							<Typography variant="caption" color="text.secondary">尚未配置 Rerank 档案</Typography>
 						)}
@@ -685,6 +707,36 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 							新增 Rerank 档案
 						</Button>
 					</>
+				)}
+			</Box>
+
+			{/* Rerank 测试 */}
+			<SectionTitle>
+				Rerank 测试
+				<HelpTooltip title="在左侧选择或新建 Rerank 档案并保存后，点击此处测试连接是否可达。测试结果仅供参考。" />
+			</SectionTitle>
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+					当前读取：{activeRerankProfileId
+						? `档案「${rerankProfiles.find((p) => p.id === activeRerankProfileId)?.name || "(未命名)"}」`
+						: "无激活档案"}
+					{activeRerankProfileId && (() => {
+						const p = rerankProfiles.find((p) => p.id === activeRerankProfileId);
+						return p ? ` · ${p.baseUrl} · ${p.model}` : "";
+					})()}
+				</Typography>
+				<Button
+					size="small" variant="outlined"
+					startIcon={<NetworkCheckIcon />}
+					onClick={handleTestRerankFromMain}
+					disabled={rerankTesting || !activeRerankProfileId}
+				>
+					{rerankTesting ? "测试中..." : "测试连接"}
+				</Button>
+				{rerankTestResult && (
+					<Alert severity={rerankTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
+						{rerankTestResult.text}
+					</Alert>
 				)}
 			</Box>
 
