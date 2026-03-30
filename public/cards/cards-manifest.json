@@ -1,4 +1,4 @@
 [
-	"main_paimon-6d328065f2ab_spec_v2.json",
-	"main_ganyu-946b1d13_spec_v2.json"
+	"sanitized/main_paimon-sanitized.json",
+	"sanitized/main_ganyu-sanitized.json"
 ]
