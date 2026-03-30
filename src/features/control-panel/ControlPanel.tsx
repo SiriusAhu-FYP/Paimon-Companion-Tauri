@@ -7,6 +7,8 @@ import {
 import StopIcon from "@mui/icons-material/Stop";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import MicIcon from "@mui/icons-material/Mic";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import CancelIcon from "@mui/icons-material/Cancel";
 import { useRuntime, useCharacter } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { getServices } from "@/services";
@@ -239,11 +241,9 @@ export function ControlPanel() {
 					<Button variant="outlined" size="small" onClick={handleMicTest} startIcon={<MicIcon />}>
 						麦克风测试
 					</Button>
-					<Typography variant="caption" sx={{ fontSize: 11 }}>
-						{micStatus === "ok" && "✅ 成功"}
-						{micStatus === "denied" && "❌ 权限被拒绝"}
-						{micStatus === "error" && "❌ 出错"}
-					</Typography>
+					{micStatus === "ok" && <CheckCircleIcon color="success" sx={{ fontSize: 14 }} />}
+					{micStatus === "denied" && <CancelIcon color="error" sx={{ fontSize: 14 }} />}
+					{micStatus === "error" && <CancelIcon color="error" sx={{ fontSize: 14 }} />}
 				</Stack>
 			</Box>
 

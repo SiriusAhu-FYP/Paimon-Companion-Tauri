@@ -4,6 +4,7 @@ import {
 	broadcastControl, isTauriEnvironment,
 	type ControlCommand, type StageDisplayMode,
 } from "@/utils/window-sync";
+import CloseIcon from "@mui/icons-material/Close";
 import { Live2DRenderer, DEFAULT_MODEL } from "@/features/live2d";
 import type { EyeMode } from "@/features/live2d";
 import { createLogger } from "@/services/logger";
@@ -335,7 +336,7 @@ export function StageWindow() {
 							clean
 						</button>
 						<button className="stage-tb-btn stage-tb-close" onClick={handleClose} title="关闭">
-								✕
+								<CloseIcon sx={{ fontSize: 16 }} />
 							</button>
 					</div>
 				</div>
