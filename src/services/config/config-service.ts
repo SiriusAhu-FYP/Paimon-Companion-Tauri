@@ -21,7 +21,14 @@ function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfi
 	return {
 		llm: { ...defaults.llm, ...overrides.llm },
 		tts: { ...defaults.tts, ...overrides.tts },
-		character: { ...defaults.character, ...overrides.character },
+		character: {
+			...defaults.character,
+			...overrides.character,
+			behaviorConstraints: {
+				...defaults.character.behaviorConstraints,
+				...(overrides.character?.behaviorConstraints ?? {}),
+			},
+		},
 		llmProfiles: overrides.llmProfiles ?? defaults.llmProfiles,
 		ttsProfiles: overrides.ttsProfiles ?? defaults.ttsProfiles,
 		activeLlmProfileId: overrides.activeLlmProfileId ?? defaults.activeLlmProfileId,
@@ -58,6 +65,10 @@ function normalizeCharacterSettings(
 	return {
 		activeProfileId: character.activeProfileId ?? DEFAULT_CONFIG.character.activeProfileId,
 		customPersona,
+		behaviorConstraints: {
+			...DEFAULT_CONFIG.character.behaviorConstraints,
+			...(character.behaviorConstraints ?? {}),
+		},
 	};
 }
 

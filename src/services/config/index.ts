@@ -5,6 +5,7 @@ export type {
 	TTSProviderConfig,
 	TTSProviderType,
 	CharacterSettingsConfig,
+	BehaviorConstraintsConfig,
 	LLMProfile,
 	TTSProfile,
 	KnowledgeConfig,
