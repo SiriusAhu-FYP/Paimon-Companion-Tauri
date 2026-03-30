@@ -65,11 +65,19 @@ export interface TTSProfile {
 
 // ── Character（应用设置：当前卡 ID、用户附加人设）──
 
+export interface BehaviorConstraintsConfig {
+	enabled: boolean;
+	maxReplyLength: number;
+	/** 用户追加的自定义约束文本，拼入行为约束段落 */
+	customRules: string;
+}
+
 export interface CharacterSettingsConfig {
 	/** 当前选中的角色档案 id，空串表示未选卡（仅用 customPersona） */
 	activeProfileId: string;
 	/** 用户自定义附加人设，拼入 system prompt（优先级低于卡内 system_prompt / persona） */
 	customPersona: string;
+	behaviorConstraints: BehaviorConstraintsConfig;
 }
 
 // ── Knowledge（知识库配置，独立于 LLM / TTS） ──
@@ -124,6 +132,11 @@ export const DEFAULT_CONFIG: AppConfig = {
 	character: {
 		activeProfileId: "",
 		customPersona: "你是旅行者的好伙伴派蒙，说话活泼可爱，喜欢吃东西。",
+		behaviorConstraints: {
+			enabled: true,
+			maxReplyLength: 150,
+			customRules: "",
+		},
 	},
 	llmProfiles: [],
 	ttsProfiles: [],

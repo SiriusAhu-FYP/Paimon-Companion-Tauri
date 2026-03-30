@@ -350,6 +350,61 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				/>
 			</Box>
 
+			<Divider />
+
+			{/* ── 直播行为约束 ── */}
+			<SectionTitle>
+				直播行为约束
+				<HelpTooltip title="在 system prompt 最前面注入行为规则，优先级高于角色卡设定。约束格式与风格，不覆盖角色个性。" />
+			</SectionTitle>
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+				<Stack direction="row" spacing={1} alignItems="center">
+					<Typography variant="caption" sx={{ fontSize: 11 }}>启用约束</Typography>
+					<Button size="small"
+						variant={config.character.behaviorConstraints.enabled ? "contained" : "outlined"}
+						color={config.character.behaviorConstraints.enabled ? "primary" : "inherit"}
+						onClick={() => {
+							const next = !config.character.behaviorConstraints.enabled;
+							setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, enabled: next } } }));
+							updateConfig({ character: { ...config.character, behaviorConstraints: { ...config.character.behaviorConstraints, enabled: next } } });
+						}}
+						sx={{ minWidth: 60, fontSize: 11 }}>
+						{config.character.behaviorConstraints.enabled ? "已启用" : "未启用"}
+					</Button>
+				</Stack>
+				{config.character.behaviorConstraints.enabled && (
+					<>
+						<Stack direction="row" alignItems="center" spacing={0.5}>
+							<FieldLabel>最大回复字数</FieldLabel>
+							<HelpTooltip title="LLM 单次回复的建议字数上限。实际输出可能略有浮动。" />
+						</Stack>
+						<TextField
+							size="small" type="number" sx={{ width: 120 }}
+							value={config.character.behaviorConstraints.maxReplyLength}
+							onChange={(e) => {
+								const v = Math.max(20, Math.min(500, Number(e.target.value) || 150));
+								setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, maxReplyLength: v } } }));
+							}}
+							onBlur={() => updateConfig({ character: { ...config.character } })}
+							inputProps={{ min: 20, max: 500, step: 10 }}
+						/>
+						<Stack direction="row" alignItems="center" spacing={0.5}>
+							<FieldLabel>自定义追加规则</FieldLabel>
+							<HelpTooltip title="追加的自定义行为约束文本，会拼入约束段落末尾。" />
+						</Stack>
+						<TextField
+							size="small" fullWidth multiline minRows={2} maxRows={4}
+							placeholder="例：每句话结尾加上「哦」"
+							value={config.character.behaviorConstraints.customRules}
+							onChange={(e) => {
+								setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, customRules: e.target.value } } }));
+							}}
+							onBlur={() => updateConfig({ character: { ...config.character } })}
+						/>
+					</>
+				)}
+			</Box>
+
 		</Box>
 	);
 }

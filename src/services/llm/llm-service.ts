@@ -85,21 +85,19 @@ export class LLMService {
 			knowledgeContext = this.knowledge.getAssembledLiveContext();
 		}
 
-		const systemMsg = buildSystemMessage({
+		const promptCtx = {
 			characterProfile: this.character.getProfile(),
 			knowledgeContext,
 			customPersona: appCharacter.customPersona,
-		});
+			behaviorConstraints: appCharacter.behaviorConstraints,
+		};
+		const systemMsg = buildSystemMessage(promptCtx);
 		const messages: ChatMessage[] = systemMsg
 			? [systemMsg, ...this.history]
 			: [...this.history];
 
 		if (systemMsg) {
-			log.info("LLM system prompt assembled", summarizePromptContext({
-				characterProfile: this.character.getProfile(),
-				knowledgeContext,
-				customPersona: appCharacter.customPersona,
-			}));
+			log.info("LLM system prompt assembled", summarizePromptContext(promptCtx));
 		}
 
 		try {
