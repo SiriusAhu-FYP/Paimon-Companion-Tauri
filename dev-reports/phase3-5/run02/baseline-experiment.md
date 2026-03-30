@@ -1,39 +1,26 @@
 # Baseline 实验记录 (rerankEnabled=false)
 
-> 日期：待手测时填写
-> 配置：rerankEnabled=false，searchMode=hybrid，recallTopK=5（无 rerank 时直接取 finalTopK）
-> 知识数据：sample-knowledge.json（5 条文档）
-> Embedding 模型：待填写（如 text-embedding-3-small）
+> 日期：2026-03-30
+> 配置：rerankEnabled=false，searchMode=hybrid，finalTopK=5（无 rerank 时直接取 finalTopK）
+> 知识数据：用户真实导入的商品知识（含派蒙PVC玩偶、原神Q版摆件礼盒、派蒙亚克力立牌、预购与售后说明等）
+> Embedding 模型：DMXAPI text-embedding-3-small
+> 环境：Tauri 桌面端（pnpm tauri dev）
 
-## 标准 Query 样本
+## 实验结果
 
-| # | Query | Top1 命中 | Recall@5 | top5 scores | 噪声结果数 | 检索延迟(ms) | rerank 延迟(ms) |
-|---|-------|----------|----------|-------------|-----------|-------------|----------------|
-| Q1 | "有什么好看的手办推荐吗？" | | | | | | N/A |
-| Q2 | "退货怎么退？" | | | | | | N/A |
-| Q3 | "直播今天晚上几点开始？" | | | | | | N/A |
-| Q4 | "派蒙喜欢吃什么？" | | | | | | N/A |
-| Q5 | "当前主推什么商品？价格多少？" | | | | | | N/A |
-| Q6 | "原神摆件有什么款式可选？" | | | | | | N/A |
-| Q7 | "商品支持定制吗？" | | | | | | N/A |
-| Q8 | "怎么联系客服？" | | | | | | N/A |
+| # | Query | Top1 结果 | Score | 备注 |
+|---|-------|----------|-------|------|
+| Q1 | `派蒙 888元` | 原神Q版摆件礼盒 | 0.5212 | 未命中最相关文档（派蒙PVC玩偶 888元） |
+| Q2 | `派蒙玩偶价格` | 派蒙PVC玩偶 | 0.5888 | 正确命中 |
+| Q3 | `888元 预购` | 原神Q版摆件礼盒 | 0.4501 | 未命中最相关文档（派蒙PVC玩偶 888元预购） |
+| Q4 | `派蒙现货吗` | 派蒙亚克力立牌 | 0.4090 | 亚克力立牌是现货，但"派蒙"指向更广 |
+| Q5 | `预购商品可以退吗` | 预购与售后说明 | 0.6522 | 正确命中 |
+| Q6 | `888元的派蒙商品` | 原神Q版摆件礼盒 | 0.5128 | 未命中最相关文档（派蒙PVC玩偶 888元） |
+| Q7 | `派蒙周边推荐` | 派蒙PVC玩偶 | 0.2680 | 正确命中，但 score 很低 |
+| Q8 | `发货较晚的商品` | 预购与售后说明 | 0.5217 | 合理，但预购商品（如PVC玩偶）更直接 |
 
-## 预期命中文档参考
+## 观察
 
-| Query | 预期最佳匹配文档 |
-|-------|-----------------|
-| Q1 | product-genshin-figure |
-| Q2 | text-return-policy |
-| Q3 | faq-livestream-schedule |
-| Q4 | faq-paimon-who（间接相关）|
-| Q5 | product-genshin-figure 或 product-genshin-keychain |
-| Q6 | product-genshin-figure |
-| Q7 | text-return-policy（部分匹配）|
-| Q8 | 无精确匹配（噪声测试）|
-
-## 备注
-
-- 每个 query 在搜索验证框中执行，记录返回的 top5 结果
-- score 取 Orama 原始 score（4 位小数）
-- 检索延迟通过 console 日志中的 knowledge 模块 log 获取
-- Q4 和 Q8 是噪声测试：知识库中不包含直接答案
+- 整体 score 偏低（0.27 ~ 0.65），hybrid 召回的原始排序区分度不高
+- 涉及具体价格（888元）的 query，hybrid 模式倾向于匹配"摆件礼盒"而非"PVC玩偶"，可能因为 fulltext 分量影响排序
+- Q7 的 score 仅 0.2680，说明 hybrid 模式在宽泛语义 query 上的排序信心很低

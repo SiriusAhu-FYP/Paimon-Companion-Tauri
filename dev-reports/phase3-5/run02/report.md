@@ -22,8 +22,8 @@
 | T4 | initServices / refreshProviders 扩展：resolveRerankProfile() + rerank 初始化 + 热刷新 | ✅ |
 | T5 | KnowledgePanel Rerank 配置 UI（启用开关 + 档案管理）+ searchMode 收口（UI 中不暴露） | ✅ |
 | T6 | 编译验证：tsc --noEmit + vite build 零错误 | ✅ |
-| T7 | Baseline 实验记录模板创建 | ✅ |
-| T8 | Rerank 实验记录模板创建 | ✅ |
+| T7 | Baseline 实验记录（真实手测结果已填写） | ✅ |
+| T8 | Rerank 实验记录（真实手测结果已填写 + 对比总结） | ✅ |
 | T9 | 本报告 | ✅ |
 
 ---
@@ -74,8 +74,8 @@
 | 文件 | 说明 |
 |------|------|
 | `src/services/knowledge/rerank-service.ts` | IRerankService 接口 + CompatibleRerankService 实现 |
-| `dev-reports/phase3-5/run02/baseline-experiment.md` | Baseline 实验记录模板 |
-| `dev-reports/phase3-5/run02/rerank-experiment.md` | Rerank 实验记录模板 |
+| `dev-reports/phase3-5/run02/baseline-experiment.md` | Baseline 实验记录（真实结果） |
+| `dev-reports/phase3-5/run02/rerank-experiment.md` | Rerank 实验记录（真实结果 + 对比） |
 
 ### 修改文件
 
@@ -110,76 +110,77 @@
 | TypeScript 编译 | ✅ | `npx tsc --noEmit` 零错误 |
 | Vite build | ✅ | `npx vite build` 零错误 |
 | Lint | ✅ | 零错误 |
-| Rerank 功能手测 | ⏳ 待验证 | 需要配置 Rerank API Key + 真实 API 端点 |
-| Baseline 实验 | ⏳ 待填写 | 模板已创建，需手测填写 |
-| Rerank 实验 | ⏳ 待填写 | 模板已创建，需手测填写 |
-| 回归测试 | ⏳ 待验证 | TTS / Stage / OBS / 角色切换等不应受影响 |
+| Rerank 功能手测 | ✅ | 已在 Tauri 桌面端真实手测，rerank 主链路生效 |
+| Baseline 实验 | ✅ | 8 条 query 真实结果已记录，见 `baseline-experiment.md` |
+| Rerank 实验 | ✅ | 8 条 query 真实结果已记录 + 对比总结，见 `rerank-experiment.md` |
+| Rerank 失败降级 | ⏳ 待验证 | 尚未测试错误 key / 断网场景下的降级行为 |
+| 聊天主链路 rerank 收益 | ⏳ 待验证 | 搜索验证框已确认 rerank 生效，但尚未验证聊天中 LLM 注入是否体现排序收益 |
+| 回归测试 | ⏳ 待验证 | TTS / Stage / OBS / 角色切换等功能尚未回归验证 |
 
 ---
+
+## 手测结论
+
+基于 8 条真实 query 的 Tauri 桌面端手测（搜索验证框）：
+
+| 类别 | 数量 | Query |
+|------|------|-------|
+| 明显改善 | 4 | Q1（派蒙 888元）、Q3（888元 预购）、Q6（888元的派蒙商品）、Q8（发货较晚的商品） |
+| top1 不变但 score 增强 | 3 | Q2（派蒙玩偶价格）、Q5（预购商品可以退吗）、Q7（派蒙周边推荐） |
+| 明显误排 | 1 | Q4（派蒙现货吗） |
+
+- 平均 top1 score：baseline 0.4905 → rerank 0.8746（+78.3%）
+- **rerank 主链路已被真实手测证明生效**
+- 详见 `baseline-experiment.md` 和 `rerank-experiment.md`
 
 ## 已知限制
 
 1. **rerank 默认关闭**：`rerankEnabled` 默认为 `false`，需要用户在 UI 中手动开启并配置 Rerank 档案
 2. **rerank 延迟叠加**：rerank 会在 recall 之后增加一次 API 调用（10s 超时），直播场景需关注总延迟
-3. **降级机制**：rerank API 失败时自动降级为不 rerank（直接截取 recall 结果），会打 warn 日志
-4. **实验数据待填写**：baseline 和 rerank 实验模板已创建，但需要手测才能填写实际数据
+3. **降级机制**：rerank API 失败时自动降级为不 rerank（直接截取 recall 结果），会打 warn 日志——但降级行为尚未被真实测试
+4. **Q4 误排**：`派蒙现货吗` 在 rerank 后出现明显误排（baseline 排出现货商品亚克力立牌，rerank 反而排了非现货的摆件礼盒）。推测 rerank 模型对"派蒙"关键词权重过高，忽略了"现货"这个隐含条件。可通过 `rerankEnabled=false` 回退
 
 ---
 
 ## 本轮状态
 
-**`implemented but not yet accepted`**
+**`manually validated, but not yet closed-out`**
 
 - 代码实现已完成，编译验证通过
-- 运行时功能验证待手测
-- Baseline vs Rerank 对比实验待执行
+- Rerank 主链路已在 Tauri 桌面端真实手测验证生效
+- Baseline vs Rerank 对比实验已执行，真实结果已记录
+- 仍有待验证项（见下方），因此不直接标记为 close-out
 
 ---
 
-## 建议手测步骤
+## 已完成手测
 
-### 前置条件
+1. ✅ Baseline 记录（rerankEnabled=false）— 8 条 query 结果已填写
+2. ✅ Rerank 配置与启用 — Tauri 桌面端完成
+3. ✅ Rerank 记录（rerankEnabled=true）— 8 条 query 结果 + 对比总结已填写
 
-- 已配置好 Embedding 档案并成功导入 `sample-knowledge.json`
-- 有可用的 Rerank API 端点和 Key
+## 仍待验证项
 
-### 步骤
-
-1. **Baseline 记录**（rerankEnabled=false）
-   - 确保 Rerank 未启用
-   - 在搜索验证框中依次执行 Q1-Q8，记录结果到 `baseline-experiment.md`
-
-2. **配置 Rerank**
-   - 打开知识库面板 → Rerank 配置 → 点击"未启用"切换为"已启用"
-   - 新增 Rerank 档案：
-     - 名称：如 `DMXAPI Qwen3 Rerank`
-     - Base URL：`https://www.dmxapi.cn`
-     - 模型：`qwen3-reranker-8b`（或 `bge-reranker-v2-m3-free`）
-     - API Key：填入有效 key
-   - 保存
-
-3. **Rerank 记录**（rerankEnabled=true）
-   - 使用同一批知识数据，依次执行 Q1-Q8，记录结果到 `rerank-experiment.md`
-   - 对比 baseline，填写对比总结
-
-4. **回归验证**
-   - 确认 TTS / Stage / OBS / 角色切换等功能不受影响
+1. **rerank 失败降级**：使用错误 API Key 或断网条件下，确认 query() 是否正确降级为不 rerank（打 warn 日志、返回 recall 截取结果）
+2. **聊天主链路 rerank 收益**：搜索验证框已确认排序改善，但需在聊天面板中发送商品相关问题，确认 LLM 注入的 knowledgeContext 是否体现 rerank 排序收益
+3. **回归测试**：确认 TTS / Stage / OBS / 角色切换等现有链路不受 rerank 改动影响
 
 ### 验收 Checklist
 
 | # | 验收项 | 通过 |
 |---|--------|------|
-| 1 | searchMode 默认值统一为 hybrid | ⏳ |
+| 1 | searchMode 默认值统一为 hybrid | ✅ |
 | 2 | rerank-service.ts 编译通过 | ✅ |
-| 3 | query() 内 rerank 步骤正确插入 | ⏳ |
-| 4 | rerank 失败时优雅降级 | ⏳ |
-| 5 | Rerank 配置 UI 可用（启用开关 + profile 管理） | ⏳ |
+| 3 | query() 内 rerank 步骤正确插入 | ✅ 手测确认 |
+| 4 | rerank 失败时优雅降级 | ⏳ 待验证（错误 key / 断网场景） |
+| 5 | Rerank 配置 UI 可用（启用开关 + profile 管理） | ✅ 手测确认 |
 | 6 | searchMode 不在 UI 中暴露 | ✅ |
-| 7 | Baseline 实验记录完成 | ⏳ |
-| 8 | Rerank 实验记录完成 | ⏳ |
-| 9 | 搜索验证框 rerank 后排序改善 | ⏳ |
-| 10 | 不破坏现有链路 | ⏳ |
-| 11 | TypeScript + Vite build 通过 | ✅ |
+| 7 | Baseline 实验记录完成 | ✅ 8 条真实结果已填写 |
+| 8 | Rerank 实验记录完成 | ✅ 8 条真实结果 + 对比总结已填写 |
+| 9 | 搜索验证框 rerank 后排序改善 | ✅ 7/8 改善或增强，1/8 误排 |
+| 10 | 聊天主链路体现 rerank 排序收益 | ⏳ 待验证 |
+| 11 | 不破坏现有链路（TTS / Stage / OBS / 角色切换） | ⏳ 待回归验证 |
+| 12 | TypeScript + Vite build 通过 | ✅ |
 
 ---
 
