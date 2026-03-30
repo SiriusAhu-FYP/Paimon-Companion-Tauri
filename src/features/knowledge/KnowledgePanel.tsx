@@ -69,7 +69,6 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 	const pendingSearchRef = useRef<string | null>(null);
 
 	// Add form
-	const [showAddForm, setShowAddForm] = useState(false);
 	const [addTitle, setAddTitle] = useState("");
 	const [addContent, setAddContent] = useState("");
 	const [adding, setAdding] = useState(false);
@@ -84,6 +83,14 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [searchResults, setSearchResults] = useState<RetrievalResult[] | null>(null);
 	const [searching, setSearching] = useState(false);
+
+	// Dual-mode input
+	const [inputMode, setInputMode] = useState<"simple" | "json">("simple");
+	const [jsonInput, setJsonInput] = useState("");
+	const [jsonError, setJsonError] = useState<string | null>(null);
+	const [jsonDocCount, setJsonDocCount] = useState<number | null>(null);
+	const [showTemplate, setShowTemplate] = useState(false);
+	const [dragging, setDragging] = useState(false);
 
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -411,6 +418,20 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 
 	// ── Knowledge operations ──
 
+	const importFromText = useCallback(async (text: string, sourceName: string) => {
+		const parsed = JSON.parse(text);
+		let docs: KnowledgeDocument[];
+		if (Array.isArray(parsed)) { docs = parsed; }
+		else if (parsed.documents && Array.isArray(parsed.documents)) { docs = parsed.documents; }
+		else { throw new Error("JSON 格式不正确：需要 KnowledgeDocument[] 或 { documents: [...] }"); }
+		for (const doc of docs) {
+			if (!doc.id || !doc.title || !doc.content) throw new Error(`文档缺少必要字段 (id/title/content)`);
+			if (!doc.source) doc.source = sourceName;
+		}
+		const { knowledge } = getServices();
+		return knowledge.importDocuments(docs);
+	}, []);
+
 	const handleFileImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
 		if (!file) return;
@@ -418,17 +439,7 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 		setMessage(null);
 		try {
 			const text = await file.text();
-			const parsed = JSON.parse(text);
-			let docs: KnowledgeDocument[];
-			if (Array.isArray(parsed)) { docs = parsed; }
-			else if (parsed.documents && Array.isArray(parsed.documents)) { docs = parsed.documents; }
-			else { throw new Error("JSON 格式不正确：需要 KnowledgeDocument[] 或 { documents: [...] }"); }
-			for (const doc of docs) {
-				if (!doc.id || !doc.title || !doc.content) throw new Error(`文档缺少必要字段 (id/title/content)`);
-				if (!doc.source) doc.source = file.name;
-			}
-			const { knowledge } = getServices();
-			const result = await knowledge.importDocuments(docs);
+			const result = await importFromText(text, file.name);
 			if (result.imported > 0) {
 				setMessage({ type: result.errors.length > 0 ? "warning" : "success", text: `成功导入 ${result.imported} 条${result.errors.length > 0 ? `，${result.errors.length} 条失败` : ""}` });
 			} else {
@@ -441,7 +452,86 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 			setImporting(false);
 			if (fileInputRef.current) fileInputRef.current.value = "";
 		}
-	}, [refreshState]);
+	}, [refreshState, importFromText]);
+
+	const handleDrop = useCallback(async (e: React.DragEvent) => {
+		e.preventDefault();
+		setDragging(false);
+		const file = e.dataTransfer.files[0];
+		if (!file || !file.name.endsWith(".json")) {
+			setMessage({ type: "error", text: "请拖入 .json 文件" });
+			return;
+		}
+		if (file.size > 1024 * 1024) {
+			setMessage({ type: "error", text: "文件过大（>1MB），请拆分后导入" });
+			return;
+		}
+		setImporting(true);
+		setMessage(null);
+		try {
+			const text = await file.text();
+			const result = await importFromText(text, file.name);
+			if (result.imported > 0) {
+				setMessage({ type: result.errors.length > 0 ? "warning" : "success", text: `成功导入 ${result.imported} 条${result.errors.length > 0 ? `，${result.errors.length} 条失败` : ""}` });
+			} else {
+				setMessage({ type: "error", text: result.errors[0] ?? "导入失败" });
+			}
+			refreshState();
+		} catch (err) {
+			setMessage({ type: "error", text: `导入失败: ${err instanceof Error ? err.message : String(err)}` });
+		} finally {
+			setImporting(false);
+		}
+	}, [refreshState, importFromText]);
+
+	const handleJsonImport = useCallback(async () => {
+		if (!jsonInput.trim()) return;
+		setImporting(true);
+		setMessage(null);
+		try {
+			const result = await importFromText(jsonInput, "json-editor");
+			if (result.imported > 0) {
+				setMessage({ type: result.errors.length > 0 ? "warning" : "success", text: `成功导入 ${result.imported} 条${result.errors.length > 0 ? `，${result.errors.length} 条失败` : ""}` });
+				setJsonInput("");
+				setJsonError(null);
+				setJsonDocCount(null);
+			} else {
+				setMessage({ type: "error", text: result.errors[0] ?? "导入失败" });
+			}
+			refreshState();
+		} catch (err) {
+			setMessage({ type: "error", text: `导入失败: ${err instanceof Error ? err.message : String(err)}` });
+		} finally {
+			setImporting(false);
+		}
+	}, [jsonInput, refreshState, importFromText]);
+
+	const validateJsonInput = useCallback((text: string) => {
+		setJsonInput(text);
+		if (!text.trim()) {
+			setJsonError(null);
+			setJsonDocCount(null);
+			return;
+		}
+		try {
+			const parsed = JSON.parse(text);
+			let docs: unknown[];
+			if (Array.isArray(parsed)) { docs = parsed; }
+			else if (parsed.documents && Array.isArray(parsed.documents)) { docs = parsed.documents; }
+			else { setJsonError("JSON 格式不正确：需要数组 [] 或 { documents: [...] }"); setJsonDocCount(null); return; }
+			const missing = docs.findIndex((d: any) => !d.id || !d.title || !d.content);
+			if (missing >= 0) {
+				setJsonError(`文档 #${missing + 1} 缺少必要字段 (id/title/content)`);
+				setJsonDocCount(null);
+				return;
+			}
+			setJsonError(null);
+			setJsonDocCount(docs.length);
+		} catch {
+			setJsonError("JSON 解析失败，请检查语法");
+			setJsonDocCount(null);
+		}
+	}, []);
 
 	const handleDeleteDoc = useCallback(async (docId: string) => {
 		try {
@@ -463,7 +553,7 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 			const result = await knowledge.addDocument(doc);
 			if (result.success) {
 				setMessage({ type: "success", text: `已添加: "${doc.title}"` });
-				setAddTitle(""); setAddContent(""); setShowAddForm(false);
+				setAddTitle(""); setAddContent("");
 				refreshState();
 			} else {
 				setMessage({ type: "error", text: result.error ?? "添加失败" });
@@ -809,13 +899,36 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 				<RebuildGate onRebuilt={handleGateRebuilt} onCancel={handleGateCancel} />
 			)}
 
-			{/* Actions */}
-			<Stack direction="row" spacing={0.5} flexWrap="wrap">
-				<input ref={fileInputRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleFileImport} />
-				<Button size="small" variant="outlined" startIcon={<UploadFileIcon />} onClick={() => fileInputRef.current?.click()} disabled={importing}>
-					{importing ? "导入中..." : "导入 JSON"}
+			{/* Drop Zone */}
+			<input ref={fileInputRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleFileImport} />
+			<Box
+				onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+				onDragLeave={() => setDragging(false)}
+				onDrop={handleDrop}
+				onClick={() => fileInputRef.current?.click()}
+				sx={{
+					border: "2px dashed", borderColor: dragging ? "primary.main" : "divider",
+					borderRadius: 1, p: 1.5, textAlign: "center", cursor: "pointer",
+					bgcolor: dragging ? "action.hover" : "background.paper",
+					transition: "all 0.2s",
+					"&:hover": { borderColor: "primary.main", bgcolor: "action.hover" },
+				}}
+			>
+				<UploadFileIcon sx={{ fontSize: 28, color: "text.secondary", mb: 0.5 }} />
+				<Typography variant="caption" color="text.secondary" display="block">
+					拖拽 JSON 文件到此处，或点击选择文件
+				</Typography>
+			</Box>
+
+			{/* Mode Tabs + Actions */}
+			<Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
+				<Button size="small" variant={inputMode === "simple" ? "contained" : "outlined"} onClick={() => setInputMode("simple")} sx={{ fontSize: 11 }}>
+					简洁模式
 				</Button>
-				<Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => setShowAddForm(!showAddForm)}>手动添加</Button>
+				<Button size="small" variant={inputMode === "json" ? "contained" : "outlined"} onClick={() => setInputMode("json")} sx={{ fontSize: 11 }}>
+					JSON 模式
+				</Button>
+				<Box sx={{ flex: 1 }} />
 				{documents.length > 0 && (
 					<Button size="small" variant="outlined" color="warning" startIcon={<RefreshIcon />} onClick={handleRebuild} disabled={rebuilding}>
 						{rebuilding ? "重建中..." : "重建索引"}
@@ -825,18 +938,87 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 
 			{(importing || rebuilding) && <LinearProgress sx={{ my: 0.5 }} />}
 
-			{/* Add Form */}
-			{showAddForm && (
+			{/* Simple Mode: single doc add */}
+			{inputMode === "simple" && (
 				<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-					<Typography variant="caption" fontWeight={600}>手动添加知识条目</Typography>
-					<TextField size="small" fullWidth label="标题" value={addTitle} onChange={(e) => setAddTitle(e.target.value)} />
-					<TextField size="small" fullWidth multiline minRows={2} maxRows={6} label="内容" value={addContent} onChange={(e) => setAddContent(e.target.value)} />
+					<Typography variant="caption" fontWeight={600}>添加知识条目</Typography>
+					<TextField size="small" fullWidth label="标题"
+						value={addTitle} onChange={(e) => setAddTitle(e.target.value)}
+						error={addTitle.length > 0 && !addTitle.trim()}
+						helperText="标题参与语义索引——填写能概括内容主题的关键词或短语"
+					/>
+					<TextField size="small" fullWidth multiline minRows={2} maxRows={6} label="内容"
+						value={addContent} onChange={(e) => setAddContent(e.target.value)}
+						error={addContent.length > 0 && !addContent.trim()}
+						helperText="正文会被切块并向量化，是语义检索的主文本"
+					/>
 					<Stack direction="row" spacing={0.5} justifyContent="flex-end">
-						<Button size="small" onClick={() => setShowAddForm(false)}>取消</Button>
+						<Button size="small" onClick={() => { setAddTitle(""); setAddContent(""); }}>清空</Button>
 						<Button size="small" variant="contained" onClick={handleAdd} disabled={adding || !addTitle.trim() || !addContent.trim()}>{adding ? "添加中..." : "添加"}</Button>
 					</Stack>
 				</Box>
 			)}
+
+			{/* JSON Mode: batch import from text */}
+			{inputMode === "json" && (
+				<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+					<Stack direction="row" alignItems="center" spacing={0.5}>
+						<Typography variant="caption" fontWeight={600}>JSON 批量导入</Typography>
+						<Button size="small" variant="text" onClick={() => setShowTemplate(!showTemplate)} sx={{ fontSize: 10, minWidth: 0, p: 0 }}>
+							{showTemplate ? "收起模板" : "查看模板"}
+						</Button>
+					</Stack>
+					{showTemplate && (
+						<Box sx={{ bgcolor: "background.default", borderRadius: 1, p: 1, position: "relative" }}>
+							<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", mb: 0.5 }}>
+								字段说明：id（唯一标识）、title（标题，参与语义索引）、content（正文，切块后向量化）、source（来源标注，可选）、category（分类，可选）
+							</Typography>
+							<Box component="pre" sx={{ fontSize: 10, m: 0, overflow: "auto", maxHeight: 160, fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
+{`[
+  {
+    "id": "faq-001",
+    "title": "退款政策",
+    "content": "商品签收后7天内可申请无理由退款，定制商品除外。",
+    "source": "FAQ",
+    "category": "policy"
+  }
+]`}
+							</Box>
+							<Button size="small" variant="text" sx={{ fontSize: 10, position: "absolute", top: 4, right: 4 }}
+								onClick={() => {
+									navigator.clipboard.writeText(`[\n  {\n    "id": "example-001",\n    "title": "示例标题",\n    "content": "示例正文内容",\n    "source": "manual",\n    "category": "general"\n  }\n]`);
+									setMessage({ type: "info", text: "模板已复制到剪贴板" });
+								}}>
+								复制模板
+							</Button>
+						</Box>
+					)}
+					<TextField
+						size="small" fullWidth multiline minRows={4} maxRows={10}
+						placeholder='粘贴 JSON 数组，如 [{"id":"...","title":"...","content":"..."}]'
+						value={jsonInput}
+						onChange={(e) => validateJsonInput(e.target.value)}
+						error={!!jsonError}
+						sx={{ "& textarea": { fontFamily: "monospace", fontSize: 11 } }}
+					/>
+					{jsonError && <Typography variant="caption" color="error" sx={{ fontSize: 10 }}>{jsonError}</Typography>}
+					{jsonDocCount !== null && !jsonError && <Typography variant="caption" color="success.main" sx={{ fontSize: 10 }}>解析成功，共 {jsonDocCount} 条文档</Typography>}
+					<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+						<Button size="small" onClick={() => { setJsonInput(""); setJsonError(null); setJsonDocCount(null); }}>清空</Button>
+						<Button size="small" variant="contained" onClick={handleJsonImport} disabled={importing || !jsonInput.trim() || !!jsonError}>
+							{importing ? "导入中..." : "导入"}
+						</Button>
+					</Stack>
+				</Box>
+			)}
+
+			{/* 索引文本说明 */}
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
+				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, lineHeight: 1.6 }}>
+					<strong>title</strong> 和 <strong>content</strong> 均参与语义检索。title 作为前缀拼入每个文本块的 embedding 输入，同时也作为 Orama 全文索引的独立字段。
+					id / source / category 不参与检索，仅用于标识和展示。
+				</Typography>
+			</Box>
 
 			{/* Document list with CRUD */}
 			{documents.length > 0 && (
