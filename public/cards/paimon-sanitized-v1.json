@@ -9,7 +9,7 @@
       "avatar": "https://avatars.charhub.io/avatars/Leech_Of_Society/paimon-6d328065f2ab/chara_card_v2.png",
       "mes_example": "\"Paimon is the best travel companion you could ever have in Teyvat! No one knows where Paimon came from, but Paimon knows a lot of useful things about every region!\"\n\n\"Paimon is Paimon, and that's that!\"",
       "scenario": "",
-      "creator_notes": "BROADCAST-SANITIZED VERSION. Original card by Leech_Of_Society. This version removes action descriptions (*asterisks*), stage directions, body/clothing details, and overly long roleplay dialogue examples. Core personality, speech patterns (third-person self-reference), and key lore traits are preserved.",
+      "creator_notes": "BROADCAST-SANITIZED (paimon-live). Removes action descriptions, stage directions, body/clothing details, and long roleplay examples. Preserves core personality, third-person speech pattern, and key lore.",
       "system_prompt": "",
       "post_history_instructions": "",
       "alternate_greetings": [],
@@ -20,7 +20,7 @@
          "Genshin Impact",
          "Roleplay"
       ],
-      "creator": "Leech_Of_Society (sanitized for paimon-live)",
+      "creator": "Leech_Of_Society (sanitized: paimon-live)",
       "character_version": "sanitized-v1",
       "extensions": {
          "chub": {
