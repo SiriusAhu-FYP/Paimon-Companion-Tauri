@@ -205,26 +205,19 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 
 	// ── Embedding 连接测试 ──
 
-	const handleTestEmbConnection = useCallback(async () => {
-		if (!editProfile?.baseUrl.trim() || !editProfile?.model.trim()) {
-			setMessage({ type: "error", text: "请先填写 Base URL 和模型名称" });
-			return;
-		}
+	const testEmbConnection = useCallback(async (profile: EmbeddingProfile, apiKey: string) => {
 		setEmbTesting(true);
 		setMessage(null);
 		try {
-			const testKey = editApiKey || (editProfile.id
-				? await getSecret(SECRET_KEYS.EMBEDDING_API_KEY(editProfile.id)) ?? ""
-				: "");
-			let baseUrl = editProfile.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+			let baseUrl = profile.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
 			const url = `${baseUrl}/v1/embeddings`;
-			const body = JSON.stringify({ input: ["test"], model: editProfile.model, dimensions: editProfile.dimension });
+			const body = JSON.stringify({ input: ["test"], model: profile.model, dimensions: profile.dimension });
 			const resp = await proxyRequest({
 				url,
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body,
-				secretKey: testKey ? SECRET_KEYS.EMBEDDING_API_KEY(editProfile.id) : undefined,
+				secretKey: apiKey ? SECRET_KEYS.EMBEDDING_API_KEY(profile.id) : undefined,
 				timeoutMs: 15000,
 			});
 			if (resp.status >= 200 && resp.status < 300) {
@@ -237,7 +230,28 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 		} finally {
 			setEmbTesting(false);
 		}
-	}, [editProfile, editApiKey]);
+	}, []);
+
+	const handleTestEmbFromMain = useCallback(async () => {
+		const profile = embProfiles.find((p) => p.id === activeEmbProfileId);
+		if (!profile) {
+			setMessage({ type: "error", text: "请先选择一个 Embedding 档案" });
+			return;
+		}
+		const key = (await getSecret(SECRET_KEYS.EMBEDDING_API_KEY(profile.id))) ?? "";
+		testEmbConnection(profile, key);
+	}, [embProfiles, activeEmbProfileId, testEmbConnection]);
+
+	const handleTestEmbConnection = useCallback(async () => {
+		if (!editProfile?.baseUrl.trim() || !editProfile?.model.trim()) {
+			setMessage({ type: "error", text: "请先填写 Base URL 和模型名称" });
+			return;
+		}
+		const key = editApiKey || (editProfile.id
+			? await getSecret(SECRET_KEYS.EMBEDDING_API_KEY(editProfile.id)) ?? ""
+			: "");
+		testEmbConnection(editProfile, key);
+	}, [editProfile, editApiKey, testEmbConnection]);
 
 	// ── Rerank profile management ──
 
@@ -339,21 +353,14 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 
 	// ── Rerank 连接测试 ──
 
-	const handleTestRerankConnection = useCallback(async () => {
-		if (!rerankEditProfile?.baseUrl.trim() || !rerankEditProfile?.model.trim()) {
-			setMessage({ type: "error", text: "请先填写 Base URL 和模型名称" });
-			return;
-		}
+	const testRerankConnection = useCallback(async (profile: RerankProfile, apiKey: string) => {
 		setRerankTesting(true);
 		setMessage(null);
 		try {
-			const testKey = rerankEditApiKey || (rerankEditProfile.id
-				? await getSecret(SECRET_KEYS.RERANK_API_KEY(rerankEditProfile.id)) ?? ""
-				: "");
-			let baseUrl = rerankEditProfile.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+			let baseUrl = profile.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
 			const url = `${baseUrl}/v1/rerank`;
 			const body = JSON.stringify({
-				model: rerankEditProfile.model,
+				model: profile.model,
 				query: "test query",
 				documents: ["test document one", "test document two"],
 				top_n: 2,
@@ -364,7 +371,7 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body,
-				secretKey: testKey ? SECRET_KEYS.RERANK_API_KEY(rerankEditProfile.id) : undefined,
+				secretKey: apiKey ? SECRET_KEYS.RERANK_API_KEY(profile.id) : undefined,
 				timeoutMs: 15000,
 			});
 			if (resp.status >= 200 && resp.status < 300) {
@@ -377,7 +384,28 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 		} finally {
 			setRerankTesting(false);
 		}
-	}, [rerankEditProfile, rerankEditApiKey]);
+	}, []);
+
+	const handleTestRerankConnection = useCallback(async () => {
+		if (!rerankEditProfile?.baseUrl.trim() || !rerankEditProfile?.model.trim()) {
+			setMessage({ type: "error", text: "请先填写 Base URL 和模型名称" });
+			return;
+		}
+		const key = rerankEditApiKey || (rerankEditProfile.id
+			? await getSecret(SECRET_KEYS.RERANK_API_KEY(rerankEditProfile.id)) ?? ""
+			: "");
+		testRerankConnection(rerankEditProfile, key);
+	}, [rerankEditProfile, rerankEditApiKey, testRerankConnection]);
+
+	const handleTestRerankFromMain = useCallback(async () => {
+		const profile = rerankProfiles.find((p) => p.id === activeRerankProfileId);
+		if (!profile) {
+			setMessage({ type: "error", text: "请先选择一个 Rerank 档案" });
+			return;
+		}
+		const key = (await getSecret(SECRET_KEYS.RERANK_API_KEY(profile.id))) ?? "";
+		testRerankConnection(profile, key);
+	}, [rerankProfiles, activeRerankProfileId, testRerankConnection]);
 
 	// ── Knowledge operations ──
 
@@ -557,6 +585,11 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 								if (profile) handleOpenEdit(e.currentTarget, profile);
 							}} disabled={!activeEmbProfileId}><EditIcon fontSize="small" /></IconButton>
 						</span></Tooltip>
+						<Tooltip title="测试连接"><span>
+							<IconButton size="small" onClick={handleTestEmbFromMain} disabled={embTesting}>
+								<NetworkCheckIcon fontSize="small" />
+							</IconButton>
+						</span></Tooltip>
 					</Stack>
 				) : (
 					<Typography variant="caption" color="text.secondary">尚未配置 Embedding 档案</Typography>
@@ -638,6 +671,11 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 										const profile = rerankProfiles.find((p) => p.id === activeRerankProfileId);
 										if (profile) handleOpenRerankEdit(e.currentTarget, profile);
 									}} disabled={!activeRerankProfileId}><EditIcon fontSize="small" /></IconButton>
+								</span></Tooltip>
+								<Tooltip title="测试连接"><span>
+									<IconButton size="small" onClick={handleTestRerankFromMain} disabled={rerankTesting}>
+										<NetworkCheckIcon fontSize="small" />
+									</IconButton>
 								</span></Tooltip>
 							</Stack>
 						) : (
