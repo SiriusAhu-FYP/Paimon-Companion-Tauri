@@ -235,7 +235,7 @@ export async function refreshEmbeddingService() {
 	}
 	const config = getConfig();
 
-	// 刷新 embedding
+	// 刷新 embedding（无档案时清理旧 service，保持配置一致性）
 	const embProfile = resolveEmbeddingProfile(config);
 	if (embProfile) {
 		const embeddingService = new OpenAIEmbeddingService(
@@ -243,6 +243,8 @@ export async function refreshEmbeddingService() {
 			embProfile.id,
 		);
 		services.knowledge.setEmbeddingService(embeddingService);
+	} else {
+		services.knowledge.setEmbeddingService(null);
 	}
 
 	// 刷新 rerank

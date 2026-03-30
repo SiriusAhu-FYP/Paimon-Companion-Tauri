@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
 	Box, Button, Typography, Stack, TextField, Select, MenuItem,
-	Alert, IconButton, Tooltip, Popover, Chip, LinearProgress,
+	Alert, IconButton, Tooltip, Popover, Chip, LinearProgress, Divider, Checkbox,
 	type SelectChangeEvent,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -11,6 +11,7 @@ import AddIcon from "@mui/icons-material/Add";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import EditIcon from "@mui/icons-material/Edit";
 import NetworkCheckIcon from "@mui/icons-material/NetworkCheck";
+import WarningIcon from "@mui/icons-material/Warning";
 import {
 	SECRET_KEYS,
 	loadConfig, updateConfig,
@@ -28,7 +29,7 @@ interface KnowledgePanelProps {
 }
 
 const SectionTitle = ({ children }: { children: React.ReactNode }) => (
-	<Typography variant="subtitle2" sx={{ fontWeight: 600, py: 0.5, display: "flex", alignItems: "center", gap: 0.5 }}>
+	<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
 		{children}
 	</Typography>
 );
@@ -84,6 +85,11 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 	const [searchResults, setSearchResults] = useState<RetrievalResult[] | null>(null);
 	const [searching, setSearching] = useState(false);
 
+	// Batch selection & delete confirmation
+	const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
+	const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<string | "batch" | null>(null);
+	const [deleteCountdown, setDeleteCountdown] = useState(0);
+
 	// Dual-mode input
 	const [inputMode, setInputMode] = useState<"simple" | "json">("simple");
 	const [jsonInput, setJsonInput] = useState("");
@@ -127,19 +133,23 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 
 	const handleSelectEmbProfile = useCallback(async (id: string) => {
 		setActiveEmbProfileId(id);
-		const loaded = await loadConfig();
-		const profile = (loaded.knowledge.embeddingProfiles ?? []).find((p) => p.id === id);
-		if (profile) {
-			await updateConfig({
-				knowledge: {
-					...loaded.knowledge,
-					activeEmbeddingProfileId: id,
-					embedding: { baseUrl: profile.baseUrl, model: profile.model, dimension: profile.dimension },
-				},
-			});
-			await refreshEmbeddingService();
-			refreshState();
-			setMessage({ type: "success", text: `已切换 Embedding 档案: ${profile.name}` });
+		try {
+			const loaded = await loadConfig();
+			const profile = (loaded.knowledge.embeddingProfiles ?? []).find((p) => p.id === id);
+			if (profile) {
+				await updateConfig({
+					knowledge: {
+						...loaded.knowledge,
+						activeEmbeddingProfileId: id,
+						embedding: { baseUrl: profile.baseUrl, model: profile.model, dimension: profile.dimension },
+					},
+				});
+				await refreshEmbeddingService();
+				refreshState();
+				setMessage({ type: "success", text: `已切换 Embedding 档案: ${profile.name}` });
+			}
+		} catch (err) {
+			setMessage({ type: "error", text: `切换失败: ${err instanceof Error ? err.message : String(err)}` });
 		}
 	}, [refreshState]);
 
@@ -251,26 +261,20 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 		testEmbConnection(profile, key);
 	}, [embProfiles, activeEmbProfileId, testEmbConnection]);
 
-	const handleTestEmbConnection = useCallback(async () => {
-		if (!editProfile?.baseUrl.trim() || !editProfile?.model.trim()) {
-			setMessage({ type: "error", text: "请先填写 Base URL 和模型名称" });
-			return;
-		}
-		const key = editApiKey || (editProfile.id
-			? await getSecret(SECRET_KEYS.EMBEDDING_API_KEY(editProfile.id)) ?? ""
-			: "");
-		testEmbConnection(editProfile, key);
-	}, [editProfile, editApiKey, testEmbConnection]);
-
 	// ── Rerank profile management ──
 
 	const handleToggleRerank = useCallback(async (enabled: boolean) => {
 		setRerankEnabled(enabled);
-		const loaded = await loadConfig();
-		await updateConfig({ knowledge: { ...loaded.knowledge, rerankEnabled: enabled } });
-		await refreshEmbeddingService();
-		refreshState();
-		setMessage({ type: "info", text: enabled ? "Rerank 已启用" : "Rerank 已关闭" });
+		try {
+			const loaded = await loadConfig();
+			await updateConfig({ knowledge: { ...loaded.knowledge, rerankEnabled: enabled } });
+			await refreshEmbeddingService();
+			refreshState();
+			setMessage({ type: "info", text: enabled ? "Rerank 已启用" : "Rerank 已关闭" });
+		} catch (err) {
+			setRerankEnabled(!enabled);
+			setMessage({ type: "error", text: `操作失败: ${err instanceof Error ? err.message : String(err)}` });
+		}
 	}, [refreshState]);
 
 	const handleSelectRerankProfile = useCallback(async (id: string) => {
@@ -394,17 +398,6 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 			setRerankTesting(false);
 		}
 	}, []);
-
-	const handleTestRerankConnection = useCallback(async () => {
-		if (!rerankEditProfile?.baseUrl.trim() || !rerankEditProfile?.model.trim()) {
-			setMessage({ type: "error", text: "请先填写 Base URL 和模型名称" });
-			return;
-		}
-		const key = rerankEditApiKey || (rerankEditProfile.id
-			? await getSecret(SECRET_KEYS.RERANK_API_KEY(rerankEditProfile.id)) ?? ""
-			: "");
-		testRerankConnection(rerankEditProfile, key);
-	}, [rerankEditProfile, rerankEditApiKey, testRerankConnection]);
 
 	const handleTestRerankFromMain = useCallback(async () => {
 		const profile = rerankProfiles.find((p) => p.id === activeRerankProfileId);
@@ -533,17 +526,6 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 		}
 	}, []);
 
-	const handleDeleteDoc = useCallback(async (docId: string) => {
-		try {
-			const { knowledge } = getServices();
-			await knowledge.removeDocument(docId);
-			refreshState();
-			setMessage({ type: "success", text: "已删除" });
-		} catch (err) {
-			setMessage({ type: "error", text: `删除失败: ${err instanceof Error ? err.message : String(err)}` });
-		}
-	}, [refreshState]);
-
 	const handleAdd = useCallback(async () => {
 		if (!addTitle.trim() || !addContent.trim()) return;
 		setAdding(true);
@@ -594,6 +576,69 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 			setMessage({ type: "error", text: `更新失败: ${err instanceof Error ? err.message : String(err)}` });
 		} finally { setSaving(false); }
 	}, [editingDocId, editTitle, editContent, refreshState]);
+
+	// ── 删除确认倒计时 ──
+	useEffect(() => {
+		if (deleteCountdown <= 0) return;
+		const timer = setTimeout(() => setDeleteCountdown((c) => c - 1), 1000);
+		return () => clearTimeout(timer);
+	}, [deleteCountdown]);
+
+	const requestDeleteDoc = useCallback((docId: string) => {
+		setConfirmDeleteTarget(docId);
+		setDeleteCountdown(2);
+	}, []);
+
+	const requestBatchDelete = useCallback(() => {
+		if (selectedDocIds.size === 0) return;
+		setConfirmDeleteTarget("batch");
+		setDeleteCountdown(2);
+	}, [selectedDocIds]);
+
+	const confirmDelete = useCallback(async () => {
+		const target = confirmDeleteTarget;
+		setConfirmDeleteTarget(null);
+		if (!target) return;
+		try {
+			const { knowledge } = getServices();
+			if (target === "batch") {
+				const ids = [...selectedDocIds];
+				for (const id of ids) {
+					await knowledge.removeDocument(id);
+				}
+				setSelectedDocIds(new Set());
+				setMessage({ type: "success", text: `已删除 ${ids.length} 条文档` });
+			} else {
+				await knowledge.removeDocument(target);
+				setSelectedDocIds((prev) => { const next = new Set(prev); next.delete(target); return next; });
+				setMessage({ type: "success", text: "已删除" });
+			}
+			refreshState();
+		} catch (err) {
+			setMessage({ type: "error", text: `删除失败: ${err instanceof Error ? err.message : String(err)}` });
+		}
+	}, [confirmDeleteTarget, selectedDocIds, refreshState]);
+
+	const cancelDelete = useCallback(() => {
+		setConfirmDeleteTarget(null);
+	}, []);
+
+	const toggleDocSelection = useCallback((docId: string) => {
+		setSelectedDocIds((prev) => {
+			const next = new Set(prev);
+			if (next.has(docId)) next.delete(docId);
+			else next.add(docId);
+			return next;
+		});
+	}, []);
+
+	const toggleSelectAll = useCallback(() => {
+		if (selectedDocIds.size === documents.length) {
+			setSelectedDocIds(new Set());
+		} else {
+			setSelectedDocIds(new Set(documents.map((d) => d.id)));
+		}
+	}, [selectedDocIds.size, documents]);
 
 	const handleRebuild = useCallback(async () => {
 		setRebuilding(true); setMessage(null);
@@ -646,50 +691,103 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 	}, []);
 
 	return (
-		<Box sx={{ p: 1, display: "flex", flexDirection: "column", gap: 0.75, height: "100%", overflowY: "auto" }}>
+		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1, height: "100%", overflowY: "auto" }}>
 			{/* Header */}
-			<Stack direction="row" alignItems="center" spacing={0.5}>
-				<Tooltip title="返回"><IconButton size="small" onClick={onClose}><ArrowBackIcon fontSize="small" /></IconButton></Tooltip>
-				<Typography variant="subtitle1" fontWeight={700} sx={{ flex: 1 }}>知识库</Typography>
+			<Stack direction="row" alignItems="center" spacing={1}>
+				<Tooltip title="返回控制面板"><IconButton size="small" onClick={onClose}><ArrowBackIcon fontSize="small" /></IconButton></Tooltip>
+				<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+					知识库
+				</Typography>
 			</Stack>
 
 			{message && (
 				<Alert severity={message.type} onClose={() => setMessage(null)} sx={{ py: 0, fontSize: 11 }}>{message.text}</Alert>
 			)}
 
-			{/* Embedding Profile */}
+			{/* ═══ 第一级：配置档案 ═══ */}
+
+			{/* Embedding 配置 */}
 			<SectionTitle>
 				Embedding 配置
 				<HelpTooltip title="配置向量化服务。支持 OpenAI 兼容的 /v1/embeddings API。每个档案有独立的 API Key。" />
 			</SectionTitle>
+			<Stack direction="row" spacing={0.5} alignItems="center">
+				<Select size="small" value={activeEmbProfileId}
+					onChange={(e: SelectChangeEvent) => handleSelectEmbProfile(e.target.value)}
+					displayEmpty sx={{ flex: 1, fontSize: 13 }}>
+					<MenuItem value=""><em>无（未配置）</em></MenuItem>
+					{embProfiles.map((p) => (
+						<MenuItem key={p.id} value={p.id}>{p.name || "(未命名)"}</MenuItem>
+					))}
+				</Select>
+				<Tooltip title="编辑档案">
+					<span><IconButton size="small" onClick={(e) => {
+						const profile = embProfiles.find((p) => p.id === activeEmbProfileId);
+						if (profile) handleOpenEdit(e.currentTarget, profile);
+					}} disabled={!activeEmbProfileId} sx={{ color: "text.secondary" }}><EditIcon sx={{ fontSize: 14 }} /></IconButton></span>
+				</Tooltip>
+				<Tooltip title="新增档案">
+					<IconButton size="small" onClick={(e) => handleOpenEdit(e.currentTarget)} sx={{ color: "primary.main" }}>
+						<AddIcon sx={{ fontSize: 14 }} />
+					</IconButton>
+				</Tooltip>
+			</Stack>
+
+			<Divider />
+
+			{/* Rerank 配置 */}
+			<SectionTitle>
+				Rerank 配置
+				<HelpTooltip title="Rerank 对初次召回结果进行二次精排，提升检索质量。支持兼容 /v1/rerank 端点的服务。" />
+			</SectionTitle>
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-				{embProfiles.length > 0 ? (
-					<Stack direction="row" spacing={0.5} alignItems="center">
-						<Select size="small" fullWidth value={activeEmbProfileId}
-							onChange={(e: SelectChangeEvent) => handleSelectEmbProfile(e.target.value)}>
-							{embProfiles.map((p) => (
-								<MenuItem key={p.id} value={p.id}>{p.name} ({p.model})</MenuItem>
-							))}
-						</Select>
-						<Tooltip title="编辑"><span>
-							<IconButton size="small" onClick={(e) => {
-								const profile = embProfiles.find((p) => p.id === activeEmbProfileId);
-								if (profile) handleOpenEdit(e.currentTarget, profile);
-							}} disabled={!activeEmbProfileId}><EditIcon fontSize="small" /></IconButton>
-						</span></Tooltip>
-					</Stack>
-				) : (
-					<Typography variant="caption" color="text.secondary">尚未配置 Embedding 档案</Typography>
+				<Stack direction="row" spacing={1} alignItems="center">
+					<Typography variant="caption" sx={{ fontSize: 11 }}>启用 Rerank</Typography>
+					<Button size="small" variant={rerankEnabled ? "contained" : "outlined"}
+						color={rerankEnabled ? "primary" : "inherit"}
+						onClick={() => handleToggleRerank(!rerankEnabled)}
+						sx={{ minWidth: 60, fontSize: 11 }}>
+						{rerankEnabled ? "已启用" : "未启用"}
+					</Button>
+				</Stack>
+				{rerankEnabled && (
+					<>
+						<Stack direction="row" spacing={0.5} alignItems="center">
+							<Select size="small" value={activeRerankProfileId}
+								onChange={(e: SelectChangeEvent) => handleSelectRerankProfile(e.target.value)}
+								displayEmpty sx={{ flex: 1, fontSize: 13 }}>
+								<MenuItem value=""><em>无（未配置）</em></MenuItem>
+								{rerankProfiles.map((p) => (
+									<MenuItem key={p.id} value={p.id}>{p.name || "(未命名)"}</MenuItem>
+								))}
+							</Select>
+							<Tooltip title="编辑档案">
+								<span><IconButton size="small" onClick={(e) => {
+									const profile = rerankProfiles.find((p) => p.id === activeRerankProfileId);
+									if (profile) handleOpenRerankEdit(e.currentTarget, profile);
+								}} disabled={!activeRerankProfileId} sx={{ color: "text.secondary" }}><EditIcon sx={{ fontSize: 14 }} /></IconButton></span>
+							</Tooltip>
+							<Tooltip title="新增档案">
+								<IconButton size="small" onClick={(e) => handleOpenRerankEdit(e.currentTarget)} sx={{ color: "primary.main" }}>
+									<AddIcon sx={{ fontSize: 14 }} />
+								</IconButton>
+							</Tooltip>
+						</Stack>
+					</>
 				)}
-				<Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={(e) => handleOpenEdit(e.currentTarget)}>
-					新增 Embedding 档案
-				</Button>
+			</Box>
+
+			{/* ═══ 第二级：连接测试 ═══ */}
+			<Box sx={{ mt: 1, pt: 1, borderTop: 2, borderColor: "divider" }}>
+				<Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ textTransform: "uppercase", letterSpacing: 0.5, mb: 0.5, display: "block" }}>
+					连接测试
+				</Typography>
 			</Box>
 
 			{/* Embedding 测试 */}
 			<SectionTitle>
 				Embedding 测试
-				<HelpTooltip title="在左侧选择或新建 Embedding 档案并保存后，点击此处测试连接是否可达。测试结果仅供参考。" />
+				<HelpTooltip title="选择或新建 Embedding 档案并保存后，点击测试连接是否可达。" />
 			</SectionTitle>
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
 				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
@@ -716,94 +814,12 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 				)}
 			</Box>
 
-			{/* Edit Popover */}
-			<Popover open={!!editAnchor} anchorEl={editAnchor} onClose={() => { setEditAnchor(null); setEditProfile(null); }}
-				anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-				slotProps={{ paper: { sx: { p: 1.5, width: 320, display: "flex", flexDirection: "column", gap: 1 } } }}>
-				{editProfile && (
-					<>
-						<Typography variant="subtitle2" fontWeight={600}>
-							{embProfiles.some((p) => p.id === editProfile.id) ? "编辑 Embedding 档案" : "新建 Embedding 档案"}
-						</Typography>
-						<TextField size="small" fullWidth label="档案名称" value={editProfile.name}
-							onChange={(e) => setEditProfile({ ...editProfile, name: e.target.value })} />
-						<TextField size="small" fullWidth label="Base URL" value={editProfile.baseUrl}
-							onChange={(e) => setEditProfile({ ...editProfile, baseUrl: e.target.value })}
-							helperText="如 https://www.dmxapi.cn 或 https://api.openai.com" />
-						<Stack direction="row" spacing={0.5}>
-							<TextField size="small" sx={{ flex: 2 }} label="模型名称" value={editProfile.model}
-								onChange={(e) => setEditProfile({ ...editProfile, model: e.target.value })} />
-							<TextField size="small" sx={{ flex: 1 }} label="维度" type="number" value={editProfile.dimension}
-								onChange={(e) => setEditProfile({ ...editProfile, dimension: parseInt(e.target.value) || 1536 })}
-								slotProps={{ htmlInput: { min: 64, max: 4096, step: 64 } }} />
-						</Stack>
-						<TextField size="small" fullWidth label="API Key" type="password" value={editApiKey}
-							onChange={(e) => setEditApiKey(e.target.value)} helperText="密钥安全存储在系统钥匙串中" />
-						<Stack direction="row" spacing={0.5} justifyContent="space-between">
-							{embProfiles.some((p) => p.id === editProfile.id) && (
-								<Button size="small" color="error" onClick={handleDeleteProfile}>删除</Button>
-							)}
-							<Box sx={{ flex: 1 }} />
-							<Button size="small" variant="outlined" startIcon={<NetworkCheckIcon />}
-								onClick={handleTestEmbConnection} disabled={embTesting}>
-								{embTesting ? "测试中..." : "测试连接"}
-							</Button>
-							<Button size="small" onClick={() => { setEditAnchor(null); setEditProfile(null); }}>取消</Button>
-							<Button size="small" variant="contained" onClick={handleSaveProfile}
-								disabled={!editProfile.name.trim() || !editProfile.baseUrl.trim() || !editProfile.model.trim()}>
-								保存
-							</Button>
-						</Stack>
-					</>
-				)}
-			</Popover>
-
-			{/* Rerank 配置 */}
-			<SectionTitle>
-				Rerank 配置
-				<HelpTooltip title="Rerank 对初次召回结果进行二次精排，提升检索质量。支持兼容 /v1/rerank 端点的服务（DMXAPI、Jina、Cohere 等）。" />
-			</SectionTitle>
-			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-				<Stack direction="row" spacing={1} alignItems="center">
-					<Typography variant="caption" sx={{ fontSize: 11 }}>启用 Rerank</Typography>
-					<Button size="small" variant={rerankEnabled ? "contained" : "outlined"}
-						color={rerankEnabled ? "primary" : "inherit"}
-						onClick={() => handleToggleRerank(!rerankEnabled)}
-						sx={{ minWidth: 60, fontSize: 11 }}>
-						{rerankEnabled ? "已启用" : "未启用"}
-					</Button>
-				</Stack>
-				{rerankEnabled && (
-					<>
-						{rerankProfiles.length > 0 ? (
-							<Stack direction="row" spacing={0.5} alignItems="center">
-							<Select size="small" fullWidth value={activeRerankProfileId}
-									onChange={(e: SelectChangeEvent) => handleSelectRerankProfile(e.target.value)}>
-								{rerankProfiles.map((p) => (
-									<MenuItem key={p.id} value={p.id}>{p.name} ({p.model})</MenuItem>
-								))}
-							</Select>
-							<Tooltip title="编辑"><span>
-								<IconButton size="small" onClick={(e) => {
-									const profile = rerankProfiles.find((p) => p.id === activeRerankProfileId);
-									if (profile) handleOpenRerankEdit(e.currentTarget, profile);
-								}} disabled={!activeRerankProfileId}><EditIcon fontSize="small" /></IconButton>
-							</span></Tooltip>
-						</Stack>
-						) : (
-							<Typography variant="caption" color="text.secondary">尚未配置 Rerank 档案</Typography>
-						)}
-						<Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={(e) => handleOpenRerankEdit(e.currentTarget)}>
-							新增 Rerank 档案
-						</Button>
-					</>
-				)}
-			</Box>
+			<Divider />
 
 			{/* Rerank 测试 */}
 			<SectionTitle>
 				Rerank 测试
-				<HelpTooltip title="在左侧选择或新建 Rerank 档案并保存后，点击此处测试连接是否可达。测试结果仅供参考。" />
+				<HelpTooltip title="选择或新建 Rerank 档案并保存后，点击测试连接是否可达。" />
 			</SectionTitle>
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
 				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
@@ -830,43 +846,94 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 				)}
 			</Box>
 
+			{/* ═══ Popover 编辑区域（不占布局位置） ═══ */}
+
+			{/* Embedding Edit Popover */}
+			<Popover open={!!editAnchor} anchorEl={editAnchor} onClose={() => { setEditAnchor(null); setEditProfile(null); }}
+				anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+				transformOrigin={{ vertical: "top", horizontal: "right" }}
+				slotProps={{ paper: { sx: { width: 360, maxHeight: 480, overflowY: "auto" } } }}>
+				<Box sx={{ p: 1.5 }}>
+					{editProfile && (
+						<Stack spacing={1}>
+							<Typography variant="subtitle2">
+								{embProfiles.some((p) => p.id === editProfile.id) ? "编辑 Embedding 档案" : "新建 Embedding 档案"}
+							</Typography>
+							<TextField size="small" fullWidth label="档案名称" value={editProfile.name}
+								onChange={(e) => setEditProfile({ ...editProfile, name: e.target.value })} />
+							<TextField size="small" fullWidth label="Base URL" value={editProfile.baseUrl}
+								onChange={(e) => setEditProfile({ ...editProfile, baseUrl: e.target.value })}
+								helperText="如 https://www.dmxapi.cn 或 https://api.openai.com" />
+							<Stack direction="row" spacing={0.5}>
+								<TextField size="small" sx={{ flex: 2 }} label="模型名称" value={editProfile.model}
+									onChange={(e) => setEditProfile({ ...editProfile, model: e.target.value })} />
+								<TextField size="small" sx={{ flex: 1 }} label="维度" type="number" value={editProfile.dimension}
+									onChange={(e) => setEditProfile({ ...editProfile, dimension: parseInt(e.target.value) || 1536 })}
+									slotProps={{ htmlInput: { min: 64, max: 4096, step: 64 } }} />
+							</Stack>
+							<TextField size="small" fullWidth label="API Key" type="password" value={editApiKey}
+								onChange={(e) => setEditApiKey(e.target.value)} helperText="密钥安全存储在系统钥匙串中" />
+							<Stack direction="row" spacing={0.5} justifyContent="space-between" alignItems="center">
+								{embProfiles.some((p) => p.id === editProfile.id) ? (
+									<Button size="small" color="error" onClick={handleDeleteProfile}>删除档案</Button>
+								) : <Box />}
+								<Stack direction="row" spacing={0.5}>
+									<Button size="small" onClick={() => { setEditAnchor(null); setEditProfile(null); }}>取消</Button>
+									<Button size="small" variant="contained" onClick={handleSaveProfile}
+										disabled={!editProfile.name.trim() || !editProfile.baseUrl.trim() || !editProfile.model.trim()}>
+										保存
+									</Button>
+								</Stack>
+							</Stack>
+						</Stack>
+					)}
+				</Box>
+			</Popover>
+
 			{/* Rerank Edit Popover */}
 			<Popover open={!!rerankEditAnchor} anchorEl={rerankEditAnchor} onClose={() => { setRerankEditAnchor(null); setRerankEditProfile(null); }}
-				anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-				slotProps={{ paper: { sx: { p: 1.5, width: 320, display: "flex", flexDirection: "column", gap: 1 } } }}>
-				{rerankEditProfile && (
-					<>
-						<Typography variant="subtitle2" fontWeight={600}>
-							{rerankProfiles.some((p) => p.id === rerankEditProfile.id) ? "编辑 Rerank 档案" : "新建 Rerank 档案"}
-						</Typography>
-						<TextField size="small" fullWidth label="档案名称" value={rerankEditProfile.name}
-							onChange={(e) => setRerankEditProfile({ ...rerankEditProfile, name: e.target.value })} />
-						<TextField size="small" fullWidth label="Base URL" value={rerankEditProfile.baseUrl}
-							onChange={(e) => setRerankEditProfile({ ...rerankEditProfile, baseUrl: e.target.value })}
-							helperText="如 https://www.dmxapi.cn" />
-						<TextField size="small" fullWidth label="模型名称" value={rerankEditProfile.model}
-							onChange={(e) => setRerankEditProfile({ ...rerankEditProfile, model: e.target.value })}
-							helperText="如 qwen3-reranker-8b 或 bge-reranker-v2-m3-free" />
-						<TextField size="small" fullWidth label="API Key" type="password" value={rerankEditApiKey}
-							onChange={(e) => setRerankEditApiKey(e.target.value)} helperText="密钥安全存储在系统钥匙串中" />
-						<Stack direction="row" spacing={0.5} justifyContent="space-between">
-							{rerankProfiles.some((p) => p.id === rerankEditProfile.id) && (
-								<Button size="small" color="error" onClick={handleDeleteRerankProfile}>删除</Button>
-							)}
-							<Box sx={{ flex: 1 }} />
-							<Button size="small" variant="outlined" startIcon={<NetworkCheckIcon />}
-								onClick={handleTestRerankConnection} disabled={rerankTesting}>
-								{rerankTesting ? "测试中..." : "测试连接"}
-							</Button>
-							<Button size="small" onClick={() => { setRerankEditAnchor(null); setRerankEditProfile(null); }}>取消</Button>
-							<Button size="small" variant="contained" onClick={handleSaveRerankProfile}
-								disabled={!rerankEditProfile.name.trim() || !rerankEditProfile.baseUrl.trim() || !rerankEditProfile.model.trim()}>
-								保存
-							</Button>
+				anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+				transformOrigin={{ vertical: "top", horizontal: "right" }}
+				slotProps={{ paper: { sx: { width: 360, maxHeight: 480, overflowY: "auto" } } }}>
+				<Box sx={{ p: 1.5 }}>
+					{rerankEditProfile && (
+						<Stack spacing={1}>
+							<Typography variant="subtitle2">
+								{rerankProfiles.some((p) => p.id === rerankEditProfile.id) ? "编辑 Rerank 档案" : "新建 Rerank 档案"}
+							</Typography>
+							<TextField size="small" fullWidth label="档案名称" value={rerankEditProfile.name}
+								onChange={(e) => setRerankEditProfile({ ...rerankEditProfile, name: e.target.value })} />
+							<TextField size="small" fullWidth label="Base URL" value={rerankEditProfile.baseUrl}
+								onChange={(e) => setRerankEditProfile({ ...rerankEditProfile, baseUrl: e.target.value })}
+								helperText="如 https://www.dmxapi.cn" />
+							<TextField size="small" fullWidth label="模型名称" value={rerankEditProfile.model}
+								onChange={(e) => setRerankEditProfile({ ...rerankEditProfile, model: e.target.value })}
+								helperText="如 qwen3-reranker-8b 或 bge-reranker-v2-m3-free" />
+							<TextField size="small" fullWidth label="API Key" type="password" value={rerankEditApiKey}
+								onChange={(e) => setRerankEditApiKey(e.target.value)} helperText="密钥安全存储在系统钥匙串中" />
+							<Stack direction="row" spacing={0.5} justifyContent="space-between" alignItems="center">
+								{rerankProfiles.some((p) => p.id === rerankEditProfile.id) ? (
+									<Button size="small" color="error" onClick={handleDeleteRerankProfile}>删除档案</Button>
+								) : <Box />}
+								<Stack direction="row" spacing={0.5}>
+									<Button size="small" onClick={() => { setRerankEditAnchor(null); setRerankEditProfile(null); }}>取消</Button>
+									<Button size="small" variant="contained" onClick={handleSaveRerankProfile}
+										disabled={!rerankEditProfile.name.trim() || !rerankEditProfile.baseUrl.trim() || !rerankEditProfile.model.trim()}>
+										保存
+									</Button>
+								</Stack>
+							</Stack>
 						</Stack>
-					</>
-				)}
+					)}
+				</Box>
 			</Popover>
+
+			{/* ═══ 第三级：知识库管理 ═══ */}
+			<Box sx={{ mt: 1, pt: 1, borderTop: 2, borderColor: "divider" }}>
+				<Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ textTransform: "uppercase", letterSpacing: 0.5, mb: 0.5, display: "block" }}>
+					知识库管理
+				</Typography>
+			</Box>
 
 			{/* Status */}
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
@@ -1012,49 +1079,94 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 				</Box>
 			)}
 
-			{/* 索引文本说明 */}
-			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
-				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, lineHeight: 1.6 }}>
-					<strong>title</strong> 和 <strong>content</strong> 均参与语义检索。title 作为前缀拼入每个文本块的 embedding 输入，同时也作为 Orama 全文索引的独立字段。
-					id / source / category 不参与检索，仅用于标识和展示。
-				</Typography>
-			</Box>
+		{/* Document list with batch management */}
+		{documents.length > 0 && (
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+				<Stack direction="row" alignItems="center" spacing={0.5}>
+					<Checkbox
+						size="small"
+						checked={selectedDocIds.size === documents.length && documents.length > 0}
+						indeterminate={selectedDocIds.size > 0 && selectedDocIds.size < documents.length}
+						onChange={toggleSelectAll}
+						sx={{ p: 0 }}
+					/>
+					<Typography variant="caption" fontWeight={600} sx={{ flex: 1 }}>
+						已导入文档 ({documents.length})
+						{selectedDocIds.size > 0 && ` · 已选 ${selectedDocIds.size}`}
+					</Typography>
+					<HelpTooltip multiline title={"title 和 content 均参与语义检索。\ntitle 作为前缀拼入 embedding 输入，同时也作为全文索引字段。\nid / source / category 不参与检索，仅用于标识和展示。"} />
+					{selectedDocIds.size > 0 && (
+						<Button size="small" color="error" variant="outlined" startIcon={<DeleteIcon />}
+							onClick={requestBatchDelete} sx={{ fontSize: 11 }}>
+							删除 ({selectedDocIds.size})
+						</Button>
+					)}
+				</Stack>
 
-			{/* Document list with CRUD */}
-			{documents.length > 0 && (
-				<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
-					<Typography variant="caption" fontWeight={600}>已导入文档 ({documents.length})</Typography>
-					{documents.map((doc) => (
-						<Box key={doc.id}>
-							{editingDocId === doc.id ? (
-								<Box sx={{ border: "1px solid", borderColor: "primary.main", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
-									<TextField size="small" fullWidth label="标题" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-									<TextField size="small" fullWidth multiline minRows={2} maxRows={6} label="内容" value={editContent} onChange={(e) => setEditContent(e.target.value)} />
-									<Stack direction="row" spacing={0.5} justifyContent="flex-end">
-										<Button size="small" onClick={handleCancelEdit}>取消</Button>
-										<Button size="small" variant="contained" onClick={handleSaveEdit} disabled={saving || !editTitle.trim() || !editContent.trim()}>
-											{saving ? "保存中..." : "保存"}
-										</Button>
-									</Stack>
-								</Box>
-							) : (
-								<Box sx={{ cursor: "pointer", "&:hover": { bgcolor: "action.hover" }, borderRadius: 0.5, px: 0.5, py: 0.25 }}
+				{/* 删除确认（内联） */}
+				{confirmDeleteTarget && (
+					<Box sx={{ bgcolor: "background.default", border: "1px solid", borderColor: "error.main", borderRadius: 1, p: 1.5, mt: 0.5 }}>
+						<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 0.5 }}>
+							<WarningIcon sx={{ fontSize: 14, color: "error.main" }} />
+							<Typography variant="subtitle2" sx={{ color: "error.main" }}>
+								{confirmDeleteTarget === "batch"
+									? `确定删除选中的 ${selectedDocIds.size} 条文档？此操作无法恢复。`
+									: "确定删除此文档？此操作无法恢复。"}
+							</Typography>
+						</Stack>
+						<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+							<Button
+								size="small" variant="contained" color="error"
+								disabled={deleteCountdown > 0}
+								onClick={confirmDelete}
+							>
+								{deleteCountdown > 0 ? `确认删除 (${deleteCountdown}s)` : "确认删除"}
+							</Button>
+							<Button size="small" onClick={cancelDelete}>取消</Button>
+						</Stack>
+					</Box>
+				)}
+
+				{documents.map((doc) => (
+					<Box key={doc.id}>
+						{editingDocId === doc.id ? (
+							<Box sx={{ border: "1px solid", borderColor: "primary.main", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+								<TextField size="small" fullWidth label="标题" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+								<TextField size="small" fullWidth multiline minRows={2} maxRows={6} label="内容" value={editContent} onChange={(e) => setEditContent(e.target.value)} />
+								<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+									<Button size="small" onClick={handleCancelEdit}>取消</Button>
+									<Button size="small" variant="contained" onClick={handleSaveEdit} disabled={saving || !editTitle.trim() || !editContent.trim()}>
+										{saving ? "保存中..." : "保存"}
+									</Button>
+								</Stack>
+							</Box>
+						) : (
+							<Stack direction="row" alignItems="flex-start" spacing={0}>
+								<Checkbox
+									size="small"
+									checked={selectedDocIds.has(doc.id)}
+									onChange={() => toggleDocSelection(doc.id)}
+									onClick={(e) => e.stopPropagation()}
+									sx={{ p: 0, mt: 0.25 }}
+								/>
+								<Box sx={{ flex: 1, cursor: "pointer", "&:hover": { bgcolor: "action.hover" }, borderRadius: 0.5, px: 0.5, py: 0.25 }}
 									onClick={() => handleStartEdit(doc)}>
 									<Stack direction="row" alignItems="center" spacing={0.5}>
 										<Typography variant="caption" sx={{ flex: 1, fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{doc.title}</Typography>
 										{doc.source && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 9 }}>{doc.source}</Typography>}
 										<IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartEdit(doc); }} sx={{ p: 0.25 }}><EditIcon sx={{ fontSize: 14 }} /></IconButton>
-										<IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc.id); }} sx={{ p: 0.25 }}><DeleteIcon sx={{ fontSize: 14 }} /></IconButton>
+										<IconButton size="small" onClick={(e) => { e.stopPropagation(); requestDeleteDoc(doc.id); }} sx={{ p: 0.25 }}><DeleteIcon sx={{ fontSize: 14 }} /></IconButton>
 									</Stack>
 									<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
 										{doc.content.slice(0, 80)}{doc.content.length > 80 ? "…" : ""}
 									</Typography>
 								</Box>
-							)}
-						</Box>
-					))}
-				</Box>
-			)}
+							</Stack>
+						)}
+					</Box>
+				))}
+			</Box>
+		)}
 
 			{/* Search */}
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>

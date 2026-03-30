@@ -81,12 +81,16 @@ export class KnowledgeService {
 
 	// ── 初始化 ──
 
-	setEmbeddingService(service: IEmbeddingService) {
+	setEmbeddingService(service: IEmbeddingService | null) {
 		this.embeddingService = service;
-		log.info("embedding service set", {
-			model: service.getModelName(),
-			dimension: service.getDimension(),
-		});
+		if (service) {
+			log.info("embedding service set", {
+				model: service.getModelName(),
+				dimension: service.getDimension(),
+			});
+		} else {
+			log.info("embedding service cleared");
+		}
 	}
 
 	setRerankService(service: IRerankService | null) {
@@ -98,24 +102,32 @@ export class KnowledgeService {
 		}
 	}
 
-	async initialize(): Promise<void> {
-		if (this.initialized || this.initializing) return;
-		this.initializing = true;
+	private initializePromise: Promise<void> | null = null;
 
+	async initialize(): Promise<void> {
+		if (this.initialized) return;
+		// 如果已有进行中的初始化，复用同一个 Promise 防止并发
+		if (this.initializing && this.initializePromise) {
+			return this.initializePromise;
+		}
+		this.initializing = true;
+		this.initializePromise = this.doInitialize();
+		return this.initializePromise;
+	}
+
+	private async doInitialize(): Promise<void> {
 		try {
 			const config = getConfig().knowledge;
 			const dimension = config.embedding.dimension;
 
 			this.db = createKnowledgeDB(dimension);
 
-			// 加载原始文档
 			const docStore = await loadDocuments();
 			if (docStore?.documents) {
 				this.documents = docStore.documents;
 				log.info(`loaded ${this.documents.length} documents from persistence`);
 			}
 
-			// 尝试加载索引快照
 			const indexStore = await loadIndex();
 			if (indexStore?.metadata && indexStore.oramaData) {
 				const compat = this.checkCompatibility(indexStore.metadata, config);
@@ -128,45 +140,47 @@ export class KnowledgeService {
 					});
 				} else {
 					log.warn(`index incompatible: ${compat.reason}`);
-					// 索引不兼容，但原始文档已加载；等用户触发重建
 				}
 			}
 
-		// revision 状态初始化：如果有文档但无有效索引，标记 needs_rebuild
-		if (this.documents.length > 0 && !this.metadata) {
-			this.documentsRevision = 1;
-			this.indexedRevision = 0;
-		} else if (this.metadata) {
-			this.documentsRevision = 0;
-			this.indexedRevision = 0;
-		}
+			if (this.documents.length > 0 && !this.metadata) {
+				this.documentsRevision = 1;
+				this.indexedRevision = 0;
+			} else if (this.metadata) {
+				this.documentsRevision = 0;
+				this.indexedRevision = 0;
+			}
 
-		// 只有 embedding service 可用时才标记为初始化完成
-		if (!this.embeddingService) {
-			log.warn("knowledge service initialized without embedding service — waiting for configuration");
-			return;
-		}
+			if (!this.embeddingService) {
+				log.warn("knowledge service initialized without embedding service — waiting for configuration");
+				return;
+			}
 
-		this.initialized = true;
-		log.info("knowledge service initialized", {
-			documentCount: this.documents.length,
-			hasIndex: !!this.metadata,
-			indexStatus: this.getIndexStatus(),
-		});
+			this.initialized = true;
+			log.info("knowledge service initialized", {
+				documentCount: this.documents.length,
+				hasIndex: !!this.metadata,
+				indexStatus: this.getIndexStatus(),
+			});
 		} catch (err) {
 			log.error("knowledge service initialization failed", err);
 		} finally {
 			this.initializing = false;
+			this.initializePromise = null;
 		}
 	}
 
 	/** 配置变更后完全重新初始化（dimension 可能变化） */
 	async reinitialize(): Promise<void> {
+		// 等待进行中的初始化完成后再重置
+		if (this.initializing && this.initializePromise) {
+			await this.initializePromise.catch(() => {});
+		}
 		this.initialized = false;
 		this.initializing = false;
+		this.initializePromise = null;
 		this.db = null;
 		this.metadata = null;
-		// 不清空 documents——持久化层会重新加载
 		this.documents = [];
 		await this.initialize();
 	}

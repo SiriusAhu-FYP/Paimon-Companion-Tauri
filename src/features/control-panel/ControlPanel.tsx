@@ -12,7 +12,7 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import { useRuntime, useCharacter } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { getServices } from "@/services";
-import { updateConfig, getConfig } from "@/services/config";
+import { type AppConfig, DEFAULT_CONFIG, loadConfig, updateConfig, getConfig } from "@/services/config";
 import { mockVoicePipeline, mockExternalEvents, MOCK_CHARACTER_PROFILE } from "@/utils/mock";
 import type { CharacterProfile } from "@/types";
 import { createLogger } from "@/services/logger";
@@ -58,6 +58,23 @@ export function ControlPanel() {
 
 		await updateConfig({ character: { ...getConfig().character, activeProfileId: profile.id } });
 		log.info(`switched to character: ${profile.name} (${profile.id})`);
+	}, []);
+
+	// ── 角色设置 & 直播行为约束（从 SettingsPanel 迁入） ──
+	const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
+
+	useEffect(() => {
+		let cancelled = false;
+		(async () => {
+			const loaded = await loadConfig();
+			if (cancelled) return;
+			setConfig(loaded);
+		})();
+		return () => { cancelled = true; };
+	}, []);
+
+	const updateCharacter = useCallback((patch: Partial<AppConfig["character"]>) => {
+		setConfig((c) => ({ ...c, character: { ...c.character, ...patch } }));
 	}, []);
 
 	// ── 上下文注入 ──
@@ -179,13 +196,84 @@ export function ControlPanel() {
 						<MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
 					))}
 				</Select>
-				<Typography variant="body2">情绪：{emotion}</Typography>
-				<Typography variant="body2">说话中：{isSpeaking ? "是" : "否"}</Typography>
-			</Box>
+			<Typography variant="body2">情绪：{emotion}</Typography>
+			<Typography variant="body2">说话中：{isSpeaking ? "是" : "否"}</Typography>
+		</Box>
 
-			<Divider />
+		<Divider />
 
-			{/* 上下文注入 */}
+		{/* 角色设置 */}
+		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+			<Stack direction="row" alignItems="center" spacing={0.5}>
+				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ fontSize: 11 }}>自定义人设</Typography>
+				<HelpTooltip title="仅在未选择角色卡时生效，优先级最低。角色卡内设定 > 自定义人设。" />
+			</Stack>
+			<TextField
+				size="small" fullWidth multiline minRows={3} maxRows={6}
+				value={config.character.customPersona}
+				onChange={(e) => updateCharacter({ customPersona: e.target.value })}
+				onBlur={() => updateConfig({ character: { ...config.character } })}
+			/>
+		</Box>
+
+		<Divider />
+
+		{/* 直播行为约束 */}
+		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+			<Stack direction="row" alignItems="center" spacing={0.5}>
+				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ fontSize: 11 }}>直播行为约束</Typography>
+				<HelpTooltip title="在 system prompt 最前面注入行为规则，优先级高于角色卡设定。约束格式与风格，不覆盖角色个性。" />
+			</Stack>
+			<Stack direction="row" spacing={1} alignItems="center">
+				<Typography variant="caption" sx={{ fontSize: 11 }}>启用约束</Typography>
+				<Button size="small"
+					variant={config.character.behaviorConstraints.enabled ? "contained" : "outlined"}
+					color={config.character.behaviorConstraints.enabled ? "primary" : "inherit"}
+					onClick={() => {
+						const next = !config.character.behaviorConstraints.enabled;
+						setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, enabled: next } } }));
+						updateConfig({ character: { ...config.character, behaviorConstraints: { ...config.character.behaviorConstraints, enabled: next } } });
+					}}
+					sx={{ minWidth: 60, fontSize: 11 }}>
+					{config.character.behaviorConstraints.enabled ? "已启用" : "未启用"}
+				</Button>
+			</Stack>
+			{config.character.behaviorConstraints.enabled && (
+				<>
+					<Stack direction="row" alignItems="center" spacing={0.5}>
+						<Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>最大回复字数</Typography>
+						<HelpTooltip title="LLM 单次回复的建议字数上限。实际输出可能略有浮动。" />
+					</Stack>
+					<TextField
+						size="small" type="number" sx={{ width: 120 }}
+						value={config.character.behaviorConstraints.maxReplyLength}
+						onChange={(e) => {
+							const v = Math.max(20, Math.min(500, Number(e.target.value) || 150));
+							setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, maxReplyLength: v } } }));
+						}}
+						onBlur={() => updateConfig({ character: { ...config.character } })}
+						inputProps={{ min: 20, max: 500, step: 10 }}
+					/>
+					<Stack direction="row" alignItems="center" spacing={0.5}>
+						<Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>自定义追加规则</Typography>
+						<HelpTooltip title="追加的自定义行为约束文本，会拼入约束段落末尾。" />
+					</Stack>
+					<TextField
+						size="small" fullWidth multiline minRows={2} maxRows={4}
+						placeholder="例：每句话结尾加上「哦」"
+						value={config.character.behaviorConstraints.customRules}
+						onChange={(e) => {
+							setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, customRules: e.target.value } } }));
+						}}
+						onBlur={() => updateConfig({ character: { ...config.character } })}
+					/>
+				</>
+			)}
+		</Box>
+
+		<Divider />
+
+		{/* 上下文注入 */}
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
 					<Typography variant="caption" color="text.secondary" fontWeight={600}>上下文注入</Typography>
