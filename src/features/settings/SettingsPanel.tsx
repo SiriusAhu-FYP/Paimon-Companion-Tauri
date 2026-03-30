@@ -8,6 +8,9 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import NetworkCheckIcon from "@mui/icons-material/NetworkCheck";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
+import EditIcon from "@mui/icons-material/Edit";
+import AddIcon from "@mui/icons-material/Add";
+import WarningIcon from "@mui/icons-material/Warning";
 import {
 	type AppConfig, type LLMProviderType, type TTSProviderType,
 	type LLMProfile, type TTSProfile,
@@ -506,12 +509,12 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 						disabled={!activeId && profiles.length === 0}
 						sx={{ color: "text.secondary" }}
 					>
-						<Box sx={{ fontSize: 14 }}>✏️</Box>
+						<EditIcon sx={{ fontSize: 14 }} />
 					</IconButton>
 				</Tooltip>
 				<Tooltip title="新增档案">
 					<IconButton size="small" onClick={handleNew} sx={{ color: "primary.main" }}>
-						<Box sx={{ fontSize: 14 }}>➕</Box>
+						<AddIcon sx={{ fontSize: 14 }} />
 					</IconButton>
 				</Tooltip>
 			</Stack>
@@ -574,7 +577,10 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 
 							{confirmDeleteOpen && editingProfile && (
 								<Box sx={{ bgcolor: "background.default", border: "1px solid", borderColor: "error.main", borderRadius: 1, p: 1.5, mt: 0.5 }}>
-									<Typography variant="subtitle2" sx={{ mb: 1, color: "error.main" }}>⚠️ 删除此档案将无法恢复</Typography>
+									<Stack direction="row" spacing={0.5} alignItems="center">
+										<WarningIcon sx={{ fontSize: 14, color: "error.main" }} />
+										<Typography variant="subtitle2" sx={{ color: "error.main" }}>删除此档案将无法恢复</Typography>
+									</Stack>
 									<Stack direction="row" spacing={0.5} justifyContent="flex-end">
 										<Button
 											size="small" variant="contained" color="error"
@@ -713,12 +719,12 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 						disabled={!activeId && profiles.length === 0}
 						sx={{ color: "text.secondary" }}
 					>
-						<Box sx={{ fontSize: 14 }}>✏️</Box>
+						<EditIcon sx={{ fontSize: 14 }} />
 					</IconButton>
 				</Tooltip>
 				<Tooltip title="新增档案">
 					<IconButton size="small" onClick={handleNew} sx={{ color: "primary.main" }}>
-						<Box sx={{ fontSize: 14 }}>➕</Box>
+						<AddIcon sx={{ fontSize: 14 }} />
 					</IconButton>
 				</Tooltip>
 			</Stack>
@@ -795,7 +801,10 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 
 							{confirmDeleteOpen && editingProfile && (
 								<Box sx={{ bgcolor: "background.default", border: "1px solid", borderColor: "error.main", borderRadius: 1, p: 1.5, mt: 0.5 }}>
-									<Typography variant="subtitle2" sx={{ mb: 1, color: "error.main" }}>⚠️ 删除此档案将无法恢复</Typography>
+									<Stack direction="row" spacing={0.5} alignItems="center">
+										<WarningIcon sx={{ fontSize: 14, color: "error.main" }} />
+										<Typography variant="subtitle2" sx={{ color: "error.main" }}>删除此档案将无法恢复</Typography>
+									</Stack>
 									<Stack direction="row" spacing={0.5} justifyContent="flex-end">
 										<Button
 											size="small" variant="contained" color="error"
