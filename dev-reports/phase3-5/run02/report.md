@@ -113,9 +113,9 @@
 | Rerank 功能手测 | ✅ | 已在 Tauri 桌面端真实手测，rerank 主链路生效 |
 | Baseline 实验 | ✅ | 8 条 query 真实结果已记录，见 `baseline-experiment.md` |
 | Rerank 实验 | ✅ | 8 条 query 真实结果已记录 + 对比总结，见 `rerank-experiment.md` |
-| Rerank 失败降级 | ⏳ 待验证 | 尚未测试错误 key / 断网场景下的降级行为 |
-| 聊天主链路 rerank 收益 | ⏳ 待验证 | 搜索验证框已确认 rerank 生效，但尚未验证聊天中 LLM 注入是否体现排序收益 |
-| 回归测试 | ⏳ 待验证 | TTS / Stage / OBS / 角色切换等功能尚未回归验证 |
+| Rerank 失败降级 | ✅ | 已确认正常：rerank API 报错时正确降级为不 rerank |
+| 聊天主链路 rerank 收益 | ✅ | 已确认正常：聊天面板发送商品相关问题，LLM 注入的 knowledgeContext 体现 rerank 排序收益 |
+| 回归测试 | ✅ | 已确认正常：TTS / Stage / OBS / 角色切换等现有链路无问题 |
 
 ---
 
@@ -137,35 +137,45 @@
 
 1. **rerank 默认关闭**：`rerankEnabled` 默认为 `false`，需要用户在 UI 中手动开启并配置 Rerank 档案
 2. **rerank 延迟叠加**：rerank 会在 recall 之后增加一次 API 调用（10s 超时），直播场景需关注总延迟
-3. **降级机制**：rerank API 失败时自动降级为不 rerank（直接截取 recall 结果），会打 warn 日志——但降级行为尚未被真实测试
-4. **Q4 误排**：`派蒙现货吗` 在 rerank 后出现明显误排（baseline 排出现货商品亚克力立牌，rerank 反而排了非现货的摆件礼盒）。推测 rerank 模型对"派蒙"关键词权重过高，忽略了"现货"这个隐含条件。可通过 `rerankEnabled=false` 回退
+3. **降级机制**：rerank API 失败时自动降级为不 rerank（直接截取 recall 结果），会打 warn 日志——已通过真实测试确认降级行为正常
+4. **Q4 误排（已知问题）**：`派蒙现货吗` 在 rerank 后出现明显误排（baseline 排出现货商品亚克力立牌，rerank 反而排了非现货的摆件礼盒）。推测 rerank 模型对"派蒙"关键词权重过高，忽略了"现货"这个隐含条件。可通过 `rerankEnabled=false` 一键回退
 
 ---
 
 ## 本轮状态
 
-**`manually validated, but not yet closed-out`**
+**`accepted`**
 
 - 代码实现已完成，编译验证通过
 - Rerank 主链路已在 Tauri 桌面端真实手测验证生效
 - Baseline vs Rerank 对比实验已执行，真实结果已记录
-- 仍有待验证项（见下方），因此不直接标记为 close-out
+- 降级机制、聊天主链路、回归测试均已通过验证
+- 保留 1 项已知问题（Q4 误排），不影响验收通过
 
 ---
 
-## 已完成手测
+## 验收 Checklist
 
-1. ✅ Baseline 记录（rerankEnabled=false）— 8 条 query 结果已填写
-2. ✅ Rerank 配置与启用 — Tauri 桌面端完成
-3. ✅ Rerank 记录（rerankEnabled=true）— 8 条 query 结果 + 对比总结已填写
+| # | 验收项 | 状态 |
+|---|--------|------|
+| 1 | searchMode 默认值统一为 hybrid | ✅ |
+| 2 | rerank-service.ts 编译通过 | ✅ |
+| 3 | query() 内 rerank 步骤正确插入 | ✅ |
+| 4 | rerank 失败时优雅降级 | ✅ |
+| 5 | Rerank 配置 UI 可用（启用开关 + profile 管理） | ✅ |
+| 6 | searchMode 不在 UI 中暴露 | ✅ |
+| 7 | Baseline 实验记录完成 | ✅ |
+| 8 | Rerank 实验记录完成 | ✅ |
+| 9 | 搜索验证框 rerank 后排序改善 | ✅ 7/8 改善或增强，1/8 误排（Q4） |
+| 10 | 聊天主链路体现 rerank 排序收益 | ✅ |
+| 11 | 不破坏现有链路（TTS / Stage / OBS / 角色切换） | ✅ |
+| 12 | TypeScript + Vite build 通过 | ✅ |
 
-## 仍待验证项
+### 已知问题（不影响验收通过）
 
-1. **rerank 失败降级**：使用错误 API Key 或断网条件下，确认 query() 是否正确降级为不 rerank（打 warn 日志、返回 recall 截取结果）
-2. **聊天主链路 rerank 收益**：搜索验证框已确认排序改善，但需在聊天面板中发送商品相关问题，确认 LLM 注入的 knowledgeContext 是否体现 rerank 排序收益
-3. **回归测试**：确认 TTS / Stage / OBS / 角色切换等现有链路不受 rerank 改动影响
-
-### 验收 Checklist
+| 问题 | 描述 | 缓解措施 |
+|------|------|----------|
+| Q4 误排 | `派蒙现货吗` 在 rerank 后误将非现货的摆件礼盒排到第一 | 通过 `rerankEnabled=false` 一键回退到 baseline 行为 |
 
 | # | 验收项 | 通过 |
 |---|--------|------|
