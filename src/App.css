@@ -21,13 +21,70 @@
 
 .event-log {
 	padding: 8px 12px;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
 }
 
-.event-log h3 {
+.event-log-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
 	margin-bottom: 6px;
+	flex-shrink: 0;
+}
+
+.event-log-header h3 {
+	margin: 0;
 	font-size: 12px;
 	font-weight: 600;
 	opacity: 0.5;
+	white-space: nowrap;
+}
+
+.event-log-filters {
+	display: flex;
+	gap: 4px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.event-log-filter-chip {
+	padding: 1px 6px;
+	border: 1px solid color-mix(in srgb, var(--chip-color, #90a4ae) 50%, transparent);
+	border-radius: 8px;
+	background: transparent;
+	color: var(--chip-color, #90a4ae);
+	font-size: 10px;
+	cursor: pointer;
+	transition: all 0.15s;
+	line-height: 1.4;
+}
+
+.event-log-filter-chip:hover {
+	background: color-mix(in srgb, var(--chip-color, #90a4ae) 15%, transparent);
+}
+
+.event-log-filter-chip.active {
+	background: var(--chip-color, #90a4ae);
+	color: #121212;
+	font-weight: 600;
+}
+
+.event-log-clear-btn {
+	padding: 1px 6px;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	border-radius: 8px;
+	background: transparent;
+	color: rgba(255, 255, 255, 0.4);
+	font-size: 10px;
+	cursor: pointer;
+	margin-left: 4px;
+}
+
+.event-log-clear-btn:hover {
+	background: rgba(255, 255, 255, 0.08);
+	color: rgba(255, 255, 255, 0.7);
 }
 
 .event-log-empty {
@@ -41,6 +98,8 @@
 	gap: 2px;
 	font-family: "Consolas", "Monaco", monospace;
 	font-size: 11px;
+	flex: 1;
+	overflow-y: auto;
 }
 
 .event-log-entry {
@@ -54,7 +113,6 @@
 }
 
 .event-log-name {
-	color: #4D9FFF;
 	min-width: 200px;
 }
 

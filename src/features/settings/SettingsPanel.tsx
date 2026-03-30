@@ -52,10 +52,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		return () => { cancelled = true; };
 	}, []);
 
-	const updateCharacter = useCallback((patch: Partial<AppConfig["character"]>) => {
-		setConfig((c) => ({ ...c, character: { ...c.character, ...patch } }));
-	}, []);
-
 	/** 从激活的 LLM 档案或根配置中获取当前 LLM 配置 */
 	const getActiveLlmConfig = useCallback(() => {
 		if (config.activeLlmProfileId) {
@@ -226,200 +222,128 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				</Typography>
 			</Stack>
 
-			{message && (
-				<Alert severity={message.type} onClose={() => setMessage(null)} sx={{ py: 0 }}>
-					{message.text}
+		{message && (
+			<Alert severity={message.type} onClose={() => setMessage(null)} sx={{ py: 0 }}>
+				{message.text}
+			</Alert>
+		)}
+
+		{/* ═══ 第一级：配置档案 ═══ */}
+
+		{/* ── LLM 配置档案 ── */}
+		<SectionTitle>LLM 配置</SectionTitle>
+		<LLMProfilesSection
+			profiles={config.llmProfiles}
+			activeId={config.activeLlmProfileId}
+			onAdd={(p) => setConfig((c) => ({ ...c, llmProfiles: [...c.llmProfiles, p] }))}
+			onUpdate={(p) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.map((x) => x.id === p.id ? p : x) }))}
+			onDelete={(id) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.filter((x) => x.id !== id), activeLlmProfileId: c.activeLlmProfileId === id ? "" : c.activeLlmProfileId }))}
+			onSelect={(id) => { setConfig((c) => ({ ...c, activeLlmProfileId: id })); updateConfig({ activeLlmProfileId: id }); refreshProviders(); }}
+			onPersist={async (newProfiles, newActiveId) => (await updateConfig({ llmProfiles: newProfiles, activeLlmProfileId: newActiveId }), refreshProviders())}
+		/>
+
+		<Divider />
+
+		{/* ── TTS 配置档案 ── */}
+		<SectionTitle>TTS 配置</SectionTitle>
+		<TTSProfilesSection
+			profiles={config.ttsProfiles}
+			activeId={config.activeTtsProfileId}
+			onAdd={(p) => setConfig((c) => ({ ...c, ttsProfiles: [...c.ttsProfiles, p] }))}
+			onUpdate={(p) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.map((x) => x.id === p.id ? p : x) }))}
+			onDelete={(id) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.filter((x) => x.id !== id), activeTtsProfileId: c.activeTtsProfileId === id ? "" : c.activeTtsProfileId }))}
+			onSelect={(id) => { setConfig((c) => ({ ...c, activeTtsProfileId: id })); updateConfig({ activeTtsProfileId: id }); refreshProviders(); }}
+			onPersist={async (newProfiles, newActiveId) => (await updateConfig({ ttsProfiles: newProfiles, activeTtsProfileId: newActiveId }), refreshProviders())}
+		/>
+
+		{/* ═══ 第二级：连接测试 ═══ */}
+		<Box sx={{ mt: 1, pt: 1, borderTop: 2, borderColor: "divider" }}>
+			<Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ textTransform: "uppercase", letterSpacing: 0.5, mb: 0.5, display: "block" }}>
+				连接测试
+			</Typography>
+		</Box>
+
+		{/* ── LLM 测试 ── */}
+		<SectionTitle>
+			LLM 测试
+			<HelpTooltip title="选择或新建 LLM 档案并保存后，点击测试连接是否可达。" />
+		</SectionTitle>
+		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+				当前读取：{config.activeLlmProfileId
+					? `档案「${config.llmProfiles.find((p) => p.id === config.activeLlmProfileId)?.name || "(未命名)"}」`
+					: "根配置（无激活档案）"}
+				· {getActiveLlmConfig().model || getActiveLlmConfig().provider}
+			</Typography>
+			<Button
+				size="small" variant="outlined"
+				startIcon={<NetworkCheckIcon />}
+				onClick={handleTestLLM}
+				disabled={testing === "llm"}
+			>
+				{testing === "llm" ? "测试中..." : "测试连接"}
+			</Button>
+			{llmTestResult && (
+				<Alert severity={llmTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
+					{llmTestResult.text}
+				</Alert>
+			)}
+		</Box>
+
+		<Divider />
+
+		{/* ── TTS 测试 ── */}
+		<SectionTitle>
+			TTS 测试
+			<HelpTooltip title="选择或新建 TTS 档案并保存后，点击测试连接是否可达。" />
+		</SectionTitle>
+		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+				当前读取：{config.activeTtsProfileId
+					? `档案「${config.ttsProfiles.find((p) => p.id === config.activeTtsProfileId)?.name || "(未命名)"}」`
+					: "根配置（无激活档案）"}
+				· {getActiveTtsConfig().provider}
+			</Typography>
+			<Button
+				size="small" variant="outlined"
+				startIcon={<NetworkCheckIcon />}
+				onClick={handleTestTTS}
+				disabled={testing === "tts"}
+			>
+				{testing === "tts" ? "测试中..." : "测试连接"}
+			</Button>
+			{ttsTestResult && (
+				<Alert severity={ttsTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
+					{ttsTestResult.text}
 				</Alert>
 			)}
 
-			{/* ── LLM 配置档案 ── */}
-			<SectionTitle>LLM 配置</SectionTitle>
-			<LLMProfilesSection
-				profiles={config.llmProfiles}
-				activeId={config.activeLlmProfileId}
-				onAdd={(p) => setConfig((c) => ({ ...c, llmProfiles: [...c.llmProfiles, p] }))}
-				onUpdate={(p) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.map((x) => x.id === p.id ? p : x) }))}
-				onDelete={(id) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.filter((x) => x.id !== id), activeLlmProfileId: c.activeLlmProfileId === id ? "" : c.activeLlmProfileId }))}
-				onSelect={(id) => { setConfig((c) => ({ ...c, activeLlmProfileId: id })); updateConfig({ activeLlmProfileId: id }); refreshProviders(); }}
-				onPersist={async (newProfiles, newActiveId) => (await updateConfig({ llmProfiles: newProfiles, activeLlmProfileId: newActiveId }), refreshProviders())}
+			<Divider sx={{ my: 0.5 }} />
+
+			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>TTS 直测（合成并播放）</Typography>
+			<TextField
+				size="small" fullWidth
+				placeholder="输入测试文本"
+				value={ttsTestText}
+				onChange={(e) => setTtsTestText(e.target.value)}
 			/>
-
-			<Divider />
-
-			{/* ── LLM 测试 ── */}
-			<SectionTitle>
-				LLM 测试
-				<HelpTooltip title="在左侧选择或新建 LLM 档案并保存后，点击此处测试连接是否可达。测试结果仅供参考。" />
-			</SectionTitle>
-			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-					当前读取：{config.activeLlmProfileId
-						? `档案「${config.llmProfiles.find((p) => p.id === config.activeLlmProfileId)?.name || "(未命名)"}」`
-						: "根配置（无激活档案）"}
-					· {getActiveLlmConfig().model || getActiveLlmConfig().provider}
-				</Typography>
-				<Button
-					size="small" variant="outlined"
-					startIcon={<NetworkCheckIcon />}
-					onClick={handleTestLLM}
-					disabled={testing === "llm"}
-				>
-					{testing === "llm" ? "测试中..." : "测试连接"}
-				</Button>
-				{llmTestResult && (
-					<Alert severity={llmTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
-						{llmTestResult.text}
-					</Alert>
-				)}
-			</Box>
-
-			<Divider />
-
-			{/* ── TTS 配置档案 ── */}
-			<SectionTitle>TTS 配置</SectionTitle>
-			<TTSProfilesSection
-				profiles={config.ttsProfiles}
-				activeId={config.activeTtsProfileId}
-				onAdd={(p) => setConfig((c) => ({ ...c, ttsProfiles: [...c.ttsProfiles, p] }))}
-				onUpdate={(p) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.map((x) => x.id === p.id ? p : x) }))}
-				onDelete={(id) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.filter((x) => x.id !== id), activeTtsProfileId: c.activeTtsProfileId === id ? "" : c.activeTtsProfileId }))}
-				onSelect={(id) => { setConfig((c) => ({ ...c, activeTtsProfileId: id })); updateConfig({ activeTtsProfileId: id }); refreshProviders(); }}
-				onPersist={async (newProfiles, newActiveId) => (await updateConfig({ ttsProfiles: newProfiles, activeTtsProfileId: newActiveId }), refreshProviders())}
-			/>
-
-			<Divider />
-
-			{/* ── TTS 测试 ── */}
-			<SectionTitle>
-				TTS 测试
-				<HelpTooltip title="在左侧选择或新建 TTS 档案（配置服务地址、权重路径等）并保存后，点击此处测试连接是否可达。测试结果仅供参考。" />
-			</SectionTitle>
-			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-					当前读取：{config.activeTtsProfileId
-						? `档案「${config.ttsProfiles.find((p) => p.id === config.activeTtsProfileId)?.name || "(未命名)"}」`
-						: "根配置（无激活档案）"}
-					· {getActiveTtsConfig().provider}
-				</Typography>
-				<Button
-					size="small" variant="outlined"
-					startIcon={<NetworkCheckIcon />}
-					onClick={handleTestTTS}
-					disabled={testing === "tts"}
-				>
-					{testing === "tts" ? "测试中..." : "测试连接"}
-				</Button>
-				{ttsTestResult && (
-					<Alert severity={ttsTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
-						{ttsTestResult.text}
-					</Alert>
-				)}
-
-				<Divider sx={{ my: 0.5 }} />
-
-				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>TTS 直测（合成并播放）</Typography>
-				<TextField
-					size="small" fullWidth
-					placeholder="输入测试文本"
-					value={ttsTestText}
-					onChange={(e) => setTtsTestText(e.target.value)}
-				/>
-				<Button
-					size="small" variant="contained"
-					startIcon={<VolumeUpIcon />}
-					onClick={handleTestTTSDirect}
-					disabled={ttsTesting}
-				>
-					{ttsTesting ? "合成中..." : "合成并播放"}
-				</Button>
-			</Box>
-
-			<Divider />
-
-			{/* ── 角色设置 ── */}
-			<SectionTitle>角色设置</SectionTitle>
-			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-				<Stack direction="row" alignItems="center" spacing={0.5}>
-					<FieldLabel>自定义人设</FieldLabel>
-					<HelpTooltip title="仅在未选择角色卡时生效，优先级最低。角色卡内设定 > 自定义人设。" />
-				</Stack>
-				<TextField
-					size="small" fullWidth multiline minRows={3} maxRows={6}
-					value={config.character.customPersona}
-					onChange={(e) => updateCharacter({ customPersona: e.target.value })}
-				/>
-			</Box>
-
-			<Divider />
-
-			{/* ── 直播行为约束 ── */}
-			<SectionTitle>
-				直播行为约束
-				<HelpTooltip title="在 system prompt 最前面注入行为规则，优先级高于角色卡设定。约束格式与风格，不覆盖角色个性。" />
-			</SectionTitle>
-			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-				<Stack direction="row" spacing={1} alignItems="center">
-					<Typography variant="caption" sx={{ fontSize: 11 }}>启用约束</Typography>
-					<Button size="small"
-						variant={config.character.behaviorConstraints.enabled ? "contained" : "outlined"}
-						color={config.character.behaviorConstraints.enabled ? "primary" : "inherit"}
-						onClick={() => {
-							const next = !config.character.behaviorConstraints.enabled;
-							setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, enabled: next } } }));
-							updateConfig({ character: { ...config.character, behaviorConstraints: { ...config.character.behaviorConstraints, enabled: next } } });
-						}}
-						sx={{ minWidth: 60, fontSize: 11 }}>
-						{config.character.behaviorConstraints.enabled ? "已启用" : "未启用"}
-					</Button>
-				</Stack>
-				{config.character.behaviorConstraints.enabled && (
-					<>
-						<Stack direction="row" alignItems="center" spacing={0.5}>
-							<FieldLabel>最大回复字数</FieldLabel>
-							<HelpTooltip title="LLM 单次回复的建议字数上限。实际输出可能略有浮动。" />
-						</Stack>
-						<TextField
-							size="small" type="number" sx={{ width: 120 }}
-							value={config.character.behaviorConstraints.maxReplyLength}
-							onChange={(e) => {
-								const v = Math.max(20, Math.min(500, Number(e.target.value) || 150));
-								setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, maxReplyLength: v } } }));
-							}}
-							onBlur={() => updateConfig({ character: { ...config.character } })}
-							inputProps={{ min: 20, max: 500, step: 10 }}
-						/>
-						<Stack direction="row" alignItems="center" spacing={0.5}>
-							<FieldLabel>自定义追加规则</FieldLabel>
-							<HelpTooltip title="追加的自定义行为约束文本，会拼入约束段落末尾。" />
-						</Stack>
-						<TextField
-							size="small" fullWidth multiline minRows={2} maxRows={4}
-							placeholder="例：每句话结尾加上「哦」"
-							value={config.character.behaviorConstraints.customRules}
-							onChange={(e) => {
-								setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, customRules: e.target.value } } }));
-							}}
-							onBlur={() => updateConfig({ character: { ...config.character } })}
-						/>
-					</>
-				)}
-			</Box>
-
+			<Button
+				size="small" variant="contained"
+				startIcon={<VolumeUpIcon />}
+				onClick={handleTestTTSDirect}
+				disabled={ttsTesting}
+			>
+				{ttsTesting ? "合成中..." : "合成并播放"}
+			</Button>
 		</Box>
+
+	</Box>
 	);
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
 	return (
 		<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
-			{children}
-		</Typography>
-	);
-}
-
-function FieldLabel({ children }: { children: React.ReactNode }) {
-	return (
-		<Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
 			{children}
 		</Typography>
 	);

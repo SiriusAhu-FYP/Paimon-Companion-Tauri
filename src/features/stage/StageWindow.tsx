@@ -198,10 +198,16 @@ export function StageWindow() {
 						await win.setSize(new LogicalSize(cmd.width, cmd.height));
 					} catch { /* */ }
 					break;
-				case "reset-zoom":
-					rendererRef.current?.resetZoom();
-					saveZoom(1);
-					break;
+			case "reset-zoom":
+				rendererRef.current?.resetZoom();
+				saveZoom(1);
+				break;
+			case "set-passthrough":
+				await win.setIgnoreCursorEvents(cmd.enabled);
+				if (canvasRef.current) {
+					canvasRef.current.style.opacity = cmd.enabled ? "0" : "1";
+				}
+				break;
 			}
 		} catch {
 			if (cmd.type === "hide-stage") {
