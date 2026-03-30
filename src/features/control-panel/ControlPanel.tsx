@@ -23,7 +23,7 @@ export function ControlPanel() {
 
 	// ── 角色切换 ──
 	const [profiles, setProfiles] = useState<CharacterProfile[]>([]);
-	const [selectedId, setSelectedId] = useState<string>("");
+	const [selectedId, setSelectedId] = useState<string>("__manual__");
 
 	useEffect(() => {
 		const { character } = getServices();
@@ -31,7 +31,7 @@ export function ControlPanel() {
 		setProfiles([...available]);
 
 		const current = character.getProfile();
-		setSelectedId(current?.id ?? "");
+		setSelectedId(current?.id ?? "__manual__");
 	}, []);
 
 	const handleCharacterSwitch = useCallback(async (e: SelectChangeEvent<string>) => {
