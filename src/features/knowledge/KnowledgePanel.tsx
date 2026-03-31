@@ -94,7 +94,7 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 	const [deleteCountdown, setDeleteCountdown] = useState(0);
 
 	// 添加知识折叠区
-	const [addExpanded, setAddExpanded] = useState(false);
+	const [addExpanded, setAddExpanded] = useState(true);
 	const [addMode, setAddMode] = useState<"simple" | "json">("simple");
 	const [jsonInput, setJsonInput] = useState("");
 	const [jsonError, setJsonError] = useState<string | null>(null);
@@ -1160,7 +1160,7 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 									onClick={(e) => e.stopPropagation()}
 									sx={{ p: 0, mt: 0.25 }}
 								/>
-								<Box sx={{ flex: 1, cursor: "pointer", "&:hover": { bgcolor: "action.hover" }, borderRadius: 0.5, px: 0.5, py: 0.25 }}
+								<Box sx={{ flex: 1, cursor: "pointer", overflow: "hidden", "&:hover": { bgcolor: "action.hover" }, borderRadius: 0.5, px: 0.5, py: 0.25 }}
 									onClick={() => handleStartEdit(doc)}>
 									<Stack direction="row" alignItems="center" spacing={0.5} sx={{ minWidth: 0, flexShrink: 1 }}>
 										<Typography variant="caption" sx={{ flex: 1, fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600, minWidth: 0, flexShrink: 1 }}>{doc.title}</Typography>
@@ -1168,7 +1168,7 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 										<IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartEdit(doc); }} sx={{ p: 0.25 }}><EditIcon sx={{ fontSize: 14 }} /></IconButton>
 										<IconButton size="small" onClick={(e) => { e.stopPropagation(); requestDeleteDoc(doc.id); }} sx={{ p: 0.25 }}><DeleteIcon sx={{ fontSize: 14 }} /></IconButton>
 									</Stack>
-									<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
+									<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
 										{doc.content.slice(0, 120)}
 									</Typography>
 								</Box>
