@@ -13,7 +13,10 @@
 |------|------|
 | `dev-reports/phase3-5/run01/report.md` | Run 01 正式报告 |
 | `dev-reports/phase3-5/run01/00N-*.md` | Run 01 过程快照 |
-| `dev-reports/phase3-5/run02/report.md` | Run 02 报告（Embedding 配置 UI） |
+| `dev-reports/phase3-5/run02/report.md` | Run 02 报告（Rerank Integration） |
+| `dev-reports/phase3-5/run03/report.md` | Run 03 报告（角色卡 Broadcast Sanitization） |
+| `dev-reports/phase3-5/run03/run03-behavior-constraints-and-knowledge-ux.md` | Run 03 报告（Behavior Constraints + Knowledge UX） |
+| `dev-reports/phase3-5/close-out.md` | Phase 3.5 Close-out 总结与交接文档 |
 
 ## 实验记录
 
