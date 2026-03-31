@@ -8,3 +8,7 @@ Use it for:
 - host/runtime decisions
 - Rust command boundary notes
 - migration notes from the frozen Python prototype
+
+Current entry point:
+
+- `architecture/tauri-baseline.md`
