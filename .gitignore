@@ -37,3 +37,7 @@ public/Resources/
 *.njsproj
 *.sln
 *.sw?
+
+# Owner-local working material
+.private/
+.cursor/
