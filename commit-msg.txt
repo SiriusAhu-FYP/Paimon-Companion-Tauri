@@ -1,14 +1,13 @@
-fix(stage): recreate canvas on show-stage to reset corrupted WebGL context
+refactor(knowledge): redesign knowledge management section
 
-The "checkMaxIfStatementsInShader" error occurred because when a PIXI
-Application fails, the canvas WebGL context enters a permanently broken
-state. Simply calling destroy() and creating a new PIXI app on the same
-canvas is not enough — the GL context is already corrupted.
+New layout for the "知识库管理" section:
+- Status chips + rebuild button at the top (always visible)
+- "添加知识" collapsible section below, default collapsed
+  - Drop zone (drag .json file)
+  - Accordion: single-doc add (简洁模式)
+  - Accordion: JSON batch import (JSON 模式)
+- Document list below (unchanged)
+- Search section below (unchanged)
 
-Fix: when handling show-stage after no renderer exists, create a brand-new
-canvas element (with preserved passthrough opacity), replace the old one,
-then init the renderer on the fresh canvas. This ensures PIXI always gets
-a canvas with no residual GL state.
-
-Also preserved passthrough opacity when replacing the canvas, so if the
-user had transparency active before hiding, it stays active after show.
+Also fixed document title overflow: added flexShrink: 1, minWidth: 0
+to the title Typography so long titles wrap instead of overflowing.
