@@ -979,19 +979,22 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 
 			{(importing || rebuilding) && <LinearProgress sx={{ my: 0.5 }} />}
 
-			{/* 添加知识折叠区 */}
+			{/* 添加知识（展开式） */}
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, overflow: "hidden" }}>
+				{/* 始终可见的标题栏 */}
 				<Box
 					onClick={() => setAddExpanded((v) => !v)}
-					sx={{ px: 1, py: 0.75, display: "flex", alignItems: "center", cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}
+					sx={{ px: 1.5, py: 1, display: "flex", alignItems: "center", cursor: "pointer", bgcolor: "action.hover", "&:hover": { bgcolor: "action.selected" } }}
 				>
-					<Typography variant="caption" fontWeight={600} sx={{ flex: 1 }}>添加知识</Typography>
-					<HelpTooltip title="拖入 JSON 文件、粘贴单条内容或使用 JSON 批量导入" />
-					<KeyboardArrowDownIcon sx={{ fontSize: 16, color: "text.secondary", transform: addExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "0.2s" }} />
+					<AddIcon sx={{ fontSize: 16, mr: 0.75, color: "primary.main" }} />
+					<Typography variant="caption" fontWeight={700} sx={{ flex: 1, color: "primary.main" }}>添加知识</Typography>
+					<HelpTooltip title="拖入 JSON、粘贴单条或批量导入" />
+					<KeyboardArrowDownIcon sx={{ fontSize: 18, color: "text.secondary", transform: addExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "0.2s" }} />
 				</Box>
 
+				{/* 展开内容 */}
 				{addExpanded && (
-					<Box sx={{ px: 1, pb: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+					<Box sx={{ px: 1, pb: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
 						{/* 拖放区 */}
 						<input ref={fileInputRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleFileImport} />
 						<Box
@@ -1165,8 +1168,8 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 										<IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartEdit(doc); }} sx={{ p: 0.25 }}><EditIcon sx={{ fontSize: 14 }} /></IconButton>
 										<IconButton size="small" onClick={(e) => { e.stopPropagation(); requestDeleteDoc(doc.id); }} sx={{ p: 0.25 }}><DeleteIcon sx={{ fontSize: 14 }} /></IconButton>
 									</Stack>
-									<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-										{doc.content.slice(0, 80)}{doc.content.length > 80 ? "…" : ""}
+									<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
+										{doc.content.slice(0, 120)}
 									</Typography>
 								</Box>
 							</Stack>
