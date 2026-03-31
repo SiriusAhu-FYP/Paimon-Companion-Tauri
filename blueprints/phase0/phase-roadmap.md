@@ -101,9 +101,10 @@
 
 ## Phase 3.5 — Knowledge Base / RAG Foundation
 
-> 详细施工文档：`blueprints/phase3-5/rag-foundation.md`
+> 阶段概览：`blueprints/phase3-5/rag-foundation.md`
+> 实施计划：`blueprints/phase3-5/run01-semantic-knowledge-foundation.md`
 
-**目标：** 知识导入、索引、检索、引用与注入闭环，为后续测试与 Live Integration 提供前置能力。
+**目标：** 语义知识导入、embedding、向量索引、语义检索、引用与 LLM 注入闭环，为后续测试与 Live Integration 提供前置能力。
 
 ---
 

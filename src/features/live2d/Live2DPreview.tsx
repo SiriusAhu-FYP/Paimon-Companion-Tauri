@@ -157,7 +157,7 @@ export function Live2DPreview() {
 			<h2>角色预览</h2>
 			{loadStatus === "error" ? (
 				<div className="live2d-placeholder">
-					<p className="placeholder-icon">🎭</p>
+					<p className="placeholder-icon"><svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5"/><path d="M3 21c0-4.97 4.03-9 9-9s9 4.03 9 9"/></svg></p>
 					<p>Live2D 加载失败</p>
 					<p className="placeholder-info" style={{ color: "#e94560", fontSize: 11 }}>
 						{errorMsg}

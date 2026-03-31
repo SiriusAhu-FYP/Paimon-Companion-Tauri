@@ -21,11 +21,35 @@ function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfi
 	return {
 		llm: { ...defaults.llm, ...overrides.llm },
 		tts: { ...defaults.tts, ...overrides.tts },
-		character: { ...defaults.character, ...overrides.character },
+		character: {
+			...defaults.character,
+			...overrides.character,
+			behaviorConstraints: {
+				...defaults.character.behaviorConstraints,
+				...(overrides.character?.behaviorConstraints ?? {}),
+			},
+		},
 		llmProfiles: overrides.llmProfiles ?? defaults.llmProfiles,
 		ttsProfiles: overrides.ttsProfiles ?? defaults.ttsProfiles,
 		activeLlmProfileId: overrides.activeLlmProfileId ?? defaults.activeLlmProfileId,
 		activeTtsProfileId: overrides.activeTtsProfileId ?? defaults.activeTtsProfileId,
+		knowledge: {
+			embedding: {
+				...defaults.knowledge.embedding,
+				...(overrides.knowledge?.embedding ?? {}),
+			},
+			embeddingProfiles: overrides.knowledge?.embeddingProfiles ?? defaults.knowledge.embeddingProfiles,
+			activeEmbeddingProfileId: overrides.knowledge?.activeEmbeddingProfileId ?? defaults.knowledge.activeEmbeddingProfileId,
+			retrievalTopK: overrides.knowledge?.retrievalTopK ?? defaults.knowledge.retrievalTopK,
+			searchMode: overrides.knowledge?.searchMode ?? defaults.knowledge.searchMode,
+			rerank: {
+				...defaults.knowledge.rerank,
+				...(overrides.knowledge?.rerank ?? {}),
+			},
+			rerankProfiles: overrides.knowledge?.rerankProfiles ?? defaults.knowledge.rerankProfiles,
+			activeRerankProfileId: overrides.knowledge?.activeRerankProfileId ?? defaults.knowledge.activeRerankProfileId,
+			rerankEnabled: overrides.knowledge?.rerankEnabled ?? defaults.knowledge.rerankEnabled,
+		},
 	};
 }
 
@@ -41,6 +65,10 @@ function normalizeCharacterSettings(
 	return {
 		activeProfileId: character.activeProfileId ?? DEFAULT_CONFIG.character.activeProfileId,
 		customPersona,
+		behaviorConstraints: {
+			...DEFAULT_CONFIG.character.behaviorConstraints,
+			...(character.behaviorConstraints ?? {}),
+		},
 	};
 }
 

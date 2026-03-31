@@ -8,6 +8,7 @@ import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import PushPinIcon from "@mui/icons-material/PushPin";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import CloseIcon from "@mui/icons-material/Close";
 import SaveIcon from "@mui/icons-material/Save";
@@ -126,6 +127,14 @@ export function StageHost({
 		onDisplayModeChange(next);
 		broadcastControl({ type: "set-display-mode", displayMode: next });
 	}, [displayMode, onDisplayModeChange]);
+
+	// 透明穿透：窗口完全透明且不可点击，但 Live2D 仍在渲染（可被 OBS 捕获）
+	const [passthrough, setPassthrough] = useState(false);
+	const handleTogglePassthrough = useCallback(() => {
+		const next = !passthrough;
+		setPassthrough(next);
+		broadcastControl({ type: "set-passthrough", enabled: next });
+	}, [passthrough]);
 
 	const handleToggleScaleLock = useCallback(() => {
 		const next = !scaleLocked;
@@ -318,9 +327,29 @@ export function StageHost({
 				</ButtonGroup>
 			</Box>
 
-			<Divider />
+		{/* 透明穿透 */}
+		{stageVisible && (
+			<Box>
+				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>穿透</Typography>
+					<HelpTooltip title="开启后 Stage 窗口完全透明且不可被点击，但 Live2D 仍在渲染，可被 OBS 窗口捕获。通过此按钮恢复。" />
+				</Stack>
+				<Button
+					variant={passthrough ? "contained" : "outlined"}
+					size="small"
+					fullWidth
+					onClick={handleTogglePassthrough}
+					startIcon={passthrough ? <VisibilityOffIcon /> : <VisibilityIcon />}
+					color={passthrough ? "warning" : "inherit"}
+				>
+					{passthrough ? "穿透中（点击恢复）" : "开启穿透"}
+				</Button>
+			</Box>
+		)}
 
-			{/* 缩放锁定 */}
+		<Divider />
+
+		{/* 缩放锁定 */}
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
 					<Typography variant="caption" color="text.secondary" fontWeight={600}>缩放</Typography>

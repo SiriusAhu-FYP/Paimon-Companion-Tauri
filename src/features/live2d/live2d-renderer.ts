@@ -322,7 +322,9 @@ export class Live2DRenderer {
 			this.model = null;
 		}
 		if (this.app) {
-			try { this.app.destroy(false, { children: true, texture: true, baseTexture: true }); } catch { /* */ }
+			try {
+				this.app.destroy(false, { children: true, texture: true, baseTexture: true });
+			} catch { /* */ }
 			this.app = null;
 		}
 	}
