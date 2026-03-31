@@ -1,7 +1,6 @@
 import type { EventBus } from "@/services/event-bus";
 import type { CharacterProfile } from "@/types";
 import type { CharacterService } from "@/services/character";
-import type { ExternalInputService } from "@/services/external-input";
 import type { RuntimeService } from "@/services/runtime";
 import { createLogger } from "@/services/logger";
 
@@ -54,37 +53,6 @@ export async function mockVoicePipeline(bus: EventBus, runtime?: RuntimeService)
 	}
 }
 
-// 模拟外部事件注入
-export function mockExternalEvents(externalInput: ExternalInputService) {
-	log.info("injecting mock external events");
-
-	externalInput.injectEvent({
-		source: "debug",
-		type: "danmaku",
-		data: { user: "测试用户A", text: "派蒙好可爱！" },
-	});
-
-	setTimeout(() => {
-		externalInput.injectEvent({
-			source: "debug",
-			type: "gift",
-			data: { user: "测试用户B", giftName: "火箭", count: 1 },
-		});
-	}, 500);
-
-	setTimeout(() => {
-		externalInput.injectEvent({
-			source: "debug",
-			type: "product-message",
-			data: {
-				priority: true,
-				content: "当前主推商品：原神周边摆件，限时8折优惠！",
-				ttl: 300,
-			},
-		});
-	}, 1000);
-}
-
 // 初始化默认角色档案（无卡或未选卡时）
 export function mockCharacterInit(character: CharacterService) {
 	character.loadFromProfile(MOCK_CHARACTER_PROFILE);
@@ -92,20 +60,13 @@ export function mockCharacterInit(character: CharacterService) {
 }
 
 // 将 mock 工具挂载到 window 上，方便在开发者工具中使用
-export function exposeMockTools(bus: EventBus, character: CharacterService, externalInput: ExternalInputService, runtime: RuntimeService) {
+export function exposeMockTools(bus: EventBus, character: CharacterService, runtime: RuntimeService) {
 	const tools = {
 		voicePipeline: () => mockVoicePipeline(bus, runtime),
-		externalEvents: () => mockExternalEvents(externalInput),
 		emit: bus.emit.bind(bus),
 		stop: () => bus.emit("system:emergency-stop"),
 		resume: () => bus.emit("system:resume"),
 		setEmotion: (e: string) => character.setEmotion(e),
-		injectDanmaku: (user: string, text: string) =>
-			externalInput.injectEvent({
-				source: "devtools",
-				type: "danmaku",
-				data: { user, text },
-			}),
 		// TTS 调试：设置合成失败注入索引（null 清除）
 		setTTSFailIndex: async (index: number | null) => {
 			try {

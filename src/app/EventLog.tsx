@@ -28,10 +28,6 @@ const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: string }> =
 		events: ["llm:response-end"],
 		color: "#ba68c8",
 	},
-	"外部": {
-		events: ["external:danmaku", "external:gift", "external:product-message"],
-		color: "#ffb74d",
-	},
 };
 
 function getCategoryForEvent(event: string): { name: string; color: string } {
