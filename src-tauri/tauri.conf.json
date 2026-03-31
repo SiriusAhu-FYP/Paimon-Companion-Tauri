@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "paimon-live",
+  "productName": "Paimon Companion Tauri",
   "version": "0.1.0",
-  "identifier": "com.siriusahu.paimon-live",
+  "identifier": "com.siriusahu.paimon-companion-tauri",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -13,13 +13,13 @@
     "windows": [
       {
         "label": "main",
-        "title": "Paimon Live",
+        "title": "Paimon Companion Tauri",
         "width": 1200,
         "height": 800
       },
       {
         "label": "stage",
-        "title": "Paimon Live - Stage",
+        "title": "Paimon Companion Tauri - Stage",
         "width": 800,
         "height": 600,
         "transparent": true,

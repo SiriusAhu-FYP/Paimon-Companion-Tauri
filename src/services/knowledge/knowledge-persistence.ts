@@ -10,8 +10,8 @@ const log = createLogger("knowledge-persistence");
 const STORE_PATH = "knowledge-store.json";
 const DOCS_KEY = "knowledge-documents";
 const INDEX_KEY = "knowledge-index";
-const LS_DOCS_KEY = "paimon-live:knowledge-documents";
-const LS_INDEX_KEY = "paimon-live:knowledge-index";
+const LS_DOCS_KEY = "paimon-companion-tauri:knowledge-documents";
+const LS_INDEX_KEY = "paimon-companion-tauri:knowledge-index";
 
 // ── Tauri Store 后端 ──
 

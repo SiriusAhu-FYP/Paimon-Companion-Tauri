@@ -26,7 +26,7 @@ pub struct ProxyResponse {
 	pub body: String,
 }
 
-const SERVICE_PREFIX: &str = "com.siriusahu.paimon-live";
+const SERVICE_PREFIX: &str = "com.siriusahu.paimon-companion-tauri";
 
 #[tauri::command]
 pub async fn proxy_http_request(

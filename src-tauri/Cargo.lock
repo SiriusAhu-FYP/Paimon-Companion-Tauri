@@ -2522,7 +2522,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "paimon-live"
+name = "paimon-companion-tauri"
 version = "0.1.0"
 dependencies = [
  "futures-util",

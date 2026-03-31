@@ -3,7 +3,7 @@ import { ThemeProvider, CssBaseline } from "@mui/material";
 import { createAppTheme } from "@/theme";
 import type { PaletteMode } from "@mui/material";
 
-const STORAGE_KEY = "paimon-live:color-scheme";
+const STORAGE_KEY = "paimon-companion-tauri:color-scheme";
 
 interface ColorSchemeContextValue {
 	mode: PaletteMode;

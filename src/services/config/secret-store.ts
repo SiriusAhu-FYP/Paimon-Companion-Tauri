@@ -9,7 +9,7 @@ import { createLogger } from "@/services/logger";
 
 const log = createLogger("secret-store");
 
-const SESSION_PREFIX = "paimon-live:secret:";
+const SESSION_PREFIX = "paimon-companion-tauri:secret:";
 
 // ── Tauri invoke 后端 ──
 
