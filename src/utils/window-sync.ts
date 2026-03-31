@@ -38,7 +38,8 @@ export type ControlCommand =
 	| { type: "set-scale-lock"; locked: boolean }
 	| { type: "set-eye-mode"; mode: EyeMode }
 	| { type: "set-size"; width: number; height: number }
-	| { type: "reset-zoom" };
+	| { type: "reset-zoom" }
+	| { type: "set-passthrough"; enabled: boolean };
 
 // ── Tauri 环境检测 ──
 

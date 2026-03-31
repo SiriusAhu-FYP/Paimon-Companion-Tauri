@@ -4,6 +4,7 @@ import SendIcon from "@mui/icons-material/Send";
 import { useEventBus } from "@/hooks";
 import { getServices } from "@/services";
 import { createLogger } from "@/services/logger";
+import { RebuildGate } from "@/features/knowledge";
 
 const log = createLogger("chat-panel");
 
@@ -53,10 +54,15 @@ export function ChatPanel() {
 			const copy = [...prev];
 			const last = copy[copy.length - 1];
 			if (last?.streaming) {
-				copy[copy.length - 1] = { ...last, content: payload.fullText, streaming: false };
+				const text = payload.fullText || "[AI 未返回有效内容]";
+				copy[copy.length - 1] = { ...last, content: text, streaming: false };
 			}
 			return copy;
 		});
+		// 空响应时 TTS 不会触发，需要手动恢复 idle 状态
+		if (!payload.fullText) {
+			setStatus("idle");
+		}
 	});
 
 	useEventBus("llm:error", (payload) => {
@@ -82,11 +88,10 @@ export function ChatPanel() {
 		]);
 	});
 
-	const handleSend = async () => {
-		const text = inputText.trim();
-		if (!text || status !== "idle") return;
+	const [showRebuildGate, setShowRebuildGate] = useState(false);
+	const pendingSendRef = useRef<string | null>(null);
 
-		setInputText("");
+	const executeSend = async (text: string) => {
 		setMessages((prev) => [
 			...prev,
 			{ role: "user", content: text, timestamp: Date.now() },
@@ -98,6 +103,24 @@ export function ChatPanel() {
 		} catch (err) {
 			log.error("pipeline error", err);
 		}
+	};
+
+	const handleSend = async () => {
+		const text = inputText.trim();
+		if (!text || status !== "idle") return;
+
+		// 门控检查：索引需要重建时拦截
+		try {
+			const { knowledge } = getServices();
+			if (knowledge.getIndexStatus() === "needs_rebuild") {
+				pendingSendRef.current = text;
+				setShowRebuildGate(true);
+				return;
+			}
+		} catch { /* services not ready */ }
+
+		setInputText("");
+		executeSend(text);
 	};
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -152,6 +175,26 @@ export function ChatPanel() {
 					{status === "thinking" && "AI 正在思考..."}
 					{status === "speaking" && "正在播放语音..."}
 				</Typography>
+			)}
+
+			{showRebuildGate && (
+				<Box sx={{ py: 1 }}>
+					<RebuildGate
+						onRebuilt={() => {
+							setShowRebuildGate(false);
+							if (pendingSendRef.current) {
+								const text = pendingSendRef.current;
+								pendingSendRef.current = null;
+								setInputText("");
+								executeSend(text);
+							}
+						}}
+						onCancel={() => {
+							setShowRebuildGate(false);
+							pendingSendRef.current = null;
+						}}
+					/>
+				</Box>
 			)}
 
 			{/* 输入区 */}

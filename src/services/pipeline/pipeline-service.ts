@@ -85,6 +85,7 @@ export class PipelineService {
 		const lastAssistant = [...history].reverse().find((m) => m.role === "assistant");
 		if (!lastAssistant?.content) {
 			log.warn("no assistant reply for TTS");
+			this.bus.emit("audio:tts-end");
 			return;
 		}
 

@@ -5,6 +5,7 @@ import type { KnowledgeService } from "@/services/knowledge";
 import { getConfig } from "@/services/config";
 import type { ILLMService, ChatMessage } from "./types";
 import { buildSystemMessage, summarizePromptContext } from "./prompt-builder";
+import { formatRetrievalForPrompt, summarizeRetrieval } from "@/services/knowledge/knowledge-formatter";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("llm");
@@ -64,21 +65,39 @@ export class LLMService {
 		this.bus.emit("llm:request-start", { userText });
 
 		const appCharacter = getConfig().character;
-		const systemMsg = buildSystemMessage({
+
+		// Phase 3.5：语义检索 + liveContext 格式化（带超时保护，不阻塞主 LLM 流程）
+		let knowledgeContext = "";
+		try {
+			const queryPromise = this.knowledge.query(userText);
+			const timeoutPromise = new Promise<never>((_, reject) =>
+				setTimeout(() => reject(new Error("knowledge query timeout (10s)")), 10000),
+			);
+			const retrievalResults = await Promise.race([queryPromise, timeoutPromise]);
+			const liveContext = this.knowledge.getAssembledLiveContext();
+			knowledgeContext = formatRetrievalForPrompt(retrievalResults, liveContext);
+
+			if (retrievalResults.length > 0) {
+				log.info("knowledge retrieval results", summarizeRetrieval(retrievalResults));
+			}
+		} catch (err) {
+			log.warn("knowledge retrieval failed, using liveContext only", err);
+			knowledgeContext = this.knowledge.getAssembledLiveContext();
+		}
+
+		const promptCtx = {
 			characterProfile: this.character.getProfile(),
-			knowledgeContext: this.knowledge.getAssembledContext(),
+			knowledgeContext,
 			customPersona: appCharacter.customPersona,
-		});
+			behaviorConstraints: appCharacter.behaviorConstraints,
+		};
+		const systemMsg = buildSystemMessage(promptCtx);
 		const messages: ChatMessage[] = systemMsg
 			? [systemMsg, ...this.history]
 			: [...this.history];
 
 		if (systemMsg) {
-			log.info("LLM system prompt assembled", summarizePromptContext({
-				characterProfile: this.character.getProfile(),
-				knowledgeContext: this.knowledge.getAssembledContext(),
-				customPersona: appCharacter.customPersona,
-			}));
+			log.info("LLM system prompt assembled", summarizePromptContext(promptCtx));
 		}
 
 		try {

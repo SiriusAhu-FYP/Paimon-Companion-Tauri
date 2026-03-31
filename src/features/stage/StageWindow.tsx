@@ -4,6 +4,7 @@ import {
 	broadcastControl, isTauriEnvironment,
 	type ControlCommand, type StageDisplayMode,
 } from "@/utils/window-sync";
+import CloseIcon from "@mui/icons-material/Close";
 import { Live2DRenderer, DEFAULT_MODEL } from "@/features/live2d";
 import type { EyeMode } from "@/features/live2d";
 import { createLogger } from "@/services/logger";
@@ -112,6 +113,8 @@ export function StageWindow() {
 		} catch (err) {
 			setLoadStatus("error");
 			log.error("model load failed", err);
+			renderer.destroy();
+			rendererRef.current = null;
 		}
 	}, []);
 
@@ -153,13 +156,29 @@ export function StageWindow() {
 				rendererRef.current = null;
 				await win.hide();
 				break;
-				case "show-stage":
-					if (!rendererRef.current) {
-						await initRenderer(currentModelPath.current);
+			case "show-stage":
+				if (!rendererRef.current) {
+					// 替换 canvas：旧 canvas 的 WebGL context 已损坏，必须换新元素才能重建
+					if (canvasRef.current) {
+						const parent = canvasRef.current.parentElement;
+						if (parent) {
+							const wasPassthrough = canvasRef.current.style.opacity === "0";
+							const newCanvas = document.createElement("canvas");
+							newCanvas.style.width = "100vw";
+							newCanvas.style.height = "100vh";
+							newCanvas.style.display = "block";
+							if (wasPassthrough) newCanvas.style.opacity = "0";
+							const oldCanvas = canvasRef.current;
+							parent.insertBefore(newCanvas, oldCanvas);
+							oldCanvas.remove();
+							canvasRef.current = newCanvas;
+						}
 					}
-					await win.show();
-					await win.setFocus();
-					break;
+					await initRenderer(currentModelPath.current);
+				}
+				await win.show();
+				await win.setFocus();
+				break;
 				case "reset-position":
 					try {
 						const { LogicalPosition } = await import("@tauri-apps/api/dpi");
@@ -169,11 +188,11 @@ export function StageWindow() {
 				case "set-mode":
 					setStageMode(cmd.mode);
 					break;
-			case "set-always-on-top":
-				setAlwaysOnTop(cmd.value);
-				break;
-			case "restore-always-on-top":
-				break;
+				case "set-always-on-top":
+					setAlwaysOnTop(cmd.value);
+					break;
+				case "restore-always-on-top":
+					break;
 				case "set-display-mode":
 					setDisplayMode(cmd.displayMode);
 					break;
@@ -200,6 +219,12 @@ export function StageWindow() {
 				case "reset-zoom":
 					rendererRef.current?.resetZoom();
 					saveZoom(1);
+					break;
+				case "set-passthrough":
+					await win.setIgnoreCursorEvents(cmd.enabled);
+					if (canvasRef.current) {
+						canvasRef.current.style.opacity = cmd.enabled ? "0" : "1";
+					}
 					break;
 			}
 		} catch {
@@ -335,8 +360,8 @@ export function StageWindow() {
 							clean
 						</button>
 						<button className="stage-tb-btn stage-tb-close" onClick={handleClose} title="关闭">
-								✕
-							</button>
+							<CloseIcon sx={{ fontSize: 16 }} />
+						</button>
 					</div>
 				</div>
 			)}

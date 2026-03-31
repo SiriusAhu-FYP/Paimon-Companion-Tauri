@@ -65,12 +65,24 @@ export interface TTSProfile {
 
 // ── Character（应用设置：当前卡 ID、用户附加人设）──
 
+export interface BehaviorConstraintsConfig {
+	enabled: boolean;
+	maxReplyLength: number;
+	/** 用户追加的自定义约束文本，拼入行为约束段落 */
+	customRules: string;
+}
+
 export interface CharacterSettingsConfig {
 	/** 当前选中的角色档案 id，空串表示未选卡（仅用 customPersona） */
 	activeProfileId: string;
 	/** 用户自定义附加人设，拼入 system prompt（优先级低于卡内 system_prompt / persona） */
 	customPersona: string;
+	behaviorConstraints: BehaviorConstraintsConfig;
 }
+
+// ── Knowledge（知识库配置，独立于 LLM / TTS） ──
+
+export type { KnowledgeConfig, EmbeddingProviderConfig, EmbeddingProfile, KnowledgeSearchMode, RerankProviderConfig, RerankProfile } from "@/types/knowledge";
 
 // ── 顶层 AppConfig ──
 
@@ -82,6 +94,7 @@ export interface AppConfig {
 	ttsProfiles: TTSProfile[];
 	activeLlmProfileId: string;
 	activeTtsProfileId: string;
+	knowledge: import("@/types/knowledge").KnowledgeConfig;
 }
 
 // ── 敏感配置 key 约定 ──
@@ -90,6 +103,8 @@ export interface AppConfig {
 export const SECRET_KEYS = {
 	LLM_API_KEY: (profileId: string) => `llm-api-key:${profileId}`,
 	TTS_API_KEY: "tts-api-key",
+	EMBEDDING_API_KEY: (profileId: string) => `embedding-api-key:${profileId}`,
+	RERANK_API_KEY: (profileId: string) => `rerank-api-key:${profileId}`,
 } as const;
 
 // ── 默认值 ──
@@ -117,9 +132,32 @@ export const DEFAULT_CONFIG: AppConfig = {
 	character: {
 		activeProfileId: "",
 		customPersona: "你是旅行者的好伙伴派蒙，说话活泼可爱，喜欢吃东西。",
+		behaviorConstraints: {
+			enabled: true,
+			maxReplyLength: 150,
+			customRules: "",
+		},
 	},
 	llmProfiles: [],
 	ttsProfiles: [],
 	activeLlmProfileId: "",
 	activeTtsProfileId: "",
+	knowledge: {
+		embedding: {
+			baseUrl: "",
+			model: "",
+			dimension: 1536,
+		},
+		embeddingProfiles: [],
+		activeEmbeddingProfileId: "",
+		retrievalTopK: 5,
+		searchMode: "hybrid" as const,
+		rerank: {
+			baseUrl: "",
+			model: "",
+		},
+		rerankProfiles: [],
+		activeRerankProfileId: "",
+		rerankEnabled: false,
+	},
 };
