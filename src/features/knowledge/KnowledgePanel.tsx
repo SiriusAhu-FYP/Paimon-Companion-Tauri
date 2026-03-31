@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
 	Box, Button, Typography, Stack, TextField, Select, MenuItem,
-	Alert, IconButton, Tooltip, Popover, Chip, LinearProgress, Divider, Checkbox,
-	Accordion, AccordionSummary,
+	Alert, IconButton, Tooltip, Popover, Chip, LinearProgress, Divider, Checkbox, ButtonGroup,
 	type SelectChangeEvent,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -13,8 +12,6 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import EditIcon from "@mui/icons-material/Edit";
 import NetworkCheckIcon from "@mui/icons-material/NetworkCheck";
 import WarningIcon from "@mui/icons-material/Warning";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
 	SECRET_KEYS,
 	loadConfig, updateConfig,
@@ -93,14 +90,16 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 	const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<string | "batch" | null>(null);
 	const [deleteCountdown, setDeleteCountdown] = useState(0);
 
-	// 添加知识折叠区
-	const [addExpanded, setAddExpanded] = useState(true);
-	const [addMode, setAddMode] = useState<"simple" | "json">("simple");
+	// 添加知识 tab
+	const [addMode, setAddMode] = useState<"drop" | "simple" | "json">("drop");
 	const [jsonInput, setJsonInput] = useState("");
 	const [jsonError, setJsonError] = useState<string | null>(null);
 	const [jsonDocCount, setJsonDocCount] = useState<number | null>(null);
 	const [showTemplate, setShowTemplate] = useState(false);
 	const [dragging, setDragging] = useState(false);
+
+	// 文档编辑模式
+	const [editMode, setEditMode] = useState<"simple" | "json">("simple");
 
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -970,216 +969,163 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 				<RebuildGate onRebuilt={handleGateRebuilt} onCancel={handleGateCancel} />
 			)}
 
-			{/* 重建索引按钮 */}
-			{documents.length > 0 && (
-				<Button size="small" variant="outlined" color="warning" startIcon={<RefreshIcon />} onClick={handleRebuild} disabled={rebuilding} fullWidth>
-					{rebuilding ? "重建中..." : "重建索引"}
-				</Button>
+		{/* 重建索引按钮 */}
+		{documents.length > 0 && (
+			<Button size="small" variant="outlined" color="warning" startIcon={<RefreshIcon />} onClick={handleRebuild} disabled={rebuilding} fullWidth>
+				{rebuilding ? "重建中..." : "重建索引"}
+			</Button>
+		)}
+
+		{(importing || rebuilding) && <LinearProgress sx={{ my: 0.5 }} />}
+
+		{/* ═══ 添加知识 ═══ */}
+		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
+			<Stack direction="row" alignItems="center" spacing={0.5}>
+				<AddIcon sx={{ fontSize: 16, color: "primary.main" }} />
+				<Typography variant="caption" fontWeight={700} sx={{ color: "primary.main" }}>添加知识</Typography>
+			</Stack>
+
+			<ButtonGroup size="small" fullWidth>
+				<Button variant={addMode === "drop" ? "contained" : "outlined"} onClick={() => setAddMode("drop")}>拖放文件</Button>
+				<Button variant={addMode === "simple" ? "contained" : "outlined"} onClick={() => setAddMode("simple")}>单条添加</Button>
+				<Button variant={addMode === "json" ? "contained" : "outlined"} onClick={() => setAddMode("json")}>JSON 导入</Button>
+			</ButtonGroup>
+
+			{addMode === "drop" && (
+				<input ref={fileInputRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleFileImport} />
+			)}
+			{addMode === "drop" && (
+				<Box
+					onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+					onDragLeave={() => setDragging(false)}
+					onDrop={handleDrop}
+					onClick={() => fileInputRef.current?.click()}
+					sx={{ border: "2px dashed", borderColor: dragging ? "primary.main" : "divider", borderRadius: 1, p: 2, textAlign: "center", cursor: "pointer", bgcolor: dragging ? "action.hover" : "background.default", "&:hover": { borderColor: "primary.main", bgcolor: "action.hover" } }}
+				>
+					<UploadFileIcon sx={{ fontSize: 28, color: "text.secondary", mb: 0.5 }} />
+					<Typography variant="caption" color="text.secondary" display="block">拖入 .json 文件，或点击选择文件</Typography>
+				</Box>
 			)}
 
-			{(importing || rebuilding) && <LinearProgress sx={{ my: 0.5 }} />}
-
-			{/* 添加知识（展开式） */}
-			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, overflow: "hidden" }}>
-				{/* 始终可见的标题栏 */}
-				<Box
-					onClick={() => setAddExpanded((v) => !v)}
-					sx={{ px: 1.5, py: 1, display: "flex", alignItems: "center", cursor: "pointer", bgcolor: "action.hover", "&:hover": { bgcolor: "action.selected" } }}
-				>
-					<AddIcon sx={{ fontSize: 16, mr: 0.75, color: "primary.main" }} />
-					<Typography variant="caption" fontWeight={700} sx={{ flex: 1, color: "primary.main" }}>添加知识</Typography>
-					<HelpTooltip title="拖入 JSON、粘贴单条或批量导入" />
-					<KeyboardArrowDownIcon sx={{ fontSize: 18, color: "text.secondary", transform: addExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "0.2s" }} />
+			{addMode === "simple" && (
+				<Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+					<TextField size="small" fullWidth label="标题" placeholder="输入标题" value={addTitle} onChange={(e) => setAddTitle(e.target.value)} error={addTitle.length > 0 && !addTitle.trim()} helperText="标题参与语义索引" />
+					<TextField size="small" fullWidth multiline minRows={2} maxRows={5} label="内容" placeholder="输入正文内容" value={addContent} onChange={(e) => setAddContent(e.target.value)} error={addContent.length > 0 && !addContent.trim()} helperText="正文会被切块并向量化" />
+					<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+						<Button size="small" onClick={() => { setAddTitle(""); setAddContent(""); }}>清空</Button>
+						<Button size="small" variant="contained" onClick={handleAdd} disabled={adding || !addTitle.trim() || !addContent.trim()}>{adding ? "添加中..." : "添加"}</Button>
+					</Stack>
 				</Box>
+			)}
 
-				{/* 展开内容 */}
-				{addExpanded && (
-					<Box sx={{ px: 1, pb: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
-						{/* 拖放区 */}
-						<input ref={fileInputRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleFileImport} />
-						<Box
-							onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-							onDragLeave={() => setDragging(false)}
-							onDrop={handleDrop}
-							onClick={() => fileInputRef.current?.click()}
-							sx={{
-								border: "2px dashed", borderColor: dragging ? "primary.main" : "divider",
-								borderRadius: 1, p: 1, textAlign: "center", cursor: "pointer",
-								bgcolor: dragging ? "action.hover" : "background.default",
-								transition: "all 0.2s",
-								"&:hover": { borderColor: "primary.main", bgcolor: "action.hover" },
-							}}
-						>
-							<UploadFileIcon sx={{ fontSize: 22, color: "text.secondary", mb: 0.25 }} />
-							<Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: 10 }}>
-								拖入 .json 或点击选择文件
-							</Typography>
-						</Box>
-
-						<Divider />
-
-						{/* 简洁模式 */}
-						<Accordion expanded={addMode === "simple"} onChange={(_, v) => v && setAddMode("simple")} disableGutters sx={{ "&::before": { display: "none" }, "& .MuiAccordionSummary-root": { minHeight: 36, px: 1 }, "& .MuiAccordionSummary-content": { my: 0.5 } }}>
-							<AccordionSummary expandIcon={<ExpandMoreIcon sx={{ fontSize: 14 }} />}>
-								<Typography variant="caption" sx={{ fontSize: 11 }}>单条添加</Typography>
-							</AccordionSummary>
-							<AccordionSummary sx={{ "& .MuiAccordionDetails-root": { px: 1, pb: 1 } }}>
-								<Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, width: "100%" }}>
-									<TextField size="small" fullWidth label="标题"
-										value={addTitle} onChange={(e) => setAddTitle(e.target.value)}
-										error={addTitle.length > 0 && !addTitle.trim()}
-										helperText="标题参与语义索引"
-									/>
-									<TextField size="small" fullWidth multiline minRows={2} maxRows={5} label="内容"
-										value={addContent} onChange={(e) => setAddContent(e.target.value)}
-										error={addContent.length > 0 && !addContent.trim()}
-										helperText="正文会被切块并向量化"
-									/>
-									<Stack direction="row" spacing={0.5} justifyContent="flex-end">
-										<Button size="small" onClick={() => { setAddTitle(""); setAddContent(""); }}>清空</Button>
-										<Button size="small" variant="contained" onClick={handleAdd} disabled={adding || !addTitle.trim() || !addContent.trim()}>{adding ? "添加中..." : "添加"}</Button>
-									</Stack>
-								</Box>
-							</AccordionSummary>
-						</Accordion>
-
-						{/* JSON 模式 */}
-						<Accordion expanded={addMode === "json"} onChange={(_, v) => v && setAddMode("json")} disableGutters sx={{ "&::before": { display: "none" }, "& .MuiAccordionSummary-root": { minHeight: 36, px: 1 }, "& .MuiAccordionSummary-content": { my: 0.5 } }}>
-							<AccordionSummary expandIcon={<ExpandMoreIcon sx={{ fontSize: 14 }} />}>
-								<Typography variant="caption" sx={{ fontSize: 11 }}>JSON 批量导入</Typography>
-							</AccordionSummary>
-							<AccordionSummary sx={{ "& .MuiAccordionDetails-root": { px: 1, pb: 1 } }}>
-								<Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, width: "100%" }}>
-									<Stack direction="row" spacing={0.5}>
-										<Button size="small" variant="text" onClick={() => setShowTemplate(!showTemplate)} sx={{ fontSize: 10 }}>
-											{showTemplate ? "收起模板" : "查看模板"}
-										</Button>
-									</Stack>
-									{showTemplate && (
-										<Box sx={{ bgcolor: "background.default", borderRadius: 1, p: 1, position: "relative" }}>
-											<Typography variant="caption" color="text.secondary" sx={{ fontSize: 9, display: "block", mb: 0.5 }}>
-												id / title / content（必填），source / category（可选）
-											</Typography>
-											<Box component="pre" sx={{ fontSize: 9, m: 0, overflow: "auto", maxHeight: 120, fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
+			{addMode === "json" && (
+				<Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+					<Button size="small" variant="text" onClick={() => setShowTemplate(!showTemplate)} sx={{ fontSize: 10, alignSelf: "flex-start" }}>
+						{showTemplate ? "收起模板" : "查看模板"}
+					</Button>
+					{showTemplate && (
+						<Box sx={{ bgcolor: "background.default", borderRadius: 1, p: 1 }}>
+							<Typography variant="caption" color="text.secondary" sx={{ fontSize: 9, display: "block", mb: 0.5 }}>id / title / content（必填），source / category（可选）</Typography>
+							<Box component="pre" sx={{ fontSize: 9, m: 0, overflow: "auto", maxHeight: 100, fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
 {`[
   { "id": "001", "title": "标题", "content": "正文" }
 ]`}
-											</Box>
-										</Box>
-									)}
-									<TextField
-										size="small" fullWidth multiline minRows={3} maxRows={8}
-										placeholder='[{"id":"...","title":"...","content":"..."}]'
-										value={jsonInput}
-										onChange={(e) => validateJsonInput(e.target.value)}
-										error={!!jsonError}
-										sx={{ "& textarea": { fontFamily: "monospace", fontSize: 10 } }}
-									/>
-									{jsonError && <Typography variant="caption" color="error" sx={{ fontSize: 9 }}>{jsonError}</Typography>}
-									{jsonDocCount !== null && !jsonError && <Typography variant="caption" color="success.main" sx={{ fontSize: 9 }}>共 {jsonDocCount} 条</Typography>}
-									<Stack direction="row" spacing={0.5} justifyContent="flex-end">
-										<Button size="small" onClick={() => { setJsonInput(""); setJsonError(null); setJsonDocCount(null); }}>清空</Button>
-										<Button size="small" variant="contained" onClick={handleJsonImport} disabled={importing || !jsonInput.trim() || !!jsonError}>
-											{importing ? "导入中..." : "导入"}
-										</Button>
-									</Stack>
-								</Box>
-							</AccordionSummary>
-						</Accordion>
-					</Box>
-				)}
-			</Box>
-
-		{/* Document list with batch management */}
-		{documents.length > 0 && (
-			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
-				<Stack direction="row" alignItems="center" spacing={0.5}>
-					<Checkbox
-						size="small"
-						checked={selectedDocIds.size === documents.length && documents.length > 0}
-						indeterminate={selectedDocIds.size > 0 && selectedDocIds.size < documents.length}
-						onChange={toggleSelectAll}
-						sx={{ p: 0 }}
-					/>
-					<Typography variant="caption" fontWeight={600} sx={{ flex: 1 }}>
-						已导入文档 ({documents.length})
-						{selectedDocIds.size > 0 && ` · 已选 ${selectedDocIds.size}`}
-					</Typography>
-					<HelpTooltip multiline title={"title 和 content 均参与语义检索。\ntitle 作为前缀拼入 embedding 输入，同时也作为全文索引字段。\nid / source / category 不参与检索，仅用于标识和展示。"} />
-					{selectedDocIds.size > 0 && (
-						<Button size="small" color="error" variant="outlined" startIcon={<DeleteIcon />}
-							onClick={requestBatchDelete} sx={{ fontSize: 11 }}>
-							删除 ({selectedDocIds.size})
-						</Button>
-					)}
-				</Stack>
-
-				{/* 删除确认（内联） */}
-				{confirmDeleteTarget && (
-					<Box sx={{ bgcolor: "background.default", border: "1px solid", borderColor: "error.main", borderRadius: 1, p: 1.5, mt: 0.5 }}>
-						<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 0.5 }}>
-							<WarningIcon sx={{ fontSize: 14, color: "error.main" }} />
-							<Typography variant="subtitle2" sx={{ color: "error.main" }}>
-								{confirmDeleteTarget === "batch"
-									? `确定删除选中的 ${selectedDocIds.size} 条文档？此操作无法恢复。`
-									: "确定删除此文档？此操作无法恢复。"}
-							</Typography>
-						</Stack>
-						<Stack direction="row" spacing={0.5} justifyContent="flex-end">
-							<Button
-								size="small" variant="contained" color="error"
-								disabled={deleteCountdown > 0}
-								onClick={confirmDelete}
-							>
-								{deleteCountdown > 0 ? `确认删除 (${deleteCountdown}s)` : "确认删除"}
-							</Button>
-							<Button size="small" onClick={cancelDelete}>取消</Button>
-						</Stack>
-					</Box>
-				)}
-
-				{documents.map((doc) => (
-					<Box key={doc.id}>
-						{editingDocId === doc.id ? (
-							<Box sx={{ border: "1px solid", borderColor: "primary.main", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
-								<TextField size="small" fullWidth label="标题" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-								<TextField size="small" fullWidth multiline minRows={2} maxRows={6} label="内容" value={editContent} onChange={(e) => setEditContent(e.target.value)} />
-								<Stack direction="row" spacing={0.5} justifyContent="flex-end">
-									<Button size="small" onClick={handleCancelEdit}>取消</Button>
-									<Button size="small" variant="contained" onClick={handleSaveEdit} disabled={saving || !editTitle.trim() || !editContent.trim()}>
-										{saving ? "保存中..." : "保存"}
-									</Button>
-								</Stack>
 							</Box>
-						) : (
-							<Stack direction="row" alignItems="flex-start" spacing={0}>
-								<Checkbox
-									size="small"
-									checked={selectedDocIds.has(doc.id)}
-									onChange={() => toggleDocSelection(doc.id)}
-									onClick={(e) => e.stopPropagation()}
-									sx={{ p: 0, mt: 0.25 }}
-								/>
-								<Box sx={{ flex: 1, cursor: "pointer", overflow: "hidden", "&:hover": { bgcolor: "action.hover" }, borderRadius: 0.5, px: 0.5, py: 0.25 }}
-									onClick={() => handleStartEdit(doc)}>
-									<Stack direction="row" alignItems="center" spacing={0.5} sx={{ minWidth: 0, flexShrink: 1 }}>
-										<Typography variant="caption" sx={{ flex: 1, fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600, minWidth: 0, flexShrink: 1 }}>{doc.title}</Typography>
-										{doc.source && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 9, flexShrink: 0 }}>{doc.source}</Typography>}
-										<IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartEdit(doc); }} sx={{ p: 0.25 }}><EditIcon sx={{ fontSize: 14 }} /></IconButton>
-										<IconButton size="small" onClick={(e) => { e.stopPropagation(); requestDeleteDoc(doc.id); }} sx={{ p: 0.25 }}><DeleteIcon sx={{ fontSize: 14 }} /></IconButton>
-									</Stack>
-									<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-										{doc.content.slice(0, 120)}
-									</Typography>
-								</Box>
-							</Stack>
-						)}
-					</Box>
-				))}
-			</Box>
-		)}
+						</Box>
+					)}
+					<TextField size="small" fullWidth multiline minRows={3} maxRows={8} placeholder='[{"id":"...","title":"...","content":"..."}]' value={jsonInput} onChange={(e) => validateJsonInput(e.target.value)} error={!!jsonError} sx={{ "& textarea": { fontFamily: "monospace", fontSize: 11 } }} />
+					{jsonError && <Typography variant="caption" color="error" sx={{ fontSize: 9 }}>{jsonError}</Typography>}
+					{jsonDocCount !== null && !jsonError && <Typography variant="caption" color="success.main" sx={{ fontSize: 9 }}>共 {jsonDocCount} 条</Typography>}
+					<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+						<Button size="small" onClick={() => { setJsonInput(""); setJsonError(null); setJsonDocCount(null); }}>清空</Button>
+						<Button size="small" variant="contained" onClick={handleJsonImport} disabled={importing || !jsonInput.trim() || !!jsonError}>{importing ? "导入中..." : "导入"}</Button>
+					</Stack>
+				</Box>
+			)}
+		</Box>
 
-			{/* Search */}
+			{/* ═══ 已导入文档 ═══ */}
+			{documents.length > 0 && (
+				<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+					<Stack direction="row" alignItems="center" spacing={0.5}>
+						<Typography variant="caption" fontWeight={700} sx={{ flex: 1 }}>已导入文档 ({documents.length})</Typography>
+						<Button size="small" variant={selectedDocIds.size > 0 ? "contained" : "outlined"} color={selectedDocIds.size > 0 ? "primary" : "inherit"} onClick={toggleSelectAll} sx={{ fontSize: 10 }}>
+							{selectedDocIds.size > 0 ? `已选 ${selectedDocIds.size}` : "批量选择"}
+						</Button>
+						{selectedDocIds.size > 0 && (
+							<Button size="small" color="error" variant="outlined" startIcon={<DeleteIcon />} onClick={requestBatchDelete} sx={{ fontSize: 10 }}>删除</Button>
+						)}
+					</Stack>
+
+					{confirmDeleteTarget && (
+						<Box sx={{ bgcolor: "background.default", border: "1px solid", borderColor: "error.main", borderRadius: 1, p: 1 }}>
+							<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 0.5 }}>
+								<WarningIcon sx={{ fontSize: 14, color: "error.main" }} />
+								<Typography variant="caption" sx={{ color: "error.main" }}>{confirmDeleteTarget === "batch" ? `确定删除选中的 ${selectedDocIds.size} 条文档？` : "确定删除此文档？"}</Typography>
+							</Stack>
+							<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+								<Button size="small" variant="contained" color="error" disabled={deleteCountdown > 0} onClick={confirmDelete}>{deleteCountdown > 0 ? `${deleteCountdown}s` : "确认删除"}</Button>
+								<Button size="small" onClick={cancelDelete}>取消</Button>
+							</Stack>
+						</Box>
+					)}
+
+					{documents.map((doc) => (
+						<Box key={doc.id}>
+							{editingDocId === doc.id ? (
+								<Box sx={{ border: "1px solid", borderColor: "primary.main", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+									<Stack direction="row" alignItems="center" spacing={0.5}>
+										<Typography variant="caption" fontWeight={700} sx={{ flex: 1 }}>编辑文档</Typography>
+										<ButtonGroup size="small">
+											<Button variant={editMode === "simple" ? "contained" : "outlined"} onClick={() => setEditMode("simple")} sx={{ fontSize: 10 }}>简洁</Button>
+											<Button variant={editMode === "json" ? "contained" : "outlined"} onClick={() => setEditMode("json")} sx={{ fontSize: 10 }}>JSON</Button>
+										</ButtonGroup>
+									</Stack>
+									{editMode === "simple" && (
+										<>
+											<TextField size="small" fullWidth label="标题" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+											<TextField size="small" fullWidth multiline minRows={2} maxRows={5} label="内容" value={editContent} onChange={(e) => setEditContent(e.target.value)} />
+										</>
+									)}
+									{editMode === "json" && (
+										<TextField
+											size="small" fullWidth multiline minRows={3} maxRows={8}
+											value={JSON.stringify({ id: doc.id, title: editTitle, content: editContent, source: doc.source, category: (doc as any).category }, null, 2)}
+											onChange={(e) => { try { const p = JSON.parse(e.target.value); setEditTitle(p.title ?? ""); setEditContent(p.content ?? ""); } catch { /* ignore */ } }}
+											error={!!jsonError}
+											sx={{ "& textarea": { fontFamily: "monospace", fontSize: 11 } }}
+										/>
+									)}
+									<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+										<Button size="small" onClick={handleCancelEdit}>取消</Button>
+										<Button size="small" variant="contained" onClick={handleSaveEdit} disabled={saving || !editTitle.trim() || !editContent.trim()}>{saving ? "保存中..." : "保存"}</Button>
+									</Stack>
+								</Box>
+							) : (
+								<Stack direction="row" alignItems="flex-start" spacing={0}>
+									{selectedDocIds.size > 0 && (
+										<Checkbox size="small" checked={selectedDocIds.has(doc.id)} onChange={() => toggleDocSelection(doc.id)} sx={{ p: 0, mt: 0.25 }} />
+									)}
+									<Box sx={{ flex: 1, cursor: "pointer", overflow: "hidden", "&:hover": { bgcolor: "action.hover" }, borderRadius: 0.5, px: 0.5, py: 0.25 }}
+										onClick={() => handleStartEdit(doc)}>
+										<Stack direction="row" alignItems="center" spacing={0.5} sx={{ minWidth: 0 }}>
+											<Typography variant="caption" sx={{ flex: 1, fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600, minWidth: 0 }}>{doc.title}</Typography>
+											{doc.source && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 9, flexShrink: 0 }}>{doc.source}</Typography>}
+											<IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartEdit(doc); }} sx={{ p: 0.25 }}><EditIcon sx={{ fontSize: 14 }} /></IconButton>
+											<IconButton size="small" onClick={(e) => { e.stopPropagation(); requestDeleteDoc(doc.id); }} sx={{ p: 0.25 }}><DeleteIcon sx={{ fontSize: 14 }} /></IconButton>
+										</Stack>
+										<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+											{doc.content.slice(0, 120)}
+										</Typography>
+									</Box>
+								</Stack>
+							)}
+						</Box>
+					))}
+				</Box>
+			)}
+
+				{/* Search */}
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
 				<Stack direction="row" alignItems="center" spacing={0.5}>
 					<Typography variant="caption" fontWeight={600}>搜索验证</Typography>
