@@ -1,39 +1,211 @@
-# Phase 4 B 站接入方式研究
+# Phase 4 B 站接入方式研究（双路方案）
 
-> **文档定位**: Phase 4 启动前的技术调研文档，记录 B 站直播弹幕 WebSocket 接入方式的关键约束与方案选型。
-> 与 `phase4-round1-observation.md` 的区别：上一份是对仓库现有架构的能力审计，本文档聚焦于 B 站侧的技术约束和具体接入方案。
+> **文档定位**: Phase 4 启动前的技术调研文档，覆盖 B 站直播弹幕接入的两条路线。
+> 与 `phase4-round1-observation.md` 的区别：上一份是对仓库现有架构的能力审计，本文档聚焦于 B 站侧的技术约束和方案选型。
 
 ---
 
-## 1. B 站直播弹幕 WebSocket 协议摘要
+## 0. 路线总览与推荐
 
-### 1.1 连接地址
+| 维度 | 路线 A：官方 Open Live（推荐） | 路线 B：匿名 WebSocket（fallback） |
+|------|-------------------------------|-----------------------------------|
+| **定位** | **默认主方案** | 备用 / 对照 / 原型验证 |
+| 认证 | HMAC-SHA256 签名，开发者凭证 | `uid: 0` 匿名连接 |
+| 凭证需求 | `access_key_id` + `access_key_secret` + `app_id` + 主播身份码 | 无 |
+| 消息 cmd 格式 | `LIVE_OPEN_PLATFORM_DM` 等（开放平台专用） | `DANMU_MSG` 等（非官方格式） |
+| 稳定性 | 官方保障，有 SLA | 非官方协议，可能随时变更 |
+| 安全性 | 签名在 Rust 受信任侧完成，密钥不暴露 | 无密钥，无安全顾虑 |
+| 项目适用性 | FYP 正式提交、演示、答辩 | 开发初期快速验证、调试对照 |
+
+**推荐结论：Phase 4 默认优先走官方 Open Live 路线。**
+
+理由：
+1. 用户已申请到 `access_key_id` 和 `access_key_secret`，官方凭证已就绪
+2. 官方路线的消息格式更规范、字段更丰富，适合正式实现
+3. 对于 FYP 项目的答辩和演示，使用官方接口更具说服力
+4. 签名逻辑放在 Rust 层，与本项目的 Tauri 架构天然契合
+5. 匿名路线作为 fallback 保留，在官方路线受阻时可快速切换
+
+---
+
+## 1. 路线 A：官方 Open Live
+
+### 1.1 平台定位
+
+B 站直播开放平台分为两套独立系统：
+
+| 系统 | 地址 | 用途 | 鉴权 |
+|------|------|------|------|
+| **直播创作者服务中心** | `open-live.bilibili.com` | 互动玩法接入（弹幕/礼物/SC） | HMAC-SHA256 签名 |
+| 开放平台（通用） | `openhome.bilibili.com` | 通用 OAuth 2.0 能力 | OAuth 2.0 |
+
+**本项目走的是"直播创作者服务中心"路线**（互动玩法），不是通用开放平台的 OAuth 路线。两者的接口和鉴权完全独立。
+
+### 1.2 关键凭证与参数
+
+| 凭证 / 参数 | 来源 | 用途 | 安全等级 |
+|-------------|------|------|----------|
+| `access_key_id` | 开发者入驻后邮件获取 | HTTP 请求头 `x-bili-accesskeyid` | 可公开（等同 client_id） |
+| `access_key_secret` | 开发者入驻后邮件获取 | HMAC-SHA256 签名密钥 | **绝不能暴露到前端** |
+| `app_id` | 开发者后台创建项目时分配 | `/v2/app/start` 请求体参数 | 可公开 |
+| 主播身份码 `code` | 主播在直播姬或弹幕姬中获取 | `/v2/app/start` 请求体参数 | 运行时由主播提供 |
+
+### 1.3 连接生命周期
+
+```
+Phase 1: 鉴权 + 开启场次
+──────────────────────────
+POST https://live-open.biliapi.com/v2/app/start
+  Headers:
+    x-bili-accesskeyid: {access_key_id}
+    x-bili-content-md5: {body 的 MD5}
+    x-bili-signature-method: HMAC-SHA256
+    x-bili-signature-nonce: {随机字符串}
+    x-bili-signature-version: 2.0
+    x-bili-timestamp: {Unix 时间戳(秒)}
+    Authorization: {HMAC-SHA256 签名结果}
+    Content-Type: application/json
+    Accept: application/json
+  Body:
+    { "code": "{主播身份码}", "app_id": {app_id} }
+  Response:
+    {
+      "code": 0,
+      "data": {
+        "game_id": "xxx",              // 场次 ID，后续心跳/关闭使用
+        "anchor_info": {
+          "room_id": 12345,
+          "uname": "主播昵称",
+          "uface": "https://..."
+        },
+        "websocket_info": {
+          "auth_body": "...",           // WebSocket 认证包体
+          "wss_link": ["wss://..."]     // WebSocket 连接地址列表
+        }
+      }
+    }
+
+Phase 2: 建立长连接
+──────────────────────────
+1. 连接 websocket_info.wss_link[0]
+2. 5 秒内发送 AUTH 包（Operation=7），Body = websocket_info.auth_body
+3. 收到 AUTH_REPLY（Operation=8），code=0 表示成功
+
+Phase 3: 保活
+──────────────────────────
+A. WebSocket 心跳：每 30 秒发送 Heartbeat 包（Operation=2）
+B. HTTP 项目心跳：每 20 秒 POST /v2/app/heartbeat
+   Body: { "game_id": "{game_id}" }
+   （也需要 HMAC-SHA256 签名 Headers）
+
+Phase 4: 消息接收
+──────────────────────────
+消息格式同标准弹幕 WebSocket 协议（16 字节头 + body）
+但 cmd 使用开放平台专用名称：
+  - LIVE_OPEN_PLATFORM_DM       → 弹幕
+  - LIVE_OPEN_PLATFORM_SEND_GIFT → 礼物
+  - LIVE_OPEN_PLATFORM_SUPER_CHAT → SC
+  - LIVE_OPEN_PLATFORM_GUARD     → 大航海
+  - LIVE_OPEN_PLATFORM_LIKE      → 点赞
+
+Phase 5: 关闭
+──────────────────────────
+POST /v2/app/end
+  Body: { "game_id": "{game_id}", "app_id": {app_id} }
+  （需要签名）
+关闭 WebSocket 连接
+```
+
+### 1.4 HMAC-SHA256 签名算法
+
+```
+步骤 1: 计算请求体的 MD5（全小写）
+  content_md5 = md5(request_body).toLowerCase()
+
+步骤 2: 构造待签名字符串
+  将所有 x-bili-* header 按字典序排列，每行格式为 key:value\n
+  待签名字符串 =
+    "x-bili-accesskeyid:{access_key_id}\n" +
+    "x-bili-content-md5:{content_md5}\n" +
+    "x-bili-signature-method:HMAC-SHA256\n" +
+    "x-bili-signature-nonce:{nonce}\n" +
+    "x-bili-signature-version:2.0\n" +
+    "x-bili-timestamp:{timestamp}"
+
+步骤 3: HMAC-SHA256 签名
+  signature = hmac_sha256(access_key_secret, 待签名字符串)
+  Authorization header = signature（十六进制字符串）
+```
+
+### 1.5 敏感信息与安全边界
+
+**绝不能放在前端 TS 层的信息：**
+
+| 信息 | 原因 |
+|------|------|
+| `access_key_secret` | 签名密钥，泄漏等于账号被盗用 |
+| 完整的签名计算过程 | 暴露了 secret 的使用方式 |
+
+**可以放在前端 TS 层的信息：**
+
+| 信息 | 原因 |
+|------|------|
+| `access_key_id` | 等同 client_id，公开信息 |
+| `app_id` | 应用标识，公开信息 |
+| 主播身份码 `code` | 由主播手动输入，运行时数据 |
+| `websocket_info`（auth_body / wss_link） | 已签名的产物，有效期短 |
+| WebSocket 连接 + 消息接收 | 标准浏览器 API，无密钥参与 |
+
+### 1.6 Rust 与 TS 的职责边界
+
+| 层 | 职责 | 原因 |
+|----|------|------|
+| **Rust（Tauri command）** | HMAC-SHA256 签名计算 | `access_key_secret` 必须留在 Rust 侧 |
+| **Rust（Tauri command）** | `/v2/app/start`、`/heartbeat`、`/end` 的 HTTP 调用 | 签名 + HTTP 请求打包在一起更自然 |
+| **Rust（Tauri command）** | `access_key_secret` 的安全存储 | 用 Tauri Store 或 keyring，不暴露到 WebView |
+| **TS（前端）** | 调用 Tauri command 获取 `websocket_info` | 通过 IPC 获取 auth_body + wss_link |
+| **TS（前端）** | WebSocket 连接 + 消息解析 | 标准浏览器 WebSocket API，无密钥参与 |
+| **TS（前端）** | WebSocket 心跳（30 秒） | 简单定时器 |
+| **TS（前端）** | 消息分发到 `ExternalInputService` | 复用现有事件链路 |
+| **TS（前端）** | 定时触发 Rust 侧的 HTTP 心跳（20 秒） | 通过 Tauri command 调用 |
+
+### 1.7 官方消息格式（与非官方的对比）
+
+| 维度 | 官方 Open Live | 非官方匿名 |
+|------|---------------|-----------|
+| 弹幕 cmd | `LIVE_OPEN_PLATFORM_DM` | `DANMU_MSG` |
+| 礼物 cmd | `LIVE_OPEN_PLATFORM_SEND_GIFT` | `SEND_GIFT` |
+| SC cmd | `LIVE_OPEN_PLATFORM_SUPER_CHAT` | `SUPER_CHAT_MESSAGE` |
+| 消息体结构 | 规范化 JSON，字段命名统一 | 非标准化，部分字段在数组中 |
+| 用户信息 | data 中有 `uname`, `uid`, `uface` 等 | 部分在 `info` 数组的固定位置 |
+
+**影响**：BilibiliAdapter 需要根据走哪条路线解析不同的 cmd 格式。建议在 adapter 内部做解析，输出统一的 `RawExternalEvent`，下游无感知。
+
+---
+
+## 2. 路线 B：匿名 WebSocket（fallback）
+
+### 2.1 连接方式
 
 ```
 wss://broadcastlv.chat.bilibili.com/sub
 ```
 
-### 1.2 连接流程
+匿名连接，`uid: 0`，不需要任何凭证。
+
+### 2.2 连接流程
 
 ```
-1. 获取真实房间号：GET https://api.live.bilibili.com/room/v1/Room/room_init?id={短号或长号}
-   └→ 响应中 data.room_id 为真实房间号（短号与长号不同）
-
-2. 建立 WebSocket 连接到 wss://broadcastlv.chat.bilibili.com/sub
-
-3. 5 秒内发送认证包（二进制）
-   └→ 包含：uid, roomid, protover, platform, clientver
-
-4. 收到服务端认证成功响应（operation=8）
-
-5. 每 30 秒发送心跳包（operation=2）
-
-6. 持续接收弹幕/礼物/SC 等消息
+1. 获取真实房间号：GET https://api.live.bilibili.com/room/v1/Room/room_init?id={房间号}
+2. 建立 WebSocket 连接
+3. 5 秒内发送认证包：{ "uid": 0, "roomid": 真实房间号, "protover": 2, "platform": "web" }
+4. 每 30 秒发送心跳包
+5. 接收弹幕/礼物等消息
 ```
 
-### 1.3 数据包格式
+### 2.3 数据包格式
 
-所有通信使用**二进制包**，16 字节定长头部（big-endian）：
+16 字节定长头部（big-endian）：
 
 | 偏移 | 长度 | 含义 |
 |------|------|------|
@@ -41,275 +213,110 @@ wss://broadcastlv.chat.bilibili.com/sub
 | 4 | 2 bytes | 头部长度（固定 16） |
 | 6 | 2 bytes | 协议版本（protover） |
 | 8 | 4 bytes | 操作码（operation） |
-| 12 | 4 bytes | 序列号（通常为 1） |
+| 12 | 4 bytes | 序列号 |
 
-操作码：
+操作码与官方路线一致（2=心跳, 5=消息, 7=认证, 8=认证响应）。
 
-| 操作码 | 方向 | 含义 |
-|--------|------|------|
-| 2 | 客户端→服务端 | 心跳 |
-| 3 | 服务端→客户端 | 心跳响应（在线人数） |
-| 5 | 服务端→客户端 | 消息通知（弹幕/礼物等） |
-| 7 | 客户端→服务端 | 认证 |
-| 8 | 服务端→客户端 | 认证响应 |
+### 2.4 压缩方案
 
-### 1.4 协议版本与压缩
+建议使用 protover=2（zlib deflate），使用 `pako` 库解压。
 
-| protover | 压缩方式 | 说明 |
-|----------|----------|------|
-| 0 | 无压缩 | 纯 JSON |
-| 1 | 无压缩 | 含心跳人数 |
-| 2 | zlib deflate | 常用，需解压后逐包解析 |
-| 3 | brotli | 较新，需 brotli 解压 |
+### 2.5 适用场景
 
-### 1.5 认证方式
+- Spike 初期快速验证 WebSocket 连通性（无需任何凭证）
+- 官方路线 Rust 签名开发期间的对照测试
+- 官方路线受阻（审核问题、API 变更等）时的临时替代
+- 开发调试：可直接在 DevTools console 中测试
 
-**关键发现：匿名连接可行。**
+### 2.6 限制
 
-认证包内容（JSON，encode 为二进制体）：
-```json
-{
-  "uid": 0,
-  "roomid": 12345,
-  "protover": 2,
-  "platform": "web",
-  "clientver": "1.4.0"
-}
-```
-
-- `uid: 0` 表示匿名用户，**不需要 Cookie、Token 或登录态**
-- 仅能接收弹幕/礼物等消息，不能发送弹幕
-- 对于本项目需求（接收弹幕作为 LLM 输入），匿名连接完全够用
-
-### 1.6 关键消息类型（Phase 4 最小版所需）
-
-| cmd | 含义 | Phase 4 需要？ |
-|-----|------|----------------|
-| `DANMU_MSG` | 普通弹幕 | ✅ 必须 |
-| `SEND_GIFT` | 礼物 | ✅ 建议 |
-| `SUPER_CHAT_MESSAGE` | 醒目留言（SC） | 可选（优先级高于普通弹幕） |
-| `INTERACT_WORD` | 进入房间 | ❌ 不做 |
-| `ENTRY_EFFECT` | 入场特效 | ❌ 不做 |
-| `GUARD_BUY` | 大航海 | ❌ 不做 |
+- 非官方协议，随时可能变更
+- 无法发送弹幕（只能接收）
+- 消息格式非标准化，解析更复杂
+- 不适合正式发布或 FYP 答辩演示
 
 ---
 
-## 2. 可用的 npm 库
+## 3. 可用的 npm 库
 
-### 2.1 bilibili-live-ws
+### 3.1 匿名路线适用
 
-| 维度 | 信息 |
-|------|------|
-| 包名 | `bilibili-live-ws` |
-| 版本 | 6.3.1 |
-| 作者 | simon300000 |
-| Stars | 325 |
-| 浏览器支持 | **实验性**，有 `bilibili-live-ws/browser` 入口 |
-| 功能 | LiveWS（WebSocket）+ LiveTCP（TCP）+ KeepLive（自动重连） |
-| 心跳 | 自动管理 |
+| 包名 | 版本 | 浏览器支持 | 说明 |
+|------|------|----------|------|
+| `bilibili-live-danmaku` | 0.7.15（2026-02） | ✅ 支持 | 最新、声明浏览器兼容 |
+| `bilibili-live-ws` | 6.3.1 | 实验性 | 较成熟，API 设计好 |
 
-### 2.2 bilibili-live-danmaku
+### 3.2 官方路线
 
-| 维度 | 信息 |
-|------|------|
-| 包名 | `bilibili-live-danmaku` |
-| 版本 | 0.7.15（2026-02-14） |
-| 浏览器支持 | **支持浏览器和服务端 JS** |
-| 功能 | WebSocket API，多 protover 支持 |
-| 心跳 | 自动管理 |
-| 更新频率 | 活跃（2026 年仍在更新） |
+官方路线的 HTTP 签名和 WebSocket 连接逻辑较为特殊，现有 npm 库主要针对匿名协议。
 
-### 2.3 自行实现
-
-考虑到协议相对简单（认证 + 心跳 + 消息解析），且现有库的浏览器兼容性标注为"实验性"，存在以下选择：
-
-| 方案 | 优势 | 劣势 |
-|------|------|------|
-| 用 `bilibili-live-danmaku` | 最新版，声明支持浏览器 | 依赖三方包，可能有隐含 Node.js 依赖 |
-| 用 `bilibili-live-ws` | 较成熟，API 设计好 | 浏览器支持标注"实验性" |
-| 自行实现 | 完全控制，零额外依赖 | 需处理二进制协议 + 压缩解码 |
-
-**建议**：先尝试 `bilibili-live-danmaku`（最新、声明浏览器兼容），如果在 Tauri WebView 中遇到兼容问题则回退自行实现核心协议。
+**建议**：官方路线的 HTTP 签名在 Rust 侧自行实现（HMAC-SHA256 + MD5，Rust 生态有成熟的 crate：`hmac`, `sha2`, `md-5`）；WebSocket 部分可复用前端标准 API，协议格式与匿名路线相同（16 字节头 + zlib 压缩）。
 
 ---
 
-## 3. Tauri WebView 中 WebSocket 的可行性分析
+## 4. Tauri WebView 中 WebSocket 的可行性分析
 
-### 3.1 标准 WebSocket
-
-Tauri WebView 基于系统 WebView2（Windows）/ WKWebView（macOS），**原生支持标准 WebSocket API**（`new WebSocket(url)`）。这与浏览器中的行为一致。
-
-### 3.2 潜在问题
+以下分析对两条路线均适用，因为两条路线的 WebSocket 连接阶段均使用标准 `wss://` 协议。
 
 | 问题 | 风险 | 分析 |
 |------|------|------|
-| CSP 限制 | 低 | Tauri 2.x 的 CSP 默认允许 `wss://` 连接；如被阻止，可在 `tauri.conf.json` 的 `security.csp` 中添加 |
-| 二进制 WebSocket 帧 | 低 | WebView2 的 WebSocket 支持 `ArrayBuffer` 二进制帧，B 站协议所需的二进制包可正常收发 |
-| zlib 解压 | 中 | 浏览器中没有原生 `zlib` 模块；需使用 `pako`（纯 JS zlib）或 `DecompressionStream` API |
-| brotli 解压 | 中 | 如果使用 protover=3，需要 brotli 解压；浏览器中可用 `DecompressionStream('deflate')` 但不一定支持 brotli |
+| CSP 限制 | 低 | Tauri 2.x 默认允许 `wss://`；如被阻止，可在 `tauri.conf.json` 中调整 |
+| 二进制 WebSocket 帧 | 低 | WebView2 支持 `ArrayBuffer` |
+| zlib 解压 | 中 | 需 `pako`（纯 JS）或 `DecompressionStream` API |
 | 跨域 | 极低 | WebSocket 不受同源策略限制 |
 
-### 3.3 压缩方案选择
-
-**建议使用 protover=2（zlib deflate）**：
-- `pako` 库（纯 JS，零原生依赖，17KB gzipped）可在 WebView 中直接运行
-- 浏览器原生 `DecompressionStream` API 在 Chromium 80+ / WebView2 中可用
-- 避免 brotli（protover=3）的额外依赖
-
-### 3.4 是否需要走 Rust 代理
-
-**结论：不需要，除非遇到兼容问题。**
-
-B 站弹幕 WebSocket 是标准 `wss://` 连接，不涉及需要隐藏的 API Key，也不涉及跨域问题。直接在 TypeScript 层连接是最简单的方案。
-
-只有在以下情况下才需要走 Rust 代理：
-1. Tauri WebView 的 CSP 策略确实阻止了 `wss://broadcastlv.chat.bilibili.com`
-2. 需要在 Rust 侧做更底层的网络控制（如 TCP 连接）
-
-**建议**：Phase 4 Run 01 先做一个 spike 验证 WebSocket 在 Tauri WebView 中的连通性。如果通，全部在 TS 层实现；如果不通，再考虑 Rust 代理。
+**关键区别**：官方路线的 `/v2/app/start` 等 HTTP 请求走 Rust 侧（Tauri command），不经过 WebView 的 CSP。因此**即使 WebView 对某些 HTTPS 域有限制，也不影响官方路线的 HTTP 调用**。
 
 ---
 
-## 4. 当前仓库的接入点（与 Round 1 观察对照）
+## 5. 当前仓库的接入点
 
-### 4.1 Round 1 观察结论是否仍成立
+Round 1 观察报告的核心结论仍然成立：`ExternalInputService` + `EventBus` + `EventMap` 三件套可直接复用。
 
-Round 1 观察报告（`phase4-round1-observation.md`）的核心结论：
-
-> 当前仓库已具备 Phase 4 B 站最小接入的大部分基础设施。`ExternalInputService` + `EventBus` + `EventMap` 三件套已经形成了完整的"外部事件注入 → 总线分发 → 各服务消费"链路。
-
-**验证结果：仍然成立。** Phase 3.5 的所有改动都未触碰 `ExternalInputService`、`EventBus`、`EventMap`。
-
-### 4.2 具体接入点确认
-
-| 组件 | 现状 | Phase 4 动作 |
+| 组件 | 现状 | 两条路线共用 |
 |------|------|-------------|
-| `ExternalInputService` | 有 `injectEvent` + `registerSource` + runtime 门控，无真实适配器 | 挂载 `BilibiliAdapter`，adapter 的 `onEvent` 指向 `injectEvent` |
-| `EventMap` | 已定义 `external:danmaku` / `external:gift` / `external:product-message` | 无需修改（可能扩展 payload 字段） |
-| `EventLog` | 已订阅三种外部事件 | 无需修改，弹幕会自动出现在事件日志中 |
-| `KnowledgeService` | 已订阅 `external:product-message` | 无需修改 |
-| `PipelineService` | 未消费 `external:danmaku` | **需新增弹幕消费者**，将选中的弹幕送入 `pipeline.run()` |
-| `ControlPanel` | 有 Mock 测试区块 | 新增 B 站连接 UI（房间号 + 开关） |
+| `ExternalInputService.injectEvent()` | 已有，runtime 门控 | ✅ 两条路线最终都汇入此处 |
+| `EventMap` | 已定义 `external:danmaku` / `external:gift` | ✅ 下游无感知路线差异 |
+| `EventLog` | 已订阅外部事件 | ✅ 自动展示 |
+| `PipelineService` | 未消费 `external:danmaku` | 需新增 DanmakuConsumer（两条路线共用） |
 
-### 4.3 建议的接入层级
-
-```
-BilibiliAdapter（新增）
-  ├→ WebSocket 连接 + 心跳 + 协议解析
-  ├→ 解析 DANMU_MSG → RawExternalEvent { source: "bilibili", type: "danmaku", data: {...} }
-  ├→ 解析 SEND_GIFT → RawExternalEvent { source: "bilibili", type: "gift", data: {...} }
-  └→ 调用 ExternalInputService.injectEvent(raw)
-       ├→ runtime.isAllowed() 门控
-       └→ bus.emit("external:danmaku" | "external:gift", payload)
-            ├→ EventLog 展示（已有）
-            ├→ KnowledgeService 消费 product-message（已有）
-            └→ DanmakuConsumer（新增）→ pipeline.run(text)
-```
+**架构关键点**：无论走哪条路线，BilibiliAdapter 内部处理路线差异，输出统一的 `RawExternalEvent`。下游的 `ExternalInputService` / `EventBus` / `DanmakuConsumer` 完全不关心弹幕是从官方还是匿名路线来的。
 
 ---
 
-## 5. 最大的技术未知点
+## 6. 两条路线的实施差异
 
-按风险/影响排序：
-
-### 5.1 Tauri WebView 中 WebSocket 连通性（风险：中）
-
-**未知**：B 站弹幕 WebSocket 在 Tauri WebView2 中是否能直接连接。
-
-**验证方式**：一个最小 spike——在 Tauri 应用中 `new WebSocket("wss://broadcastlv.chat.bilibili.com/sub")`，发送认证包，确认能收到弹幕。
-
-**预估验证时间**：1–2 小时。
-
-**如果不通**：
-- 方案 B：Rust 侧起 WebSocket 连接，通过 Tauri Event 转发到前端（增加约 1 天工作量）
-- 方案 C：使用 Tauri HTTP 代理（`tauri-plugin-http`）做 fetch，但 WebSocket 需要独立处理
-
-### 5.2 弹幕到 LLM 的节流策略（风险：中）
-
-**未知**：热门直播间弹幕可达每秒数十条，如何选取弹幕送入 LLM。
-
-**当前 Pipeline 约束**：`PipelineService.run()` 有 `processing` 锁，不允许并发。弹幕频率高于 LLM 响应速度时，后续弹幕会被阻断。
-
-**建议的最小策略**：
-1. 固定冷却时间（如 10–15 秒），冷却期间丢弃新弹幕
-2. 弹幕文本长度限制（太短的无意义，太长的可能是 spam）
-3. 不做 AI 评分 / 关键词过滤（留后续优化）
-
-### 5.3 zlib 解压在 WebView 中的性能（风险：低）
-
-**未知**：高频弹幕场景下 `pako` 解压的性能开销。
-
-**预计不是问题**：每个压缩包通常只有几 KB，`pako.inflate` 在现代 JS 引擎中是毫秒级操作。
-
-### 5.4 短号 → 长号的 room_init API（风险：低）
-
-需要先调 `https://api.live.bilibili.com/room/v1/Room/room_init` 获取真实房间号。这是一个简单的 HTTP GET 请求，可通过现有的 `proxyRequest`（Rust 代理）完成。
+| 维度 | 官方 Open Live | 匿名 WebSocket |
+|------|---------------|----------------|
+| Rust 侧工作量 | 需要新增 Tauri commands（签名 + HTTP 调用） | 无 |
+| TS 侧工作量 | WebSocket + 消息解析 + Tauri command 调用 | WebSocket + 消息解析 |
+| 新增依赖 | Rust: `hmac`, `sha2`, `md-5`, `reqwest`；TS: `pako` | TS: `pako` |
+| 配置项 | `access_key_id`, `access_key_secret`(Rust), `app_id`, `code` | `roomId` |
+| UI 需求 | 主播身份码输入 + 连接按钮 | 房间号输入 + 连接按钮 |
+| 预估总工作量 | 3–4 天（含 Rust 签名） | 2–3 天 |
 
 ---
 
-## 6. B 站开放平台 vs 非官方 WebSocket
+## 7. 本文档与其他文档的关系
 
-| 维度 | B 站开放平台 | 非官方 WebSocket |
-|------|-------------|-----------------|
-| 认证 | 需要开发者账号 + 审核 + HMAC-SHA256 签名 | 匿名连接，`uid: 0` |
-| 功能 | 完整 API（弹幕、礼物、SC、大航海、互动） | 同样完整的消息类型 |
-| 稳定性 | 官方保障 | 协议可能变更，但多年来较稳定 |
-| 适用场景 | 商业应用、公开发布 | 个人/小团队项目、FYP |
-| 限制 | 需要审核 | 无发送能力，仅接收 |
-
-**本项目建议：Phase 4 最小版使用非官方 WebSocket（匿名连接）。**
-
-理由：
-- 本项目是 FYP 项目，不需要商业级稳定性保障
-- 匿名连接的功能完全满足需求（只需接收弹幕和礼物）
-- 避免开放平台审核流程的时间成本
-- 如果后续需要发布或商用，可迁移到开放平台
-
----
-
-## 7. 现在该不该直接进入实现
-
-**建议：先做一个极小的 spike，再进入正式实现。**
-
-### 需要验证的内容
-
-| Spike 项 | 验证目标 | 方式 |
-|----------|---------|------|
-| WebSocket 连通性 | Tauri WebView 中 `new WebSocket("wss://broadcastlv.chat.bilibili.com/sub")` 能否建立连接 | 在现有应用的 console 中直接执行 |
-| 认证 + 心跳 | 发送认证包后能否收到认证成功响应；心跳能否保持连接 | 在 console 中写最小脚本 |
-| 弹幕接收 | 能否接收到 `DANMU_MSG` 并解析出用户名和弹幕文本 | 连接一个有活跃弹幕的房间观察 |
-| zlib 解压 | `pako.inflate` 能否在 WebView 中正常工作 | 安装 pako，解压实际收到的包 |
-
-### Spike 的形式
-
-不需要创建正式文件。在 Tauri 桌面端的 DevTools console 中执行以下操作即可：
-
-1. `pnpm add pako`（如果需要 zlib）
-2. 在 console 中手动 `new WebSocket(...)` → 发认证包 → 等待弹幕
-3. 记录结果到 `docs/research/` 中
-
-**预估时间：0.5–1 天。**
-
-如果 spike 验证通过，可直接进入 Phase 4 Run 01 正式实施。
-
----
-
-## 8. 本文档与其他文档的关系
-
-| 文档 | 定位 | 关系 |
-|------|------|------|
-| `phase4-round1-observation.md` | 仓库架构审计——当前代码能接什么、缺什么 | 本文档的前序 |
-| 本文档 | B 站侧的技术约束——协议、认证、库、兼容性 | 为 Blueprint 提供技术决策依据 |
-| `blueprints/phase4/bilibili-minimum-integration.md` | Phase 4 正式 Kickoff Blueprint | 基于本文档和 Round 1 观察产出的实施计划 |
+| 文档 | 定位 |
+|------|------|
+| `phase4-round1-observation.md` | 仓库架构审计——当前代码能接什么、缺什么 |
+| **本文档** | B 站侧技术约束——两条路线的协议、认证、库、兼容性、安全边界 |
+| `blueprints/phase4/bilibili-minimum-integration.md` | Phase 4 正式 Kickoff Blueprint——基于本文档的实施计划 |
 
 ---
 
 ## 元信息
 
-- 调研日期：2026-03-31
+- 初始调研日期：2026-03-31
+- 路线修正日期：2026-03-31
 - 参考来源：
-  - [BiliBili Live Danmaku WebSocket Protocol Analysis](https://www.oreateai.com/blog/technical-analysis-of-bilibili-live-danmaku-websocket-protocol/)
+  - [B 站直播创作者服务中心](https://open-live.bilibili.com/)
+  - [B 站 Open Live 接口签名标准](https://bilibili.apifox.cn/doc-885734)
+  - [B 站 Open Live WebSocket 协议](https://bilibili.apifox.cn/doc-7499638)
+  - [B 站 Open Live 接入指南](https://bilibili.apifox.cn/doc-7499516)
   - [bilibili-live-danmaku npm](https://www.npmjs.com/package/bilibili-live-danmaku)
   - [bilibili-live-ws GitHub](https://github.com/simon300000/bilibili-live-ws)
-  - [B 站直播 WebSocket 协议（CSDN）](https://blog.csdn.net/xfgryujk/article/details/80306776)
+  - [BiliBili Live Danmaku WebSocket Protocol Analysis](https://www.oreateai.com/blog/technical-analysis-of-bilibili-live-danmaku-websocket-protocol/)
 - 文档路径：`docs/research/phase4-bilibili-connection-research.md`
