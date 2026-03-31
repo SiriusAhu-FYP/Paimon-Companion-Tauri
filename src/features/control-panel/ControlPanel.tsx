@@ -13,7 +13,7 @@ import { useRuntime, useCharacter } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { getServices } from "@/services";
 import { type AppConfig, DEFAULT_CONFIG, loadConfig, updateConfig, getConfig } from "@/services/config";
-import { mockVoicePipeline, mockExternalEvents, MOCK_CHARACTER_PROFILE } from "@/utils/mock";
+import { mockVoicePipeline, MOCK_CHARACTER_PROFILE } from "@/utils/mock";
 import type { CharacterProfile } from "@/types";
 import { createLogger } from "@/services/logger";
 
@@ -60,7 +60,7 @@ export function ControlPanel() {
 		log.info(`switched to character: ${profile.name} (${profile.id})`);
 	}, []);
 
-	// ── 角色设置 & 直播行为约束（从 SettingsPanel 迁入） ──
+	// ── 角色设置 & 输出行为约束（从 SettingsPanel 迁入） ──
 	const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
 
 	useEffect(() => {
@@ -78,43 +78,37 @@ export function ControlPanel() {
 	}, []);
 
 	// ── 上下文注入 ──
-	const [productText, setProductText] = useState("");
-	const [liveContextText, setLiveContextText] = useState("");
+	const [referenceText, setReferenceText] = useState("");
+	const [taskContextText, setTaskContextText] = useState("");
 
-	const handleAddProduct = useCallback(() => {
-		const text = productText.trim();
+	const handleAddReference = useCallback(() => {
+		const text = referenceText.trim();
 		if (!text) return;
 		const { knowledge } = getServices();
-		knowledge.addKnowledge({ id: `product-${Date.now()}`, content: text });
-		setProductText("");
-		log.info("product knowledge added");
-	}, [productText]);
+		knowledge.addLiveContext({ id: `reference-${Date.now()}`, content: text, priority: 1, expiresAt: null });
+		setReferenceText("");
+		log.info("reference context added");
+	}, [referenceText]);
 
-	const handleAddLiveContext = useCallback(() => {
-		const text = liveContextText.trim();
+	const handleAddTaskContext = useCallback(() => {
+		const text = taskContextText.trim();
 		if (!text) return;
 		const { knowledge } = getServices();
-		knowledge.addLiveContext({ id: `live-${Date.now()}`, content: text, priority: 10, expiresAt: null });
-		setLiveContextText("");
-		log.info("live context added");
-	}, [liveContextText]);
+		knowledge.addLiveContext({ id: `task-${Date.now()}`, content: text, priority: 10, expiresAt: null });
+		setTaskContextText("");
+		log.info("task context added");
+	}, [taskContextText]);
 
-	const handleClearKnowledge = useCallback(() => {
+	const handleClearContext = useCallback(() => {
 		const { knowledge } = getServices();
-		knowledge.clearLongTermKnowledge();
 		knowledge.clearLiveContext();
-		log.info("knowledge + live context cleared");
+		log.info("manual context cleared");
 	}, []);
 
 	// ── Mock 测试 ──
 	const handleMockPipeline = async () => {
 		const { bus, runtime } = getServices();
 		await mockVoicePipeline(bus, runtime);
-	};
-
-	const handleMockExternal = () => {
-		const { externalInput } = getServices();
-		mockExternalEvents(externalInput);
 	};
 
 	const [micStatus, setMicStatus] = useState<"idle" | "ok" | "denied" | "error">("idle");
@@ -218,11 +212,11 @@ export function ControlPanel() {
 
 		<Divider />
 
-		{/* 直播行为约束 */}
+		{/* 输出行为约束 */}
 		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
 			<Stack direction="row" alignItems="center" spacing={0.5}>
-				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ fontSize: 11 }}>直播行为约束</Typography>
-				<HelpTooltip title="在 system prompt 最前面注入行为规则，优先级高于角色卡设定。约束格式与风格，不覆盖角色个性。" />
+				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ fontSize: 11 }}>输出行为约束</Typography>
+				<HelpTooltip title="在 system prompt 最前面注入行为规则，优先级高于角色卡设定。约束回复格式与风格，不覆盖角色个性。" />
 			</Stack>
 			<Stack direction="row" spacing={1} alignItems="center">
 				<Typography variant="caption" sx={{ fontSize: 11 }}>启用约束</Typography>
@@ -277,43 +271,43 @@ export function ControlPanel() {
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
 					<Typography variant="caption" color="text.secondary" fontWeight={600}>上下文注入</Typography>
-					<HelpTooltip title="将商品资料或运营口径注入 LLM 上下文，影响回复内容" />
+					<HelpTooltip title="将参考信息或任务上下文注入 LLM 上下文，影响当前回复内容。" />
 				</Stack>
 
 				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", mb: 0.5 }}>
-					商品/资料
+					参考信息
 				</Typography>
 				<Stack direction="row" spacing={0.5} sx={{ mb: 0.75 }}>
 					<TextField
 						size="small" fullWidth multiline maxRows={3}
-						placeholder="例：原神周边摆件，限时8折"
-						value={productText}
-						onChange={(e) => setProductText(e.target.value)}
+						placeholder="例：当前画面里右上角有派蒙菜单提示"
+						value={referenceText}
+						onChange={(e) => setReferenceText(e.target.value)}
 						sx={{ "& .MuiInputBase-input": { fontSize: 12 } }}
 					/>
-					<Button variant="outlined" size="small" onClick={handleAddProduct} disabled={!productText.trim()} sx={{ minWidth: 48 }}>
+					<Button variant="outlined" size="small" onClick={handleAddReference} disabled={!referenceText.trim()} sx={{ minWidth: 48 }}>
 						注入
 					</Button>
 				</Stack>
 
 				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", mb: 0.5 }}>
-					运营口径 / 直播上下文
+					任务上下文
 				</Typography>
 				<Stack direction="row" spacing={0.5} sx={{ mb: 0.75 }}>
 					<TextField
 						size="small" fullWidth multiline maxRows={3}
-						placeholder="例：当前是晚间互动环节"
-						value={liveContextText}
-						onChange={(e) => setLiveContextText(e.target.value)}
+						placeholder="例：当前目标是判断 2048 下一步方向"
+						value={taskContextText}
+						onChange={(e) => setTaskContextText(e.target.value)}
 						sx={{ "& .MuiInputBase-input": { fontSize: 12 } }}
 					/>
-					<Button variant="outlined" size="small" onClick={handleAddLiveContext} disabled={!liveContextText.trim()} sx={{ minWidth: 48 }}>
+					<Button variant="outlined" size="small" onClick={handleAddTaskContext} disabled={!taskContextText.trim()} sx={{ minWidth: 48 }}>
 						注入
 					</Button>
 				</Stack>
 
-				<Button variant="text" size="small" color="warning" onClick={handleClearKnowledge} sx={{ fontSize: 11 }}>
-					清空全部注入
+				<Button variant="text" size="small" color="warning" onClick={handleClearContext} sx={{ fontSize: 11 }}>
+					清空手动上下文
 				</Button>
 			</Box>
 
@@ -341,14 +335,11 @@ export function ControlPanel() {
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
 					<Typography variant="caption" color="text.secondary" fontWeight={600}>Mock 测试</Typography>
-					<HelpTooltip title="模拟语音链路（含口型同步）和外部事件" />
+					<HelpTooltip title="模拟语音链路（含口型同步）" />
 				</Stack>
 				<Stack direction="row" spacing={0.5}>
 					<Button variant="outlined" size="small" onClick={handleMockPipeline}>
 						模拟语音链路
-					</Button>
-					<Button variant="outlined" size="small" onClick={handleMockExternal}>
-						模拟外部事件
 					</Button>
 				</Stack>
 			</Box>

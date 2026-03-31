@@ -77,27 +77,6 @@ export interface SystemErrorPayload {
 	error: string;
 }
 
-// ── 外部事件 ──
-
-export interface ExternalDanmakuPayload {
-	user: string;
-	text: string;
-	source: string;
-}
-
-export interface ExternalGiftPayload {
-	user: string;
-	giftName: string;
-	count: number;
-	source: string;
-}
-
-export interface ExternalProductMessagePayload {
-	type: "persistent" | "priority";
-	content: string;
-	ttl?: number;
-}
-
 // ── 事件名 → 载荷类型的统一映射 ──
 
 export interface EventMap {
@@ -129,11 +108,6 @@ export interface EventMap {
 	"system:manual-takeover": void;
 	"system:resume": void;
 	"system:error": SystemErrorPayload;
-
-	// 外部
-	"external:danmaku": ExternalDanmakuPayload;
-	"external:gift": ExternalGiftPayload;
-	"external:product-message": ExternalProductMessagePayload;
 }
 
 export type EventName = keyof EventMap;
