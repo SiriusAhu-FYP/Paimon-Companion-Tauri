@@ -184,7 +184,7 @@ export function MainWindow() {
 				justifyContent: "space-between",
 			}}>
 				<Box component="h1" sx={{ fontSize: 18, fontWeight: 600, color: "primary.main", m: 0 }}>
-					Paimon Live
+					Paimon Companion Tauri
 				</Box>
 				<Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
 					<Tooltip title={mode === "dark" ? "切换亮色" : "切换暗色"}>

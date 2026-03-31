@@ -1,7 +1,7 @@
 use tauri::AppHandle;
 use tauri_plugin_keyring::KeyringExt;
 
-const SERVICE_PREFIX: &str = "com.siriusahu.paimon-live";
+const SERVICE_PREFIX: &str = "com.siriusahu.paimon-companion-tauri";
 
 fn make_service(key: &str) -> String {
 	format!("{SERVICE_PREFIX}:{key}")

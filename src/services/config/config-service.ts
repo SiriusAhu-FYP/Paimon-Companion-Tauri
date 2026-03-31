@@ -13,7 +13,7 @@ const log = createLogger("config");
 
 const STORE_PATH = "app-config.json";
 const STORE_KEY = "config";
-const LOCAL_STORAGE_KEY = "paimon-live:app-config";
+const LOCAL_STORAGE_KEY = "paimon-companion-tauri:app-config";
 
 let cachedConfig: AppConfig | null = null;
 

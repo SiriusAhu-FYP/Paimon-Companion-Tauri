@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    paimon_live_lib::run()
+    paimon_companion_tauri_lib::run()
 }

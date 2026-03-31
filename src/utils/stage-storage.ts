@@ -3,9 +3,9 @@
  * 所有 Stage 持久化读写统一在此管理，避免散落在组件文件中。
  */
 
-const ZOOM_KEY = "paimon-live:stage-zoom";
-const CUSTOM_PRESETS_KEY = "paimon-live:custom-size-presets";
-const SCALE_LOCK_KEY = "paimon-live:stage-scale-lock";
+const ZOOM_KEY = "paimon-companion-tauri:stage-zoom";
+const CUSTOM_PRESETS_KEY = "paimon-companion-tauri:custom-size-presets";
+const SCALE_LOCK_KEY = "paimon-companion-tauri:stage-scale-lock";
 
 // ── 缩放比例 ──
 
