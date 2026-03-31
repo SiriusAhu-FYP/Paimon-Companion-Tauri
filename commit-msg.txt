@@ -1,0 +1,14 @@
+fix(stage): recreate canvas on show-stage to reset corrupted WebGL context
+
+The "checkMaxIfStatementsInShader" error occurred because when a PIXI
+Application fails, the canvas WebGL context enters a permanently broken
+state. Simply calling destroy() and creating a new PIXI app on the same
+canvas is not enough — the GL context is already corrupted.
+
+Fix: when handling show-stage after no renderer exists, create a brand-new
+canvas element (with preserved passthrough opacity), replace the old one,
+then init the renderer on the fresh canvas. This ensures PIXI always gets
+a canvas with no residual GL state.
+
+Also preserved passthrough opacity when replacing the canvas, so if the
+user had transparency active before hiding, it stays active after show.

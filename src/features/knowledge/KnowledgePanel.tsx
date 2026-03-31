@@ -24,6 +24,17 @@ import type { KnowledgeDocument, RetrievalResult, EmbeddingProfile, RerankProfil
 import type { IndexStatus } from "@/services/knowledge";
 import { RebuildGate } from "./RebuildGate";
 
+// JSON 批量导入的默认模板
+const JSON_TEMPLATE = `[
+  {
+    "id": "example-001",
+    "title": "示例标题",
+    "content": "示例正文内容，将被切块并向量化。",
+    "source": "manual",
+    "category": "general"
+  }
+]`;
+
 interface KnowledgePanelProps {
 	onClose: () => void;
 }
@@ -99,6 +110,13 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 	const [dragging, setDragging] = useState(false);
 
 	const fileInputRef = useRef<HTMLInputElement>(null);
+
+	// 切换到 JSON 模式时，若输入框为空则自动填入模板
+	useEffect(() => {
+		if (inputMode === "json" && !jsonInput.trim()) {
+			validateJsonInput(JSON_TEMPLATE);
+		}
+	}, [inputMode]);
 
 	const refreshState = useCallback(() => {
 		try {
