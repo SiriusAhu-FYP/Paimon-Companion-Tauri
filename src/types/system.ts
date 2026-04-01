@@ -13,3 +13,6 @@ export interface HostWindowCapture {
 	height: number;
 	pngBase64: string;
 }
+
+export type HostMouseButton = "left" | "right" | "middle";
+export type HostMouseAction = "move" | "down" | "up" | "click";
