@@ -1,7 +1,12 @@
 export type { EventMap, EventName } from "./events";
 export type { RuntimeMode, RuntimeState } from "./runtime";
 export type { CharacterProfile, CharacterProfileSource, CharacterState } from "./character";
-export type { HostWindowCapture, HostWindowInfo } from "./system";
+export type {
+	HostMouseAction,
+	HostMouseButton,
+	HostWindowCapture,
+	HostWindowInfo,
+} from "./system";
 export type {
 	KnowledgeDocument,
 	KnowledgeChunk,

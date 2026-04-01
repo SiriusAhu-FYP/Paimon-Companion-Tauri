@@ -21,9 +21,9 @@ Public progress tracker for `paimon-companion-tauri`.
   - [ ] P1.1 Host OS Primitives
     - [x] `list_windows`
     - [x] `capture_window`
-    - [ ] `focus_window`
-    - [ ] `send_key`
-    - [ ] `send_mouse`
+    - [x] `focus_window`
+    - [x] `send_key`
+    - [x] `send_mouse`
   - [ ] P1.2 TypeScript Core
     - [ ] `services/perception`
     - [ ] `services/orchestrator`

@@ -15,7 +15,13 @@ import { useRuntime, useCharacter } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { getServices } from "@/services";
 import { type AppConfig, DEFAULT_CONFIG, loadConfig, updateConfig, getConfig } from "@/services/config";
-import { captureWindow, listWindows } from "@/services/system";
+import {
+	captureWindow,
+	focusWindow,
+	listWindows,
+	sendHostKey,
+	sendHostMouse,
+} from "@/services/system";
 import { mockVoicePipeline, MOCK_CHARACTER_PROFILE } from "@/utils/mock";
 import type { CharacterProfile, HostWindowCapture, HostWindowInfo } from "@/types";
 import { createLogger } from "@/services/logger";
@@ -122,6 +128,11 @@ export function ControlPanel() {
 	const [capturePreview, setCapturePreview] = useState<HostWindowCapture | null>(null);
 	const [capturePreviewTitle, setCapturePreviewTitle] = useState("");
 	const [captureError, setCaptureError] = useState<string | null>(null);
+	const [selectedWindowHandle, setSelectedWindowHandle] = useState<string | null>(null);
+	const [selectedWindowTitle, setSelectedWindowTitle] = useState("");
+	const [manualKey, setManualKey] = useState("Enter");
+	const [hostActionLoading, setHostActionLoading] = useState<string | null>(null);
+	const [hostActionError, setHostActionError] = useState<string | null>(null);
 
 	const handleMicTest = async () => {
 		try {
@@ -151,6 +162,7 @@ export function ControlPanel() {
 		setWindowsLoading(true);
 		setWindowListError(null);
 		setCaptureError(null);
+		setHostActionError(null);
 
 		try {
 			const result = await listWindows();
@@ -171,6 +183,28 @@ export function ControlPanel() {
 		}
 	}, []);
 
+	const selectWindowTarget = useCallback((windowInfo: HostWindowInfo) => {
+		setSelectedWindowHandle(windowInfo.handle);
+		setSelectedWindowTitle(windowInfo.title);
+		setHostActionError(null);
+	}, []);
+
+	const handleFocusWindow = useCallback(async (windowInfo: HostWindowInfo) => {
+		setHostActionLoading(`focus:${windowInfo.handle}`);
+		setHostActionError(null);
+
+		try {
+			await focusWindow(windowInfo.handle);
+			selectWindowTarget(windowInfo);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			setHostActionError(message);
+			log.error("failed to focus window", err);
+		} finally {
+			setHostActionLoading(null);
+		}
+	}, [selectWindowTarget]);
+
 	const handleCaptureWindow = useCallback(async (windowInfo: HostWindowInfo) => {
 		setCaptureLoadingHandle(windowInfo.handle);
 		setCaptureError(null);
@@ -179,6 +213,7 @@ export function ControlPanel() {
 			const capture = await captureWindow(windowInfo.handle);
 			setCapturePreview(capture);
 			setCapturePreviewTitle(windowInfo.title);
+			selectWindowTarget(windowInfo);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			setCaptureError(message);
@@ -186,7 +221,41 @@ export function ControlPanel() {
 		} finally {
 			setCaptureLoadingHandle(null);
 		}
-	}, []);
+	}, [selectWindowTarget]);
+
+	const handleSendKey = useCallback(async (key: string) => {
+		if (!selectedWindowHandle) return;
+
+		setHostActionLoading(`key:${key}`);
+		setHostActionError(null);
+
+		try {
+			await sendHostKey(selectedWindowHandle, key);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			setHostActionError(message);
+			log.error("failed to send key", err);
+		} finally {
+			setHostActionLoading(null);
+		}
+	}, [selectedWindowHandle]);
+
+	const handleMouseClickCenter = useCallback(async () => {
+		if (!selectedWindowHandle) return;
+
+		setHostActionLoading("mouse:center-click");
+		setHostActionError(null);
+
+		try {
+			await sendHostMouse(selectedWindowHandle, { action: "click", button: "left" });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			setHostActionError(message);
+			log.error("failed to send mouse", err);
+		} finally {
+			setHostActionLoading(null);
+		}
+	}, [selectedWindowHandle]);
 
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
@@ -401,6 +470,12 @@ export function ControlPanel() {
 					</Alert>
 				)}
 
+				{hostActionError && (
+					<Alert severity="error" sx={{ mt: 0.75, py: 0 }}>
+						{hostActionError}
+					</Alert>
+				)}
+
 				{windowList.length > 0 && (
 					<Box sx={{ mt: 0.75, maxHeight: 180, overflowY: "auto", pr: 0.5 }}>
 						<Stack spacing={0.5}>
@@ -421,7 +496,24 @@ export function ControlPanel() {
 									<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
 										PID {windowInfo.processId} · {windowInfo.className} · {windowInfo.visible ? "visible" : "hidden"} · {windowInfo.minimized ? "minimized" : "normal"}
 									</Typography>
-									<Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.5 }}>
+									<Stack direction="row" justifyContent="flex-end" spacing={0.25} sx={{ mt: 0.5, flexWrap: "wrap" }}>
+										<Button
+											size="small"
+											variant={selectedWindowHandle === windowInfo.handle ? "contained" : "text"}
+											onClick={() => selectWindowTarget(windowInfo)}
+											sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
+										>
+											目标
+										</Button>
+										<Button
+											size="small"
+											variant="text"
+											onClick={() => handleFocusWindow(windowInfo)}
+											disabled={hostActionLoading === `focus:${windowInfo.handle}`}
+											sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
+										>
+											{hostActionLoading === `focus:${windowInfo.handle}` ? "聚焦中..." : "聚焦"}
+										</Button>
 										<Button
 											size="small"
 											variant="text"
@@ -438,11 +530,11 @@ export function ControlPanel() {
 					</Box>
 				)}
 
-				{captureLoadingHandle && (
+				{(captureLoadingHandle || hostActionLoading) && (
 					<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.75 }}>
 						<CircularProgress size={12} />
 						<Typography variant="caption" color="text.secondary">
-							正在抓取窗口图像...
+							{captureLoadingHandle ? "正在抓取窗口图像..." : "正在发送宿主操作..."}
 						</Typography>
 					</Stack>
 				)}
@@ -466,6 +558,58 @@ export function ControlPanel() {
 								borderColor: "divider",
 							}}
 						/>
+					</Box>
+				)}
+
+				{selectedWindowHandle && (
+					<Box sx={{ mt: 0.75, p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+							当前目标：{selectedWindowTitle || selectedWindowHandle}
+						</Typography>
+						<Stack direction="row" spacing={0.5} sx={{ mb: 0.5, flexWrap: "wrap" }}>
+							<Button size="small" variant="outlined" onClick={() => handleFocusWindow({
+								handle: selectedWindowHandle,
+								title: selectedWindowTitle,
+								className: "",
+								processId: 0,
+								visible: true,
+								minimized: false,
+							})}>
+								聚焦目标
+							</Button>
+							<Button size="small" variant="outlined" onClick={handleMouseClickCenter}>
+								点击中心
+							</Button>
+							<Button size="small" variant="outlined" onClick={() => handleSendKey("Enter")}>
+								发送 Enter
+							</Button>
+							<Button size="small" variant="outlined" onClick={() => handleSendKey("Space")}>
+								发送 Space
+							</Button>
+						</Stack>
+						<Stack direction="row" spacing={0.5} sx={{ mb: 0.5, flexWrap: "wrap" }}>
+							<Button size="small" variant="text" onClick={() => handleSendKey("Up")}>Up</Button>
+							<Button size="small" variant="text" onClick={() => handleSendKey("Down")}>Down</Button>
+							<Button size="small" variant="text" onClick={() => handleSendKey("Left")}>Left</Button>
+							<Button size="small" variant="text" onClick={() => handleSendKey("Right")}>Right</Button>
+						</Stack>
+						<Stack direction="row" spacing={0.5}>
+							<TextField
+								size="small"
+								fullWidth
+								value={manualKey}
+								onChange={(e) => setManualKey(e.target.value)}
+								placeholder="输入单键或命名键，如 Enter / Up / a"
+							/>
+							<Button
+								size="small"
+								variant="contained"
+								onClick={() => handleSendKey(manualKey.trim())}
+								disabled={!manualKey.trim()}
+							>
+								发送
+							</Button>
+						</Stack>
 					</Box>
 				)}
 			</Box>
