@@ -2525,7 +2525,9 @@ dependencies = [
 name = "paimon-companion-tauri"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "futures-util",
+ "png",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

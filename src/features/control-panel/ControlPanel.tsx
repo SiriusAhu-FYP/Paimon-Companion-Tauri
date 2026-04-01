@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
 	Box, Button, Typography, Stack, Chip, Divider,
 	Select, MenuItem, TextField,
+	CircularProgress,
 	Alert,
 	type SelectChangeEvent,
 } from "@mui/material";
@@ -14,9 +15,9 @@ import { useRuntime, useCharacter } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { getServices } from "@/services";
 import { type AppConfig, DEFAULT_CONFIG, loadConfig, updateConfig, getConfig } from "@/services/config";
-import { listWindows } from "@/services/system";
+import { captureWindow, listWindows } from "@/services/system";
 import { mockVoicePipeline, MOCK_CHARACTER_PROFILE } from "@/utils/mock";
-import type { CharacterProfile, HostWindowInfo } from "@/types";
+import type { CharacterProfile, HostWindowCapture, HostWindowInfo } from "@/types";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("control-panel");
@@ -117,6 +118,10 @@ export function ControlPanel() {
 	const [windowsLoading, setWindowsLoading] = useState(false);
 	const [windowList, setWindowList] = useState<HostWindowInfo[]>([]);
 	const [windowListError, setWindowListError] = useState<string | null>(null);
+	const [captureLoadingHandle, setCaptureLoadingHandle] = useState<string | null>(null);
+	const [capturePreview, setCapturePreview] = useState<HostWindowCapture | null>(null);
+	const [capturePreviewTitle, setCapturePreviewTitle] = useState("");
+	const [captureError, setCaptureError] = useState<string | null>(null);
 
 	const handleMicTest = async () => {
 		try {
@@ -145,6 +150,7 @@ export function ControlPanel() {
 	const handleListWindows = useCallback(async () => {
 		setWindowsLoading(true);
 		setWindowListError(null);
+		setCaptureError(null);
 
 		try {
 			const result = await listWindows();
@@ -162,6 +168,23 @@ export function ControlPanel() {
 			log.error("failed to list desktop windows", err);
 		} finally {
 			setWindowsLoading(false);
+		}
+	}, []);
+
+	const handleCaptureWindow = useCallback(async (windowInfo: HostWindowInfo) => {
+		setCaptureLoadingHandle(windowInfo.handle);
+		setCaptureError(null);
+
+		try {
+			const capture = await captureWindow(windowInfo.handle);
+			setCapturePreview(capture);
+			setCapturePreviewTitle(windowInfo.title);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			setCaptureError(message);
+			log.error("failed to capture window", err);
+		} finally {
+			setCaptureLoadingHandle(null);
 		}
 	}, []);
 
@@ -372,6 +395,12 @@ export function ControlPanel() {
 					</Alert>
 				)}
 
+				{captureError && (
+					<Alert severity="error" sx={{ mt: 0.75, py: 0 }}>
+						{captureError}
+					</Alert>
+				)}
+
 				{windowList.length > 0 && (
 					<Box sx={{ mt: 0.75, maxHeight: 180, overflowY: "auto", pr: 0.5 }}>
 						<Stack spacing={0.5}>
@@ -392,9 +421,51 @@ export function ControlPanel() {
 									<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
 										PID {windowInfo.processId} · {windowInfo.className} · {windowInfo.visible ? "visible" : "hidden"} · {windowInfo.minimized ? "minimized" : "normal"}
 									</Typography>
+									<Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.5 }}>
+										<Button
+											size="small"
+											variant="text"
+											onClick={() => handleCaptureWindow(windowInfo)}
+											disabled={captureLoadingHandle === windowInfo.handle}
+											sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
+										>
+											{captureLoadingHandle === windowInfo.handle ? "截图中..." : "截图"}
+										</Button>
+									</Stack>
 								</Box>
 							))}
 						</Stack>
+					</Box>
+				)}
+
+				{captureLoadingHandle && (
+					<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.75 }}>
+						<CircularProgress size={12} />
+						<Typography variant="caption" color="text.secondary">
+							正在抓取窗口图像...
+						</Typography>
+					</Stack>
+				)}
+
+				{capturePreview && (
+					<Box sx={{ mt: 0.75 }}>
+						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+							截图预览：{capturePreviewTitle} · {capturePreview.width}x{capturePreview.height}
+						</Typography>
+						<Box
+							component="img"
+							src={`data:image/png;base64,${capturePreview.pngBase64}`}
+							alt={capturePreviewTitle || "window capture"}
+							sx={{
+								width: "100%",
+								maxHeight: 180,
+								objectFit: "contain",
+								bgcolor: "background.paper",
+								borderRadius: 1,
+								border: "1px solid",
+								borderColor: "divider",
+							}}
+						/>
 					</Box>
 				)}
 			</Box>
