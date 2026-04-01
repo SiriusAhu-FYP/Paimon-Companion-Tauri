@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
 	Box, Button, Typography, Stack, Chip, Divider,
 	Select, MenuItem, TextField,
+	Alert,
 	type SelectChangeEvent,
 } from "@mui/material";
 import StopIcon from "@mui/icons-material/Stop";
@@ -13,8 +14,9 @@ import { useRuntime, useCharacter } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { getServices } from "@/services";
 import { type AppConfig, DEFAULT_CONFIG, loadConfig, updateConfig, getConfig } from "@/services/config";
+import { listWindows } from "@/services/system";
 import { mockVoicePipeline, MOCK_CHARACTER_PROFILE } from "@/utils/mock";
-import type { CharacterProfile } from "@/types";
+import type { CharacterProfile, HostWindowInfo } from "@/types";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("control-panel");
@@ -112,6 +114,10 @@ export function ControlPanel() {
 	};
 
 	const [micStatus, setMicStatus] = useState<"idle" | "ok" | "denied" | "error">("idle");
+	const [windowsLoading, setWindowsLoading] = useState(false);
+	const [windowList, setWindowList] = useState<HostWindowInfo[]>([]);
+	const [windowListError, setWindowListError] = useState<string | null>(null);
+
 	const handleMicTest = async () => {
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -135,6 +141,29 @@ export function ControlPanel() {
 			setMicStatus(msg.includes("denied") || msg.includes("NotAllowed") ? "denied" : "error");
 		}
 	};
+
+	const handleListWindows = useCallback(async () => {
+		setWindowsLoading(true);
+		setWindowListError(null);
+
+		try {
+			const result = await listWindows();
+			setWindowList(result);
+			log.info("desktop windows refreshed", {
+				count: result.length,
+				top: result.slice(0, 5).map((windowInfo) => ({
+					title: windowInfo.title,
+					processId: windowInfo.processId,
+				})),
+			});
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			setWindowListError(message);
+			log.error("failed to list desktop windows", err);
+		} finally {
+			setWindowsLoading(false);
+		}
+	}, []);
 
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
@@ -327,6 +356,47 @@ export function ControlPanel() {
 					{micStatus === "denied" && <CancelIcon color="error" sx={{ fontSize: 14 }} />}
 					{micStatus === "error" && <CancelIcon color="error" sx={{ fontSize: 14 }} />}
 				</Stack>
+
+				<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.75 }}>
+					<Button variant="outlined" size="small" onClick={handleListWindows} disabled={windowsLoading}>
+						{windowsLoading ? "枚举中..." : "枚举窗口"}
+					</Button>
+					<Typography variant="caption" color="text.secondary">
+						{windowList.length > 0 ? `${windowList.length} 个窗口` : "尚未获取窗口列表"}
+					</Typography>
+				</Stack>
+
+				{windowListError && (
+					<Alert severity="error" sx={{ mt: 0.75, py: 0 }}>
+						{windowListError}
+					</Alert>
+				)}
+
+				{windowList.length > 0 && (
+					<Box sx={{ mt: 0.75, maxHeight: 180, overflowY: "auto", pr: 0.5 }}>
+						<Stack spacing={0.5}>
+							{windowList.slice(0, 12).map((windowInfo) => (
+								<Box
+									key={windowInfo.handle}
+									sx={{
+										bgcolor: "background.paper",
+										borderRadius: 1,
+										p: 0.75,
+										border: "1px solid",
+										borderColor: "divider",
+									}}
+								>
+									<Typography variant="caption" sx={{ display: "block", color: "text.primary" }}>
+										{windowInfo.title}
+									</Typography>
+									<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
+										PID {windowInfo.processId} · {windowInfo.className} · {windowInfo.visible ? "visible" : "hidden"} · {windowInfo.minimized ? "minimized" : "normal"}
+									</Typography>
+								</Box>
+							))}
+						</Stack>
+					</Box>
+				)}
 			</Box>
 
 			<Divider />
