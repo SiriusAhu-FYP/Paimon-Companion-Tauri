@@ -16,6 +16,7 @@ pub fn run() {
 			commands::http_proxy::proxy_http_request,
 			commands::http_proxy::proxy_binary_request,
 			commands::http_proxy::proxy_sse_request,
+			commands::window::list_windows,
 		])
 		.on_window_event(|window, event| {
 			if let tauri::WindowEvent::CloseRequested { .. } = event {
