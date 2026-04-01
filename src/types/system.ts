@@ -6,3 +6,10 @@ export interface HostWindowInfo {
 	visible: boolean;
 	minimized: boolean;
 }
+
+export interface HostWindowCapture {
+	handle: string;
+	width: number;
+	height: number;
+	pngBase64: string;
+}

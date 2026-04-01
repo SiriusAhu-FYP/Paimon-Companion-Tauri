@@ -1,1 +1,1 @@
-export { listWindows } from "./system-service";
+export { captureWindow, listWindows } from "./system-service";

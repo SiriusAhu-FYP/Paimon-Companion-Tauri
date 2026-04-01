@@ -20,7 +20,7 @@ Public progress tracker for `paimon-companion-tauri`.
 - [ ] P1: Functional Core Validation
   - [ ] P1.1 Host OS Primitives
     - [x] `list_windows`
-    - [ ] `capture_window`
+    - [x] `capture_window`
     - [ ] `focus_window`
     - [ ] `send_key`
     - [ ] `send_mouse`
