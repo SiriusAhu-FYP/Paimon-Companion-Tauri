@@ -1,7 +1,7 @@
 import { Box, Typography, IconButton, Tooltip, Chip, Stack } from "@mui/material";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import type { StageDisplayMode } from "@/utils/window-sync";
-import { useRuntime, useCharacter } from "@/hooks";
+import { useRuntime, useCharacter, useFunctional } from "@/hooks";
 
 interface StatusBarProps {
 	stageVisible: boolean;
@@ -20,6 +20,7 @@ export function StatusBar({
 }: StatusBarProps) {
 	const { mode } = useRuntime();
 	const { emotion, isSpeaking } = useCharacter();
+	const { state: functionalState } = useFunctional();
 
 	return (
 		<Box sx={{
@@ -84,6 +85,21 @@ export function StatusBar({
 
 			{/* 右侧弹性空间 */}
 			<Box sx={{ flex: 1 }} />
+
+			{functionalState.selectedTarget && (
+				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+					Target: {functionalState.selectedTarget.title}
+				</Typography>
+			)}
+
+			{functionalState.activeTaskId && (
+				<Chip
+					label="Functional Task Running"
+					size="small"
+					color="warning"
+					sx={{ height: 18, fontSize: 10, "& .MuiChip-label": { px: 0.75 } }}
+				/>
+			)}
 
 			{/* 事件日志开关 */}
 			<Tooltip title={eventLogOpen ? "关闭事件日志" : "打开事件日志"}>

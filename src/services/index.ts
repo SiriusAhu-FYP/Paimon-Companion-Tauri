@@ -2,6 +2,9 @@ import { EventBus, eventBus } from "./event-bus";
 import { RuntimeService } from "./runtime";
 import { CharacterService } from "./character";
 import { KnowledgeService, OpenAIEmbeddingService, CompatibleRerankService } from "./knowledge";
+import { PerceptionService } from "./perception";
+import { SafetyService } from "./safety";
+import { OrchestratorService } from "./orchestrator";
 import { LLMService, MockLLMService, OpenAILLMService } from "./llm";
 import type { ILLMService } from "./llm/types";
 import { MockTTSService, GptSovitsTTSService } from "./tts";
@@ -19,6 +22,9 @@ export interface ServiceContainer {
 	runtime: RuntimeService;
 	character: CharacterService;
 	knowledge: KnowledgeService;
+	perception: PerceptionService;
+	safety: SafetyService;
+	orchestrator: OrchestratorService;
 	llm: LLMService;
 	player: AudioPlayer;
 	pipeline: PipelineService;
@@ -106,6 +112,13 @@ export function initServices(): ServiceContainer {
 	const runtime = new RuntimeService(eventBus);
 	const character = new CharacterService(eventBus);
 	const knowledge = new KnowledgeService(eventBus);
+	const perception = new PerceptionService(eventBus);
+	const safety = new SafetyService(eventBus, runtime);
+	const orchestrator = new OrchestratorService({
+		bus: eventBus,
+		safety,
+		perception,
+	});
 
 	// Phase 3.5: 初始化 Embedding Service + Rerank Service + Knowledge
 	const embProfile = resolveEmbeddingProfile(config);
@@ -147,6 +160,9 @@ export function initServices(): ServiceContainer {
 		runtime,
 		character,
 		knowledge,
+		perception,
+		safety,
+		orchestrator,
 		llm,
 		player,
 		pipeline,
