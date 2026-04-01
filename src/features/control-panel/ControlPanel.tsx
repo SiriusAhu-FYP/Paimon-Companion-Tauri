@@ -11,19 +11,13 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import MicIcon from "@mui/icons-material/Mic";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
-import { useRuntime, useCharacter } from "@/hooks";
+import { useRuntime, useCharacter, useFunctional } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { getServices } from "@/services";
 import { type AppConfig, DEFAULT_CONFIG, loadConfig, updateConfig, getConfig } from "@/services/config";
-import {
-	captureWindow,
-	focusWindow,
-	listWindows,
-	sendHostKey,
-	sendHostMouse,
-} from "@/services/system";
+import { listWindows } from "@/services/system";
 import { mockVoicePipeline, MOCK_CHARACTER_PROFILE } from "@/utils/mock";
-import type { CharacterProfile, HostWindowCapture, HostWindowInfo } from "@/types";
+import type { CharacterProfile, HostWindowInfo } from "@/types";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("control-panel");
@@ -31,6 +25,15 @@ const log = createLogger("control-panel");
 export function ControlPanel() {
 	const { mode, stop, resume } = useRuntime();
 	const { emotion, isSpeaking } = useCharacter();
+	const {
+		state: functionalState,
+		setTarget,
+		clearHistory,
+		runCapture,
+		runFocus,
+		runKey,
+		runMouse,
+	} = useFunctional();
 
 	// ── 角色切换 ──
 	const [profiles, setProfiles] = useState<CharacterProfile[]>([]);
@@ -124,15 +127,11 @@ export function ControlPanel() {
 	const [windowsLoading, setWindowsLoading] = useState(false);
 	const [windowList, setWindowList] = useState<HostWindowInfo[]>([]);
 	const [windowListError, setWindowListError] = useState<string | null>(null);
-	const [captureLoadingHandle, setCaptureLoadingHandle] = useState<string | null>(null);
-	const [capturePreview, setCapturePreview] = useState<HostWindowCapture | null>(null);
-	const [capturePreviewTitle, setCapturePreviewTitle] = useState("");
-	const [captureError, setCaptureError] = useState<string | null>(null);
-	const [selectedWindowHandle, setSelectedWindowHandle] = useState<string | null>(null);
-	const [selectedWindowTitle, setSelectedWindowTitle] = useState("");
 	const [manualKey, setManualKey] = useState("Enter");
-	const [hostActionLoading, setHostActionLoading] = useState<string | null>(null);
-	const [hostActionError, setHostActionError] = useState<string | null>(null);
+
+	const functionalError =
+		functionalState.safetyBlockedReason
+		?? (functionalState.latestTask?.status === "failed" ? functionalState.latestTask.error : null);
 
 	const handleMicTest = async () => {
 		try {
@@ -161,8 +160,6 @@ export function ControlPanel() {
 	const handleListWindows = useCallback(async () => {
 		setWindowsLoading(true);
 		setWindowListError(null);
-		setCaptureError(null);
-		setHostActionError(null);
 
 		try {
 			const result = await listWindows();
@@ -184,78 +181,54 @@ export function ControlPanel() {
 	}, []);
 
 	const selectWindowTarget = useCallback((windowInfo: HostWindowInfo) => {
-		setSelectedWindowHandle(windowInfo.handle);
-		setSelectedWindowTitle(windowInfo.title);
-		setHostActionError(null);
-	}, []);
+		setTarget({ handle: windowInfo.handle, title: windowInfo.title });
+		log.info("selected functional target", {
+			handle: windowInfo.handle,
+			title: windowInfo.title,
+		});
+	}, [setTarget]);
 
 	const handleFocusWindow = useCallback(async (windowInfo: HostWindowInfo) => {
-		setHostActionLoading(`focus:${windowInfo.handle}`);
-		setHostActionError(null);
+		const target = { handle: windowInfo.handle, title: windowInfo.title };
+		setTarget(target);
 
 		try {
-			await focusWindow(windowInfo.handle);
-			selectWindowTarget(windowInfo);
+			await runFocus(target);
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			setHostActionError(message);
 			log.error("failed to focus window", err);
-		} finally {
-			setHostActionLoading(null);
 		}
-	}, [selectWindowTarget]);
+	}, [runFocus, setTarget]);
 
 	const handleCaptureWindow = useCallback(async (windowInfo: HostWindowInfo) => {
-		setCaptureLoadingHandle(windowInfo.handle);
-		setCaptureError(null);
+		const target = { handle: windowInfo.handle, title: windowInfo.title };
+		setTarget(target);
 
 		try {
-			const capture = await captureWindow(windowInfo.handle);
-			setCapturePreview(capture);
-			setCapturePreviewTitle(windowInfo.title);
-			selectWindowTarget(windowInfo);
+			await runCapture(target);
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			setCaptureError(message);
 			log.error("failed to capture window", err);
-		} finally {
-			setCaptureLoadingHandle(null);
 		}
-	}, [selectWindowTarget]);
+	}, [runCapture, setTarget]);
 
 	const handleSendKey = useCallback(async (key: string) => {
-		if (!selectedWindowHandle) return;
-
-		setHostActionLoading(`key:${key}`);
-		setHostActionError(null);
+		if (!functionalState.selectedTarget || !key.trim()) return;
 
 		try {
-			await sendHostKey(selectedWindowHandle, key);
+			await runKey(key.trim(), functionalState.selectedTarget);
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			setHostActionError(message);
 			log.error("failed to send key", err);
-		} finally {
-			setHostActionLoading(null);
 		}
-	}, [selectedWindowHandle]);
+	}, [functionalState.selectedTarget, runKey]);
 
 	const handleMouseClickCenter = useCallback(async () => {
-		if (!selectedWindowHandle) return;
-
-		setHostActionLoading("mouse:center-click");
-		setHostActionError(null);
+		if (!functionalState.selectedTarget) return;
 
 		try {
-			await sendHostMouse(selectedWindowHandle, { action: "click", button: "left" });
+			await runMouse({ action: "click", button: "left" }, functionalState.selectedTarget);
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			setHostActionError(message);
 			log.error("failed to send mouse", err);
-		} finally {
-			setHostActionLoading(null);
 		}
-	}, [selectedWindowHandle]);
+	}, [functionalState.selectedTarget, runMouse]);
 
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
@@ -311,84 +284,84 @@ export function ControlPanel() {
 						<MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
 					))}
 				</Select>
-			<Typography variant="body2">情绪：{emotion}</Typography>
-			<Typography variant="body2">说话中：{isSpeaking ? "是" : "否"}</Typography>
-		</Box>
+				<Typography variant="body2">情绪：{emotion}</Typography>
+				<Typography variant="body2">说话中：{isSpeaking ? "是" : "否"}</Typography>
+			</Box>
 
-		<Divider />
+			<Divider />
 
-		{/* 角色设置 */}
-		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-			<Stack direction="row" alignItems="center" spacing={0.5}>
-				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ fontSize: 11 }}>自定义人设</Typography>
-				<HelpTooltip title="仅在未选择角色卡时生效，优先级最低。角色卡内设定 > 自定义人设。" />
-			</Stack>
-			<TextField
-				size="small" fullWidth multiline minRows={3} maxRows={6}
-				value={config.character.customPersona}
-				onChange={(e) => updateCharacter({ customPersona: e.target.value })}
-				onBlur={() => updateConfig({ character: { ...config.character } })}
-			/>
-		</Box>
+			{/* 角色设置 */}
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+				<Stack direction="row" alignItems="center" spacing={0.5}>
+					<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ fontSize: 11 }}>自定义人设</Typography>
+					<HelpTooltip title="仅在未选择角色卡时生效，优先级最低。角色卡内设定 > 自定义人设。" />
+				</Stack>
+				<TextField
+					size="small" fullWidth multiline minRows={3} maxRows={6}
+					value={config.character.customPersona}
+					onChange={(e) => updateCharacter({ customPersona: e.target.value })}
+					onBlur={() => updateConfig({ character: { ...config.character } })}
+				/>
+			</Box>
 
-		<Divider />
+			<Divider />
 
-		{/* 输出行为约束 */}
-		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
-			<Stack direction="row" alignItems="center" spacing={0.5}>
-				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ fontSize: 11 }}>输出行为约束</Typography>
-				<HelpTooltip title="在 system prompt 最前面注入行为规则，优先级高于角色卡设定。约束回复格式与风格，不覆盖角色个性。" />
-			</Stack>
-			<Stack direction="row" spacing={1} alignItems="center">
-				<Typography variant="caption" sx={{ fontSize: 11 }}>启用约束</Typography>
-				<Button size="small"
-					variant={config.character.behaviorConstraints.enabled ? "contained" : "outlined"}
-					color={config.character.behaviorConstraints.enabled ? "primary" : "inherit"}
-					onClick={() => {
-						const next = !config.character.behaviorConstraints.enabled;
-						setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, enabled: next } } }));
-						updateConfig({ character: { ...config.character, behaviorConstraints: { ...config.character.behaviorConstraints, enabled: next } } });
-					}}
-					sx={{ minWidth: 60, fontSize: 11 }}>
-					{config.character.behaviorConstraints.enabled ? "已启用" : "未启用"}
-				</Button>
-			</Stack>
-			{config.character.behaviorConstraints.enabled && (
-				<>
-					<Stack direction="row" alignItems="center" spacing={0.5}>
-						<Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>最大回复字数</Typography>
-						<HelpTooltip title="LLM 单次回复的建议字数上限。实际输出可能略有浮动。" />
-					</Stack>
-					<TextField
-						size="small" type="number" sx={{ width: 120 }}
-						value={config.character.behaviorConstraints.maxReplyLength}
-						onChange={(e) => {
-							const v = Math.max(20, Math.min(500, Number(e.target.value) || 150));
-							setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, maxReplyLength: v } } }));
+			{/* 输出行为约束 */}
+			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+				<Stack direction="row" alignItems="center" spacing={0.5}>
+					<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ fontSize: 11 }}>输出行为约束</Typography>
+					<HelpTooltip title="在 system prompt 最前面注入行为规则，优先级高于角色卡设定。约束回复格式与风格，不覆盖角色个性。" />
+				</Stack>
+				<Stack direction="row" spacing={1} alignItems="center">
+					<Typography variant="caption" sx={{ fontSize: 11 }}>启用约束</Typography>
+					<Button size="small"
+						variant={config.character.behaviorConstraints.enabled ? "contained" : "outlined"}
+						color={config.character.behaviorConstraints.enabled ? "primary" : "inherit"}
+						onClick={() => {
+							const next = !config.character.behaviorConstraints.enabled;
+							setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, enabled: next } } }));
+							updateConfig({ character: { ...config.character, behaviorConstraints: { ...config.character.behaviorConstraints, enabled: next } } });
 						}}
-						onBlur={() => updateConfig({ character: { ...config.character } })}
-						inputProps={{ min: 20, max: 500, step: 10 }}
-					/>
-					<Stack direction="row" alignItems="center" spacing={0.5}>
-						<Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>自定义追加规则</Typography>
-						<HelpTooltip title="追加的自定义行为约束文本，会拼入约束段落末尾。" />
-					</Stack>
-					<TextField
-						size="small" fullWidth multiline minRows={2} maxRows={4}
-						placeholder="例：每句话结尾加上「哦」"
-						value={config.character.behaviorConstraints.customRules}
-						onChange={(e) => {
-							setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, customRules: e.target.value } } }));
-						}}
-						onBlur={() => updateConfig({ character: { ...config.character } })}
-					/>
-				</>
-			)}
-		</Box>
+						sx={{ minWidth: 60, fontSize: 11 }}>
+						{config.character.behaviorConstraints.enabled ? "已启用" : "未启用"}
+					</Button>
+				</Stack>
+				{config.character.behaviorConstraints.enabled && (
+					<>
+						<Stack direction="row" alignItems="center" spacing={0.5}>
+							<Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>最大回复字数</Typography>
+							<HelpTooltip title="LLM 单次回复的建议字数上限。实际输出可能略有浮动。" />
+						</Stack>
+						<TextField
+							size="small" type="number" sx={{ width: 120 }}
+							value={config.character.behaviorConstraints.maxReplyLength}
+							onChange={(e) => {
+								const v = Math.max(20, Math.min(500, Number(e.target.value) || 150));
+								setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, maxReplyLength: v } } }));
+							}}
+							onBlur={() => updateConfig({ character: { ...config.character } })}
+							inputProps={{ min: 20, max: 500, step: 10 }}
+						/>
+						<Stack direction="row" alignItems="center" spacing={0.5}>
+							<Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>自定义追加规则</Typography>
+							<HelpTooltip title="追加的自定义行为约束文本，会拼入约束段落末尾。" />
+						</Stack>
+						<TextField
+							size="small" fullWidth multiline minRows={2} maxRows={4}
+							placeholder="例：每句话结尾加上「哦」"
+							value={config.character.behaviorConstraints.customRules}
+							onChange={(e) => {
+								setConfig((c) => ({ ...c, character: { ...c.character, behaviorConstraints: { ...c.character.behaviorConstraints, customRules: e.target.value } } }));
+							}}
+							onBlur={() => updateConfig({ character: { ...config.character } })}
+						/>
+					</>
+				)}
+			</Box>
 
-		<Divider />
+			<Divider />
 
-		{/* 上下文注入 */}
+			{/* 上下文注入 */}
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
 					<Typography variant="caption" color="text.secondary" fontWeight={600}>上下文注入</Typography>
@@ -464,15 +437,9 @@ export function ControlPanel() {
 					</Alert>
 				)}
 
-				{captureError && (
+				{functionalError && (
 					<Alert severity="error" sx={{ mt: 0.75, py: 0 }}>
-						{captureError}
-					</Alert>
-				)}
-
-				{hostActionError && (
-					<Alert severity="error" sx={{ mt: 0.75, py: 0 }}>
-						{hostActionError}
+						{functionalError}
 					</Alert>
 				)}
 
@@ -499,7 +466,7 @@ export function ControlPanel() {
 									<Stack direction="row" justifyContent="flex-end" spacing={0.25} sx={{ mt: 0.5, flexWrap: "wrap" }}>
 										<Button
 											size="small"
-											variant={selectedWindowHandle === windowInfo.handle ? "contained" : "text"}
+											variant={functionalState.selectedTarget?.handle === windowInfo.handle ? "contained" : "text"}
 											onClick={() => selectWindowTarget(windowInfo)}
 											sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
 										>
@@ -509,19 +476,19 @@ export function ControlPanel() {
 											size="small"
 											variant="text"
 											onClick={() => handleFocusWindow(windowInfo)}
-											disabled={hostActionLoading === `focus:${windowInfo.handle}`}
+											disabled={functionalState.activeTaskId !== null}
 											sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
 										>
-											{hostActionLoading === `focus:${windowInfo.handle}` ? "聚焦中..." : "聚焦"}
+											聚焦
 										</Button>
 										<Button
 											size="small"
 											variant="text"
 											onClick={() => handleCaptureWindow(windowInfo)}
-											disabled={captureLoadingHandle === windowInfo.handle}
+											disabled={functionalState.activeTaskId !== null}
 											sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
 										>
-											{captureLoadingHandle === windowInfo.handle ? "截图中..." : "截图"}
+											截图
 										</Button>
 									</Stack>
 								</Box>
@@ -530,24 +497,24 @@ export function ControlPanel() {
 					</Box>
 				)}
 
-				{(captureLoadingHandle || hostActionLoading) && (
+				{functionalState.activeTaskId && (
 					<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.75 }}>
 						<CircularProgress size={12} />
 						<Typography variant="caption" color="text.secondary">
-							{captureLoadingHandle ? "正在抓取窗口图像..." : "正在发送宿主操作..."}
+							正在执行：{functionalState.latestTask?.name ?? "功能任务"}
 						</Typography>
 					</Stack>
 				)}
 
-				{capturePreview && (
+				{functionalState.latestSnapshot && (
 					<Box sx={{ mt: 0.75 }}>
 						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-							截图预览：{capturePreviewTitle} · {capturePreview.width}x{capturePreview.height}
+							截图预览：{functionalState.latestSnapshot.targetTitle} · {functionalState.latestSnapshot.width}x{functionalState.latestSnapshot.height}
 						</Typography>
 						<Box
 							component="img"
-							src={`data:image/png;base64,${capturePreview.pngBase64}`}
-							alt={capturePreviewTitle || "window capture"}
+							src={functionalState.latestSnapshot.dataUrl}
+							alt={functionalState.latestSnapshot.targetTitle || "window capture"}
 							sx={{
 								width: "100%",
 								maxHeight: 180,
@@ -561,37 +528,58 @@ export function ControlPanel() {
 					</Box>
 				)}
 
-				{selectedWindowHandle && (
+				{functionalState.selectedTarget && (
 					<Box sx={{ mt: 0.75, p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
 						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-							当前目标：{selectedWindowTitle || selectedWindowHandle}
+							当前目标：{functionalState.selectedTarget.title || functionalState.selectedTarget.handle}
 						</Typography>
 						<Stack direction="row" spacing={0.5} sx={{ mb: 0.5, flexWrap: "wrap" }}>
-							<Button size="small" variant="outlined" onClick={() => handleFocusWindow({
-								handle: selectedWindowHandle,
-								title: selectedWindowTitle,
-								className: "",
-								processId: 0,
-								visible: true,
-								minimized: false,
-							})}>
+							<Button
+								size="small"
+								variant="outlined"
+								onClick={() => runFocus(functionalState.selectedTarget ?? undefined)}
+								disabled={functionalState.activeTaskId !== null}
+							>
 								聚焦目标
 							</Button>
-							<Button size="small" variant="outlined" onClick={handleMouseClickCenter}>
+							<Button
+								size="small"
+								variant="outlined"
+								onClick={() => runCapture(functionalState.selectedTarget ?? undefined)}
+								disabled={functionalState.activeTaskId !== null}
+							>
+								截图目标
+							</Button>
+							<Button
+								size="small"
+								variant="outlined"
+								onClick={handleMouseClickCenter}
+								disabled={functionalState.activeTaskId !== null}
+							>
 								点击中心
 							</Button>
-							<Button size="small" variant="outlined" onClick={() => handleSendKey("Enter")}>
+							<Button
+								size="small"
+								variant="outlined"
+								onClick={() => handleSendKey("Enter")}
+								disabled={functionalState.activeTaskId !== null}
+							>
 								发送 Enter
 							</Button>
-							<Button size="small" variant="outlined" onClick={() => handleSendKey("Space")}>
+							<Button
+								size="small"
+								variant="outlined"
+								onClick={() => handleSendKey("Space")}
+								disabled={functionalState.activeTaskId !== null}
+							>
 								发送 Space
 							</Button>
 						</Stack>
 						<Stack direction="row" spacing={0.5} sx={{ mb: 0.5, flexWrap: "wrap" }}>
-							<Button size="small" variant="text" onClick={() => handleSendKey("Up")}>Up</Button>
-							<Button size="small" variant="text" onClick={() => handleSendKey("Down")}>Down</Button>
-							<Button size="small" variant="text" onClick={() => handleSendKey("Left")}>Left</Button>
-							<Button size="small" variant="text" onClick={() => handleSendKey("Right")}>Right</Button>
+							<Button size="small" variant="text" onClick={() => handleSendKey("Up")} disabled={functionalState.activeTaskId !== null}>Up</Button>
+							<Button size="small" variant="text" onClick={() => handleSendKey("Down")} disabled={functionalState.activeTaskId !== null}>Down</Button>
+							<Button size="small" variant="text" onClick={() => handleSendKey("Left")} disabled={functionalState.activeTaskId !== null}>Left</Button>
+							<Button size="small" variant="text" onClick={() => handleSendKey("Right")} disabled={functionalState.activeTaskId !== null}>Right</Button>
 						</Stack>
 						<Stack direction="row" spacing={0.5}>
 							<TextField
@@ -604,11 +592,74 @@ export function ControlPanel() {
 							<Button
 								size="small"
 								variant="contained"
-								onClick={() => handleSendKey(manualKey.trim())}
-								disabled={!manualKey.trim()}
+								onClick={() => handleSendKey(manualKey)}
+								disabled={!manualKey.trim() || functionalState.activeTaskId !== null}
 							>
 								发送
 							</Button>
+						</Stack>
+					</Box>
+				)}
+
+				{functionalState.latestTask && (
+					<Box sx={{ mt: 0.75, p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+						<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+							<Typography variant="caption" color="text.secondary">
+								最近任务：{functionalState.latestTask.name}
+							</Typography>
+							<Chip
+								label={functionalState.latestTask.status}
+								size="small"
+								color={functionalState.latestTask.status === "completed" ? "success" : functionalState.latestTask.status === "failed" ? "error" : "warning"}
+								sx={{ height: 18, fontSize: 10 }}
+							/>
+						</Stack>
+						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+							{functionalState.latestTask.summary}
+						</Typography>
+						{functionalState.latestTask.logs.slice(-3).map((entry) => (
+							<Typography key={`${functionalState.latestTask?.id}-${entry.timestamp}-${entry.message}`} variant="caption" sx={{ display: "block", fontSize: 10 }}>
+								[{new Date(entry.timestamp).toLocaleTimeString()}] {entry.level}: {entry.message}
+							</Typography>
+						))}
+					</Box>
+				)}
+
+				{functionalState.taskHistory.length > 0 && (
+					<Box sx={{ mt: 0.75 }}>
+						<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+							<Typography variant="caption" color="text.secondary" fontWeight={600}>
+								任务历史
+							</Typography>
+							<Button size="small" variant="text" onClick={clearHistory} sx={{ minWidth: 0, fontSize: 11 }}>
+								清空记录
+							</Button>
+						</Stack>
+						<Stack spacing={0.5}>
+							{functionalState.taskHistory.slice(0, 5).map((task) => (
+								<Box
+									key={task.id}
+									sx={{
+										bgcolor: "background.paper",
+										borderRadius: 1,
+										p: 0.75,
+										border: "1px solid",
+										borderColor: "divider",
+									}}
+								>
+									<Stack direction="row" justifyContent="space-between" alignItems="center">
+										<Typography variant="caption" sx={{ color: "text.primary" }}>
+											{task.name}
+										</Typography>
+										<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+											{new Date(task.startedAt).toLocaleTimeString()}
+										</Typography>
+									</Stack>
+									<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
+										{task.summary}
+									</Typography>
+								</Box>
+							))}
 						</Stack>
 					</Box>
 				)}

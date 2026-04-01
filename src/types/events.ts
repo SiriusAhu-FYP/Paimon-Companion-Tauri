@@ -2,6 +2,11 @@
 // 所有通过 EventBus 发布/订阅的事件在此定义载荷类型
 
 import type { RuntimeMode } from "./runtime";
+import type {
+	FunctionalActionKind,
+	FunctionalLogLevel,
+	FunctionalRuntimeState,
+} from "./functional";
 
 // ── 运行时事件 ──
 
@@ -77,6 +82,54 @@ export interface SystemErrorPayload {
 	error: string;
 }
 
+// ── 功能执行事件 ──
+
+export interface FunctionalTargetChangePayload {
+	handle: string | null;
+	title: string | null;
+}
+
+export interface PerceptionSnapshotPayload {
+	targetHandle: string;
+	targetTitle: string;
+	width: number;
+	height: number;
+	capturedAt: number;
+}
+
+export interface OrchestratorStateChangePayload {
+	state: FunctionalRuntimeState;
+}
+
+export interface OrchestratorTaskStartPayload {
+	taskId: string;
+	name: string;
+	actionKind: FunctionalActionKind;
+	targetHandle: string;
+	targetTitle: string;
+}
+
+export interface OrchestratorTaskCompletePayload {
+	taskId: string;
+	name: string;
+	actionKind: FunctionalActionKind;
+	success: boolean;
+	summary: string;
+	error?: string | null;
+}
+
+export interface OrchestratorTaskLogPayload {
+	taskId: string;
+	level: FunctionalLogLevel;
+	message: string;
+}
+
+export interface SafetyDecisionPayload {
+	operation: string;
+	allowed: boolean;
+	reason: string | null;
+}
+
 // ── 事件名 → 载荷类型的统一映射 ──
 
 export interface EventMap {
@@ -108,6 +161,15 @@ export interface EventMap {
 	"system:manual-takeover": void;
 	"system:resume": void;
 	"system:error": SystemErrorPayload;
+
+	// 功能执行
+	"functional:target-change": FunctionalTargetChangePayload;
+	"perception:snapshot": PerceptionSnapshotPayload;
+	"orchestrator:state-change": OrchestratorStateChangePayload;
+	"orchestrator:task-start": OrchestratorTaskStartPayload;
+	"orchestrator:task-complete": OrchestratorTaskCompletePayload;
+	"orchestrator:task-log": OrchestratorTaskLogPayload;
+	"safety:decision": SafetyDecisionPayload;
 }
 
 export type EventName = keyof EventMap;

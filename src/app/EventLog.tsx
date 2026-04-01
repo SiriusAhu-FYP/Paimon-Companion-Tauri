@@ -16,6 +16,17 @@ const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: string }> =
 		events: ["runtime:mode-change", "system:error", "system:emergency-stop", "system:resume"],
 		color: "#e57373",
 	},
+	"功能": {
+		events: [
+			"functional:target-change",
+			"perception:snapshot",
+			"orchestrator:task-start",
+			"orchestrator:task-complete",
+			"orchestrator:task-log",
+			"safety:decision",
+		],
+		color: "#ffb74d",
+	},
 	"角色": {
 		events: ["character:expression", "character:state-change"],
 		color: "#81c784",

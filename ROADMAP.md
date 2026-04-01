@@ -24,12 +24,12 @@ Public progress tracker for `paimon-companion-tauri`.
     - [x] `focus_window`
     - [x] `send_key`
     - [x] `send_mouse`
-  - [ ] P1.2 TypeScript Core
-    - [ ] `services/perception`
-    - [ ] `services/orchestrator`
-    - [ ] `services/safety`
-    - [ ] unified runtime state for functional execution
-    - [ ] task/result logging for evaluation runs
+  - [x] P1.2 TypeScript Core
+    - [x] `services/perception`
+    - [x] `services/orchestrator`
+    - [x] `services/safety`
+    - [x] unified runtime state for functional execution
+    - [x] task/result logging for evaluation runs
   - [ ] P1.3 2048 Minimal Loop
     - [ ] detect target window
     - [ ] capture board image

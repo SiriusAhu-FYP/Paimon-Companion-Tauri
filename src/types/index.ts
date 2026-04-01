@@ -2,6 +2,16 @@ export type { EventMap, EventName } from "./events";
 export type { RuntimeMode, RuntimeState } from "./runtime";
 export type { CharacterProfile, CharacterProfileSource, CharacterState } from "./character";
 export type {
+	FunctionalActionKind,
+	FunctionalLogLevel,
+	FunctionalRuntimeState,
+	FunctionalTarget,
+	FunctionalTaskLogEntry,
+	FunctionalTaskRecord,
+	FunctionalTaskStatus,
+	PerceptionSnapshot,
+} from "./functional";
+export type {
 	HostMouseAction,
 	HostMouseButton,
 	HostWindowCapture,
