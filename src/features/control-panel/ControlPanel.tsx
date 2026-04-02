@@ -11,13 +11,13 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import MicIcon from "@mui/icons-material/Mic";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
-import { useRuntime, useCharacter, useFunctional, useGame2048, useEvaluation } from "@/hooks";
+import { useRuntime, useCharacter, useFunctional, useGame2048, useEvaluation, useStardew } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { getServices } from "@/services";
 import { type AppConfig, DEFAULT_CONFIG, loadConfig, updateConfig, getConfig } from "@/services/config";
 import { listWindows } from "@/services/system";
 import { mockVoicePipeline, MOCK_CHARACTER_PROFILE } from "@/utils/mock";
-import type { CharacterProfile, HostWindowInfo } from "@/types";
+import type { CharacterProfile, HostWindowInfo, StardewTaskId } from "@/types";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("control-panel");
@@ -35,6 +35,7 @@ export function ControlPanel() {
 		runMouse,
 	} = useFunctional();
 	const { state: game2048State, detectTarget, runSingleStep } = useGame2048();
+	const { state: stardewState, detectTarget: detectStardewTarget, setSelectedTask: setSelectedStardewTask, runTask: runStardewTask } = useStardew();
 	const { state: evaluationState, runCase } = useEvaluation();
 
 	// ── 角色切换 ──
@@ -135,6 +136,7 @@ export function ControlPanel() {
 		functionalState.safetyBlockedReason
 		?? (functionalState.latestTask?.status === "failed" ? functionalState.latestTask.error : null);
 	const game2048Error = game2048State.lastRun?.status === "failed" ? game2048State.lastRun.error : null;
+	const stardewError = stardewState.lastRun?.status === "failed" ? stardewState.lastRun.error : null;
 	const evaluationError = evaluationState.latestResult?.status === "failed" ? evaluationState.latestResult.summary : null;
 
 	const handleMicTest = async () => {
@@ -257,6 +259,22 @@ export function ControlPanel() {
 			log.error("failed to run evaluation case", err);
 		}
 	}, [runCase]);
+
+	const handleDetectStardewTarget = useCallback(async () => {
+		try {
+			await detectStardewTarget();
+		} catch (err) {
+			log.error("failed to detect Stardew target", err);
+		}
+	}, [detectStardewTarget]);
+
+	const handleRunStardewTask = useCallback(async (taskId?: StardewTaskId) => {
+		try {
+			await runStardewTask(taskId, functionalState.selectedTarget ?? undefined);
+		} catch (err) {
+			log.error("failed to run Stardew task", err);
+		}
+	}, [functionalState.selectedTarget, runStardewTask]);
 
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
@@ -773,7 +791,92 @@ export function ControlPanel() {
 				<Box sx={{ mt: 1, p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
 					<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
 						<Typography variant="caption" color="text.secondary" fontWeight={600}>
-							2048 评测 Harness
+							Stardew Valley 扩展
+						</Typography>
+						<Chip
+							label={stardewState.activeRunId ? "运行中" : "待命"}
+							size="small"
+							color={stardewState.activeRunId ? "warning" : "default"}
+							sx={{ height: 18, fontSize: 10 }}
+						/>
+					</Stack>
+					<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+						首批小任务：角色微移动、打开背包、关闭菜单。移动任务会优先使用截图分析来排序 `W/A/D/S`。
+					</Typography>
+					<Stack direction="row" spacing={0.5} sx={{ mb: 0.75, flexWrap: "wrap" }}>
+						<Button
+							size="small"
+							variant="outlined"
+							onClick={handleDetectStardewTarget}
+							disabled={functionalState.activeTaskId !== null || stardewState.activeRunId !== null}
+						>
+							自动检测 Stardew
+						</Button>
+						{stardewState.availableTasks.map((task) => (
+							<Button
+								key={task.id}
+								size="small"
+								variant={stardewState.selectedTaskId === task.id ? "contained" : "outlined"}
+								onClick={() => setSelectedStardewTask(task.id)}
+								disabled={functionalState.activeTaskId !== null || stardewState.activeRunId !== null}
+							>
+								{task.name}
+							</Button>
+						))}
+					</Stack>
+					<Button
+						size="small"
+						variant="contained"
+						onClick={() => handleRunStardewTask()}
+						disabled={functionalState.activeTaskId !== null || stardewState.activeRunId !== null}
+						sx={{ mb: 0.75 }}
+					>
+						运行 Stardew 小任务
+					</Button>
+					{stardewState.detectionSummary && (
+						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+							检测：{stardewState.detectionSummary}
+						</Typography>
+					)}
+					{stardewError && (
+						<Alert severity="error" sx={{ mb: 0.75, py: 0 }}>
+							{stardewError}
+						</Alert>
+					)}
+					{stardewState.lastRun && (
+						<>
+							<Typography variant="caption" sx={{ display: "block", color: "text.primary", mb: 0.25 }}>
+								结果：{stardewState.lastRun.summary}
+							</Typography>
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
+								任务：{stardewState.lastRun.taskId} · 分析源：{stardewState.lastRun.analysis.source}
+							</Typography>
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
+								推理：{stardewState.lastRun.analysis.reasoning}
+							</Typography>
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+								反馈：{stardewState.lastRun.companionText}
+							</Typography>
+							<Stack direction="row" spacing={0.5} sx={{ mb: 0.5, flexWrap: "wrap" }}>
+								{stardewState.lastRun.analysis.preferredActions.map((action) => (
+									<Chip key={`stardew-pref-${action}`} label={action} size="small" variant="outlined" sx={{ height: 18, fontSize: 10 }} />
+								))}
+							</Stack>
+							<Stack spacing={0.5}>
+								{stardewState.lastRun.attempts.map((attempt) => (
+									<Typography key={`${stardewState.lastRun?.id}-${attempt.action}`} variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
+										{attempt.action}: {attempt.changed ? "changed" : "no change"} ({(attempt.changeRatio * 100).toFixed(1)}%)
+									</Typography>
+								))}
+							</Stack>
+						</>
+					)}
+				</Box>
+
+				<Box sx={{ mt: 1, p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+					<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+						<Typography variant="caption" color="text.secondary" fontWeight={600}>
+							Functional Evaluation Harness
 						</Typography>
 						<Chip
 							label={evaluationState.activeCaseId ? "评测中" : "就绪"}
@@ -783,7 +886,7 @@ export function ControlPanel() {
 						/>
 					</Stack>
 					<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-						固定 case 会重复运行 2048 单步，并聚合成功率、动作有效率和延迟。
+						固定 case 会重复运行 2048 或 Stardew 小任务，并聚合成功率、动作有效率和延迟。
 					</Typography>
 					<Stack spacing={0.5} sx={{ mb: 0.75 }}>
 						{evaluationState.availableCases.map((definition) => (
@@ -797,11 +900,11 @@ export function ControlPanel() {
 									borderColor: "divider",
 								}}
 							>
-								<Typography variant="caption" sx={{ display: "block", color: "text.primary" }}>
+							<Typography variant="caption" sx={{ display: "block", color: "text.primary" }}>
 									{definition.name}
 								</Typography>
 								<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10, mb: 0.5 }}>
-									{definition.description} · {definition.iterations} 次
+									[{definition.game}] {definition.description} · {definition.iterations} 次
 								</Typography>
 								<Button
 									size="small"

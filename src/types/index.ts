@@ -1,6 +1,7 @@
 export type { EventMap, EventName } from "./events";
 export type {
 	EvaluationCaseDefinition,
+	EvaluationGame,
 	EvaluationCaseMetrics,
 	EvaluationCaseResult,
 	EvaluationCaseStatus,
@@ -10,6 +11,17 @@ export type {
 } from "./evaluation";
 export type { RuntimeMode, RuntimeState } from "./runtime";
 export type { CharacterProfile, CharacterProfileSource, CharacterState } from "./character";
+export type {
+	StardewActionKey,
+	StardewAnalysis,
+	StardewAnalysisSource,
+	StardewAttemptRecord,
+	StardewRunRecord,
+	StardewRunStatus,
+	StardewState,
+	StardewTaskDefinition,
+	StardewTaskId,
+} from "./stardew";
 export type {
 	Game2048Analysis,
 	Game2048AnalysisSource,

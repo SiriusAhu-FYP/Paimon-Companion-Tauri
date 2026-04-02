@@ -12,6 +12,7 @@ import type {
 	FunctionalRuntimeState,
 } from "./functional";
 import type { Game2048Move, Game2048State } from "./game-2048";
+import type { StardewActionKey, StardewState, StardewTaskId } from "./stardew";
 
 // ── 运行时事件 ──
 
@@ -173,12 +174,47 @@ export interface EvaluationStateChangePayload {
 
 export interface EvaluationCaseStartPayload {
 	caseId: string;
+	game: "2048" | "stardew";
 	name: string;
 	iterations: number;
 }
 
 export interface EvaluationCaseCompletePayload {
 	result: EvaluationCaseResult;
+}
+
+export interface StardewStateChangePayload {
+	state: StardewState;
+}
+
+export interface StardewTargetDetectedPayload {
+	handle: string | null;
+	title: string | null;
+	summary: string;
+}
+
+export interface StardewRunStartPayload {
+	runId: string;
+	taskId: StardewTaskId;
+	targetHandle: string;
+	targetTitle: string;
+	preferredActions: StardewActionKey[];
+}
+
+export interface StardewAttemptPayload {
+	runId: string;
+	action: StardewActionKey;
+	changed: boolean;
+	changeRatio: number;
+}
+
+export interface StardewRunCompletePayload {
+	runId: string;
+	taskId: StardewTaskId;
+	success: boolean;
+	selectedAction: StardewActionKey | null;
+	boardChanged: boolean;
+	summary: string;
 }
 
 // ── 事件名 → 载荷类型的统一映射 ──
@@ -226,6 +262,11 @@ export interface EventMap {
 	"game2048:run-start": Game2048RunStartPayload;
 	"game2048:attempt": Game2048AttemptPayload;
 	"game2048:run-complete": Game2048RunCompletePayload;
+	"stardew:state-change": StardewStateChangePayload;
+	"stardew:target-detected": StardewTargetDetectedPayload;
+	"stardew:run-start": StardewRunStartPayload;
+	"stardew:attempt": StardewAttemptPayload;
+	"stardew:run-complete": StardewRunCompletePayload;
 	"evaluation:state-change": EvaluationStateChangePayload;
 	"evaluation:case-start": EvaluationCaseStartPayload;
 	"evaluation:case-complete": EvaluationCaseCompletePayload;

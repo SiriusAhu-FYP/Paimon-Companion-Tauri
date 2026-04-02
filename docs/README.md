@@ -13,3 +13,4 @@ Current entry point:
 
 - `architecture/tauri-baseline.md`
 - `evaluation/2048-baseline.md`
+- `evaluation/stardew-baseline.md`

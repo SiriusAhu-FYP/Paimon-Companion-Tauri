@@ -1,10 +1,10 @@
-import type { Game2048AnalysisSource, Game2048Move } from "./game-2048";
-
+export type EvaluationGame = "2048" | "stardew";
 export type EvaluationCaseTargetMode = "auto-detect" | "selected-target";
 export type EvaluationCaseStatus = "running" | "completed" | "failed";
 
 export interface EvaluationCaseDefinition {
 	id: string;
+	game: EvaluationGame;
 	name: string;
 	description: string;
 	targetMode: EvaluationCaseTargetMode;
@@ -17,8 +17,8 @@ export interface EvaluationRunEntry {
 	latencyMs: number;
 	boardChanged: boolean;
 	actionValid: boolean;
-	selectedMove: Game2048Move | null;
-	analysisSource: Game2048AnalysisSource | null;
+	selectedAction: string | null;
+	analysisSource: string | null;
 	summary: string;
 	error: string | null;
 }

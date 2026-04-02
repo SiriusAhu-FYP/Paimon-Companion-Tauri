@@ -5,7 +5,7 @@ import { KnowledgeService, OpenAIEmbeddingService, CompatibleRerankService } fro
 import { PerceptionService } from "./perception";
 import { SafetyService } from "./safety";
 import { OrchestratorService } from "./orchestrator";
-import { Game2048Service } from "./games";
+import { Game2048Service, StardewService } from "./games";
 import { EvaluationService } from "./evaluation";
 import { LLMService, MockLLMService, OpenAILLMService } from "./llm";
 import type { ILLMService } from "./llm/types";
@@ -28,6 +28,7 @@ export interface ServiceContainer {
 	safety: SafetyService;
 	orchestrator: OrchestratorService;
 	game2048: Game2048Service;
+	stardew: StardewService;
 	evaluation: EvaluationService;
 	llm: LLMService;
 	player: AudioPlayer;
@@ -127,9 +128,14 @@ export function initServices(): ServiceContainer {
 		bus: eventBus,
 		orchestrator,
 	});
+	const stardew = new StardewService({
+		bus: eventBus,
+		orchestrator,
+	});
 	const evaluation = new EvaluationService({
 		bus: eventBus,
 		game2048,
+		stardew,
 		orchestrator,
 	});
 
@@ -177,6 +183,7 @@ export function initServices(): ServiceContainer {
 		safety,
 		orchestrator,
 		game2048,
+		stardew,
 		evaluation,
 		llm,
 		player,
