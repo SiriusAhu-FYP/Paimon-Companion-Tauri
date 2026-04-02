@@ -136,7 +136,7 @@ export class KnowledgeService {
 			}
 
 			if (!this.embeddingService) {
-				log.warn("knowledge service initialized without embedding service — waiting for configuration");
+				log.info("knowledge service initialized without embedding service; retrieval stays inactive until configured");
 				return;
 			}
 

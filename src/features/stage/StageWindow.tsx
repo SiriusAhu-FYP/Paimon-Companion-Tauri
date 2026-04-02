@@ -16,6 +16,7 @@ export function StageWindow() {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const rendererRef = useRef<Live2DRenderer | null>(null);
 	const [loadStatus, setLoadStatus] = useState<"loading" | "ok" | "error">("loading");
+	const [loadErrorMessage, setLoadErrorMessage] = useState<string | null>(null);
 	const [showControls, setShowControls] = useState(false);
 	const [stageMode, setStageMode] = useState<"docked" | "floating">("docked");
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
@@ -90,6 +91,7 @@ export function StageWindow() {
 		if (!canvasRef.current) return;
 
 		setLoadStatus("loading");
+		setLoadErrorMessage(null);
 		const renderer = new Live2DRenderer();
 		rendererRef.current = renderer;
 		currentModelPath.current = modelPath;
@@ -112,6 +114,7 @@ export function StageWindow() {
 			broadcastControl({ type: "report-expressions", expressions });
 		} catch (err) {
 			setLoadStatus("error");
+			setLoadErrorMessage(err instanceof Error ? err.message : String(err));
 			log.error("model load failed", err);
 			renderer.destroy();
 			rendererRef.current = null;
@@ -128,6 +131,7 @@ export function StageWindow() {
 
 		currentModelPath.current = modelPath;
 		setLoadStatus("loading");
+		setLoadErrorMessage(null);
 
 		try {
 			await renderer.switchModel(modelPath);
@@ -141,6 +145,7 @@ export function StageWindow() {
 			broadcastControl({ type: "report-expressions", expressions });
 		} catch (err) {
 			setLoadStatus("error");
+			setLoadErrorMessage(err instanceof Error ? err.message : String(err));
 			log.error("model switch failed", err);
 		}
 	}, [initRenderer]);
@@ -367,9 +372,10 @@ export function StageWindow() {
 			)}
 
 			{loadStatus === "error" ? (
-				<p style={{ color: "#F87171", textAlign: "center", marginTop: 40 }}>
-					Live2D 加载失败
-				</p>
+				<div style={{ color: "#F87171", textAlign: "center", marginTop: 40, padding: "0 16px" }}>
+					<p style={{ marginBottom: 8 }}>Live2D 加载失败</p>
+					<p style={{ fontSize: 12, opacity: 0.85 }}>{loadErrorMessage ?? "未知错误"}</p>
+				</div>
 			) : (
 				<canvas
 					ref={canvasRef}
