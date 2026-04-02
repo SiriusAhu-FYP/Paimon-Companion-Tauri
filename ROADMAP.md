@@ -32,11 +32,11 @@ Public progress tracker for `paimon-companion-tauri`.
     - [x] task/result logging for evaluation runs
   - [ ] P1.3 2048 Minimal Loop
     - [ ] detect target window
-    - [ ] capture board image
+    - [x] capture board image
     - [ ] produce action-oriented understanding from VLM/LLM
-    - [ ] execute one valid move
-    - [ ] verify board changed as expected
-    - [ ] render companion feedback in UI
+    - [x] execute one valid move
+    - [x] verify board changed as expected
+    - [x] render companion feedback in UI
   - [ ] P1.4 Functional Evaluation Harness
     - [ ] define repeatable `2048` task cases
     - [ ] track task success rate

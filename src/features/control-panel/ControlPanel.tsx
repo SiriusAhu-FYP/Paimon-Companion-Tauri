@@ -11,7 +11,7 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import MicIcon from "@mui/icons-material/Mic";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
-import { useRuntime, useCharacter, useFunctional } from "@/hooks";
+import { useRuntime, useCharacter, useFunctional, useGame2048 } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { getServices } from "@/services";
 import { type AppConfig, DEFAULT_CONFIG, loadConfig, updateConfig, getConfig } from "@/services/config";
@@ -34,6 +34,7 @@ export function ControlPanel() {
 		runKey,
 		runMouse,
 	} = useFunctional();
+	const { state: game2048State, runSingleStep } = useGame2048();
 
 	// ── 角色切换 ──
 	const [profiles, setProfiles] = useState<CharacterProfile[]>([]);
@@ -132,6 +133,7 @@ export function ControlPanel() {
 	const functionalError =
 		functionalState.safetyBlockedReason
 		?? (functionalState.latestTask?.status === "failed" ? functionalState.latestTask.error : null);
+	const game2048Error = game2048State.lastRun?.status === "failed" ? game2048State.lastRun.error : null;
 
 	const handleMicTest = async () => {
 		try {
@@ -229,6 +231,16 @@ export function ControlPanel() {
 			log.error("failed to send mouse", err);
 		}
 	}, [functionalState.selectedTarget, runMouse]);
+
+	const handleRun2048Step = useCallback(async () => {
+		if (!functionalState.selectedTarget) return;
+
+		try {
+			await runSingleStep(functionalState.selectedTarget);
+		} catch (err) {
+			log.error("failed to run 2048 single step", err);
+		}
+	}, [functionalState.selectedTarget, runSingleStep]);
 
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
@@ -663,6 +675,59 @@ export function ControlPanel() {
 						</Stack>
 					</Box>
 				)}
+
+				<Box sx={{ mt: 1, p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+					<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+						<Typography variant="caption" color="text.secondary" fontWeight={600}>
+							2048 最小闭环
+						</Typography>
+						<Chip
+							label={game2048State.activeRunId ? "运行中" : "待命"}
+							size="small"
+							color={game2048State.activeRunId ? "warning" : "default"}
+							sx={{ height: 18, fontSize: 10 }}
+						/>
+					</Stack>
+					<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+						策略：{game2048State.lastRun?.analysis.strategy ?? "默认优先尝试 Up -> Left -> Right -> Down，用截图前后差异验证是否为有效移动。"}
+					</Typography>
+					<Button
+						size="small"
+						variant="contained"
+						onClick={handleRun2048Step}
+						disabled={!functionalState.selectedTarget || functionalState.activeTaskId !== null || game2048State.activeRunId !== null}
+						sx={{ mb: 0.75 }}
+					>
+						运行 2048 单步
+					</Button>
+					{game2048Error && (
+						<Alert severity="error" sx={{ mb: 0.75, py: 0 }}>
+							{game2048Error}
+						</Alert>
+					)}
+					{game2048State.lastRun && (
+						<>
+							<Typography variant="caption" sx={{ display: "block", color: "text.primary", mb: 0.25 }}>
+								结果：{game2048State.lastRun.summary}
+							</Typography>
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+								反馈：{game2048State.lastRun.companionText}
+							</Typography>
+							<Stack direction="row" spacing={0.5} sx={{ mb: 0.5, flexWrap: "wrap" }}>
+								{game2048State.lastRun.analysis.preferredMoves.map((move) => (
+									<Chip key={`pref-${move}`} label={move} size="small" variant="outlined" sx={{ height: 18, fontSize: 10 }} />
+								))}
+							</Stack>
+							<Stack spacing={0.5}>
+								{game2048State.lastRun.attempts.map((attempt) => (
+									<Typography key={`${game2048State.lastRun?.id}-${attempt.move}`} variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
+										{attempt.move}: {attempt.changed ? "changed" : "no change"} ({(attempt.changeRatio * 100).toFixed(1)}%)
+									</Typography>
+								))}
+							</Stack>
+						</>
+					)}
+				</Box>
 			</Box>
 
 			<Divider />
