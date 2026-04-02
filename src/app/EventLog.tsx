@@ -24,6 +24,7 @@ const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: string }> =
 			"orchestrator:task-complete",
 			"orchestrator:task-log",
 			"safety:decision",
+			"game2048:target-detected",
 			"game2048:run-start",
 			"game2048:attempt",
 			"game2048:run-complete",

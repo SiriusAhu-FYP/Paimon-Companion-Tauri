@@ -16,8 +16,13 @@ export function useGame2048() {
 		return game2048.runSingleStep(target);
 	}, [game2048]);
 
+	const detectTarget = useCallback(() => {
+		return game2048.detectTargetWindow();
+	}, [game2048]);
+
 	return {
 		state,
+		detectTarget,
 		runSingleStep,
 	};
 }

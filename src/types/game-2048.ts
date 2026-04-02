@@ -2,9 +2,12 @@ import type { FunctionalTarget } from "./functional";
 
 export type Game2048Move = "Up" | "Down" | "Left" | "Right";
 export type Game2048RunStatus = "running" | "completed" | "failed";
+export type Game2048AnalysisSource = "vision-llm" | "heuristic";
 
 export interface Game2048Analysis {
+	source: Game2048AnalysisSource;
 	strategy: string;
+	reasoning: string;
 	preferredMoves: Game2048Move[];
 }
 
@@ -33,4 +36,6 @@ export interface Game2048State {
 	activeRunId: string | null;
 	lastRun: Game2048RunRecord | null;
 	history: Game2048RunRecord[];
+	detectedTarget: FunctionalTarget | null;
+	detectionSummary: string | null;
 }

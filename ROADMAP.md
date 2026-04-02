@@ -30,10 +30,10 @@ Public progress tracker for `paimon-companion-tauri`.
     - [x] `services/safety`
     - [x] unified runtime state for functional execution
     - [x] task/result logging for evaluation runs
-  - [ ] P1.3 2048 Minimal Loop
-    - [ ] detect target window
+  - [x] P1.3 2048 Minimal Loop
+    - [x] detect target window
     - [x] capture board image
-    - [ ] produce action-oriented understanding from VLM/LLM
+    - [x] produce action-oriented understanding from VLM/LLM
     - [x] execute one valid move
     - [x] verify board changed as expected
     - [x] render companion feedback in UI
