@@ -52,7 +52,8 @@ Public progress tracker for `paimon-companion-tauri`.
 - [ ] P1.5+: Support Systems
   - [-] connect knowledge retrieval to functional tasks where useful
     deferred: current functional loop is latency-bound, so embedding / retrieval / rerank stay out of the real-time path
-  - [ ] add better debug panels for capture / action / verification
+  - [-] add better debug panels for capture / action / verification
+    event log and status bar now surface live runtime / functional events; deeper capture-action drill-down is still pending
   - [ ] add reusable task templates for new games
 
 - [ ] P2: Unified System Validation
