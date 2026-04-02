@@ -37,6 +37,7 @@ External AI services are still allowed and expected:
 - safety / verification policy
 - runtime coordination
 - character state and companion feedback
+- reusable game task template definitions for finite action sets
 
 ## Functional Latency Policy
 
@@ -55,6 +56,26 @@ The knowledge module is still retained in the repo and runtime for:
 Reason:
 
 - the functional loop is latency-bound, and extra retrieval / rerank hops materially hurt action turnaround
+
+## Reusable Game Tasks
+
+For games with a small finite task set, the functional layer now supports reusable task templates.
+
+This is intended for things like:
+
+- menu toggles
+- short movement probes
+- simple interaction tasks
+
+The pattern keeps:
+
+- shared screenshot / window / verification helpers in common modules
+- per-game task metadata and fallback action orderings in template definition files
+- service classes focused on orchestration, event emission, and run summaries
+
+Reference:
+
+- see `docs/architecture/game-task-templates.md`
 
 ### React owns
 

@@ -10,9 +10,15 @@ import type {
 	Game2048MoveAttempt,
 	Game2048RunRecord,
 	Game2048State,
-	HostWindowInfo,
 	PerceptionSnapshot,
 } from "@/types";
+import {
+	chooseWindowByKeywords,
+	ensureReferenceSnapshot,
+	estimateSnapshotChange,
+	extractJsonObject,
+	normalizeCompatibleOpenAIBaseUrl,
+} from "./game-utils";
 
 const log = createLogger("game-2048");
 const MAX_RUN_HISTORY = 10;
@@ -61,7 +67,10 @@ export class Game2048Service {
 
 	async detectTargetWindow(): Promise<FunctionalTarget | null> {
 		const windows = await listWindows();
-		const candidate = choose2048Window(windows);
+		const candidate = chooseWindowByKeywords(windows, {
+			keywords: TARGET_KEYWORDS,
+			processKeywords: ["msedge", "chrome", "firefox"],
+		});
 		const summary = candidate
 			? `detected 2048 candidate: ${candidate.title}`
 			: "no 2048-like window title found";
@@ -92,7 +101,11 @@ export class Game2048Service {
 			throw new Error("no target window selected and no 2048 window could be detected");
 		}
 
-		const baselineSnapshot = await this.ensureReferenceSnapshot(target);
+		const baselineSnapshot = await ensureReferenceSnapshot(
+			this.orchestrator,
+			target,
+			"unable to capture baseline snapshot",
+		);
 		const analysis = await this.buildAnalysis(target, baselineSnapshot);
 		const run: Game2048RunRecord = {
 			id: `2048-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -225,7 +238,7 @@ export class Game2048Service {
 		}
 
 		const response = await proxyRequest({
-			url: `${normalizeBaseUrl(rawBaseUrl)}/chat/completions`,
+			url: `${normalizeCompatibleOpenAIBaseUrl(rawBaseUrl)}/chat/completions`,
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
@@ -274,26 +287,12 @@ export class Game2048Service {
 		};
 	}
 
-	private async ensureReferenceSnapshot(target: FunctionalTarget): Promise<PerceptionSnapshot> {
-		const state = this.orchestrator.getState();
-		if (state.latestSnapshot && state.latestSnapshot.targetHandle === target.handle) {
-			return state.latestSnapshot;
-		}
-
-		const captureTask = await this.orchestrator.runCaptureTask(target);
-		if (!captureTask.afterSnapshot) {
-			throw new Error("unable to capture baseline snapshot");
-		}
-
-		return captureTask.afterSnapshot;
-	}
-
 	private async evaluateAttempt(
 		move: Game2048Move,
 		beforeSnapshot: PerceptionSnapshot,
 		afterSnapshot: PerceptionSnapshot,
 	): Promise<Game2048MoveAttempt> {
-		const changeRatio = await estimateSnapshotChange(beforeSnapshot, afterSnapshot);
+		const changeRatio = await estimateSnapshotChange(beforeSnapshot, afterSnapshot, { cropScale: 0.7 });
 		return {
 			move,
 			changed: changeRatio >= 0.012,
@@ -304,39 +303,6 @@ export class Game2048Service {
 	private emitState() {
 		this.bus.emit("game2048:state-change", { state: this.getState() });
 	}
-}
-
-function choose2048Window(windows: HostWindowInfo[]): HostWindowInfo | null {
-	const candidates = windows
-		.filter((windowInfo) => windowInfo.visible && !windowInfo.minimized)
-		.map((windowInfo) => ({
-			windowInfo,
-			score: scoreWindow(windowInfo),
-		}))
-		.filter((candidate) => candidate.score > 0)
-		.sort((left, right) => right.score - left.score);
-
-	return candidates[0]?.windowInfo ?? null;
-}
-
-function scoreWindow(windowInfo: HostWindowInfo): number {
-	const title = windowInfo.title.toLowerCase();
-	let score = 0;
-
-	for (const keyword of TARGET_KEYWORDS) {
-		if (title.includes(keyword.toLowerCase())) {
-			score += 10;
-		}
-	}
-
-	if (title.includes("msedge") || title.includes("chrome") || title.includes("firefox")) {
-		score += 2;
-	}
-
-	if (windowInfo.visible) score += 1;
-	if (!windowInfo.minimized) score += 1;
-
-	return score;
 }
 
 function buildHeuristicAnalysis(previousMove: Game2048Move | null): Game2048Analysis {
@@ -404,24 +370,6 @@ function normalizeMoves(value: unknown): Game2048Move[] {
 	return uniqueMoves(normalized);
 }
 
-function extractJsonObject(content: string): string {
-	const start = content.indexOf("{");
-	const end = content.lastIndexOf("}");
-	if (start === -1 || end === -1 || end <= start) {
-		throw new Error("no JSON object found in vision response");
-	}
-
-	return content.slice(start, end + 1);
-}
-
-function normalizeBaseUrl(raw: string): string {
-	let url = raw.replace(/\/+$/, "");
-	if (!url.endsWith("/v1")) {
-		url += "/v1";
-	}
-	return url;
-}
-
 function uniqueMoves(moves: Game2048Move[]): Game2048Move[] {
 	const seen = new Set<Game2048Move>();
 	return moves.filter((move) => {
@@ -458,73 +406,6 @@ function buildCompanionText(run: Game2048RunRecord): string {
 	}
 
 	return "我已经试过这轮候选方向，但截图前后没有看到足够明显的棋盘变化。可能当前画面不是 2048 对局，或者游戏窗口还没真正获得焦点。";
-}
-
-async function estimateSnapshotChange(
-	beforeSnapshot: PerceptionSnapshot,
-	afterSnapshot: PerceptionSnapshot,
-): Promise<number> {
-	if (beforeSnapshot.width !== afterSnapshot.width || beforeSnapshot.height !== afterSnapshot.height) {
-		return 1;
-	}
-
-	const beforeData = await sampleSnapshot(beforeSnapshot.dataUrl);
-	const afterData = await sampleSnapshot(afterSnapshot.dataUrl);
-	const pixelCount = beforeData.width * beforeData.height;
-	let totalDiff = 0;
-
-	for (let index = 0; index < beforeData.data.length; index += 4) {
-		const beforeLuma = luma(beforeData.data[index], beforeData.data[index + 1], beforeData.data[index + 2]);
-		const afterLuma = luma(afterData.data[index], afterData.data[index + 1], afterData.data[index + 2]);
-		totalDiff += Math.abs(beforeLuma - afterLuma);
-	}
-
-	return totalDiff / (pixelCount * 255);
-}
-
-async function sampleSnapshot(dataUrl: string): Promise<ImageData> {
-	const image = await loadImage(dataUrl);
-	const canvas = document.createElement("canvas");
-	const context = canvas.getContext("2d");
-
-	if (!context) {
-		throw new Error("2d canvas context unavailable");
-	}
-
-	canvas.width = 48;
-	canvas.height = 48;
-
-	const cropWidth = image.width * 0.7;
-	const cropHeight = image.height * 0.7;
-	const cropX = (image.width - cropWidth) / 2;
-	const cropY = (image.height - cropHeight) / 2;
-
-	context.drawImage(
-		image,
-		cropX,
-		cropY,
-		cropWidth,
-		cropHeight,
-		0,
-		0,
-		canvas.width,
-		canvas.height,
-	);
-
-	return context.getImageData(0, 0, canvas.width, canvas.height);
-}
-
-function loadImage(dataUrl: string): Promise<HTMLImageElement> {
-	return new Promise((resolve, reject) => {
-		const image = new Image();
-		image.onload = () => resolve(image);
-		image.onerror = () => reject(new Error("failed to decode snapshot image"));
-		image.src = dataUrl;
-	});
-}
-
-function luma(r: number, g: number, b: number): number {
-	return (r * 0.2126) + (g * 0.7152) + (b * 0.0722);
 }
 
 function formatPercent(value: number): string {
