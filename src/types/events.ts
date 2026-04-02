@@ -135,6 +135,12 @@ export interface Game2048StateChangePayload {
 	state: Game2048State;
 }
 
+export interface Game2048TargetDetectedPayload {
+	handle: string | null;
+	title: string | null;
+	summary: string;
+}
+
 export interface Game2048RunStartPayload {
 	runId: string;
 	targetHandle: string;
@@ -198,6 +204,7 @@ export interface EventMap {
 	"orchestrator:task-log": OrchestratorTaskLogPayload;
 	"safety:decision": SafetyDecisionPayload;
 	"game2048:state-change": Game2048StateChangePayload;
+	"game2048:target-detected": Game2048TargetDetectedPayload;
 	"game2048:run-start": Game2048RunStartPayload;
 	"game2048:attempt": Game2048AttemptPayload;
 	"game2048:run-complete": Game2048RunCompletePayload;

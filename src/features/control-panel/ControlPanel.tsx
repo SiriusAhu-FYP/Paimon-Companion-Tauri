@@ -34,7 +34,7 @@ export function ControlPanel() {
 		runKey,
 		runMouse,
 	} = useFunctional();
-	const { state: game2048State, runSingleStep } = useGame2048();
+	const { state: game2048State, detectTarget, runSingleStep } = useGame2048();
 
 	// ── 角色切换 ──
 	const [profiles, setProfiles] = useState<CharacterProfile[]>([]);
@@ -233,14 +233,20 @@ export function ControlPanel() {
 	}, [functionalState.selectedTarget, runMouse]);
 
 	const handleRun2048Step = useCallback(async () => {
-		if (!functionalState.selectedTarget) return;
-
 		try {
-			await runSingleStep(functionalState.selectedTarget);
+			await runSingleStep(functionalState.selectedTarget ?? undefined);
 		} catch (err) {
 			log.error("failed to run 2048 single step", err);
 		}
 	}, [functionalState.selectedTarget, runSingleStep]);
+
+	const handleDetect2048Target = useCallback(async () => {
+		try {
+			await detectTarget();
+		} catch (err) {
+			log.error("failed to detect 2048 target", err);
+		}
+	}, [detectTarget]);
 
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
@@ -689,17 +695,36 @@ export function ControlPanel() {
 						/>
 					</Stack>
 					<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-						策略：{game2048State.lastRun?.analysis.strategy ?? "默认优先尝试 Up -> Left -> Right -> Down，用截图前后差异验证是否为有效移动。"}
+						策略：{game2048State.lastRun?.analysis.strategy ?? "默认优先尝试 Up -> Left -> Right -> Down；如果当前 LLM 支持图像输入，会优先使用截图分析来排序候选方向。"}
 					</Typography>
-					<Button
-						size="small"
-						variant="contained"
-						onClick={handleRun2048Step}
-						disabled={!functionalState.selectedTarget || functionalState.activeTaskId !== null || game2048State.activeRunId !== null}
-						sx={{ mb: 0.75 }}
-					>
-						运行 2048 单步
-					</Button>
+					<Stack direction="row" spacing={0.5} sx={{ mb: 0.75, flexWrap: "wrap" }}>
+						<Button
+							size="small"
+							variant="outlined"
+							onClick={handleDetect2048Target}
+							disabled={functionalState.activeTaskId !== null || game2048State.activeRunId !== null}
+						>
+							自动检测 2048 窗口
+						</Button>
+						<Button
+							size="small"
+							variant="contained"
+							onClick={handleRun2048Step}
+							disabled={functionalState.activeTaskId !== null || game2048State.activeRunId !== null}
+						>
+							运行 2048 单步
+						</Button>
+					</Stack>
+					{game2048State.detectionSummary && (
+						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+							检测：{game2048State.detectionSummary}
+						</Typography>
+					)}
+					{game2048State.detectedTarget && (
+						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+							候选目标：{game2048State.detectedTarget.title}
+						</Typography>
+					)}
 					{game2048Error && (
 						<Alert severity="error" sx={{ mb: 0.75, py: 0 }}>
 							{game2048Error}
@@ -709,6 +734,12 @@ export function ControlPanel() {
 						<>
 							<Typography variant="caption" sx={{ display: "block", color: "text.primary", mb: 0.25 }}>
 								结果：{game2048State.lastRun.summary}
+							</Typography>
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
+								分析源：{game2048State.lastRun.analysis.source}
+							</Typography>
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
+								推理：{game2048State.lastRun.analysis.reasoning}
 							</Typography>
 							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
 								反馈：{game2048State.lastRun.companionText}

@@ -1,5 +1,8 @@
 import type { EventBus } from "@/services/event-bus";
 import type { OrchestratorService } from "@/services/orchestrator";
+import { getConfig, proxyRequest, SECRET_KEYS } from "@/services/config";
+import { createLogger } from "@/services/logger";
+import { listWindows } from "@/services/system";
 import type {
 	FunctionalTarget,
 	Game2048Analysis,
@@ -7,19 +10,30 @@ import type {
 	Game2048MoveAttempt,
 	Game2048RunRecord,
 	Game2048State,
+	HostWindowInfo,
 	PerceptionSnapshot,
 } from "@/types";
-import { createLogger } from "@/services/logger";
 
 const log = createLogger("game-2048");
 const MAX_RUN_HISTORY = 10;
 const DEFAULT_MOVE_ORDER: Game2048Move[] = ["Up", "Left", "Right", "Down"];
+const TARGET_KEYWORDS = ["2048", "play 2048", "gabriele cirulli", "threes"];
+
+interface VisionCompletionResponse {
+	choices?: Array<{
+		message?: {
+			content?: string | Array<{ type?: string; text?: string }>;
+		};
+	}>;
+}
 
 function makeInitialState(): Game2048State {
 	return {
 		activeRunId: null,
 		lastRun: null,
 		history: [],
+		detectedTarget: null,
+		detectionSummary: null,
 	};
 }
 
@@ -41,16 +55,45 @@ export class Game2048Service {
 			...this.state,
 			lastRun: this.state.lastRun ? cloneRun(this.state.lastRun) : null,
 			history: this.state.history.map(cloneRun),
+			detectedTarget: this.state.detectedTarget ? { ...this.state.detectedTarget } : null,
 		};
 	}
 
-	async runSingleStep(targetOverride?: FunctionalTarget): Promise<Game2048RunRecord> {
-		const target = targetOverride ?? this.orchestrator.getState().selectedTarget;
-		if (!target) {
-			throw new Error("no target window selected");
+	async detectTargetWindow(): Promise<FunctionalTarget | null> {
+		const windows = await listWindows();
+		const candidate = choose2048Window(windows);
+		const summary = candidate
+			? `detected 2048 candidate: ${candidate.title}`
+			: "no 2048-like window title found";
+
+		this.state.detectedTarget = candidate ? { handle: candidate.handle, title: candidate.title } : null;
+		this.state.detectionSummary = summary;
+
+		if (candidate) {
+			this.orchestrator.setTarget(this.state.detectedTarget);
 		}
 
-		const analysis = this.buildAnalysis();
+		this.bus.emit("game2048:target-detected", {
+			handle: candidate?.handle ?? null,
+			title: candidate?.title ?? null,
+			summary,
+		});
+		this.emitState();
+
+		return this.state.detectedTarget ? { ...this.state.detectedTarget } : null;
+	}
+
+	async runSingleStep(targetOverride?: FunctionalTarget): Promise<Game2048RunRecord> {
+		let target = targetOverride ?? this.orchestrator.getState().selectedTarget;
+		if (!target) {
+			target = await this.detectTargetWindow();
+		}
+		if (!target) {
+			throw new Error("no target window selected and no 2048 window could be detected");
+		}
+
+		const baselineSnapshot = await this.ensureReferenceSnapshot(target);
+		const analysis = await this.buildAnalysis(target, baselineSnapshot);
 		const run: Game2048RunRecord = {
 			id: `2048-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 			status: "running",
@@ -79,7 +122,7 @@ export class Game2048Service {
 		try {
 			await this.orchestrator.runFocusTask(target);
 
-			let referenceSnapshot = await this.ensureReferenceSnapshot(target);
+			let referenceSnapshot = baselineSnapshot;
 
 			for (const move of analysis.preferredMoves) {
 				const task = await this.orchestrator.runSendKeyTask(move, target);
@@ -115,6 +158,7 @@ export class Game2048Service {
 			run.companionText = buildCompanionText(run);
 			log.info(run.summary, {
 				target: run.target.title,
+				analysisSource: run.analysis.source,
 				selectedMove: run.selectedMove,
 				attempts: run.attempts,
 			});
@@ -147,17 +191,84 @@ export class Game2048Service {
 		return cloneRun(run);
 	}
 
-	private buildAnalysis(): Game2048Analysis {
+	private async buildAnalysis(target: FunctionalTarget, snapshot: PerceptionSnapshot): Promise<Game2048Analysis> {
 		const previousMove = this.state.lastRun?.boardChanged ? this.state.lastRun.selectedMove : null;
-		const preferredMoves = previousMove
-			? uniqueMoves([previousMove, ...DEFAULT_MOVE_ORDER])
-			: [...DEFAULT_MOVE_ORDER];
+
+		try {
+			const visionAnalysis = await this.requestVisionAnalysis(target, snapshot, previousMove);
+			return visionAnalysis;
+		} catch (err) {
+			log.warn("2048 vision analysis unavailable, falling back to heuristic", err);
+			return buildHeuristicAnalysis(previousMove);
+		}
+	}
+
+	private async requestVisionAnalysis(
+		target: FunctionalTarget,
+		snapshot: PerceptionSnapshot,
+		previousMove: Game2048Move | null,
+	): Promise<Game2048Analysis> {
+		const config = getConfig();
+		const activeProfile = config.activeLlmProfileId
+			? config.llmProfiles.find((profile) => profile.id === config.activeLlmProfileId)
+			: null;
+
+		const provider = activeProfile?.provider ?? config.llm.provider;
+		const rawBaseUrl = activeProfile?.baseUrl ?? config.llm.baseUrl;
+		const model = activeProfile?.model ?? config.llm.model;
+		const secretKey = activeProfile?.id ? SECRET_KEYS.LLM_API_KEY(activeProfile.id) : undefined;
+
+		if (provider !== "openai-compatible" || !rawBaseUrl || !model) {
+			throw new Error("vision analysis requires an openai-compatible LLM profile");
+		}
+
+		const response = await proxyRequest({
+			url: `${normalizeBaseUrl(rawBaseUrl)}/chat/completions`,
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				model,
+				temperature: 0.1,
+				max_tokens: 250,
+				response_format: { type: "json_object" },
+				messages: [
+					{
+						role: "user",
+						content: [
+							{
+								type: "text",
+								text: buildVisionPrompt(target.title, previousMove),
+							},
+							{
+								type: "image_url",
+								image_url: {
+									url: snapshot.dataUrl,
+								},
+							},
+						],
+					},
+				],
+			}),
+			secretKey,
+			timeoutMs: 30000,
+		});
+
+		if (response.status < 200 || response.status >= 300) {
+			throw new Error(`vision analysis failed with HTTP ${response.status}`);
+		}
+
+		const payload = JSON.parse(response.body) as VisionCompletionResponse;
+		const rawContent = payload.choices?.[0]?.message?.content;
+		const textContent = Array.isArray(rawContent)
+			? rawContent.map((part) => part.text ?? "").join("")
+			: rawContent ?? "";
+		const parsed = parseVisionResponse(textContent);
 
 		return {
-			strategy: previousMove
-				? `reuse last verified move ${previousMove} first, then bias toward upper-left stability`
-				: "prefer keeping the board stable toward the upper-left corner: Up -> Left -> Right -> Down",
-			preferredMoves,
+			source: "vision-llm",
+			strategy: parsed.strategy,
+			reasoning: parsed.reasoning,
+			preferredMoves: parsed.preferredMoves,
 		};
 	}
 
@@ -193,6 +304,122 @@ export class Game2048Service {
 	}
 }
 
+function choose2048Window(windows: HostWindowInfo[]): HostWindowInfo | null {
+	const candidates = windows
+		.filter((windowInfo) => windowInfo.visible && !windowInfo.minimized)
+		.map((windowInfo) => ({
+			windowInfo,
+			score: scoreWindow(windowInfo),
+		}))
+		.filter((candidate) => candidate.score > 0)
+		.sort((left, right) => right.score - left.score);
+
+	return candidates[0]?.windowInfo ?? null;
+}
+
+function scoreWindow(windowInfo: HostWindowInfo): number {
+	const title = windowInfo.title.toLowerCase();
+	let score = 0;
+
+	for (const keyword of TARGET_KEYWORDS) {
+		if (title.includes(keyword.toLowerCase())) {
+			score += 10;
+		}
+	}
+
+	if (title.includes("msedge") || title.includes("chrome") || title.includes("firefox")) {
+		score += 2;
+	}
+
+	if (windowInfo.visible) score += 1;
+	if (!windowInfo.minimized) score += 1;
+
+	return score;
+}
+
+function buildHeuristicAnalysis(previousMove: Game2048Move | null): Game2048Analysis {
+	const preferredMoves = previousMove
+		? uniqueMoves([previousMove, ...DEFAULT_MOVE_ORDER])
+		: [...DEFAULT_MOVE_ORDER];
+
+	return {
+		source: "heuristic",
+		strategy: previousMove
+			? `reuse last verified move ${previousMove} first, then bias toward upper-left stability`
+			: "prefer keeping the board stable toward the upper-left corner: Up -> Left -> Right -> Down",
+		reasoning: previousMove
+			? `The last verified move was ${previousMove}, so test it first before falling back to the stable corner strategy.`
+			: "Without image reasoning, default to a conservative upper-left stacking strategy.",
+		preferredMoves,
+	};
+}
+
+function buildVisionPrompt(targetTitle: string, previousMove: Game2048Move | null): string {
+	return [
+		"You are analyzing a live screenshot of the 2048 game.",
+		`Window title: ${targetTitle}.`,
+		previousMove ? `The last verified successful move was ${previousMove}.` : "There is no prior verified move.",
+		"Choose the best next action for a single move.",
+		"Return strict JSON with keys: strategy, reasoning, preferredMoves.",
+		`preferredMoves must be an array containing each of these move strings exactly once, in priority order: ${DEFAULT_MOVE_ORDER.join(", ")}.`,
+		"Optimize for a stable 2048 board and prefer keeping the largest tile anchored in a corner.",
+	].join(" ");
+}
+
+function parseVisionResponse(content: string): {
+	strategy: string;
+	reasoning: string;
+	preferredMoves: Game2048Move[];
+} {
+	const jsonText = extractJsonObject(content);
+	const parsed = JSON.parse(jsonText) as {
+		strategy?: unknown;
+		reasoning?: unknown;
+		preferredMoves?: unknown;
+	};
+
+	const preferredMoves = normalizeMoves(parsed.preferredMoves);
+	if (preferredMoves.length !== 4) {
+		throw new Error("vision analysis did not return a full move ordering");
+	}
+
+	return {
+		strategy: typeof parsed.strategy === "string" ? parsed.strategy : "vision-guided 2048 move selection",
+		reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "The model selected an action based on the screenshot.",
+		preferredMoves,
+	};
+}
+
+function normalizeMoves(value: unknown): Game2048Move[] {
+	if (!Array.isArray(value)) {
+		throw new Error("preferredMoves is not an array");
+	}
+
+	const normalized = value
+		.map((entry) => String(entry))
+		.filter((entry): entry is Game2048Move => DEFAULT_MOVE_ORDER.includes(entry as Game2048Move));
+
+	return uniqueMoves(normalized);
+}
+
+function extractJsonObject(content: string): string {
+	const start = content.indexOf("{");
+	const end = content.lastIndexOf("}");
+	if (start === -1 || end === -1 || end <= start) {
+		throw new Error("no JSON object found in vision response");
+	}
+
+	return content.slice(start, end + 1);
+}
+
+function normalizeBaseUrl(raw: string): string {
+	let url = raw.replace(/\/+$/, "");
+	if (!url.endsWith("/v1")) {
+		url += "/v1";
+	}
+	return url;
+}
+
 function uniqueMoves(moves: Game2048Move[]): Game2048Move[] {
 	const seen = new Set<Game2048Move>();
 	return moves.filter((move) => {
@@ -217,7 +444,7 @@ function cloneRun(run: Game2048RunRecord): Game2048RunRecord {
 function buildRunSummary(run: Game2048RunRecord): string {
 	if (run.boardChanged && run.selectedMove) {
 		const successAttempt = run.attempts.find((attempt) => attempt.move === run.selectedMove);
-		return `2048 step verified with ${run.selectedMove} (${formatPercent(successAttempt?.changeRatio ?? 0)})`;
+		return `2048 step verified with ${run.selectedMove} (${formatPercent(successAttempt?.changeRatio ?? 0)}) via ${run.analysis.source}`;
 	}
 
 	return `2048 step found no board-changing move after ${run.attempts.length} attempt(s)`;
@@ -225,10 +452,10 @@ function buildRunSummary(run: Game2048RunRecord): string {
 
 function buildCompanionText(run: Game2048RunRecord): string {
 	if (run.boardChanged && run.selectedMove) {
-		return `我先按 ${run.selectedMove} 试了一步，截图前后已经确认棋盘变化。这说明目标窗口能被感知、执行和验证，最小功能闭环是通的。`;
+		return `我先根据${run.analysis.source === "vision-llm" ? "截图分析" : "保守启发式"}判断应该尝试 ${run.selectedMove}，然后我已经确认棋盘真的变化了。`;
 	}
 
-	return "我按顺序试了几个方向，但截图前后没看到足够明显的棋盘变化。可能当前画面不是 2048 对局，或者需要重新聚焦目标窗口。";
+	return "我已经试过这轮候选方向，但截图前后没有看到足够明显的棋盘变化。可能当前画面不是 2048 对局，或者游戏窗口还没真正获得焦点。";
 }
 
 async function estimateSnapshotChange(
