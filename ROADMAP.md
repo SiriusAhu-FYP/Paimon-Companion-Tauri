@@ -37,12 +37,12 @@ Public progress tracker for `paimon-companion-tauri`.
     - [x] execute one valid move
     - [x] verify board changed as expected
     - [x] render companion feedback in UI
-  - [ ] P1.4 Functional Evaluation Harness
-    - [ ] define repeatable `2048` task cases
-    - [ ] track task success rate
-    - [ ] track latency
-    - [ ] track action validity
-    - [ ] document baseline results
+  - [x] P1.4 Functional Evaluation Harness
+    - [x] define repeatable `2048` task cases
+    - [x] track task success rate
+    - [x] track latency
+    - [x] track action validity
+    - [x] document baseline results
   - [ ] P1.5 Stardew Valley Extension
     - [ ] define first small task set
     - [ ] adapt perception prompts/context
