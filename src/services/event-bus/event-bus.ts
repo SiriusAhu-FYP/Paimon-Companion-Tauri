@@ -75,7 +75,7 @@ export class EventBus {
 	}
 
 	getHistory(): readonly EventHistoryEntry[] {
-		return [...this.history];
+		return this.history;
 	}
 
 	clearHistory() {

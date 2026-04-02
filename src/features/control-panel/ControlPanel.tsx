@@ -23,6 +23,14 @@ import { createLogger } from "@/services/logger";
 
 const log = createLogger("control-panel");
 
+function normalizeSelectedCharacterId(currentId: string | null, available: readonly CharacterProfile[]): string {
+	if (!currentId || currentId === MOCK_CHARACTER_PROFILE.id) {
+		return "__manual__";
+	}
+
+	return available.some((profile) => profile.id === currentId) ? currentId : "__manual__";
+}
+
 export function ControlPanel() {
 	const { mode, stop, resume } = useRuntime();
 	const { emotion, isSpeaking } = useCharacter();
@@ -49,7 +57,7 @@ export function ControlPanel() {
 		setProfiles([...available]);
 
 		const current = character.getProfile();
-		setSelectedId(current?.id ?? "__manual__");
+		setSelectedId(normalizeSelectedCharacterId(current?.id ?? null, available));
 	}, []);
 
 	const handleCharacterSwitch = useCallback(async (e: SelectChangeEvent<string>) => {
@@ -58,7 +66,7 @@ export function ControlPanel() {
 
 		if (id === "__manual__") {
 			character.loadFromProfile(MOCK_CHARACTER_PROFILE);
-			setSelectedId(MOCK_CHARACTER_PROFILE.id);
+			setSelectedId("__manual__");
 			llm.clearHistory();
 			await updateConfig({ character: { ...getConfig().character, activeProfileId: "" } });
 			log.info("switched to manual/default character");
@@ -315,7 +323,7 @@ export function ControlPanel() {
 			{/* 角色切换 */}
 			<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1 }}>
 				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
-					当前读取：{profiles.find((p) => p.id === selectedId)?.name ?? "手动人设"}
+					当前读取：{selectedId === "__manual__" ? "手动人设" : profiles.find((p) => p.id === selectedId)?.name ?? "手动人设"}
 				</Typography>
 				<Select
 					size="small" fullWidth
