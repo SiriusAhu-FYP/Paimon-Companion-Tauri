@@ -5,26 +5,25 @@ import { createLogger } from "@/services/logger";
 import { listWindows } from "@/services/system";
 import type {
 	FunctionalTarget,
-	HostWindowInfo,
-	PerceptionSnapshot,
 	StardewActionKey,
 	StardewAnalysis,
 	StardewAttemptRecord,
 	StardewRunRecord,
 	StardewState,
-	StardewTaskDefinition,
 	StardewTaskId,
 } from "@/types";
+import {
+	chooseWindowByKeywords,
+	ensureReferenceSnapshot,
+	estimateSnapshotChange,
+	normalizeCompatibleOpenAIBaseUrl,
+} from "./game-utils";
+import { getStardewTaskDefinitions, getStardewTaskTemplate } from "./stardew-task-templates";
+import { cloneTemplateAnalysis, parseVisionTemplateResponse } from "./task-templates";
 
 const log = createLogger("stardew");
 const MAX_HISTORY = 10;
 const TARGET_KEYWORDS = ["stardew valley", "stardew"];
-const MOVEMENT_PRIORITY: StardewActionKey[] = ["W", "A", "D", "S"];
-const TASK_DEFINITIONS: StardewTaskDefinition[] = [
-	{ id: "reposition", name: "Reposition Character", description: "Take one small movement step based on the current scene." },
-	{ id: "open-inventory", name: "Open Inventory", description: "Toggle the inventory open and verify that the UI changed." },
-	{ id: "close-menu", name: "Close Menu", description: "Dismiss the current menu layer with Escape and verify the scene changed back." },
-];
 
 interface VisionCompletionResponse {
 	choices?: Array<{
@@ -37,7 +36,7 @@ interface VisionCompletionResponse {
 function makeInitialState(): StardewState {
 	return {
 		activeRunId: null,
-		availableTasks: TASK_DEFINITIONS.map((task) => ({ ...task })),
+		availableTasks: getStardewTaskDefinitions(),
 		lastRun: null,
 		history: [],
 		detectedTarget: null,
@@ -73,7 +72,10 @@ export class StardewService {
 
 	async detectTargetWindow(): Promise<FunctionalTarget | null> {
 		const windows = await listWindows();
-		const candidate = chooseStardewWindow(windows);
+		const candidate = chooseWindowByKeywords(windows, {
+			keywords: TARGET_KEYWORDS,
+			processKeywords: ["steam"],
+		});
 		const summary = candidate
 			? `detected Stardew target: ${candidate.title}`
 			: "no Stardew Valley-like window title found";
@@ -96,6 +98,7 @@ export class StardewService {
 
 	async runTask(taskId?: StardewTaskId, targetOverride?: FunctionalTarget): Promise<StardewRunRecord> {
 		const resolvedTaskId = taskId ?? this.state.selectedTaskId;
+		const taskTemplate = getStardewTaskTemplate(resolvedTaskId);
 		let target = targetOverride ?? this.orchestrator.getState().selectedTarget;
 		if (!target) {
 			target = await this.detectTargetWindow();
@@ -104,11 +107,15 @@ export class StardewService {
 			throw new Error("no target window selected and no Stardew target could be detected");
 		}
 
-		const baselineSnapshot = await this.ensureReferenceSnapshot(target);
-		const analysis = await this.buildAnalysis(resolvedTaskId, target, baselineSnapshot);
+		const baselineSnapshot = await ensureReferenceSnapshot(
+			this.orchestrator,
+			target,
+			"unable to capture Stardew baseline snapshot",
+		);
+		const analysis = await this.buildAnalysis(taskTemplate, target, baselineSnapshot);
 		const run: StardewRunRecord = {
 			id: `stardew-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-			taskId: resolvedTaskId,
+			taskId: taskTemplate.id,
 			status: "running",
 			target: { ...target },
 			startedAt: Date.now(),
@@ -144,7 +151,7 @@ export class StardewService {
 					throw new Error(`missing post-action snapshot for ${action}`);
 				}
 
-				const attempt = await this.evaluateAttempt(run.taskId, action, beforeSnapshot, afterSnapshot);
+				const attempt = await this.evaluateAttempt(taskTemplate.verificationThreshold, action, beforeSnapshot, afterSnapshot);
 				run.attempts.push(attempt);
 				this.bus.emit("stardew:attempt", {
 					runId: run.id,
@@ -199,19 +206,30 @@ export class StardewService {
 		return cloneRun(run);
 	}
 
-	private async buildAnalysis(taskId: StardewTaskId, target: FunctionalTarget, snapshot: PerceptionSnapshot): Promise<StardewAnalysis> {
+	private async buildAnalysis(
+		taskTemplate: ReturnType<typeof getStardewTaskTemplate>,
+		target: FunctionalTarget,
+		snapshot: Awaited<ReturnType<typeof ensureReferenceSnapshot>>,
+	): Promise<StardewAnalysis> {
 		try {
-			if (taskId === "reposition") {
-				return await this.requestVisionAnalysis(target, snapshot);
+			if (taskTemplate.analysisMode === "vision") {
+				return await this.requestVisionAnalysis(taskTemplate, target, snapshot);
 			}
-			return buildFixedTaskAnalysis(taskId);
+			return cloneTemplateAnalysis(taskTemplate.analysis);
 		} catch (err) {
 			log.warn("stardew analysis unavailable, falling back", err);
-			return taskId === "reposition" ? buildMovementFallback() : buildFixedTaskAnalysis(taskId);
+			if (taskTemplate.analysisMode === "vision") {
+				return cloneTemplateAnalysis(taskTemplate.fallbackAnalysis);
+			}
+			return cloneTemplateAnalysis(taskTemplate.analysis);
 		}
 	}
 
-	private async requestVisionAnalysis(target: FunctionalTarget, snapshot: PerceptionSnapshot): Promise<StardewAnalysis> {
+	private async requestVisionAnalysis(
+		taskTemplate: Extract<ReturnType<typeof getStardewTaskTemplate>, { analysisMode: "vision" }>,
+		target: FunctionalTarget,
+		snapshot: Awaited<ReturnType<typeof ensureReferenceSnapshot>>,
+	): Promise<StardewAnalysis> {
 		// The functional loop is latency-bound, so game actions bypass the
 		// general chat/retrieval stack and call the configured model directly.
 		const config = getConfig();
@@ -228,7 +246,7 @@ export class StardewService {
 		}
 
 		const response = await proxyRequest({
-			url: `${normalizeBaseUrl(rawBaseUrl)}/chat/completions`,
+			url: `${normalizeCompatibleOpenAIBaseUrl(rawBaseUrl)}/chat/completions`,
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
@@ -239,7 +257,7 @@ export class StardewService {
 				messages: [{
 					role: "user",
 					content: [
-						{ type: "text", text: buildVisionPrompt(target.title) },
+						{ type: "text", text: taskTemplate.buildVisionPrompt(target.title, snapshot) },
 						{ type: "image_url", image_url: { url: snapshot.dataUrl } },
 					],
 				}],
@@ -257,26 +275,19 @@ export class StardewService {
 		const textContent = Array.isArray(rawContent)
 			? rawContent.map((part) => part.text ?? "").join("")
 			: rawContent ?? "";
-		return parseVisionResponse(textContent);
+		return parseVisionTemplateResponse(textContent, taskTemplate.actionSpace, {
+			strategy: "vision-guided Stardew movement selection",
+			reasoning: "The model selected a movement probe from the screenshot.",
+		});
 	}
 
-	private async ensureReferenceSnapshot(target: FunctionalTarget): Promise<PerceptionSnapshot> {
-		const state = this.orchestrator.getState();
-		if (state.latestSnapshot && state.latestSnapshot.targetHandle === target.handle) {
-			return state.latestSnapshot;
-		}
-
-		const captureTask = await this.orchestrator.runCaptureTask(target);
-		if (!captureTask.afterSnapshot) {
-			throw new Error("unable to capture Stardew baseline snapshot");
-		}
-
-		return captureTask.afterSnapshot;
-	}
-
-	private async evaluateAttempt(taskId: StardewTaskId, action: StardewActionKey, beforeSnapshot: PerceptionSnapshot, afterSnapshot: PerceptionSnapshot): Promise<StardewAttemptRecord> {
+	private async evaluateAttempt(
+		threshold: number,
+		action: StardewActionKey,
+		beforeSnapshot: Awaited<ReturnType<typeof ensureReferenceSnapshot>>,
+		afterSnapshot: Awaited<ReturnType<typeof ensureReferenceSnapshot>>,
+	): Promise<StardewAttemptRecord> {
 		const changeRatio = await estimateSnapshotChange(beforeSnapshot, afterSnapshot);
-		const threshold = taskId === "reposition" ? 0.014 : 0.03;
 		return {
 			action,
 			changed: changeRatio >= threshold,
@@ -287,112 +298,6 @@ export class StardewService {
 	private emitState() {
 		this.bus.emit("stardew:state-change", { state: this.getState() });
 	}
-}
-
-function chooseStardewWindow(windows: HostWindowInfo[]): HostWindowInfo | null {
-	const candidates = windows
-		.filter((windowInfo) => windowInfo.visible && !windowInfo.minimized)
-		.map((windowInfo) => ({ windowInfo, score: scoreWindow(windowInfo) }))
-		.filter((candidate) => candidate.score > 0)
-		.sort((left, right) => right.score - left.score);
-
-	return candidates[0]?.windowInfo ?? null;
-}
-
-function scoreWindow(windowInfo: HostWindowInfo): number {
-	const title = windowInfo.title.toLowerCase();
-	let score = 0;
-	for (const keyword of TARGET_KEYWORDS) {
-		if (title.includes(keyword)) score += 12;
-	}
-	if (title.includes("steam")) score += 2;
-	if (windowInfo.visible) score += 1;
-	if (!windowInfo.minimized) score += 1;
-	return score;
-}
-
-function buildFixedTaskAnalysis(taskId: StardewTaskId): StardewAnalysis {
-	if (taskId === "open-inventory") {
-		return {
-			source: "heuristic",
-			strategy: "toggle the inventory with E and expect a strong UI change",
-			reasoning: "Inventory is a deterministic small task with a stable keyboard shortcut.",
-			preferredActions: ["E"],
-		};
-	}
-
-	return {
-		source: "heuristic",
-		strategy: "dismiss the current menu layer with Escape",
-		reasoning: "Escape is the safest generic way to close Stardew overlays and return to gameplay.",
-		preferredActions: ["Escape"],
-	};
-}
-
-function buildMovementFallback(): StardewAnalysis {
-	return {
-		source: "heuristic",
-		strategy: "try a conservative one-step reposition with north-west bias",
-		reasoning: "Without vision analysis, movement defaults to W/A/D/S as a scene-change probe.",
-		preferredActions: [...MOVEMENT_PRIORITY],
-	};
-}
-
-function buildVisionPrompt(targetTitle: string): string {
-	return [
-		"You are analyzing a Stardew Valley gameplay screenshot.",
-		`Window title: ${targetTitle}.`,
-		"Choose a safe one-step reposition for the player using only W, A, S, D.",
-		"Return strict JSON with keys: strategy, reasoning, preferredActions.",
-		"preferredActions must contain each of W, A, D, S exactly once, ordered by priority.",
-		"Prefer a small movement likely to cause a visible scene change without committing to a long path.",
-	].join(" ");
-}
-
-function parseVisionResponse(content: string): StardewAnalysis {
-	const jsonText = extractJsonObject(content);
-	const parsed = JSON.parse(jsonText) as { strategy?: unknown; reasoning?: unknown; preferredActions?: unknown };
-	const preferredActions = normalizeActions(parsed.preferredActions);
-	if (preferredActions.length !== 4) {
-		throw new Error("stardew analysis did not return a full action ordering");
-	}
-
-	return {
-		source: "vision-llm",
-		strategy: typeof parsed.strategy === "string" ? parsed.strategy : "vision-guided Stardew movement selection",
-		reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "The model selected a movement probe from the screenshot.",
-		preferredActions,
-	};
-}
-
-function normalizeActions(value: unknown): StardewActionKey[] {
-	if (!Array.isArray(value)) throw new Error("preferredActions is not an array");
-	const normalized = value
-		.map((entry) => String(entry))
-		.filter((entry): entry is StardewActionKey => MOVEMENT_PRIORITY.includes(entry as StardewActionKey));
-	return uniqueActions(normalized);
-}
-
-function extractJsonObject(content: string): string {
-	const start = content.indexOf("{");
-	const end = content.lastIndexOf("}");
-	if (start === -1 || end === -1 || end <= start) throw new Error("no JSON object found in Stardew response");
-	return content.slice(start, end + 1);
-}
-
-function normalizeBaseUrl(raw: string): string {
-	let url = raw.replace(/\/+$/, "");
-	if (!url.endsWith("/v1")) url += "/v1";
-	return url;
-}
-
-function uniqueActions(actions: StardewActionKey[]): StardewActionKey[] {
-	const seen = new Set<StardewActionKey>();
-	return actions.filter((action) => {
-		if (seen.has(action)) return false;
-		seen.add(action);
-		return true;
-	});
 }
 
 function cloneRun(run: StardewRunRecord): StardewRunRecord {
@@ -417,52 +322,6 @@ function buildCompanionText(run: StardewRunRecord): string {
 		return `我先判断了这次 Stardew 小任务应该怎么做，再用 ${run.selectedAction} 执行，并确认画面真的变化了。`;
 	}
 	return "这轮 Stardew 小任务没有得到足够明显的画面变化，可能需要换一个更明确的场景或重新聚焦游戏窗口。";
-}
-
-async function estimateSnapshotChange(beforeSnapshot: PerceptionSnapshot, afterSnapshot: PerceptionSnapshot): Promise<number> {
-	if (beforeSnapshot.width !== afterSnapshot.width || beforeSnapshot.height !== afterSnapshot.height) return 1;
-
-	const beforeData = await sampleSnapshot(beforeSnapshot.dataUrl);
-	const afterData = await sampleSnapshot(afterSnapshot.dataUrl);
-	const pixelCount = beforeData.width * beforeData.height;
-	let totalDiff = 0;
-
-	for (let index = 0; index < beforeData.data.length; index += 4) {
-		const beforeLuma = luma(beforeData.data[index], beforeData.data[index + 1], beforeData.data[index + 2]);
-		const afterLuma = luma(afterData.data[index], afterData.data[index + 1], afterData.data[index + 2]);
-		totalDiff += Math.abs(beforeLuma - afterLuma);
-	}
-
-	return totalDiff / (pixelCount * 255);
-}
-
-async function sampleSnapshot(dataUrl: string): Promise<ImageData> {
-	const image = await loadImage(dataUrl);
-	const canvas = document.createElement("canvas");
-	const context = canvas.getContext("2d");
-	if (!context) throw new Error("2d canvas context unavailable");
-
-	canvas.width = 48;
-	canvas.height = 48;
-	const cropWidth = image.width * 0.75;
-	const cropHeight = image.height * 0.75;
-	const cropX = (image.width - cropWidth) / 2;
-	const cropY = (image.height - cropHeight) / 2;
-	context.drawImage(image, cropX, cropY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
-	return context.getImageData(0, 0, canvas.width, canvas.height);
-}
-
-function loadImage(dataUrl: string): Promise<HTMLImageElement> {
-	return new Promise((resolve, reject) => {
-		const image = new Image();
-		image.onload = () => resolve(image);
-		image.onerror = () => reject(new Error("failed to decode Stardew snapshot image"));
-		image.src = dataUrl;
-	});
-}
-
-function luma(r: number, g: number, b: number): number {
-	return (r * 0.2126) + (g * 0.7152) + (b * 0.0722);
 }
 
 function formatPercent(value: number): string {
