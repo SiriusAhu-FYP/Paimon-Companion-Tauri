@@ -18,7 +18,7 @@ Public progress tracker for `paimon-companion-tauri`.
   - [x] Copy owner-local `.cursor` workspace rules into the repo as ignored local files
 
 - [ ] P1: Functional Core Validation
-  - [ ] P1.1 Host OS Primitives
+  - [x] P1.1 Host OS Primitives
     - [x] `list_windows`
     - [x] `capture_window`
     - [x] `focus_window`
@@ -43,11 +43,11 @@ Public progress tracker for `paimon-companion-tauri`.
     - [x] track latency
     - [x] track action validity
     - [x] document baseline results
-  - [ ] P1.5 Stardew Valley Extension
-    - [ ] define first small task set
-    - [ ] adapt perception prompts/context
-    - [ ] adapt control and verification logic
-    - [ ] run the same evaluation flow used in `2048`
+  - [x] P1.5 Stardew Valley Extension
+    - [x] define first small task set
+    - [x] adapt perception prompts/context
+    - [x] adapt control and verification logic
+    - [x] run the same evaluation flow used in `2048`
 
 - [ ] P1.5+: Support Systems
   - [ ] connect knowledge retrieval to functional tasks where useful
