@@ -11,7 +11,7 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import MicIcon from "@mui/icons-material/Mic";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
-import { useRuntime, useCharacter, useFunctional, useGame2048 } from "@/hooks";
+import { useRuntime, useCharacter, useFunctional, useGame2048, useEvaluation } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { getServices } from "@/services";
 import { type AppConfig, DEFAULT_CONFIG, loadConfig, updateConfig, getConfig } from "@/services/config";
@@ -35,6 +35,7 @@ export function ControlPanel() {
 		runMouse,
 	} = useFunctional();
 	const { state: game2048State, detectTarget, runSingleStep } = useGame2048();
+	const { state: evaluationState, runCase } = useEvaluation();
 
 	// ── 角色切换 ──
 	const [profiles, setProfiles] = useState<CharacterProfile[]>([]);
@@ -134,6 +135,7 @@ export function ControlPanel() {
 		functionalState.safetyBlockedReason
 		?? (functionalState.latestTask?.status === "failed" ? functionalState.latestTask.error : null);
 	const game2048Error = game2048State.lastRun?.status === "failed" ? game2048State.lastRun.error : null;
+	const evaluationError = evaluationState.latestResult?.status === "failed" ? evaluationState.latestResult.summary : null;
 
 	const handleMicTest = async () => {
 		try {
@@ -247,6 +249,14 @@ export function ControlPanel() {
 			log.error("failed to detect 2048 target", err);
 		}
 	}, [detectTarget]);
+
+	const handleRunEvaluationCase = useCallback(async (caseId: string) => {
+		try {
+			await runCase(caseId);
+		} catch (err) {
+			log.error("failed to run evaluation case", err);
+		}
+	}, [runCase]);
 
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
@@ -757,6 +767,83 @@ export function ControlPanel() {
 								))}
 							</Stack>
 						</>
+					)}
+				</Box>
+
+				<Box sx={{ mt: 1, p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+					<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+						<Typography variant="caption" color="text.secondary" fontWeight={600}>
+							2048 评测 Harness
+						</Typography>
+						<Chip
+							label={evaluationState.activeCaseId ? "评测中" : "就绪"}
+							size="small"
+							color={evaluationState.activeCaseId ? "warning" : "default"}
+							sx={{ height: 18, fontSize: 10 }}
+						/>
+					</Stack>
+					<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+						固定 case 会重复运行 2048 单步，并聚合成功率、动作有效率和延迟。
+					</Typography>
+					<Stack spacing={0.5} sx={{ mb: 0.75 }}>
+						{evaluationState.availableCases.map((definition) => (
+							<Box
+								key={definition.id}
+								sx={{
+									bgcolor: "background.paper",
+									borderRadius: 1,
+									p: 0.75,
+									border: "1px solid",
+									borderColor: "divider",
+								}}
+							>
+								<Typography variant="caption" sx={{ display: "block", color: "text.primary" }}>
+									{definition.name}
+								</Typography>
+								<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10, mb: 0.5 }}>
+									{definition.description} · {definition.iterations} 次
+								</Typography>
+								<Button
+									size="small"
+									variant="outlined"
+									onClick={() => handleRunEvaluationCase(definition.id)}
+									disabled={evaluationState.activeCaseId !== null || game2048State.activeRunId !== null || functionalState.activeTaskId !== null}
+								>
+									运行 Case
+								</Button>
+							</Box>
+						))}
+					</Stack>
+					{evaluationError && (
+						<Alert severity="error" sx={{ mb: 0.75, py: 0 }}>
+							{evaluationError}
+						</Alert>
+					)}
+					{evaluationState.latestResult && (
+						<Box sx={{ p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+							<Typography variant="caption" sx={{ display: "block", color: "text.primary", mb: 0.25 }}>
+								最近评测：{evaluationState.latestResult.caseName}
+							</Typography>
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+								{evaluationState.latestResult.summary}
+							</Typography>
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
+								成功率：{(evaluationState.latestResult.metrics.successRate * 100).toFixed(0)}%
+							</Typography>
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
+								动作有效率：{(evaluationState.latestResult.metrics.actionValidityRate * 100).toFixed(0)}%
+							</Typography>
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10, mb: 0.5 }}>
+								平均延迟：{evaluationState.latestResult.metrics.averageLatencyMs.toFixed(0)}ms · 中位延迟：{evaluationState.latestResult.metrics.medianLatencyMs.toFixed(0)}ms
+							</Typography>
+							<Stack spacing={0.25}>
+								{evaluationState.latestResult.runs.map((run) => (
+									<Typography key={`${evaluationState.latestResult?.caseId}-${run.index}`} variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
+										Run {run.index}: {run.status} · {run.summary} · {run.latencyMs}ms
+									</Typography>
+								))}
+							</Stack>
+						</Box>
 					)}
 				</Box>
 			</Box>

@@ -3,6 +3,10 @@
 
 import type { RuntimeMode } from "./runtime";
 import type {
+	EvaluationCaseResult,
+	EvaluationState,
+} from "./evaluation";
+import type {
 	FunctionalActionKind,
 	FunctionalLogLevel,
 	FunctionalRuntimeState,
@@ -163,6 +167,20 @@ export interface Game2048RunCompletePayload {
 	summary: string;
 }
 
+export interface EvaluationStateChangePayload {
+	state: EvaluationState;
+}
+
+export interface EvaluationCaseStartPayload {
+	caseId: string;
+	name: string;
+	iterations: number;
+}
+
+export interface EvaluationCaseCompletePayload {
+	result: EvaluationCaseResult;
+}
+
 // ── 事件名 → 载荷类型的统一映射 ──
 
 export interface EventMap {
@@ -208,6 +226,9 @@ export interface EventMap {
 	"game2048:run-start": Game2048RunStartPayload;
 	"game2048:attempt": Game2048AttemptPayload;
 	"game2048:run-complete": Game2048RunCompletePayload;
+	"evaluation:state-change": EvaluationStateChangePayload;
+	"evaluation:case-start": EvaluationCaseStartPayload;
+	"evaluation:case-complete": EvaluationCaseCompletePayload;
 }
 
 export type EventName = keyof EventMap;

@@ -1,4 +1,13 @@
 export type { EventMap, EventName } from "./events";
+export type {
+	EvaluationCaseDefinition,
+	EvaluationCaseMetrics,
+	EvaluationCaseResult,
+	EvaluationCaseStatus,
+	EvaluationCaseTargetMode,
+	EvaluationRunEntry,
+	EvaluationState,
+} from "./evaluation";
 export type { RuntimeMode, RuntimeState } from "./runtime";
 export type { CharacterProfile, CharacterProfileSource, CharacterState } from "./character";
 export type {
