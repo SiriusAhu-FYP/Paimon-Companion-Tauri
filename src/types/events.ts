@@ -7,6 +7,7 @@ import type {
 	FunctionalLogLevel,
 	FunctionalRuntimeState,
 } from "./functional";
+import type { Game2048Move, Game2048State } from "./game-2048";
 
 // ── 运行时事件 ──
 
@@ -130,6 +131,32 @@ export interface SafetyDecisionPayload {
 	reason: string | null;
 }
 
+export interface Game2048StateChangePayload {
+	state: Game2048State;
+}
+
+export interface Game2048RunStartPayload {
+	runId: string;
+	targetHandle: string;
+	targetTitle: string;
+	preferredMoves: Game2048Move[];
+}
+
+export interface Game2048AttemptPayload {
+	runId: string;
+	move: Game2048Move;
+	changed: boolean;
+	changeRatio: number;
+}
+
+export interface Game2048RunCompletePayload {
+	runId: string;
+	success: boolean;
+	selectedMove: Game2048Move | null;
+	boardChanged: boolean;
+	summary: string;
+}
+
 // ── 事件名 → 载荷类型的统一映射 ──
 
 export interface EventMap {
@@ -170,6 +197,10 @@ export interface EventMap {
 	"orchestrator:task-complete": OrchestratorTaskCompletePayload;
 	"orchestrator:task-log": OrchestratorTaskLogPayload;
 	"safety:decision": SafetyDecisionPayload;
+	"game2048:state-change": Game2048StateChangePayload;
+	"game2048:run-start": Game2048RunStartPayload;
+	"game2048:attempt": Game2048AttemptPayload;
+	"game2048:run-complete": Game2048RunCompletePayload;
 }
 
 export type EventName = keyof EventMap;

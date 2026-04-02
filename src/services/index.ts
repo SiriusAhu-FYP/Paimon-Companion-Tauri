@@ -5,6 +5,7 @@ import { KnowledgeService, OpenAIEmbeddingService, CompatibleRerankService } fro
 import { PerceptionService } from "./perception";
 import { SafetyService } from "./safety";
 import { OrchestratorService } from "./orchestrator";
+import { Game2048Service } from "./games";
 import { LLMService, MockLLMService, OpenAILLMService } from "./llm";
 import type { ILLMService } from "./llm/types";
 import { MockTTSService, GptSovitsTTSService } from "./tts";
@@ -25,6 +26,7 @@ export interface ServiceContainer {
 	perception: PerceptionService;
 	safety: SafetyService;
 	orchestrator: OrchestratorService;
+	game2048: Game2048Service;
 	llm: LLMService;
 	player: AudioPlayer;
 	pipeline: PipelineService;
@@ -119,6 +121,10 @@ export function initServices(): ServiceContainer {
 		safety,
 		perception,
 	});
+	const game2048 = new Game2048Service({
+		bus: eventBus,
+		orchestrator,
+	});
 
 	// Phase 3.5: 初始化 Embedding Service + Rerank Service + Knowledge
 	const embProfile = resolveEmbeddingProfile(config);
@@ -163,6 +169,7 @@ export function initServices(): ServiceContainer {
 		perception,
 		safety,
 		orchestrator,
+		game2048,
 		llm,
 		player,
 		pipeline,

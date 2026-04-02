@@ -2,6 +2,14 @@ export type { EventMap, EventName } from "./events";
 export type { RuntimeMode, RuntimeState } from "./runtime";
 export type { CharacterProfile, CharacterProfileSource, CharacterState } from "./character";
 export type {
+	Game2048Analysis,
+	Game2048Move,
+	Game2048MoveAttempt,
+	Game2048RunRecord,
+	Game2048RunStatus,
+	Game2048State,
+} from "./game-2048";
+export type {
 	FunctionalActionKind,
 	FunctionalLogLevel,
 	FunctionalRuntimeState,
