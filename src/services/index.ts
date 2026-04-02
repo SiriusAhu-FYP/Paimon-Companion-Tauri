@@ -139,6 +139,8 @@ export function initServices(): ServiceContainer {
 		orchestrator,
 	});
 
+	// Keep knowledge alive for companion/chat workflows, but do not route the
+	// latency-sensitive functional game loop through embedding or rerank.
 	// Phase 3.5: 初始化 Embedding Service + Rerank Service + Knowledge
 	const embProfile = resolveEmbeddingProfile(config);
 	if (embProfile) {

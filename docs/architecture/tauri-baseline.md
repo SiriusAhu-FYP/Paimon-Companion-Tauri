@@ -38,6 +38,24 @@ External AI services are still allowed and expected:
 - runtime coordination
 - character state and companion feedback
 
+## Functional Latency Policy
+
+For the current functional-validation stages:
+
+- the real-time game loop does not use knowledge retrieval
+- embedding and rerank requests are kept out of the control path
+- vision/game-task services call the configured model endpoint directly when needed
+
+The knowledge module is still retained in the repo and runtime for:
+
+- chat / companion experiments
+- manual context injection
+- future non-real-time workflows
+
+Reason:
+
+- the functional loop is latency-bound, and extra retrieval / rerank hops materially hurt action turnaround
+
 ### React owns
 
 - control layout

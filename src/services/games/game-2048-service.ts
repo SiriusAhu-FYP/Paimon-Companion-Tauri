@@ -208,6 +208,8 @@ export class Game2048Service {
 		snapshot: PerceptionSnapshot,
 		previousMove: Game2048Move | null,
 	): Promise<Game2048Analysis> {
+		// The functional loop is latency-bound, so game actions bypass the
+		// general chat/retrieval stack and call the configured model directly.
 		const config = getConfig();
 		const activeProfile = config.activeLlmProfileId
 			? config.llmProfiles.find((profile) => profile.id === config.activeLlmProfileId)

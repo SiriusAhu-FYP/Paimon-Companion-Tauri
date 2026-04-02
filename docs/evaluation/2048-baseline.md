@@ -42,6 +42,7 @@ Session context:
 - repository implementation completed in a terminal-only coding session
 - `pnpm build` passed
 - `cargo check --manifest-path src-tauri/Cargo.toml` passed
+- the functional evaluation path intentionally excludes knowledge retrieval / embedding / rerank overhead
 - no live GUI evaluation run was executed from this terminal session
 
 Baseline table:

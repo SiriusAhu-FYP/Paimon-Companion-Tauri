@@ -50,7 +50,8 @@ Public progress tracker for `paimon-companion-tauri`.
     - [x] run the same evaluation flow used in `2048`
 
 - [ ] P1.5+: Support Systems
-  - [ ] connect knowledge retrieval to functional tasks where useful
+  - [-] connect knowledge retrieval to functional tasks where useful
+    deferred: current functional loop is latency-bound, so embedding / retrieval / rerank stay out of the real-time path
   - [ ] add better debug panels for capture / action / verification
   - [ ] add reusable task templates for new games
 

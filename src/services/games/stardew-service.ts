@@ -212,6 +212,8 @@ export class StardewService {
 	}
 
 	private async requestVisionAnalysis(target: FunctionalTarget, snapshot: PerceptionSnapshot): Promise<StardewAnalysis> {
+		// The functional loop is latency-bound, so game actions bypass the
+		// general chat/retrieval stack and call the configured model directly.
 		const config = getConfig();
 		const activeProfile = config.activeLlmProfileId
 			? config.llmProfiles.find((profile) => profile.id === config.activeLlmProfileId)
