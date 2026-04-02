@@ -53,7 +53,7 @@ Public progress tracker for `paimon-companion-tauri`.
   - [-] connect knowledge retrieval to functional tasks where useful
     deferred: current functional loop is latency-bound, so embedding / retrieval / rerank stay out of the real-time path
   - [-] add better debug panels for capture / action / verification
-    event log and status bar now surface live runtime / functional events; deeper capture-action drill-down is still pending
+    event log and status bar now surface live runtime / functional events; control panel also exposes capture -> decision -> action -> verification drill-down, but richer artifact export is still pending
   - [ ] add reusable task templates for new games
 
 - [ ] P2: Unified System Validation

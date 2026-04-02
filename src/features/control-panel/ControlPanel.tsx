@@ -16,6 +16,7 @@ import { HelpTooltip } from "@/components";
 import { getServices } from "@/services";
 import { type AppConfig, DEFAULT_CONFIG, loadConfig, updateConfig, getConfig } from "@/services/config";
 import { listWindows } from "@/services/system";
+import { FunctionalDebugPanel } from "./FunctionalDebugPanel";
 import { mockVoicePipeline, MOCK_CHARACTER_PROFILE } from "@/utils/mock";
 import type { CharacterProfile, HostWindowInfo, StardewTaskId } from "@/types";
 import { createLogger } from "@/services/logger";
@@ -552,28 +553,6 @@ export function ControlPanel() {
 					</Stack>
 				)}
 
-				{functionalState.latestSnapshot && (
-					<Box sx={{ mt: 0.75 }}>
-						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-							截图预览：{functionalState.latestSnapshot.targetTitle} · {functionalState.latestSnapshot.width}x{functionalState.latestSnapshot.height}
-						</Typography>
-						<Box
-							component="img"
-							src={functionalState.latestSnapshot.dataUrl}
-							alt={functionalState.latestSnapshot.targetTitle || "window capture"}
-							sx={{
-								width: "100%",
-								maxHeight: 180,
-								objectFit: "contain",
-								bgcolor: "background.paper",
-								borderRadius: 1,
-								border: "1px solid",
-								borderColor: "divider",
-							}}
-						/>
-					</Box>
-				)}
-
 				{functionalState.selectedTarget && (
 					<Box sx={{ mt: 0.75, p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
 						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
@@ -647,69 +626,6 @@ export function ControlPanel() {
 					</Box>
 				)}
 
-				{functionalState.latestTask && (
-					<Box sx={{ mt: 0.75, p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
-						<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
-							<Typography variant="caption" color="text.secondary">
-								最近任务：{functionalState.latestTask.name}
-							</Typography>
-							<Chip
-								label={functionalState.latestTask.status}
-								size="small"
-								color={functionalState.latestTask.status === "completed" ? "success" : functionalState.latestTask.status === "failed" ? "error" : "warning"}
-								sx={{ height: 18, fontSize: 10 }}
-							/>
-						</Stack>
-						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-							{functionalState.latestTask.summary}
-						</Typography>
-						{functionalState.latestTask.logs.slice(-3).map((entry) => (
-							<Typography key={`${functionalState.latestTask?.id}-${entry.timestamp}-${entry.message}`} variant="caption" sx={{ display: "block", fontSize: 10 }}>
-								[{new Date(entry.timestamp).toLocaleTimeString()}] {entry.level}: {entry.message}
-							</Typography>
-						))}
-					</Box>
-				)}
-
-				{functionalState.taskHistory.length > 0 && (
-					<Box sx={{ mt: 0.75 }}>
-						<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
-							<Typography variant="caption" color="text.secondary" fontWeight={600}>
-								任务历史
-							</Typography>
-							<Button size="small" variant="text" onClick={clearHistory} sx={{ minWidth: 0, fontSize: 11 }}>
-								清空记录
-							</Button>
-						</Stack>
-						<Stack spacing={0.5}>
-							{functionalState.taskHistory.slice(0, 5).map((task) => (
-								<Box
-									key={task.id}
-									sx={{
-										bgcolor: "background.paper",
-										borderRadius: 1,
-										p: 0.75,
-										border: "1px solid",
-										borderColor: "divider",
-									}}
-								>
-									<Stack direction="row" justifyContent="space-between" alignItems="center">
-										<Typography variant="caption" sx={{ color: "text.primary" }}>
-											{task.name}
-										</Typography>
-										<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-											{new Date(task.startedAt).toLocaleTimeString()}
-										</Typography>
-									</Stack>
-									<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
-										{task.summary}
-									</Typography>
-								</Box>
-							))}
-						</Stack>
-					</Box>
-				)}
-
 				<Box sx={{ mt: 1, p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
 					<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
 						<Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -748,44 +664,20 @@ export function ControlPanel() {
 							检测：{game2048State.detectionSummary}
 						</Typography>
 					)}
-					{game2048State.detectedTarget && (
-						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-							候选目标：{game2048State.detectedTarget.title}
-						</Typography>
-					)}
+					<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+						候选目标：{game2048State.detectedTarget?.title ?? "尚未检测"}
+					</Typography>
 					{game2048Error && (
 						<Alert severity="error" sx={{ mb: 0.75, py: 0 }}>
 							{game2048Error}
 						</Alert>
 					)}
-					{game2048State.lastRun && (
-						<>
-							<Typography variant="caption" sx={{ display: "block", color: "text.primary", mb: 0.25 }}>
-								结果：{game2048State.lastRun.summary}
-							</Typography>
-							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
-								分析源：{game2048State.lastRun.analysis.source}
-							</Typography>
-							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
-								推理：{game2048State.lastRun.analysis.reasoning}
-							</Typography>
-							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-								反馈：{game2048State.lastRun.companionText}
-							</Typography>
-							<Stack direction="row" spacing={0.5} sx={{ mb: 0.5, flexWrap: "wrap" }}>
-								{game2048State.lastRun.analysis.preferredMoves.map((move) => (
-									<Chip key={`pref-${move}`} label={move} size="small" variant="outlined" sx={{ height: 18, fontSize: 10 }} />
-								))}
-							</Stack>
-							<Stack spacing={0.5}>
-								{game2048State.lastRun.attempts.map((attempt) => (
-									<Typography key={`${game2048State.lastRun?.id}-${attempt.move}`} variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
-										{attempt.move}: {attempt.changed ? "changed" : "no change"} ({(attempt.changeRatio * 100).toFixed(1)}%)
-									</Typography>
-								))}
-							</Stack>
-						</>
-					)}
+					<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
+						最近结果：{game2048State.lastRun?.summary ?? "尚未执行"}
+					</Typography>
+					<Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+						分析源：{game2048State.lastRun?.analysis.source ?? "—"} · 尝试数：{game2048State.lastRun?.attempts.length ?? 0}
+					</Typography>
 				</Box>
 
 				<Box sx={{ mt: 1, p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
@@ -838,39 +730,20 @@ export function ControlPanel() {
 							检测：{stardewState.detectionSummary}
 						</Typography>
 					)}
+					<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+						候选目标：{stardewState.detectedTarget?.title ?? "尚未检测"}
+					</Typography>
 					{stardewError && (
 						<Alert severity="error" sx={{ mb: 0.75, py: 0 }}>
 							{stardewError}
 						</Alert>
 					)}
-					{stardewState.lastRun && (
-						<>
-							<Typography variant="caption" sx={{ display: "block", color: "text.primary", mb: 0.25 }}>
-								结果：{stardewState.lastRun.summary}
-							</Typography>
-							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
-								任务：{stardewState.lastRun.taskId} · 分析源：{stardewState.lastRun.analysis.source}
-							</Typography>
-							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
-								推理：{stardewState.lastRun.analysis.reasoning}
-							</Typography>
-							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-								反馈：{stardewState.lastRun.companionText}
-							</Typography>
-							<Stack direction="row" spacing={0.5} sx={{ mb: 0.5, flexWrap: "wrap" }}>
-								{stardewState.lastRun.analysis.preferredActions.map((action) => (
-									<Chip key={`stardew-pref-${action}`} label={action} size="small" variant="outlined" sx={{ height: 18, fontSize: 10 }} />
-								))}
-							</Stack>
-							<Stack spacing={0.5}>
-								{stardewState.lastRun.attempts.map((attempt) => (
-									<Typography key={`${stardewState.lastRun?.id}-${attempt.action}`} variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
-										{attempt.action}: {attempt.changed ? "changed" : "no change"} ({(attempt.changeRatio * 100).toFixed(1)}%)
-									</Typography>
-								))}
-							</Stack>
-						</>
-					)}
+					<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
+						最近结果：{stardewState.lastRun?.summary ?? "尚未执行"}
+					</Typography>
+					<Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+						任务：{stardewState.lastRun?.taskId ?? stardewState.selectedTaskId} · 分析源：{stardewState.lastRun?.analysis.source ?? "—"} · 尝试数：{stardewState.lastRun?.attempts.length ?? 0}
+					</Typography>
 				</Box>
 
 				<Box sx={{ mt: 1, p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
@@ -922,33 +795,21 @@ export function ControlPanel() {
 							{evaluationError}
 						</Alert>
 					)}
-					{evaluationState.latestResult && (
-						<Box sx={{ p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
-							<Typography variant="caption" sx={{ display: "block", color: "text.primary", mb: 0.25 }}>
-								最近评测：{evaluationState.latestResult.caseName}
-							</Typography>
-							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-								{evaluationState.latestResult.summary}
-							</Typography>
-							<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
-								成功率：{(evaluationState.latestResult.metrics.successRate * 100).toFixed(0)}%
-							</Typography>
-							<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
-								动作有效率：{(evaluationState.latestResult.metrics.actionValidityRate * 100).toFixed(0)}%
-							</Typography>
-							<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10, mb: 0.5 }}>
-								平均延迟：{evaluationState.latestResult.metrics.averageLatencyMs.toFixed(0)}ms · 中位延迟：{evaluationState.latestResult.metrics.medianLatencyMs.toFixed(0)}ms
-							</Typography>
-							<Stack spacing={0.25}>
-								{evaluationState.latestResult.runs.map((run) => (
-									<Typography key={`${evaluationState.latestResult?.caseId}-${run.index}`} variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
-										Run {run.index}: {run.status} · {run.summary} · {run.latencyMs}ms
-									</Typography>
-								))}
-							</Stack>
-						</Box>
-					)}
+					<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
+						最近评测：{evaluationState.latestResult?.caseName ?? "尚未执行"}
+					</Typography>
+					<Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+						成功率：{evaluationState.latestResult ? `${(evaluationState.latestResult.metrics.successRate * 100).toFixed(0)}%` : "—"} · 平均延迟：{evaluationState.latestResult ? `${evaluationState.latestResult.metrics.averageLatencyMs.toFixed(0)}ms` : "—"}
+					</Typography>
 				</Box>
+
+				<FunctionalDebugPanel
+					functionalState={functionalState}
+					game2048State={game2048State}
+					stardewState={stardewState}
+					evaluationState={evaluationState}
+					onClearTaskHistory={clearHistory}
+				/>
 			</Box>
 
 			<Divider />
