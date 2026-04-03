@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
 	Box, Button, Typography, Stack, Chip, Divider,
 	Select, MenuItem, TextField,
@@ -22,6 +22,7 @@ import type { CharacterProfile, HostWindowInfo, StardewTaskId } from "@/types";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("control-panel");
+const WINDOW_LIST_PREVIEW_LIMIT = 40;
 
 function normalizeSelectedCharacterId(currentId: string | null, available: readonly CharacterProfile[]): string {
 	if (!currentId || currentId === MOCK_CHARACTER_PROFILE.id) {
@@ -139,6 +140,7 @@ export function ControlPanel() {
 	const [windowsLoading, setWindowsLoading] = useState(false);
 	const [windowList, setWindowList] = useState<HostWindowInfo[]>([]);
 	const [windowListError, setWindowListError] = useState<string | null>(null);
+	const [windowQuery, setWindowQuery] = useState("");
 	const [manualKey, setManualKey] = useState("Enter");
 
 	const functionalError =
@@ -284,6 +286,32 @@ export function ControlPanel() {
 			log.error("failed to run Stardew task", err);
 		}
 	}, [functionalState.selectedTarget, runStardewTask]);
+
+	const filteredWindowList = useMemo(() => {
+		const query = windowQuery.trim().toLowerCase();
+		if (!query) {
+			return windowList;
+		}
+
+		return windowList.filter((windowInfo) => {
+			const haystack = [
+				windowInfo.title,
+				windowInfo.processName,
+				windowInfo.className,
+				windowInfo.handle,
+				String(windowInfo.processId),
+			]
+				.join(" ")
+				.toLowerCase();
+
+			return haystack.includes(query);
+		});
+	}, [windowList, windowQuery]);
+
+	const visibleWindowList = useMemo(
+		() => filteredWindowList.slice(0, WINDOW_LIST_PREVIEW_LIMIT),
+		[filteredWindowList],
+	);
 
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
@@ -482,9 +510,29 @@ export function ControlPanel() {
 						{windowsLoading ? "枚举中..." : "枚举窗口"}
 					</Button>
 					<Typography variant="caption" color="text.secondary">
-						{windowList.length > 0 ? `${windowList.length} 个窗口` : "尚未获取窗口列表"}
+						{windowList.length > 0 ? `${filteredWindowList.length} / ${windowList.length} 个窗口` : "尚未获取窗口列表"}
 					</Typography>
 				</Stack>
+
+				{windowList.length > 0 && (
+					<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.75 }}>
+						<TextField
+							size="small"
+							fullWidth
+							value={windowQuery}
+							onChange={(event) => setWindowQuery(event.target.value)}
+							placeholder="搜索标题 / 进程名 / 类名，例如 原神、YuanShen、firefox"
+						/>
+						<Button
+							size="small"
+							variant="text"
+							onClick={() => setWindowQuery("")}
+							disabled={!windowQuery.trim()}
+						>
+							清空
+						</Button>
+					</Stack>
+				)}
 
 				{windowListError && (
 					<Alert severity="error" sx={{ mt: 0.75, py: 0 }}>
@@ -501,7 +549,7 @@ export function ControlPanel() {
 				{windowList.length > 0 && (
 					<Box sx={{ mt: 0.75, maxHeight: 180, overflowY: "auto", pr: 0.5 }}>
 						<Stack spacing={0.5}>
-							{windowList.slice(0, 12).map((windowInfo) => (
+							{visibleWindowList.map((windowInfo) => (
 								<Box
 									key={windowInfo.handle}
 									sx={{
@@ -549,6 +597,16 @@ export function ControlPanel() {
 								</Box>
 							))}
 						</Stack>
+						{filteredWindowList.length > WINDOW_LIST_PREVIEW_LIMIT && (
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+								当前仅展示前 {WINDOW_LIST_PREVIEW_LIMIT} 条，请继续搜索以缩小范围。
+							</Typography>
+						)}
+						{filteredWindowList.length === 0 && (
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+								没有匹配当前搜索词的窗口。
+							</Typography>
+						)}
 					</Box>
 				)}
 
