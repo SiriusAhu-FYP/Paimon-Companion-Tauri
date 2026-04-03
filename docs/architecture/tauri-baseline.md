@@ -57,6 +57,26 @@ Reason:
 
 - the functional loop is latency-bound, and extra retrieval / rerank hops materially hurt action turnaround
 
+## Input Execution Model
+
+For the current host-control implementation:
+
+- host actions are foreground-oriented
+- the target window is focused before key or mouse input is emitted
+- keyboard and mouse events are sent through standard Windows input APIs
+
+This means the system currently assumes a foreground-exclusive interaction model:
+
+- it does not guarantee coexistence with the user's own typing
+- it does not guarantee coexistence with IME composition
+- it should not be treated as a background-safe automation layer
+
+If future stages require non-interfering control, the design will need one of:
+
+- app-specific automation hooks
+- reliable background message injection for a specific target
+- an isolated execution environment such as a VM or remote session
+
 ## Reusable Game Tasks
 
 For games with a small finite task set, the functional layer now supports reusable task templates.

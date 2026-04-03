@@ -17,7 +17,7 @@ Public progress tracker for `paimon-companion-tauri`.
   - [x] Move private planning/report material out of tracked repo content
   - [x] Copy owner-local `.cursor` workspace rules into the repo as ignored local files
 
-- [ ] P1: Functional Core Validation
+- [x] P1: Functional Core Validation
   - [x] P1.1 Host OS Primitives
     - [x] `list_windows`
     - [x] `capture_window`
@@ -49,12 +49,18 @@ Public progress tracker for `paimon-companion-tauri`.
     - [x] adapt control and verification logic
     - [x] run the same evaluation flow used in `2048`
 
-- [ ] P1.5+: Support Systems
+- [x] P1.5+: Support Systems
   - [-] connect knowledge retrieval to functional tasks where useful
     deferred: current functional loop is latency-bound, so embedding / retrieval / rerank stay out of the real-time path
   - [-] add better debug panels for capture / action / verification
     event log and status bar now surface live runtime / functional events; control panel also exposes capture -> decision -> action -> verification drill-down, but richer artifact export is still pending
   - [x] add reusable task templates for new games
+
+P1 close-out note:
+
+- live manual validation completed for the `2048` path on `2026-04-03`
+- the functional `2048` loop, evaluation harness, and searchable host-window picker are treated as the accepted P1 baseline
+- any `P2` work should start on a fresh branch rather than extending the P1 validation branch
 
 - [ ] P2: Unified System Validation
   - [ ] P2.1 Relational Core Integration

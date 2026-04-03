@@ -71,6 +71,11 @@ Baseline table:
 | `stardew-auto-detect-reposition` | pending live run | n/a | n/a | n/a | Requires a visible Stardew gameplay window |
 | `stardew-selected-inventory-toggle` | pending live run | n/a | n/a | n/a | Requires a manually confirmed target inside the app |
 
+Close-out note:
+
+- the `2026-04-03` P1 manual validation pass focused on the accepted `2048` baseline
+- Stardew live validation was intentionally deferred and should be resumed only when that extension becomes an active scope again
+
 ## Collection Procedure
 
 1. Launch the app in a real desktop session with Stardew Valley visible.

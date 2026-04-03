@@ -35,22 +35,23 @@ Action validity is defined as:
 
 ## Current Baseline Status
 
-Collection date: `2026-04-02`
+Collection date: `2026-04-03`
 
 Session context:
 
-- repository implementation completed in a terminal-only coding session
+- repository implementation completed and then manually validated in a real desktop session
 - `pnpm build` passed
 - `cargo check --manifest-path src-tauri/Cargo.toml` passed
 - the functional evaluation path intentionally excludes knowledge retrieval / embedding / rerank overhead
-- no live GUI evaluation run was executed from this terminal session
+- the functional input path still uses foreground-focused host control
+- manual validation confirmed that the `2048` capture, verification, and evaluation path now produce results consistent with visible board changes
 
 Baseline table:
 
 | Case | Status | Success Rate | Action Validity | Avg Latency | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `2048-auto-detect-smoke` | pending live run | n/a | n/a | n/a | Requires an actual visible `2048` window during an app session |
-| `2048-selected-target-repeat` | pending live run | n/a | n/a | n/a | Requires a manually confirmed target inside the app |
+| `2048-auto-detect-smoke` | live run complete | 100% | 100% | 15212ms | Manual GUI validation on `2026-04-03`; visible board motion matched the reported success metric |
+| `2048-selected-target-repeat` | live run complete | 100% | 100% | 14498ms | Manual GUI validation on `2026-04-03`; selected-target repeat case matched the observed board changes |
 
 ## Collection Procedure
 
@@ -59,4 +60,4 @@ Baseline table:
 3. Use the `Functional Evaluation Harness` section.
 4. Run `2048-auto-detect-smoke` with a visible browser tab for `2048`.
 5. Run `2048-selected-target-repeat` after manually confirming the target window.
-6. Copy the latest case summaries and replace the `pending live run` rows above.
+6. Record the latest case summaries and compare them against visible board changes.
