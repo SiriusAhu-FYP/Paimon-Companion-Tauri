@@ -4,8 +4,10 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
+import ScienceIcon from "@mui/icons-material/Science";
+import TuneIcon from "@mui/icons-material/Tune";
 import { StageHost, StageSlot } from "@/features/stage";
-import { ControlPanel } from "@/features/control-panel";
+import { ControlPanel, FunctionalPanel } from "@/features/control-panel";
 import { SettingsPanel } from "@/features/settings";
 import { KnowledgePanel } from "@/features/knowledge";
 import { ChatPanel } from "@/features/chat";
@@ -24,8 +26,7 @@ export function MainWindow() {
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
 	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("clean");
 	const [eventLogOpen, setEventLogOpen] = useState(false);
-	const [showSettings, setShowSettings] = useState(false);
-	const [showKnowledge, setShowKnowledge] = useState(false);
+	const [rightPanel, setRightPanel] = useState<"control" | "functional" | "settings" | "knowledge">("control");
 
 	const slotRectRef = useRef<DOMRect | null>(null);
 	const unlistenMoveRef = useRef<(() => void) | null>(null);
@@ -196,20 +197,38 @@ export function MainWindow() {
 							{mode === "dark" ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
 						</IconButton>
 					</Tooltip>
+					<Tooltip title="控制面板">
+						<IconButton
+							size="small"
+							onClick={() => setRightPanel("control")}
+							sx={{ color: rightPanel === "control" ? "primary.main" : "text.secondary" }}
+						>
+							<TuneIcon fontSize="small" />
+						</IconButton>
+					</Tooltip>
 					<Tooltip title="知识库">
 						<IconButton
 							size="small"
-							onClick={() => { setShowKnowledge(true); setShowSettings(false); }}
-							sx={{ color: showKnowledge ? "primary.main" : "text.secondary" }}
+							onClick={() => setRightPanel("knowledge")}
+							sx={{ color: rightPanel === "knowledge" ? "primary.main" : "text.secondary" }}
 						>
 							<AutoStoriesIcon fontSize="small" />
+						</IconButton>
+					</Tooltip>
+					<Tooltip title="功能实验">
+						<IconButton
+							size="small"
+							onClick={() => setRightPanel("functional")}
+							sx={{ color: rightPanel === "functional" ? "primary.main" : "text.secondary" }}
+						>
+							<ScienceIcon fontSize="small" />
 						</IconButton>
 					</Tooltip>
 					<Tooltip title="设置">
 						<IconButton
 							size="small"
-							onClick={() => { setShowSettings(true); setShowKnowledge(false); }}
-							sx={{ color: showSettings ? "primary.main" : "text.secondary" }}
+							onClick={() => setRightPanel("settings")}
+							sx={{ color: rightPanel === "settings" ? "primary.main" : "text.secondary" }}
 						>
 							<SettingsIcon fontSize="small" />
 						</IconButton>
@@ -264,10 +283,12 @@ export function MainWindow() {
 
 				{/* 右栏: 控制面板 / 设置 / 知识库 */}
 				<Box sx={{ width: 280, minWidth: 220, flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-					{showSettings ? (
-						<SettingsPanel onClose={() => setShowSettings(false)} />
-					) : showKnowledge ? (
-						<KnowledgePanel onClose={() => setShowKnowledge(false)} />
+					{rightPanel === "settings" ? (
+						<SettingsPanel onClose={() => setRightPanel("control")} />
+					) : rightPanel === "knowledge" ? (
+						<KnowledgePanel onClose={() => setRightPanel("control")} />
+					) : rightPanel === "functional" ? (
+						<FunctionalPanel />
 					) : (
 						<ControlPanel />
 					)}
