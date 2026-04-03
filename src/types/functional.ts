@@ -10,6 +10,9 @@ export interface PerceptionSnapshot {
 	height: number;
 	dataUrl: string;
 	capturedAt: number;
+	captureMethod: string;
+	qualityScore: number;
+	lowConfidence: boolean;
 }
 
 export type FunctionalTaskStatus = "running" | "completed" | "failed";

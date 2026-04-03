@@ -18,6 +18,7 @@ export class EventBus {
 	private history: EventHistoryEntry[] = [];
 	private historyLimit = 200;
 	private historyListeners = new Set<() => void>();
+	private historyVersion = 0;
 
 	on<E extends EventName>(event: E, handler: Handler<EventMap[E]>): () => void {
 		if (!this.listeners.has(event)) {
@@ -78,6 +79,10 @@ export class EventBus {
 		return this.history;
 	}
 
+	getHistoryVersion(): number {
+		return this.historyVersion;
+	}
+
 	clearHistory() {
 		this.history = [];
 		this.notifyHistoryListeners();
@@ -104,6 +109,7 @@ export class EventBus {
 	}
 
 	private notifyHistoryListeners() {
+		this.historyVersion += 1;
 		for (const listener of this.historyListeners) {
 			try {
 				listener();

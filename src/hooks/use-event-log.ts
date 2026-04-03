@@ -161,7 +161,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "perception:snapshot": {
 			const data = payload as EventMap["perception:snapshot"];
-			return `${data.targetTitle} ${data.width}x${data.height}`;
+			return `${data.targetTitle} ${data.width}x${data.height} via ${data.captureMethod}${data.lowConfidence ? " low-confidence" : ""}`;
 		}
 		case "orchestrator:state-change": {
 			const data = payload as EventMap["orchestrator:state-change"];
@@ -259,11 +259,12 @@ function toEntry(entry: EventHistoryEntry): EventLogEntry | null {
 
 export function useEventLog(limit = DEFAULT_LIMIT) {
 	const { bus } = getServices();
-	const history = useSyncExternalStore(
+	const historyVersion = useSyncExternalStore(
 		(onStoreChange) => bus.subscribeHistory(onStoreChange),
-		() => bus.getHistory(),
-		() => [],
+		() => bus.getHistoryVersion(),
+		() => 0,
 	);
+	const history = bus.getHistory();
 
 	const entries = useMemo(() => {
 		const next: EventLogEntry[] = [];
@@ -280,7 +281,7 @@ export function useEventLog(limit = DEFAULT_LIMIT) {
 			entries: next,
 			totalTrackedEntries: history.reduce((count, item) => count + (TRACKED_EVENTS.includes(item.event) ? 1 : 0), 0),
 		};
-	}, [history, limit]);
+	}, [history, historyVersion, limit]);
 
 	const clear = useCallback(() => {
 		bus.clearHistory();

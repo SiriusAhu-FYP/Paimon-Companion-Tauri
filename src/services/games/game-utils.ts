@@ -51,6 +51,14 @@ export async function ensureReferenceSnapshot(
 	return captureTask.afterSnapshot;
 }
 
+export function isSnapshotLowConfidence(snapshot: PerceptionSnapshot): boolean {
+	return snapshot.lowConfidence || snapshot.qualityScore < 0.12;
+}
+
+export function describeSnapshotQuality(snapshot: PerceptionSnapshot): string {
+	return `${snapshot.captureMethod} / score ${snapshot.qualityScore.toFixed(3)}`;
+}
+
 export async function estimateSnapshotChange(
 	beforeSnapshot: PerceptionSnapshot,
 	afterSnapshot: PerceptionSnapshot,
@@ -58,6 +66,11 @@ export async function estimateSnapshotChange(
 ): Promise<number> {
 	if (beforeSnapshot.width !== afterSnapshot.width || beforeSnapshot.height !== afterSnapshot.height) {
 		return 1;
+	}
+	if (isSnapshotLowConfidence(beforeSnapshot) || isSnapshotLowConfidence(afterSnapshot)) {
+		throw new Error(
+			`capture confidence too low for verification: before=${describeSnapshotQuality(beforeSnapshot)}, after=${describeSnapshotQuality(afterSnapshot)}`,
+		);
 	}
 
 	const sampleSize = options.sampleSize ?? 48;
@@ -68,12 +81,13 @@ export async function estimateSnapshotChange(
 	let totalDiff = 0;
 
 	for (let index = 0; index < beforeData.data.length; index += 4) {
-		const beforeLuma = luma(beforeData.data[index], beforeData.data[index + 1], beforeData.data[index + 2]);
-		const afterLuma = luma(afterData.data[index], afterData.data[index + 1], afterData.data[index + 2]);
-		totalDiff += Math.abs(beforeLuma - afterLuma);
+		totalDiff +=
+			Math.abs(beforeData.data[index] - afterData.data[index]) +
+			Math.abs(beforeData.data[index + 1] - afterData.data[index + 1]) +
+			Math.abs(beforeData.data[index + 2] - afterData.data[index + 2]);
 	}
 
-	return totalDiff / (pixelCount * 255);
+	return totalDiff / (pixelCount * 255 * 3);
 }
 
 export function extractJsonObject(content: string): string {
@@ -96,6 +110,7 @@ export function normalizeCompatibleOpenAIBaseUrl(raw: string): string {
 
 function scoreWindow(windowInfo: HostWindowInfo, options: WindowMatchOptions): number {
 	const title = windowInfo.title.toLowerCase();
+	const processName = windowInfo.processName.toLowerCase();
 	let score = 0;
 
 	for (const keyword of options.keywords) {
@@ -105,7 +120,8 @@ function scoreWindow(windowInfo: HostWindowInfo, options: WindowMatchOptions): n
 	}
 
 	for (const keyword of options.processKeywords ?? []) {
-		if (title.includes(keyword.toLowerCase())) {
+		const normalized = keyword.toLowerCase();
+		if (title.includes(normalized) || processName.includes(normalized)) {
 			score += 2;
 		}
 	}
@@ -163,8 +179,4 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
 		image.onerror = () => reject(new Error("failed to decode snapshot image"));
 		image.src = dataUrl;
 	});
-}
-
-function luma(r: number, g: number, b: number): number {
-	return (r * 0.2126) + (g * 0.7152) + (b * 0.0722);
 }

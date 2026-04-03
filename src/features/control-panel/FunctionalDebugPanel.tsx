@@ -263,16 +263,25 @@ export function FunctionalDebugPanel(props: FunctionalDebugPanelProps) {
 					lines={latestSnapshot ? [
 						`target: ${latestSnapshot.targetTitle}`,
 						`size: ${latestSnapshot.width}x${latestSnapshot.height}`,
+						`method: ${latestSnapshot.captureMethod}`,
+						`quality: ${latestSnapshot.qualityScore.toFixed(3)}${latestSnapshot.lowConfidence ? " (low-confidence)" : ""}`,
 						`captured: ${formatTime(latestSnapshot.capturedAt)}`,
 					] : ["还没有可视快照"]}
 				>
 					{latestSnapshot ? (
-						<SnapshotCard
-							title="Latest Snapshot"
-							dataUrl={latestSnapshot.dataUrl}
-							label={latestSnapshot.targetTitle}
-							height={180}
-						/>
+						<>
+							{latestSnapshot.lowConfidence && (
+								<Alert severity="warning" sx={{ mb: 0.75, py: 0 }}>
+									当前截图可信度偏低，后续验证结果可能不可靠。
+								</Alert>
+							)}
+							<SnapshotCard
+								title="Latest Snapshot"
+								dataUrl={latestSnapshot.dataUrl}
+								label={latestSnapshot.targetTitle}
+								height={180}
+							/>
+						</>
 					) : null}
 				</StageCard>
 
@@ -408,6 +417,16 @@ export function FunctionalDebugPanel(props: FunctionalDebugPanelProps) {
 						<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
 							summary: {selectedTask.summary}
 						</Typography>
+						{selectedTask.beforeSnapshot && (
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
+								before: {selectedTask.beforeSnapshot.captureMethod} / {selectedTask.beforeSnapshot.qualityScore.toFixed(3)}
+							</Typography>
+						)}
+						{selectedTask.afterSnapshot && (
+							<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
+								after: {selectedTask.afterSnapshot.captureMethod} / {selectedTask.afterSnapshot.qualityScore.toFixed(3)}
+							</Typography>
+						)}
 					</Stack>
 
 					<Stack direction={{ xs: "column", sm: "row" }} spacing={0.75}>

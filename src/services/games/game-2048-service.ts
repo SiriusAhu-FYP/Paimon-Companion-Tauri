@@ -14,9 +14,11 @@ import type {
 } from "@/types";
 import {
 	chooseWindowByKeywords,
+	describeSnapshotQuality,
 	ensureReferenceSnapshot,
 	estimateSnapshotChange,
 	extractJsonObject,
+	isSnapshotLowConfidence,
 	normalizeCompatibleOpenAIBaseUrl,
 } from "./game-utils";
 
@@ -106,6 +108,11 @@ export class Game2048Service {
 			target,
 			"unable to capture baseline snapshot",
 		);
+		if (isSnapshotLowConfidence(baselineSnapshot)) {
+			throw new Error(
+				`2048 baseline capture looks invalid (${describeSnapshotQuality(baselineSnapshot)}). Check browser/game capture first.`,
+			);
+		}
 		const analysis = await this.buildAnalysis(target, baselineSnapshot);
 		const run: Game2048RunRecord = {
 			id: `2048-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -292,6 +299,11 @@ export class Game2048Service {
 		beforeSnapshot: PerceptionSnapshot,
 		afterSnapshot: PerceptionSnapshot,
 	): Promise<Game2048MoveAttempt> {
+		if (isSnapshotLowConfidence(beforeSnapshot) || isSnapshotLowConfidence(afterSnapshot)) {
+			throw new Error(
+				`capture invalid during ${move}: before=${describeSnapshotQuality(beforeSnapshot)}, after=${describeSnapshotQuality(afterSnapshot)}`,
+			);
+		}
 		const changeRatio = await estimateSnapshotChange(beforeSnapshot, afterSnapshot, { cropScale: 0.7 });
 		return {
 			move,

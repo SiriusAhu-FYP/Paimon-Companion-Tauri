@@ -7,6 +7,7 @@ pub struct WindowInfo {
 	pub title: String,
 	pub class_name: String,
 	pub process_id: u32,
+	pub process_name: String,
 	pub visible: bool,
 	pub minimized: bool,
 }
@@ -47,6 +48,8 @@ pub struct WindowCapture {
 	pub width: u32,
 	pub height: u32,
 	pub png_base64: String,
+	pub capture_method: String,
+	pub quality_score: f32,
 }
 
 #[tauri::command]
@@ -120,9 +123,10 @@ pub async fn send_mouse(request: SendMouseRequest) -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 fn list_windows_windows() -> Result<Vec<WindowInfo>, String> {
-	use windows::Win32::Foundation::{HWND, LPARAM};
+	use windows::Win32::Foundation::{HWND, LPARAM, RECT};
 	use windows::Win32::UI::WindowsAndMessaging::{
-		EnumWindows, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+		EnumWindows, GetWindow, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId,
+		IsIconic, IsWindowVisible, GWL_EXSTYLE, GW_OWNER, WS_EX_TOOLWINDOW,
 	};
 	use windows::core::BOOL;
 
@@ -133,25 +137,50 @@ fn list_windows_windows() -> Result<Vec<WindowInfo>, String> {
 	unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
 		let state = unsafe { &mut *(lparam.0 as *mut EnumState) };
 
-		let title = get_window_text(hwnd).unwrap_or_default();
-		if title.trim().is_empty() {
+		let visible = unsafe { IsWindowVisible(hwnd) }.as_bool();
+		let minimized = unsafe { IsIconic(hwnd) }.as_bool();
+
+		let owner = unsafe { GetWindow(hwnd, GW_OWNER) }.unwrap_or_default();
+		if !owner.0.is_null() {
 			return BOOL(1);
 		}
 
-		let class_name = get_class_name(hwnd).unwrap_or_default();
-		let visible = unsafe { IsWindowVisible(hwnd) }.as_bool();
-		let minimized = unsafe { IsIconic(hwnd) }.as_bool();
+		let ex_style = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) } as u32;
+		if ex_style & WS_EX_TOOLWINDOW.0 != 0 {
+			return BOOL(1);
+		}
+
+		let mut rect = RECT::default();
+		if unsafe { GetWindowRect(hwnd, &mut rect) }.is_err() {
+			return BOOL(1);
+		}
+
+		if rect.right <= rect.left || rect.bottom <= rect.top {
+			return BOOL(1);
+		}
 
 		let mut process_id = 0u32;
 		unsafe {
 			GetWindowThreadProcessId(hwnd, Some(&mut process_id as *mut u32));
 		}
+		let process_name = get_process_name(process_id).unwrap_or_default();
+
+		let mut title = get_window_text(hwnd).unwrap_or_default();
+		if title.trim().is_empty() && !process_name.is_empty() {
+			title = format!("[{process_name}]");
+		}
+		if title.trim().is_empty() {
+			return BOOL(1);
+		}
+
+		let class_name = get_class_name(hwnd).unwrap_or_default();
 
 		state.windows.push(WindowInfo {
 			handle: format!("0x{:X}", hwnd.0 as usize),
 			title,
 			class_name,
 			process_id,
+			process_name,
 			visible,
 			minimized,
 		});
@@ -166,8 +195,8 @@ fn list_windows_windows() -> Result<Vec<WindowInfo>, String> {
 		.map_err(|err| format!("EnumWindows failed: {err}"))?;
 
 	state.windows.sort_by(|a, b| {
-		b.visible
-			.cmp(&a.visible)
+		a.minimized
+			.cmp(&b.minimized)
 			.then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
 	});
 
@@ -179,10 +208,6 @@ fn capture_window_windows(handle: &str) -> Result<WindowCapture, String> {
 	use base64::engine::general_purpose::STANDARD;
 	use base64::Engine;
 	use windows::Win32::Foundation::RECT;
-	use windows::Win32::Graphics::Gdi::{
-		BitBlt, CAPTUREBLT, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC,
-		DeleteObject, GetWindowDC, HGDIOBJ, ReleaseDC, SRCCOPY, SelectObject,
-	};
 	use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsWindow};
 
 	let hwnd = parse_hwnd(handle)?;
@@ -199,41 +224,113 @@ fn capture_window_windows(handle: &str) -> Result<WindowCapture, String> {
 		return Err("target window has zero-sized bounds".to_string());
 	}
 
+	let capture = capture_window_pixels(hwnd, width, height)?;
+	let png_bytes = encode_png_rgba(&capture.pixels, width, height)?;
+
+	Ok(WindowCapture {
+		handle: handle.to_string(),
+		width,
+		height,
+		png_base64: STANDARD.encode(png_bytes),
+		capture_method: capture.method,
+		quality_score: capture.quality_score,
+	})
+}
+
+#[cfg(target_os = "windows")]
+struct PixelCapture {
+	method: String,
+	pixels: Vec<u8>,
+	quality_score: f32,
+}
+
+#[cfg(target_os = "windows")]
+fn capture_window_pixels(
+	hwnd: windows::Win32::Foundation::HWND,
+	width: u32,
+	height: u32,
+) -> Result<PixelCapture, String> {
+	let mut captures = Vec::new();
+
+	if let Ok(capture) = capture_with_print_window(hwnd, width, height, 0x0000_0002) {
+		captures.push(capture);
+	}
+
+	if let Ok(capture) = capture_with_print_window(hwnd, width, height, 0) {
+		captures.push(capture);
+	}
+
+	if let Ok(capture) = capture_with_bitblt(hwnd, width, height) {
+		captures.push(capture);
+	}
+
+	captures
+		.into_iter()
+		.max_by(|left, right| left.quality_score.total_cmp(&right.quality_score))
+		.ok_or_else(|| "all window capture strategies failed".to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn capture_with_print_window(
+	hwnd: windows::Win32::Foundation::HWND,
+	width: u32,
+	height: u32,
+	flags: u32,
+) -> Result<PixelCapture, String> {
+	use windows::Win32::Graphics::Gdi::GetDC;
+	use windows::Win32::Graphics::Gdi::ReleaseDC;
+	use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS};
+
+	let screen_dc = unsafe { GetDC(None) };
+	if screen_dc.is_invalid() {
+		return Err("GetDC returned invalid device context".to_string());
+	}
+
+	let context = CaptureContext::new(screen_dc, width, height)?;
+	let printed = unsafe { PrintWindow(hwnd, context.memory_dc, PRINT_WINDOW_FLAGS(flags)) }.as_bool();
+	let pixels = if printed {
+		read_bitmap_rgba(context.memory_dc, context.bitmap, width, height)?
+	} else {
+		let err = format!("PrintWindow failed for flags=0x{flags:08X}");
+		unsafe {
+			ReleaseDC(None, screen_dc);
+		}
+		drop(context);
+		return Err(err);
+	};
+	drop(context);
+	unsafe {
+		ReleaseDC(None, screen_dc);
+	}
+
+	Ok(PixelCapture {
+		method: if flags == 0x0000_0002 {
+			"print-window-full".to_string()
+		} else {
+			"print-window".to_string()
+		},
+		quality_score: score_rgba_quality(&pixels),
+		pixels,
+	})
+}
+
+#[cfg(target_os = "windows")]
+fn capture_with_bitblt(
+	hwnd: windows::Win32::Foundation::HWND,
+	width: u32,
+	height: u32,
+) -> Result<PixelCapture, String> {
+	use windows::Win32::Graphics::Gdi::{BitBlt, CAPTUREBLT, GetWindowDC, ReleaseDC, SRCCOPY};
+
 	let window_dc = unsafe { GetWindowDC(Some(hwnd)) };
 	if window_dc.is_invalid() {
 		return Err("GetWindowDC returned invalid device context".to_string());
 	}
 
-	let memory_dc = unsafe { CreateCompatibleDC(Some(window_dc)) };
-	if memory_dc.is_invalid() {
-		unsafe {
-			ReleaseDC(Some(hwnd), window_dc);
-		}
-		return Err("CreateCompatibleDC failed".to_string());
-	}
-
-	let bitmap = unsafe { CreateCompatibleBitmap(window_dc, width as i32, height as i32) };
-	if bitmap.is_invalid() {
-		unsafe {
-			let _ = DeleteDC(memory_dc);
-			ReleaseDC(Some(hwnd), window_dc);
-		}
-		return Err("CreateCompatibleBitmap failed".to_string());
-	}
-
-	let previous = unsafe { SelectObject(memory_dc, HGDIOBJ(bitmap.0)) };
-	if previous.is_invalid() {
-		unsafe {
-			let _ = DeleteObject(HGDIOBJ(bitmap.0));
-			let _ = DeleteDC(memory_dc);
-			ReleaseDC(Some(hwnd), window_dc);
-		}
-		return Err("SelectObject failed".to_string());
-	}
-
-	let capture_result = unsafe {
+	let context = CaptureContext::new(window_dc, width, height)?;
+	let result = unsafe {
 		BitBlt(
-			memory_dc,
+			context.memory_dc,
 			0,
 			0,
 			width as i32,
@@ -245,26 +342,81 @@ fn capture_window_windows(handle: &str) -> Result<WindowCapture, String> {
 		)
 	};
 
-	let pixels_result = capture_result
+	let pixels = result
 		.map_err(|err| format!("BitBlt failed: {err}"))
-		.and_then(|_| read_bitmap_rgba(memory_dc, bitmap, width, height));
+		.and_then(|_| read_bitmap_rgba(context.memory_dc, context.bitmap, width, height))?;
 
+	drop(context);
 	unsafe {
-		SelectObject(memory_dc, previous);
-		let _ = DeleteObject(HGDIOBJ(bitmap.0));
-		let _ = DeleteDC(memory_dc);
 		ReleaseDC(Some(hwnd), window_dc);
 	}
 
-	let pixels = pixels_result?;
-	let png_bytes = encode_png_rgba(&pixels, width, height)?;
-
-	Ok(WindowCapture {
-		handle: handle.to_string(),
-		width,
-		height,
-		png_base64: STANDARD.encode(png_bytes),
+	Ok(PixelCapture {
+		method: "bitblt".to_string(),
+		quality_score: score_rgba_quality(&pixels),
+		pixels,
 	})
+}
+
+#[cfg(target_os = "windows")]
+struct CaptureContext {
+	memory_dc: windows::Win32::Graphics::Gdi::HDC,
+	bitmap: windows::Win32::Graphics::Gdi::HBITMAP,
+	previous: windows::Win32::Graphics::Gdi::HGDIOBJ,
+}
+
+#[cfg(target_os = "windows")]
+impl CaptureContext {
+	fn new(
+		source_dc: windows::Win32::Graphics::Gdi::HDC,
+		width: u32,
+		height: u32,
+	) -> Result<Self, String> {
+		use windows::Win32::Graphics::Gdi::{
+			CreateCompatibleBitmap, CreateCompatibleDC, HGDIOBJ, SelectObject,
+		};
+
+		let memory_dc = unsafe { CreateCompatibleDC(Some(source_dc)) };
+		if memory_dc.is_invalid() {
+			return Err("CreateCompatibleDC failed".to_string());
+		}
+
+		let bitmap = unsafe { CreateCompatibleBitmap(source_dc, width as i32, height as i32) };
+		if bitmap.is_invalid() {
+			unsafe {
+				let _ = windows::Win32::Graphics::Gdi::DeleteDC(memory_dc);
+			}
+			return Err("CreateCompatibleBitmap failed".to_string());
+		}
+
+		let previous = unsafe { SelectObject(memory_dc, HGDIOBJ(bitmap.0)) };
+		if previous.is_invalid() {
+			unsafe {
+				let _ = windows::Win32::Graphics::Gdi::DeleteObject(HGDIOBJ(bitmap.0));
+				let _ = windows::Win32::Graphics::Gdi::DeleteDC(memory_dc);
+			}
+			return Err("SelectObject failed".to_string());
+		}
+
+		Ok(Self {
+			memory_dc,
+			bitmap,
+			previous,
+		})
+	}
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for CaptureContext {
+	fn drop(&mut self) {
+		use windows::Win32::Graphics::Gdi::{DeleteDC, DeleteObject, HGDIOBJ, SelectObject};
+
+		unsafe {
+			let _ = SelectObject(self.memory_dc, self.previous);
+			let _ = DeleteObject(HGDIOBJ(self.bitmap.0));
+			let _ = DeleteDC(self.memory_dc);
+		}
+	}
 }
 
 #[cfg(target_os = "windows")]
@@ -522,6 +674,43 @@ fn read_bitmap_rgba(
 }
 
 #[cfg(target_os = "windows")]
+fn score_rgba_quality(rgba: &[u8]) -> f32 {
+	if rgba.len() < 4 {
+		return 0.0;
+	}
+
+	let stride = 16usize;
+	let mut count = 0f32;
+	let mut sum = 0f32;
+	let mut sum_sq = 0f32;
+	let mut min_luma = 255f32;
+	let mut max_luma = 0f32;
+
+	for pixel in rgba.chunks_exact(4).step_by(stride) {
+		let luma = (pixel[0] as f32 * 0.2126) + (pixel[1] as f32 * 0.7152) + (pixel[2] as f32 * 0.0722);
+		sum += luma;
+		sum_sq += luma * luma;
+		min_luma = min_luma.min(luma);
+		max_luma = max_luma.max(luma);
+		count += 1.0;
+	}
+
+	if count <= 1.0 {
+		return 0.0;
+	}
+
+	let mean = sum / count;
+	let variance = ((sum_sq / count) - (mean * mean)).max(0.0);
+	let std_dev = variance.sqrt();
+	let spread = ((max_luma - min_luma) / 255.0).clamp(0.0, 1.0);
+	let normalized_std_dev = (std_dev / 64.0).clamp(0.0, 1.0);
+	let normalized_mean = (mean / 255.0).clamp(0.0, 1.0);
+	let brightness_penalty = if normalized_mean < 0.06 { 0.25 } else { 0.0 };
+
+	(0.65 * spread + 0.35 * normalized_std_dev - brightness_penalty).clamp(0.0, 1.0)
+}
+
+#[cfg(target_os = "windows")]
 fn encode_png_rgba(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
 	use png::Encoder;
 
@@ -543,20 +732,61 @@ fn encode_png_rgba(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>, Stri
 
 #[cfg(target_os = "windows")]
 fn get_window_text(hwnd: windows::Win32::Foundation::HWND) -> Result<String, String> {
-	use windows::Win32::UI::WindowsAndMessaging::{GetWindowTextLengthW, GetWindowTextW};
+	use windows::Win32::UI::WindowsAndMessaging::GetWindowTextW;
 
-	let len = unsafe { GetWindowTextLengthW(hwnd) };
-	if len <= 0 {
-		return Ok(String::new());
-	}
-
-	let mut buffer = vec![0u16; len as usize + 1];
+	let mut buffer = vec![0u16; 1024];
 	let copied = unsafe { GetWindowTextW(hwnd, &mut buffer) };
 	if copied <= 0 {
 		return Ok(String::new());
 	}
 
 	Ok(String::from_utf16_lossy(&buffer[..copied as usize]))
+}
+
+#[cfg(target_os = "windows")]
+fn get_process_name(process_id: u32) -> Result<String, String> {
+	use windows::core::PWSTR;
+	use windows::Win32::Foundation::CloseHandle;
+	use windows::Win32::System::Threading::{
+		OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+	};
+
+	if process_id == 0 {
+		return Ok(String::new());
+	}
+
+	let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) }
+		.map_err(|err| format!("OpenProcess failed: {err}"))?;
+
+	let mut buffer = vec![0u16; 260];
+	let mut size = buffer.len() as u32;
+	let result = unsafe {
+		QueryFullProcessImageNameW(
+			process,
+			PROCESS_NAME_WIN32,
+			PWSTR(buffer.as_mut_ptr()),
+			&mut size,
+		)
+	};
+
+	unsafe {
+		let _ = CloseHandle(process);
+	}
+
+	if result.is_err() || size == 0 {
+		return Ok(String::new());
+	}
+
+	let full_path = String::from_utf16_lossy(&buffer[..size as usize]);
+	let file_name = full_path
+		.rsplit(['\\', '/'])
+		.next()
+		.unwrap_or("")
+		.trim()
+		.trim_end_matches(".exe")
+		.to_string();
+
+	Ok(file_name)
 }
 
 #[cfg(target_os = "windows")]

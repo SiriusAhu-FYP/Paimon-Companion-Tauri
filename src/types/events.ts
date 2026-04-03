@@ -101,6 +101,9 @@ export interface PerceptionSnapshotPayload {
 	width: number;
 	height: number;
 	capturedAt: number;
+	captureMethod: string;
+	qualityScore: number;
+	lowConfidence: boolean;
 }
 
 export interface OrchestratorStateChangePayload {
