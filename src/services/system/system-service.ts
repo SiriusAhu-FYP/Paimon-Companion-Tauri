@@ -31,7 +31,10 @@ export async function captureWindow(handle: string): Promise<HostWindowCapture> 
 		request: { handle },
 	});
 
-	log.info(`captured window ${handle} (${capture.width}x${capture.height})`);
+	log.info(`captured window ${handle} (${capture.width}x${capture.height})`, {
+		captureMethod: capture.captureMethod,
+		qualityScore: Number(capture.qualityScore.toFixed(3)),
+	});
 	return capture;
 }
 

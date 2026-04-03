@@ -516,7 +516,7 @@ export function ControlPanel() {
 										{windowInfo.title}
 									</Typography>
 									<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
-										PID {windowInfo.processId} · {windowInfo.className} · {windowInfo.visible ? "visible" : "hidden"} · {windowInfo.minimized ? "minimized" : "normal"}
+										PID {windowInfo.processId} · {windowInfo.processName || "unknown"} · {windowInfo.className} · {windowInfo.visible ? "visible" : "hidden"} · {windowInfo.minimized ? "minimized" : "normal"}
 									</Typography>
 									<Stack direction="row" justifyContent="flex-end" spacing={0.25} sx={{ mt: 0.5, flexWrap: "wrap" }}>
 										<Button
