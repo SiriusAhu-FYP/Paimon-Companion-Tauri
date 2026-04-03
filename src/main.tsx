@@ -24,7 +24,7 @@ async function bootstrap() {
 		} else {
 			mockCharacterInit(services.character);
 		}
-		exposeMockTools(services.bus, services.character, services.externalInput, services.runtime);
+		exposeMockTools(services.bus, services.character, services.runtime);
 
 		const broadcastFullState = (expressionEmotion?: string) => {
 			const charState = services.character.getState();

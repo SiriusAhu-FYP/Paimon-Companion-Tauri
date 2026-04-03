@@ -52,4 +52,5 @@ pnpm tauri dev
 
 - This repo does not treat Python as an in-app sidecar baseline.
 - External AI services may still run outside the app over HTTP/SSE.
-- The old Python-first integration repo is frozen at `E:\FYP-PROJECT\core\paimon-companion`.
+- The old Python-first integration repo is frozen and kept only as a local historical reference.
+- Public implementation progress is tracked in `ROADMAP.md`.

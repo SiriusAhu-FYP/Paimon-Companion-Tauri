@@ -29,9 +29,17 @@
 .event-log-header {
 	display: flex;
 	align-items: center;
+	justify-content: space-between;
 	gap: 8px;
 	margin-bottom: 6px;
 	flex-shrink: 0;
+}
+
+.event-log-title-group {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
 }
 
 .event-log-header h3 {
@@ -42,11 +50,27 @@
 	white-space: nowrap;
 }
 
+.event-log-meta {
+	font-size: 10px;
+	opacity: 0.45;
+	white-space: nowrap;
+}
+
+.event-log-latest {
+	font-size: 11px;
+	opacity: 0.65;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 420px;
+}
+
 .event-log-filters {
 	display: flex;
 	gap: 4px;
 	align-items: center;
 	flex-wrap: wrap;
+	justify-content: flex-end;
 }
 
 .event-log-filter-chip {
@@ -105,6 +129,9 @@
 .event-log-entry {
 	display: flex;
 	gap: 8px;
+	align-items: flex-start;
+	padding: 4px 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .event-log-time {
@@ -112,12 +139,48 @@
 	min-width: 70px;
 }
 
+.event-log-category {
+	min-width: 40px;
+	padding: 1px 6px;
+	border: 1px solid color-mix(in srgb, var(--event-color, #90a4ae) 50%, transparent);
+	border-radius: 999px;
+	color: var(--event-color, #90a4ae);
+	font-size: 10px;
+	line-height: 1.5;
+	text-align: center;
+}
+
+.event-log-body {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 1;
+}
+
+.event-log-main {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+
 .event-log-name {
-	min-width: 200px;
+	min-width: 180px;
+	flex-shrink: 0;
+}
+
+.event-log-summary {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	opacity: 0.9;
 }
 
 .event-log-payload {
-	opacity: 0.6;
+	opacity: 0.55;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;

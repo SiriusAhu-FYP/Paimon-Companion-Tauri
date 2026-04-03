@@ -2,6 +2,12 @@ import type { EventMap, EventName } from "@/types";
 
 type Handler<T> = (payload: T) => void;
 
+export interface EventHistoryEntry {
+	event: EventName;
+	payload: unknown;
+	timestamp: number;
+}
+
 interface Subscription {
 	event: EventName;
 	handler: Handler<unknown>;
@@ -9,8 +15,10 @@ interface Subscription {
 
 export class EventBus {
 	private listeners = new Map<EventName, Set<Handler<unknown>>>();
-	private history: Array<{ event: EventName; payload: unknown; timestamp: number }> = [];
+	private history: EventHistoryEntry[] = [];
 	private historyLimit = 200;
+	private historyListeners = new Set<() => void>();
+	private historyVersion = 0;
 
 	on<E extends EventName>(event: E, handler: Handler<EventMap[E]>): () => void {
 		if (!this.listeners.has(event)) {
@@ -60,12 +68,24 @@ export class EventBus {
 		return () => unsubscribes.forEach((unsub) => unsub());
 	}
 
-	getHistory() {
-		return [...this.history];
+	subscribeHistory(listener: () => void): () => void {
+		this.historyListeners.add(listener);
+		return () => {
+			this.historyListeners.delete(listener);
+		};
+	}
+
+	getHistory(): readonly EventHistoryEntry[] {
+		return this.history;
+	}
+
+	getHistoryVersion(): number {
+		return this.historyVersion;
 	}
 
 	clearHistory() {
 		this.history = [];
+		this.notifyHistoryListeners();
 	}
 
 	listenerCount(event: EventName): number {
@@ -84,6 +104,18 @@ export class EventBus {
 		this.history.push({ event, payload, timestamp: Date.now() });
 		if (this.history.length > this.historyLimit) {
 			this.history = this.history.slice(-this.historyLimit);
+		}
+		this.notifyHistoryListeners();
+	}
+
+	private notifyHistoryListeners() {
+		this.historyVersion += 1;
+		for (const listener of this.historyListeners) {
+			try {
+				listener();
+			} catch (err) {
+				console.error("[EventBus] history listener error:", err);
+			}
 		}
 	}
 }

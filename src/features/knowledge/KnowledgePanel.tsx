@@ -530,7 +530,7 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 	}, []);
 
 	// 切换到 JSON 模式时预填样例
-	const JSON_SAMPLE = '[\n  {\n    "id": "example-001",\n    "title": "示例：派蒙PVC玩偶",\n    "content": "尺寸：1:2 售价：888元一只 状态：现货，可直接下单。",\n    "source": "manual",\n    "category": "商品"\n  }\n]';
+	const JSON_SAMPLE = '[\n  {\n    "id": "example-001",\n    "title": "示例：2048 方向策略",\n    "content": "优先保持最大数字停留在角落，避免在中盘频繁改变主堆叠方向。",\n    "source": "manual",\n    "category": "strategy"\n  }\n]';
 	useEffect(() => {
 		if (addMode === "json" && !jsonInput.trim()) {
 			validateJsonInput(JSON_SAMPLE);
