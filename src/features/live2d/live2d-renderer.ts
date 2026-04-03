@@ -67,7 +67,7 @@ export class Live2DRenderer {
 		this.destroyed = false;
 
 		if (!hasCubismCore()) {
-			throw new Error("Live2D Cubism Core 未安装：缺少 public/Core/live2dcubismcore.min.js");
+			throw new Error("Live2D Cubism Core 未加载：请确认 /Core/live2dcubismcore.min.js 可访问");
 		}
 
 		this.autoFit = options.autoFit ?? false;
@@ -130,7 +130,7 @@ export class Live2DRenderer {
 	async switchModel(modelPath: string): Promise<void> {
 		if (!this.app || this.destroyed) return;
 		if (!hasCubismCore()) {
-			throw new Error("Live2D Cubism Core 未安装：缺少 public/Core/live2dcubismcore.min.js");
+			throw new Error("Live2D Cubism Core 未加载：请确认 /Core/live2dcubismcore.min.js 可访问");
 		}
 
 		// 清理旧模型
