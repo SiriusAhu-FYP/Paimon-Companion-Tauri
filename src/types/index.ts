@@ -1,6 +1,52 @@
 export type { EventMap, EventName } from "./events";
+export type {
+	EvaluationCaseDefinition,
+	EvaluationGame,
+	EvaluationCaseMetrics,
+	EvaluationCaseResult,
+	EvaluationCaseStatus,
+	EvaluationCaseTargetMode,
+	EvaluationRunEntry,
+	EvaluationState,
+} from "./evaluation";
 export type { RuntimeMode, RuntimeState } from "./runtime";
 export type { CharacterProfile, CharacterProfileSource, CharacterState } from "./character";
+export type {
+	StardewActionKey,
+	StardewAnalysis,
+	StardewAnalysisSource,
+	StardewAttemptRecord,
+	StardewRunRecord,
+	StardewRunStatus,
+	StardewState,
+	StardewTaskDefinition,
+	StardewTaskId,
+} from "./stardew";
+export type {
+	Game2048Analysis,
+	Game2048AnalysisSource,
+	Game2048Move,
+	Game2048MoveAttempt,
+	Game2048RunRecord,
+	Game2048RunStatus,
+	Game2048State,
+} from "./game-2048";
+export type {
+	FunctionalActionKind,
+	FunctionalLogLevel,
+	FunctionalRuntimeState,
+	FunctionalTarget,
+	FunctionalTaskLogEntry,
+	FunctionalTaskRecord,
+	FunctionalTaskStatus,
+	PerceptionSnapshot,
+} from "./functional";
+export type {
+	HostMouseAction,
+	HostMouseButton,
+	HostWindowCapture,
+	HostWindowInfo,
+} from "./system";
 export type {
 	KnowledgeDocument,
 	KnowledgeChunk,

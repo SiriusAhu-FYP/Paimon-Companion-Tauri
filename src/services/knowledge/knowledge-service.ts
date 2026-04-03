@@ -44,7 +44,6 @@ interface LiveContextEntry {
 export type IndexStatus = "ready" | "needs_rebuild" | "rebuilding" | "error";
 
 export class KnowledgeService {
-	private bus: EventBus;
 	private embeddingService: IEmbeddingService | null = null;
 	private rerankService: IRerankService | null = null;
 	private db: KnowledgeOrama | null = null;
@@ -62,22 +61,7 @@ export class KnowledgeService {
 	private initialized = false;
 	private initializing = false;
 
-	constructor(bus: EventBus) {
-		this.bus = bus;
-
-		// 保留 external:product-message 事件订阅
-		this.bus.on("external:product-message", (payload) => {
-			if (payload.type === "priority") {
-				this.addLiveContext({
-					id: `product-${Date.now()}`,
-					content: payload.content,
-					priority: 10,
-					expiresAt: payload.ttl ? Date.now() + payload.ttl * 1000 : null,
-				});
-			}
-			// "persistent" 类型不再走旧的 addKnowledge，应通过 importDocuments 导入
-		});
-	}
+	constructor(_bus: EventBus) {}
 
 	// ── 初始化 ──
 
@@ -152,7 +136,7 @@ export class KnowledgeService {
 			}
 
 			if (!this.embeddingService) {
-				log.warn("knowledge service initialized without embedding service — waiting for configuration");
+				log.info("knowledge service initialized without embedding service; retrieval stays inactive until configured");
 				return;
 			}
 

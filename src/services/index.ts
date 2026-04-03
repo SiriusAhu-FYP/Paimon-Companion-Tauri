@@ -2,7 +2,11 @@ import { EventBus, eventBus } from "./event-bus";
 import { RuntimeService } from "./runtime";
 import { CharacterService } from "./character";
 import { KnowledgeService, OpenAIEmbeddingService, CompatibleRerankService } from "./knowledge";
-import { ExternalInputService } from "./external-input";
+import { PerceptionService } from "./perception";
+import { SafetyService } from "./safety";
+import { OrchestratorService } from "./orchestrator";
+import { Game2048Service, StardewService } from "./games";
+import { EvaluationService } from "./evaluation";
 import { LLMService, MockLLMService, OpenAILLMService } from "./llm";
 import type { ILLMService } from "./llm/types";
 import { MockTTSService, GptSovitsTTSService } from "./tts";
@@ -20,7 +24,12 @@ export interface ServiceContainer {
 	runtime: RuntimeService;
 	character: CharacterService;
 	knowledge: KnowledgeService;
-	externalInput: ExternalInputService;
+	perception: PerceptionService;
+	safety: SafetyService;
+	orchestrator: OrchestratorService;
+	game2048: Game2048Service;
+	stardew: StardewService;
+	evaluation: EvaluationService;
 	llm: LLMService;
 	player: AudioPlayer;
 	pipeline: PipelineService;
@@ -108,9 +117,30 @@ export function initServices(): ServiceContainer {
 	const runtime = new RuntimeService(eventBus);
 	const character = new CharacterService(eventBus);
 	const knowledge = new KnowledgeService(eventBus);
-	const externalInput = new ExternalInputService(eventBus);
-	externalInput.setRuntime(runtime);
+	const perception = new PerceptionService(eventBus);
+	const safety = new SafetyService(eventBus, runtime);
+	const orchestrator = new OrchestratorService({
+		bus: eventBus,
+		safety,
+		perception,
+	});
+	const game2048 = new Game2048Service({
+		bus: eventBus,
+		orchestrator,
+	});
+	const stardew = new StardewService({
+		bus: eventBus,
+		orchestrator,
+	});
+	const evaluation = new EvaluationService({
+		bus: eventBus,
+		game2048,
+		stardew,
+		orchestrator,
+	});
 
+	// Keep knowledge alive for companion/chat workflows, but do not route the
+	// latency-sensitive functional game loop through embedding or rerank.
 	// Phase 3.5: 初始化 Embedding Service + Rerank Service + Knowledge
 	const embProfile = resolveEmbeddingProfile(config);
 	if (embProfile) {
@@ -151,7 +181,12 @@ export function initServices(): ServiceContainer {
 		runtime,
 		character,
 		knowledge,
-		externalInput,
+		perception,
+		safety,
+		orchestrator,
+		game2048,
+		stardew,
+		evaluation,
 		llm,
 		player,
 		pipeline,

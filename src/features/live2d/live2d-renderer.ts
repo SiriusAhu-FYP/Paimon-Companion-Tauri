@@ -66,6 +66,10 @@ export class Live2DRenderer {
 	async init(options: Live2DRendererOptions): Promise<void> {
 		this.destroyed = false;
 
+		if (!hasCubismCore()) {
+			throw new Error("Live2D Cubism Core 未加载：请确认 /Core/live2dcubismcore.min.js 可访问");
+		}
+
 		this.autoFit = options.autoFit ?? false;
 		this.dpr = Math.max(1, window.devicePixelRatio || 1);
 
@@ -125,6 +129,9 @@ export class Live2DRenderer {
 	 */
 	async switchModel(modelPath: string): Promise<void> {
 		if (!this.app || this.destroyed) return;
+		if (!hasCubismCore()) {
+			throw new Error("Live2D Cubism Core 未加载：请确认 /Core/live2dcubismcore.min.js 可访问");
+		}
 
 		// 清理旧模型
 		this.stopRandomEye();
@@ -429,4 +436,8 @@ export class Live2DRenderer {
 		this.model.x = canvasW / 2;
 		this.model.y = canvasH * 0.52;
 	}
+}
+
+function hasCubismCore(): boolean {
+	return typeof window !== "undefined" && "Live2DCubismCore" in window;
 }

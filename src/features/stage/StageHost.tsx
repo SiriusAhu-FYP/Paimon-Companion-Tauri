@@ -128,7 +128,7 @@ export function StageHost({
 		broadcastControl({ type: "set-display-mode", displayMode: next });
 	}, [displayMode, onDisplayModeChange]);
 
-	// 透明穿透：窗口完全透明且不可点击，但 Live2D 仍在渲染（可被 OBS 捕获）
+	// 透明穿透：窗口完全透明且不可点击，但 Live2D 仍在渲染（仍可被窗口捕获）
 	const [passthrough, setPassthrough] = useState(false);
 	const handleTogglePassthrough = useCallback(() => {
 		const next = !passthrough;
@@ -332,7 +332,7 @@ export function StageHost({
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
 					<Typography variant="caption" color="text.secondary" fontWeight={600}>穿透</Typography>
-					<HelpTooltip title="开启后 Stage 窗口完全透明且不可被点击，但 Live2D 仍在渲染，可被 OBS 窗口捕获。通过此按钮恢复。" />
+					<HelpTooltip title="开启后 Stage 窗口完全透明且不可被点击，但 Live2D 仍在渲染，仍可被桌面录制或窗口捕获。通过此按钮恢复。" />
 				</Stack>
 				<Button
 					variant={passthrough ? "contained" : "outlined"}
@@ -405,7 +405,7 @@ export function StageHost({
 					<Box>
 						<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
 							<Typography variant="caption" color="text.secondary" fontWeight={600}>窗口尺寸</Typography>
-							<HelpTooltip title="调整 Stage 窗口大小以获得最佳 OBS 捕获清晰度。窗口越大，捕获越清晰。" />
+							<HelpTooltip title="调整 Stage 窗口大小以获得更好的窗口捕获清晰度。窗口越大，捕获通常越清晰。" />
 						</Stack>
 
 						{/* 内置预设 */}

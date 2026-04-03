@@ -1,7 +1,7 @@
 import { Box, Typography, IconButton, Tooltip, Chip, Stack } from "@mui/material";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import type { StageDisplayMode } from "@/utils/window-sync";
-import { useRuntime, useCharacter } from "@/hooks";
+import { useRuntime, useCharacter, useFunctional, useEventLog } from "@/hooks";
 
 interface StatusBarProps {
 	stageVisible: boolean;
@@ -20,6 +20,8 @@ export function StatusBar({
 }: StatusBarProps) {
 	const { mode } = useRuntime();
 	const { emotion, isSpeaking } = useCharacter();
+	const { state: functionalState } = useFunctional();
+	const { latestEntry, totalTrackedEntries } = useEventLog(40);
 
 	return (
 		<Box sx={{
@@ -85,6 +87,37 @@ export function StatusBar({
 			{/* 右侧弹性空间 */}
 			<Box sx={{ flex: 1 }} />
 
+			{functionalState.selectedTarget && (
+				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+					Target: {functionalState.selectedTarget.title}
+				</Typography>
+			)}
+
+			{functionalState.activeTaskId && (
+				<Chip
+					label="Functional Task Running"
+					size="small"
+					color="warning"
+					sx={{ height: 18, fontSize: 10, "& .MuiChip-label": { px: 0.75 } }}
+				/>
+			)}
+
+			<Tooltip title={latestEntry?.payloadText ?? "暂无事件"}>
+				<Typography
+					variant="caption"
+					color="text.secondary"
+					sx={{
+						fontSize: 11,
+						maxWidth: 320,
+						overflow: "hidden",
+						textOverflow: "ellipsis",
+						whiteSpace: "nowrap",
+					}}
+				>
+					{latestEntry ? `最近事件: ${latestEntry.summary}` : "最近事件: 暂无"}
+				</Typography>
+			</Tooltip>
+
 			{/* 事件日志开关 */}
 			<Tooltip title={eventLogOpen ? "关闭事件日志" : "打开事件日志"}>
 				<IconButton
@@ -98,6 +131,12 @@ export function StatusBar({
 					<TerminalIcon sx={{ fontSize: 16 }} />
 				</IconButton>
 			</Tooltip>
+			<Chip
+				label={`日志 ${totalTrackedEntries}`}
+				size="small"
+				variant={eventLogOpen ? "filled" : "outlined"}
+				sx={{ height: 18, fontSize: 10, "& .MuiChip-label": { px: 0.75 } }}
+			/>
 		</Box>
 	);
 }

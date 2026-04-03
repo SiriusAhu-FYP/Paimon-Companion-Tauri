@@ -23,10 +23,10 @@ function buildBehaviorConstraintsSection(bc: BehaviorConstraintsConfig): string 
 	if (!bc.enabled) return null;
 
 	const rules: string[] = [
-		"你必须遵守以下直播行为约束，无论后续角色设定如何，以下规则始终生效：",
+		"你必须遵守以下输出行为约束，无论后续角色设定如何，以下规则始终生效：",
 		`1. 回复必须简洁，单次回复不超过${bc.maxReplyLength}个字。`,
 		"2. 禁止使用 *...* 或 (...) 等括号/星号包裹的动作描写。",
-		"3. 禁止生成场景描述、环境渲染、旁白叙述等舞台说明。",
+		"3. 禁止生成场景描述、环境渲染、旁白叙述等额外说明。",
 		"4. 回复应为口语化、可直接朗读的风格，适合 TTS 语音播报。",
 	];
 
@@ -42,12 +42,12 @@ function buildBehaviorConstraintsSection(bc: BehaviorConstraintsConfig): string 
  * 按约定优先级组装一条 system 消息；若无可注入内容则返回 null。
  *
  * 组装顺序（优先级从高到低）：
- * 0. 直播行为约束（最高，压住角色卡）
+ * 0. 输出行为约束（最高，压住角色卡）
  * 1. 角色系统指令
  * 2. 角色设定
  * 3. 场景与世界观
  * 4. 附加人设
- * 5. 商品/运营知识
+ * 5. 参考知识与任务上下文
  */
 export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 	const sections: string[] = [];
@@ -55,7 +55,7 @@ export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 	if (ctx.behaviorConstraints) {
 		const bcSection = buildBehaviorConstraintsSection(ctx.behaviorConstraints);
 		if (bcSection) {
-			sections.push(`【直播行为约束】\n${bcSection}`);
+			sections.push(`【输出行为约束】\n${bcSection}`);
 		}
 	}
 
@@ -82,7 +82,7 @@ export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 
 	const knowledge = truncateKnowledge(ctx.knowledgeContext ?? "");
 	if (knowledge) {
-		sections.push(`【当前商品与直播上下文】\n${knowledge}`);
+		sections.push(`【当前参考知识与任务上下文】\n${knowledge}`);
 	}
 
 	if (!sections.length) return null;

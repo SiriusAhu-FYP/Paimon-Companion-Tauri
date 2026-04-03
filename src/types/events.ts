@@ -2,6 +2,17 @@
 // 所有通过 EventBus 发布/订阅的事件在此定义载荷类型
 
 import type { RuntimeMode } from "./runtime";
+import type {
+	EvaluationCaseResult,
+	EvaluationState,
+} from "./evaluation";
+import type {
+	FunctionalActionKind,
+	FunctionalLogLevel,
+	FunctionalRuntimeState,
+} from "./functional";
+import type { Game2048Move, Game2048State } from "./game-2048";
+import type { StardewActionKey, StardewState, StardewTaskId } from "./stardew";
 
 // ── 运行时事件 ──
 
@@ -77,25 +88,136 @@ export interface SystemErrorPayload {
 	error: string;
 }
 
-// ── 外部事件 ──
+// ── 功能执行事件 ──
 
-export interface ExternalDanmakuPayload {
-	user: string;
-	text: string;
-	source: string;
+export interface FunctionalTargetChangePayload {
+	handle: string | null;
+	title: string | null;
 }
 
-export interface ExternalGiftPayload {
-	user: string;
-	giftName: string;
-	count: number;
-	source: string;
+export interface PerceptionSnapshotPayload {
+	targetHandle: string;
+	targetTitle: string;
+	width: number;
+	height: number;
+	capturedAt: number;
+	captureMethod: string;
+	qualityScore: number;
+	lowConfidence: boolean;
 }
 
-export interface ExternalProductMessagePayload {
-	type: "persistent" | "priority";
-	content: string;
-	ttl?: number;
+export interface OrchestratorStateChangePayload {
+	state: FunctionalRuntimeState;
+}
+
+export interface OrchestratorTaskStartPayload {
+	taskId: string;
+	name: string;
+	actionKind: FunctionalActionKind;
+	targetHandle: string;
+	targetTitle: string;
+}
+
+export interface OrchestratorTaskCompletePayload {
+	taskId: string;
+	name: string;
+	actionKind: FunctionalActionKind;
+	success: boolean;
+	summary: string;
+	error?: string | null;
+}
+
+export interface OrchestratorTaskLogPayload {
+	taskId: string;
+	level: FunctionalLogLevel;
+	message: string;
+}
+
+export interface SafetyDecisionPayload {
+	operation: string;
+	allowed: boolean;
+	reason: string | null;
+}
+
+export interface Game2048StateChangePayload {
+	state: Game2048State;
+}
+
+export interface Game2048TargetDetectedPayload {
+	handle: string | null;
+	title: string | null;
+	summary: string;
+}
+
+export interface Game2048RunStartPayload {
+	runId: string;
+	targetHandle: string;
+	targetTitle: string;
+	preferredMoves: Game2048Move[];
+}
+
+export interface Game2048AttemptPayload {
+	runId: string;
+	move: Game2048Move;
+	changed: boolean;
+	changeRatio: number;
+}
+
+export interface Game2048RunCompletePayload {
+	runId: string;
+	success: boolean;
+	selectedMove: Game2048Move | null;
+	boardChanged: boolean;
+	summary: string;
+}
+
+export interface EvaluationStateChangePayload {
+	state: EvaluationState;
+}
+
+export interface EvaluationCaseStartPayload {
+	caseId: string;
+	game: "2048" | "stardew";
+	name: string;
+	iterations: number;
+}
+
+export interface EvaluationCaseCompletePayload {
+	result: EvaluationCaseResult;
+}
+
+export interface StardewStateChangePayload {
+	state: StardewState;
+}
+
+export interface StardewTargetDetectedPayload {
+	handle: string | null;
+	title: string | null;
+	summary: string;
+}
+
+export interface StardewRunStartPayload {
+	runId: string;
+	taskId: StardewTaskId;
+	targetHandle: string;
+	targetTitle: string;
+	preferredActions: StardewActionKey[];
+}
+
+export interface StardewAttemptPayload {
+	runId: string;
+	action: StardewActionKey;
+	changed: boolean;
+	changeRatio: number;
+}
+
+export interface StardewRunCompletePayload {
+	runId: string;
+	taskId: StardewTaskId;
+	success: boolean;
+	selectedAction: StardewActionKey | null;
+	boardChanged: boolean;
+	summary: string;
 }
 
 // ── 事件名 → 载荷类型的统一映射 ──
@@ -130,10 +252,27 @@ export interface EventMap {
 	"system:resume": void;
 	"system:error": SystemErrorPayload;
 
-	// 外部
-	"external:danmaku": ExternalDanmakuPayload;
-	"external:gift": ExternalGiftPayload;
-	"external:product-message": ExternalProductMessagePayload;
+	// 功能执行
+	"functional:target-change": FunctionalTargetChangePayload;
+	"perception:snapshot": PerceptionSnapshotPayload;
+	"orchestrator:state-change": OrchestratorStateChangePayload;
+	"orchestrator:task-start": OrchestratorTaskStartPayload;
+	"orchestrator:task-complete": OrchestratorTaskCompletePayload;
+	"orchestrator:task-log": OrchestratorTaskLogPayload;
+	"safety:decision": SafetyDecisionPayload;
+	"game2048:state-change": Game2048StateChangePayload;
+	"game2048:target-detected": Game2048TargetDetectedPayload;
+	"game2048:run-start": Game2048RunStartPayload;
+	"game2048:attempt": Game2048AttemptPayload;
+	"game2048:run-complete": Game2048RunCompletePayload;
+	"stardew:state-change": StardewStateChangePayload;
+	"stardew:target-detected": StardewTargetDetectedPayload;
+	"stardew:run-start": StardewRunStartPayload;
+	"stardew:attempt": StardewAttemptPayload;
+	"stardew:run-complete": StardewRunCompletePayload;
+	"evaluation:state-change": EvaluationStateChangePayload;
+	"evaluation:case-start": EvaluationCaseStartPayload;
+	"evaluation:case-complete": EvaluationCaseCompletePayload;
 }
 
 export type EventName = keyof EventMap;
