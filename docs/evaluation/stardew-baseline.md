@@ -79,7 +79,7 @@ Close-out note:
 ## Collection Procedure
 
 1. Launch the app in a real desktop session with Stardew Valley visible.
-2. Open the control panel.
+2. Open the dedicated `功能实验` panel in the right-hand UI column.
 3. Use the `Stardew Valley 扩展` section to verify target detection and the first task set.
 4. Use the `Functional Evaluation Harness` section and run the two Stardew cases.
 5. Replace the `pending live run` rows above with the latest measured values.

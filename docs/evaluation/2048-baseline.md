@@ -56,7 +56,7 @@ Baseline table:
 ## Collection Procedure
 
 1. Launch the app in a real desktop session.
-2. Open the control panel.
+2. Open the dedicated `功能实验` panel in the right-hand UI column.
 3. Use the `Functional Evaluation Harness` section.
 4. Run `2048-auto-detect-smoke` with a visible browser tab for `2048`.
 5. Run `2048-selected-target-repeat` after manually confirming the target window.
