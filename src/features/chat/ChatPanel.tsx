@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Box, Typography, TextField, Button, Paper, IconButton, Tooltip } from "@mui/material";
+import { Alert, Box, Typography, TextField, Button, Paper, IconButton, Tooltip } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
@@ -163,6 +163,22 @@ export function ChatPanel() {
 				? "primary.main"
 				: "text.secondary";
 
+	const permissionLabelMap: Record<typeof voiceState.permission, string> = {
+		unknown: "未确认",
+		granted: "已授予",
+		denied: "已拒绝",
+	};
+
+	const phaseLabelMap: Record<typeof voiceState.status, string> = {
+		idle: "未开启",
+		"requesting-permission": "请求权限",
+		listening: "待机监听",
+		recording: "正在录音",
+		transcribing: "识别中",
+		locked: "已锁定",
+		error: "错误",
+	};
+
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100%", p: 1.5 }}>
 			<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, mb: 1 }}>
@@ -210,17 +226,52 @@ export function ChatPanel() {
 				</Typography>
 			)}
 
-			{(voiceState.enabled || voiceState.status === "error") && (
-				<Typography
-					variant="caption"
-					sx={{
-						color: voiceState.status === "error" ? "error.main" : "text.secondary",
-						textAlign: "center",
-						py: 0.25,
-					}}
-				>
-					{voiceLabelMap[voiceState.status]}
-				</Typography>
+			{(voiceState.enabled || voiceState.status === "error" || !!voiceState.lastTranscript || !!voiceState.lastError) && (
+				<Box sx={{ py: 0.5 }}>
+					<Paper
+						elevation={0}
+						sx={{
+							p: 0.9,
+							borderRadius: 1,
+							bgcolor: "background.paper",
+							border: "1px solid",
+							borderColor: voiceState.status === "error" ? "error.main" : "divider",
+							display: "flex",
+							flexDirection: "column",
+							gap: 0.5,
+						}}
+					>
+						<Typography
+							variant="caption"
+							sx={{
+								color: voiceState.status === "error" ? "error.main" : "text.secondary",
+								fontWeight: 600,
+							}}
+						>
+							语音诊断
+						</Typography>
+						<Typography variant="caption" sx={{ color: "text.secondary" }}>
+							状态：{phaseLabelMap[voiceState.status]} · Provider：{voiceState.providerLabel} · 权限：{permissionLabelMap[voiceState.permission]}
+						</Typography>
+						<Typography variant="caption" sx={{ color: voiceState.status === "error" ? "error.main" : "text.secondary" }}>
+							{voiceLabelMap[voiceState.status]}
+						</Typography>
+						{voiceState.lastTranscript && (
+							<Alert severity="info" sx={{ py: 0, "& .MuiAlert-message": { py: 0.2 } }}>
+								<Typography variant="caption">
+									最近识别：{voiceState.lastTranscript}
+								</Typography>
+							</Alert>
+						)}
+						{voiceState.lastError && (
+							<Alert severity="error" sx={{ py: 0, "& .MuiAlert-message": { py: 0.2 } }}>
+								<Typography variant="caption">
+									最近错误：{voiceState.lastError}
+								</Typography>
+							</Alert>
+						)}
+					</Paper>
+				</Box>
 			)}
 
 			{showRebuildGate && (

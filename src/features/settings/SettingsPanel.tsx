@@ -38,7 +38,8 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	const [message, setMessage] = useState<{ type: "success" | "error" | "info" | "warning"; text: string } | null>(null);
 	const [llmTestResult, setLlmTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 	const [ttsTestResult, setTtsTestResult] = useState<{ ok: boolean; text: string } | null>(null);
-	const [testing, setTesting] = useState<"llm" | "tts" | null>(null);
+	const [asrTestResult, setAsrTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+	const [testing, setTesting] = useState<"llm" | "tts" | "asr" | null>(null);
 	const [ttsTestText, setTtsTestText] = useState("你好，我是测试文本");
 	const [ttsTesting, setTtsTesting] = useState(false);
 
@@ -81,6 +82,15 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 			ttsBaseUrl: config.tts.baseUrl,
 		});
 		return config.tts;
+	}, [config]);
+
+	/** 从激活的 ASR 档案或根配置中获取当前 ASR 配置 */
+	const getActiveAsrConfig = useCallback(() => {
+		if (config.activeAsrProfileId) {
+			const profile = config.asrProfiles.find((p) => p.id === config.activeAsrProfileId);
+			if (profile) return profile;
+		}
+		return config.asr;
 	}, [config]);
 
 	const handleTestLLM = useCallback(async () => {
@@ -210,6 +220,52 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		}
 	}, [getActiveTtsConfig, ttsTestText]);
 
+	const handleTestASR = useCallback(async () => {
+		setTesting("asr");
+		setAsrTestResult(null);
+		try {
+			const asrCfg = getActiveAsrConfig();
+			if (asrCfg.provider === "mock") {
+				setAsrTestResult({ ok: true, text: "Mock ASR 始终可用" });
+				return;
+			}
+			const baseUrl = (asrCfg.baseUrl || "").trim().replace(/\/+$/, "");
+			if (!baseUrl) {
+				setAsrTestResult({ ok: false, text: "请先在档案中配置服务地址" });
+				return;
+			}
+
+			const profileId = config.activeAsrProfileId || null;
+			const secretKey = profileId ? SECRET_KEYS.ASR_API_KEY(profileId) : undefined;
+			const resp = await proxyRequest({
+				url: baseUrl,
+				method: "GET",
+				secretKey,
+				timeoutMs: 8000,
+			});
+
+			if (resp.status < 500) {
+				setAsrTestResult({
+					ok: true,
+					text: `服务可达 (HTTP ${resp.status})。这是连通性测试，不代表识别链路已完成验证。`,
+				});
+				log.info("ASR connection test passed", { status: resp.status, provider: asrCfg.provider });
+				return;
+			}
+
+			setAsrTestResult({
+				ok: false,
+				text: `服务返回异常 (HTTP ${resp.status}): ${resp.body.slice(0, 120)}`,
+			});
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			setAsrTestResult({ ok: false, text: msg });
+			log.warn("ASR connection test failed", msg);
+		} finally {
+			setTesting(null);
+		}
+	}, [config.activeAsrProfileId, getActiveAsrConfig]);
+
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1, height: "100%", overflowY: "auto" }}>
 			<Stack direction="row" alignItems="center" spacing={1}>
@@ -293,6 +349,35 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				连接测试
 			</Typography>
 		</Box>
+
+		{/* ── LLM 测试 ── */}
+		<SectionTitle>
+			ASR 测试
+			<HelpTooltip title="这里只验证当前 ASR provider 的网络/服务可达性。真正的麦克风 -> 识别链路仍需在聊天区手测。" />
+		</SectionTitle>
+		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+				当前读取：{config.activeAsrProfileId
+					? `档案「${config.asrProfiles.find((p) => p.id === config.activeAsrProfileId)?.name || "(未命名)"}」`
+					: "根配置（无激活档案）"}
+				· {getActiveAsrConfig().provider}
+			</Typography>
+			<Button
+				size="small" variant="outlined"
+				startIcon={<NetworkCheckIcon />}
+				onClick={handleTestASR}
+				disabled={testing === "asr"}
+			>
+				{testing === "asr" ? "测试中..." : "测试连接"}
+			</Button>
+			{asrTestResult && (
+				<Alert severity={asrTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
+					{asrTestResult.text}
+				</Alert>
+			)}
+		</Box>
+
+		<Divider />
 
 		{/* ── LLM 测试 ── */}
 		<SectionTitle>
