@@ -11,4 +11,5 @@ Current high-value entry points:
 Current state:
 
 - `P1 Functional Core Validation` is complete on `main`
+- `P2.1 Relational Core Integration` is complete on the active `P2` branch
 - the functional desktop workflow now lives under the dedicated `功能实验` panel

@@ -7,6 +7,7 @@ import { SafetyService } from "./safety";
 import { OrchestratorService } from "./orchestrator";
 import { Game2048Service } from "./games";
 import { EvaluationService } from "./evaluation";
+import { UnifiedRuntimeService } from "./unified";
 import { LLMService } from "./llm";
 import { AudioPlayer } from "./audio";
 import { PipelineService } from "./pipeline";
@@ -27,6 +28,7 @@ export interface ServiceContainer {
 	orchestrator: OrchestratorService;
 	game2048: Game2048Service;
 	evaluation: EvaluationService;
+	unified: UnifiedRuntimeService;
 	llm: LLMService;
 	player: AudioPlayer;
 	pipeline: PipelineService;
@@ -82,6 +84,13 @@ export function initServices(): ServiceContainer {
 		tts: ttsProvider,
 		player,
 	});
+	const unified = new UnifiedRuntimeService({
+		bus: eventBus,
+		runtime,
+		character,
+		game2048,
+		pipeline,
+	});
 
 	services = {
 		bus: eventBus,
@@ -93,6 +102,7 @@ export function initServices(): ServiceContainer {
 		orchestrator,
 		game2048,
 		evaluation,
+		unified,
 		llm,
 		player,
 		pipeline,

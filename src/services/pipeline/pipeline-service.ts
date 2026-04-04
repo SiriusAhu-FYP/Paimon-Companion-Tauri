@@ -22,6 +22,7 @@ export class PipelineService {
 	private character: CharacterService;
 	private llm: LLMService;
 	private speechQueue: SpeechQueue;
+	private pendingSpeechText = "";
 
 	constructor(deps: {
 		bus: EventBus;
@@ -48,8 +49,9 @@ export class PipelineService {
 			(speaking) => {
 				this.character.setSpeaking(speaking);
 				if (speaking) {
-					this.bus.emit("audio:tts-start", { text: "" });
+					this.bus.emit("audio:tts-start", { text: this.pendingSpeechText });
 				} else {
+					this.pendingSpeechText = "";
 					this.bus.emit("audio:tts-end");
 				}
 			},
@@ -98,19 +100,36 @@ export class PipelineService {
 			log.debug(`[text] spoken:  "${spokenText.slice(0, 80)}..."`);
 		}
 
+		await this.speakDisplayText(displayText, spokenText);
+		log.info("pipeline complete");
+	}
+
+	async speakText(text: string): Promise<void> {
+		if (!this.runtime.isAllowed()) {
+			log.warn("direct speech blocked — runtime stopped");
+			return;
+		}
+		const displayText = text.trim();
+		if (!displayText) return;
+		const spokenText = normalizeForSpeech(displayText);
+		await this.speakDisplayText(displayText, spokenText);
+	}
+
+	private async speakDisplayText(displayText: string, spokenText: string): Promise<void> {
 		const segments = splitText(spokenText);
 		if (!segments.length) {
 			log.warn("text splitting produced no segments");
 			return;
 		}
+
+		this.pendingSpeechText = displayText;
 		log.info(`[split] ${segments.length} segments: ${segments.map((s) => `[${s.lang}]"${s.text.slice(0, 20)}"`).join(", ")}`);
 
 		try {
 			await this.speechQueue.speakAll(segments);
 		} catch (err) {
 			log.error("speech queue failed", err);
-		} finally {
-			log.info("pipeline complete");
+			throw err;
 		}
 	}
 }

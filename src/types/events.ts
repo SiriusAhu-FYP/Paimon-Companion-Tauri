@@ -6,6 +6,7 @@ import type {
 	EvaluationCaseResult,
 	EvaluationState,
 } from "./evaluation";
+import type { UnifiedRuntimeState } from "./unified";
 import type {
 	FunctionalActionKind,
 	FunctionalLogLevel,
@@ -173,6 +174,29 @@ export interface EvaluationCaseCompletePayload {
 	result: EvaluationCaseResult;
 }
 
+export interface UnifiedStateChangePayload {
+	state: UnifiedRuntimeState;
+}
+
+export interface UnifiedRunStartPayload {
+	runId: string;
+	trigger: "manual" | "voice";
+	requestText: string | null;
+}
+
+export interface UnifiedRunCompletePayload {
+	runId: string;
+	success: boolean;
+	summary: string;
+	emotion: string;
+	spoke: boolean;
+}
+
+export interface UnifiedVoiceInputPayload {
+	text: string;
+	command: string | null;
+}
+
 export interface EventMap {
 	"runtime:mode-change": RuntimeModeChangePayload;
 	"audio:vad-start": void;
@@ -208,6 +232,10 @@ export interface EventMap {
 	"evaluation:state-change": EvaluationStateChangePayload;
 	"evaluation:case-start": EvaluationCaseStartPayload;
 	"evaluation:case-complete": EvaluationCaseCompletePayload;
+	"unified:state-change": UnifiedStateChangePayload;
+	"unified:run-start": UnifiedRunStartPayload;
+	"unified:run-complete": UnifiedRunCompletePayload;
+	"unified:voice-input": UnifiedVoiceInputPayload;
 }
 
 export type EventName = keyof EventMap;

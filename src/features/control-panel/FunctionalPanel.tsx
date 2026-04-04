@@ -1,11 +1,12 @@
 import { useCallback } from "react";
-import { useEvaluation, useFunctional, useGame2048 } from "@/hooks";
+import { useEvaluation, useFunctional, useGame2048, useUnifiedRuntime } from "@/hooks";
 import { createLogger } from "@/services/logger";
 import { EvaluationSection } from "./EvaluationSection";
 import { FunctionalDebugPanel } from "./FunctionalDebugPanel";
 import { Game2048Section } from "./Game2048Section";
 import { HostToolsSection } from "./HostToolsSection";
 import { PanelRoot } from "./panel-shell";
+import { UnifiedRunSection } from "./UnifiedRunSection";
 
 const log = createLogger("functional-panel");
 
@@ -21,6 +22,13 @@ export function FunctionalPanel() {
 	} = useFunctional();
 	const { state: game2048State, detectTarget, runSingleStep } = useGame2048();
 	const { state: evaluationState, runCase } = useEvaluation();
+	const {
+		state: unifiedState,
+		runUnified2048Step,
+		submitVoiceText,
+		setSpeechEnabled,
+		setVoiceInputEnabled,
+	} = useUnifiedRuntime();
 
 	const handleDetect2048Target = useCallback(async () => {
 		try {
@@ -40,6 +48,14 @@ export function FunctionalPanel() {
 
 	return (
 		<PanelRoot title="功能实验">
+			<UnifiedRunSection
+				unifiedState={unifiedState}
+				onRunUnified2048={runUnified2048Step}
+				onSubmitVoiceText={submitVoiceText}
+				onSetSpeechEnabled={setSpeechEnabled}
+				onSetVoiceInputEnabled={setVoiceInputEnabled}
+				busy={functionalState.activeTaskId !== null || game2048State.activeRunId !== null || evaluationState.activeCaseId !== null || unifiedState.activeRunId !== null}
+			/>
 			<HostToolsSection
 				functionalState={functionalState}
 				setTarget={setTarget}

@@ -43,6 +43,10 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 			"evaluation:case-start",
 			"evaluation:case-complete",
 			"evaluation:state-change",
+			"unified:state-change",
+			"unified:run-start",
+			"unified:run-complete",
+			"unified:voice-input",
 		],
 		color: "#ffb74d",
 	},
@@ -210,6 +214,22 @@ function formatSummary(event: EventName, payload: unknown): string {
 		case "evaluation:state-change": {
 			const data = payload as EventMap["evaluation:state-change"];
 			return `active=${data.state.activeCaseId ?? "none"}, 历史=${data.state.history.length}`;
+		}
+		case "unified:state-change": {
+			const data = payload as EventMap["unified:state-change"];
+			return `phase=${data.state.phase}, active=${data.state.activeRunId ?? "none"}`;
+		}
+		case "unified:run-start": {
+			const data = payload as EventMap["unified:run-start"];
+			return `${data.trigger}: ${data.requestText ?? "direct 2048 step"}`;
+		}
+		case "unified:run-complete": {
+			const data = payload as EventMap["unified:run-complete"];
+			return `${data.success ? "完成" : "失败"}: ${data.summary}`;
+		}
+		case "unified:voice-input": {
+			const data = payload as EventMap["unified:voice-input"];
+			return data.command ? `${data.command}: ${truncate(data.text, 80)}` : `voice: ${truncate(data.text, 80)}`;
 		}
 		default:
 			return serializePayload(payload);
