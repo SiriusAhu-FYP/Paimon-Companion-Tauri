@@ -60,12 +60,12 @@ P1 close-out:
 
 - [ ] P2: Core Repository Fusion
   - [x] groundwork: a thin unified runtime layer already exists for `2048` validation
-  - [ ] P2.1 Source Audit And Gap Mapping
-    - [ ] map `LLMPlay-MVP` features to the current Tauri codebase
-    - [ ] map `VoiceL2D-MVP` features to the current Tauri codebase
-    - [ ] map `Video-Understanding-MVP` features to the current Tauri codebase
-    - [ ] classify each capability as merged / partial / missing / replaced
-    - [ ] document the accepted replacement decisions where implementation shape has changed
+  - [x] P2.1 Source Audit And Gap Mapping
+    - [x] map `LLMPlay-MVP` features to the current Tauri codebase
+    - [x] map `VoiceL2D-MVP` features to the current Tauri codebase
+    - [x] map `Video-Understanding-MVP` features to the current Tauri codebase
+    - [x] classify each capability as merged / partial / missing / replaced
+    - [x] document the accepted replacement decisions where implementation shape has changed
   - [ ] P2.2 `VoiceL2D-MVP` Completion
     - [ ] restore a real voice-input path instead of manual/mock-only ASR
     - [ ] restore microphone / VAD / ASR behavior needed for end-to-end interaction
@@ -100,3 +100,4 @@ P2 note:
 - `paimon-live` is framework heritage only
 - the functional source-of-truth repos for this stage are `LLMPlay-MVP`, `VoiceL2D-MVP`, and `Video-Understanding-MVP`
 - the current `Unified Run` path is useful groundwork, but it is not by itself proof that source-repo fusion is complete
+- the first-pass fusion matrix is recorded in `docs/architecture/source-fusion-audit.md`
