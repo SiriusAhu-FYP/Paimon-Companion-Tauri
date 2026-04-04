@@ -28,6 +28,7 @@ TypeScript owns:
 - safety and verification policy
 - runtime coordination
 - perception/game-task services
+- unified companion coordination for validated runs
 - companion state and feedback
 - reusable game task templates
 
@@ -37,6 +38,24 @@ React owns:
 - control layout
 - debug surfaces
 - user-triggered inspection actions
+- unified-run validation controls
+
+## Unified Run Layer
+
+`P2.1` adds a thin unified runtime layer above the validated `2048` path.
+
+It is responsible for:
+
+- triggering a functional run from a companion-facing entry point
+- mapping run state to character emotion
+- speaking the companion summary through the existing TTS pipeline
+- accepting testing-oriented voice text input and routing simple `2048` commands
+
+Current scope:
+
+- `功能实验 -> Unified Run` supports direct unified single-step execution
+- speech output is real and uses the normal `PipelineService` TTS path
+- voice input is currently a manual/mock ASR path for interaction validation, not a full microphone capture stack
 
 ## Functional Latency Policy
 

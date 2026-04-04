@@ -59,11 +59,11 @@ P1 close-out:
 - `P2` should start from a fresh branch
 
 - [ ] P2: Unified System Validation
-  - [ ] P2.1 Relational Core Integration
-    - [ ] integrate proactive companion behavior into the functional loop
-    - [ ] expression mapping aligned with task/game state
-    - [ ] speech output path for unified runs
-    - [ ] voice input path where needed for interaction testing
+  - [x] P2.1 Relational Core Integration
+    - [x] integrate proactive companion behavior into the functional loop
+    - [x] expression mapping aligned with task/game state
+    - [x] speech output path for unified runs
+    - [x] voice input path where needed for interaction testing
   - [ ] P2.2 Minecraft Transfer
     - [ ] define initial Minecraft task set
     - [ ] adapt perception for high-DOF play
@@ -76,7 +76,12 @@ P1 close-out:
     - [ ] collect results
     - [ ] summarize companionship / proactivity / workload outcomes
 
-- [ ] Stretch
+  - [ ] Stretch
   - [ ] Genshin Impact transfer test
   - [ ] broader pluginized multi-game support
   - [ ] release packaging polish
+
+P2.1 note:
+
+- the current voice input path is a testing-oriented manual/mock ASR entry inside `功能实验 -> Unified Run`
+- it is sufficient for unified interaction validation, but it is not yet a production microphone + ASR stack
