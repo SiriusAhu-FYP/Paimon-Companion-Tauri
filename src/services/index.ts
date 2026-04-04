@@ -10,11 +10,12 @@ import { EvaluationService } from "./evaluation";
 import { UnifiedRuntimeService } from "./unified";
 import { LLMService } from "./llm";
 import { AudioPlayer } from "./audio";
+import type { IASRService } from "./asr";
 import { PipelineService } from "./pipeline";
 import { createLogger } from "./logger";
 import { getConfig } from "./config";
 import { configureKnowledgeProviders, reinitializeKnowledgeProviders } from "./knowledge-provider-manager";
-import { resolveLLMProvider, resolveTTSProvider } from "./provider-resolvers";
+import { resolveASRProvider, resolveLLMProvider, resolveTTSProvider } from "./provider-resolvers";
 
 const log = createLogger("services");
 
@@ -30,6 +31,7 @@ export interface ServiceContainer {
 	evaluation: EvaluationService;
 	unified: UnifiedRuntimeService;
 	llm: LLMService;
+	asr: IASRService;
 	player: AudioPlayer;
 	pipeline: PipelineService;
 }
@@ -73,6 +75,7 @@ export function initServices(): ServiceContainer {
 
 	const llmProvider = resolveLLMProvider(config);
 	const llm = new LLMService(eventBus, runtime, llmProvider, character, knowledge);
+	const asr = resolveASRProvider(config);
 	const ttsProvider = resolveTTSProvider(config);
 	const player = new AudioPlayer();
 
@@ -104,6 +107,7 @@ export function initServices(): ServiceContainer {
 		evaluation,
 		unified,
 		llm,
+		asr,
 		player,
 		pipeline,
 	};
@@ -111,6 +115,7 @@ export function initServices(): ServiceContainer {
 	log.info("all services initialized", {
 		llmProvider: config.llm.provider,
 		ttsProvider: config.tts.provider,
+		asrProvider: config.asr.provider,
 	});
 	return services;
 }
@@ -134,9 +139,11 @@ export function refreshProviders() {
 	const config = getConfig();
 
 	const newLLMProvider = resolveLLMProvider(config);
+	const newASRProvider = resolveASRProvider(config);
 	const newTTSProvider = resolveTTSProvider(config);
 
 	services.llm.setProvider(newLLMProvider);
+	services.asr = newASRProvider;
 
 	const sq = services.pipeline.getSpeechQueue();
 	sq.setTTS(newTTSProvider);
@@ -144,6 +151,7 @@ export function refreshProviders() {
 	log.info("providers refreshed", {
 		llmProvider: config.llm.provider,
 		ttsProvider: config.tts.provider,
+		asrProvider: config.asr.provider,
 	});
 }
 

@@ -25,6 +25,7 @@ import { GptSovitsTTSService, MockTTSService, splitText, normalizeForSpeech, Spe
 import { AudioPlayer } from "@/services/audio/audio-player";
 import { HelpTooltip } from "@/components";
 import { refreshProviders } from "@/services";
+import { AsrProfilesSection } from "./AsrProfilesSection";
 
 const log = createLogger("settings");
 
@@ -254,6 +255,36 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 			onDelete={(id) => setConfig((c) => ({ ...c, ttsProfiles: c.ttsProfiles.filter((x) => x.id !== id), activeTtsProfileId: c.activeTtsProfileId === id ? "" : c.activeTtsProfileId }))}
 			onSelect={(id) => { setConfig((c) => ({ ...c, activeTtsProfileId: id })); updateConfig({ activeTtsProfileId: id }); refreshProviders(); }}
 			onPersist={async (newProfiles, newActiveId) => (await updateConfig({ ttsProfiles: newProfiles, activeTtsProfileId: newActiveId }), refreshProviders())}
+		/>
+
+		<Divider />
+
+		<SectionTitle>
+			ASR 配置
+			<HelpTooltip title="ASR 会作为独立 provider/profile 管理。本地模型不默认打包进应用，可选择本地路径、下载来源或云接口。" />
+		</SectionTitle>
+		<AsrProfilesSection
+			profiles={config.asrProfiles}
+			activeId={config.activeAsrProfileId}
+			onAdd={(profile) => setConfig((current) => ({ ...current, asrProfiles: [...current.asrProfiles, profile] }))}
+			onUpdate={(profile) => setConfig((current) => ({
+				...current,
+				asrProfiles: current.asrProfiles.map((item) => item.id === profile.id ? profile : item),
+			}))}
+			onDelete={(id) => setConfig((current) => ({
+				...current,
+				asrProfiles: current.asrProfiles.filter((item) => item.id !== id),
+				activeAsrProfileId: current.activeAsrProfileId === id ? "" : current.activeAsrProfileId,
+			}))}
+			onSelect={(id) => {
+				setConfig((current) => ({ ...current, activeAsrProfileId: id }));
+				updateConfig({ activeAsrProfileId: id });
+				refreshProviders();
+			}}
+			onPersist={async (newProfiles, newActiveId) => {
+				await updateConfig({ asrProfiles: newProfiles, activeAsrProfileId: newActiveId });
+				refreshProviders();
+			}}
 		/>
 
 		{/* ═══ 第二级：连接测试 ═══ */}

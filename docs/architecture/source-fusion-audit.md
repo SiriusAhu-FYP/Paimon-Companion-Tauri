@@ -57,7 +57,7 @@ These are not yet accepted replacements:
 | MCP-driven expression commands from LLM | `src/services/character/character-service.ts`, `src/features/stage/StageWindow.tsx` | `replaced` | Expression control now flows through local events rather than a separate MCP roundtrip. | Keep this replacement. |
 | Microphone capture | no current equivalent | `missing` | The MVP had microphone recording via `sounddevice`; the Tauri app currently has no real microphone capture path. | Reintroduce microphone capture in `P2.2`. |
 | VAD-based speech segmentation | no current equivalent | `missing` | The MVP had continuous VAD and speech chunking; current app does not. | Reintroduce VAD in `P2.2`. |
-| Real ASR pipeline (`GLM-ASR` / `Faster-Whisper`) | no current equivalent | `missing` | Current app only exposes manual/mock voice text input for testing. | Reintroduce a real ASR path in `P2.2`. |
+| Real ASR pipeline (`GLM-ASR` / `Faster-Whisper`) | ASR provider/profile configuration now exists in settings; runtime path still missing | `partial` | Current app now has a dedicated ASR config surface and migration strategy, but no live microphone-to-ASR path yet. | Connect at least one real local/cloud provider in `P2.2`. |
 | Audio lock / anti-feedback during playback | no current equivalent | `missing` | The MVP paused microphone/VAD during TTS playback. Current app cannot do this because there is no live microphone path yet. | Restore together with microphone/VAD work in `P2.2`. |
 
 ### `Video-Understanding-MVP`
