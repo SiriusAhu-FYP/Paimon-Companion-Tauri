@@ -1,7 +1,6 @@
 import type { EventBus } from "@/services/event-bus";
 import type { Game2048Service } from "@/services/games";
 import type { OrchestratorService } from "@/services/orchestrator";
-import type { StardewService } from "@/services/games";
 import type {
 	EvaluationCaseDefinition,
 	EvaluationCaseMetrics,
@@ -31,22 +30,6 @@ const EVALUATION_CASES: EvaluationCaseDefinition[] = [
 		targetMode: "selected-target",
 		iterations: 5,
 	},
-	{
-		id: "stardew-auto-detect-reposition",
-		game: "stardew",
-		name: "Stardew Auto-Detect Reposition",
-		description: "Auto-detect a Stardew Valley window and run a one-step reposition task.",
-		targetMode: "auto-detect",
-		iterations: 3,
-	},
-	{
-		id: "stardew-selected-inventory-toggle",
-		game: "stardew",
-		name: "Stardew Selected Target Inventory",
-		description: "Reuse the selected Stardew target and measure inventory toggle stability.",
-		targetMode: "selected-target",
-		iterations: 4,
-	},
 ];
 
 function makeInitialState(): EvaluationState {
@@ -61,19 +44,16 @@ function makeInitialState(): EvaluationState {
 export class EvaluationService {
 	private bus: EventBus;
 	private game2048: Game2048Service;
-	private stardew: StardewService;
 	private orchestrator: OrchestratorService;
 	private state: EvaluationState = makeInitialState();
 
 	constructor(deps: {
 		bus: EventBus;
 		game2048: Game2048Service;
-		stardew: StardewService;
 		orchestrator: OrchestratorService;
 	}) {
 		this.bus = deps.bus;
 		this.game2048 = deps.game2048;
-		this.stardew = deps.stardew;
 		this.orchestrator = deps.orchestrator;
 	}
 
@@ -221,31 +201,7 @@ export class EvaluationService {
 				summary: run.summary,
 			};
 		}
-
-		if (definition.targetMode === "auto-detect") {
-			await this.stardew.detectTargetWindow();
-			const run = await this.stardew.runTask("reposition");
-			return {
-				boardChanged: run.boardChanged,
-				selectedAction: run.selectedAction,
-				preferredActions: run.analysis.preferredActions,
-				analysis: { source: run.analysis.source },
-				summary: run.summary,
-			};
-		}
-
-		const selectedTarget = this.orchestrator.getState().selectedTarget;
-		if (!selectedTarget) {
-			throw new Error("selected-target evaluation requires a manually selected target");
-		}
-		const run = await this.stardew.runTask("open-inventory", selectedTarget);
-		return {
-			boardChanged: run.boardChanged,
-			selectedAction: run.selectedAction,
-			preferredActions: run.analysis.preferredActions,
-			analysis: { source: run.analysis.source },
-			summary: run.summary,
-		};
+		throw new Error(`unsupported evaluation game: ${definition.game}`);
 	}
 }
 

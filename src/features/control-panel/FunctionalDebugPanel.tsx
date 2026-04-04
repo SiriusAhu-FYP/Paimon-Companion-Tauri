@@ -5,42 +5,27 @@ import type {
 	FunctionalRuntimeState,
 	FunctionalTaskRecord,
 	Game2048State,
-	StardewState,
 } from "@/types";
 
 interface FunctionalDebugPanelProps {
 	functionalState: FunctionalRuntimeState;
 	game2048State: Game2048State;
-	stardewState: StardewState;
 	evaluationState: EvaluationState;
 	onClearTaskHistory: () => void;
 }
 
-type DebugRun =
-	| {
-		game: "2048";
-		startedAt: number;
-		status: string;
-		summary: string;
-		companionText: string;
-		strategy: string;
-		reasoning: string;
-		analysisSource: string;
-		preferred: string[];
-		attempts: Array<{ label: string; changed: boolean; changeRatio: number }>;
-	}
-	| {
-		game: "stardew";
-		startedAt: number;
-		status: string;
-		summary: string;
-		companionText: string;
-		strategy: string;
-		reasoning: string;
-		analysisSource: string;
-		preferred: string[];
-		attempts: Array<{ label: string; changed: boolean; changeRatio: number }>;
-	};
+interface DebugRun {
+	game: "2048";
+	startedAt: number;
+	status: string;
+	summary: string;
+	companionText: string;
+	strategy: string;
+	reasoning: string;
+	analysisSource: string;
+	preferred: string[];
+	attempts: Array<{ label: string; changed: boolean; changeRatio: number }>;
+}
 
 function formatTime(timestamp: number | null): string {
 	if (!timestamp) return "—";
@@ -62,43 +47,22 @@ function getTaskStatusColor(status: FunctionalTaskRecord["status"]): "success" |
 	return "warning";
 }
 
-function buildLatestGameRun(game2048State: Game2048State, stardewState: StardewState): DebugRun | null {
+function buildLatestGameRun(game2048State: Game2048State): DebugRun | null {
 	const gameRun = game2048State.lastRun;
-	const stardewRun = stardewState.lastRun;
-
-	if (!gameRun && !stardewRun) return null;
-
-	if (gameRun && (!stardewRun || gameRun.startedAt >= stardewRun.startedAt)) {
-		return {
-			game: "2048",
-			startedAt: gameRun.startedAt,
-			status: gameRun.status,
-			summary: gameRun.summary,
-			companionText: gameRun.companionText,
-			strategy: gameRun.analysis.strategy,
-			reasoning: gameRun.analysis.reasoning,
-			analysisSource: gameRun.analysis.source,
-			preferred: gameRun.analysis.preferredMoves,
-			attempts: gameRun.attempts.map((attempt) => ({
-				label: attempt.move,
-				changed: attempt.changed,
-				changeRatio: attempt.changeRatio,
-			})),
-		};
-	}
+	if (!gameRun) return null;
 
 	return {
-		game: "stardew",
-		startedAt: stardewRun!.startedAt,
-		status: stardewRun!.status,
-		summary: stardewRun!.summary,
-		companionText: stardewRun!.companionText,
-		strategy: stardewRun!.analysis.strategy,
-		reasoning: stardewRun!.analysis.reasoning,
-		analysisSource: stardewRun!.analysis.source,
-		preferred: stardewRun!.analysis.preferredActions,
-		attempts: stardewRun!.attempts.map((attempt) => ({
-			label: attempt.action,
+		game: "2048",
+		startedAt: gameRun.startedAt,
+		status: gameRun.status,
+		summary: gameRun.summary,
+		companionText: gameRun.companionText,
+		strategy: gameRun.analysis.strategy,
+		reasoning: gameRun.analysis.reasoning,
+		analysisSource: gameRun.analysis.source,
+		preferred: gameRun.analysis.preferredMoves,
+		attempts: gameRun.attempts.map((attempt) => ({
+			label: attempt.move,
 			changed: attempt.changed,
 			changeRatio: attempt.changeRatio,
 		})),
@@ -185,8 +149,8 @@ export function FunctionalDebugPanel(props: FunctionalDebugPanelProps) {
 	const latestTask = props.functionalState.latestTask;
 	const latestSnapshot = props.functionalState.latestSnapshot;
 	const latestRun = useMemo(
-		() => buildLatestGameRun(props.game2048State, props.stardewState),
-		[props.game2048State, props.stardewState],
+		() => buildLatestGameRun(props.game2048State),
+		[props.game2048State],
 	);
 	const [selectedTaskId, setSelectedTaskId] = useState<string | null>(props.functionalState.latestTask?.id ?? null);
 

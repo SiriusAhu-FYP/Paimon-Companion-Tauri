@@ -43,11 +43,8 @@ Public progress tracker for `paimon-companion-tauri`.
     - [x] track latency
     - [x] track action validity
     - [x] document baseline results
-  - [x] P1.5 Stardew Valley Extension
-    - [x] define first small task set
-    - [x] adapt perception prompts/context
-    - [x] adapt control and verification logic
-    - [x] run the same evaluation flow used in `2048`
+  - [-] P1.5 Stardew Valley Extension
+    deferred from the active codebase during pre-`P2` cleanup to reduce maintenance surface; task templates remain available for future reintroduction
 
 - [x] P1.5+: Support Systems
   - [-] connect knowledge retrieval to functional tasks where useful

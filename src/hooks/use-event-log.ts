@@ -40,11 +40,6 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 			"game2048:attempt",
 			"game2048:run-complete",
 			"game2048:state-change",
-			"stardew:target-detected",
-			"stardew:run-start",
-			"stardew:attempt",
-			"stardew:run-complete",
-			"stardew:state-change",
 			"evaluation:case-start",
 			"evaluation:case-complete",
 			"evaluation:state-change",
@@ -201,27 +196,6 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "game2048:state-change": {
 			const data = payload as EventMap["game2048:state-change"];
-			const latest = data.state.lastRun;
-			return latest ? `最新运行: ${latest.status}` : "状态刷新";
-		}
-		case "stardew:target-detected": {
-			const data = payload as EventMap["stardew:target-detected"];
-			return data.summary;
-		}
-		case "stardew:run-start": {
-			const data = payload as EventMap["stardew:run-start"];
-			return `${data.taskId}: ${data.preferredActions.join(" -> ")}`;
-		}
-		case "stardew:attempt": {
-			const data = payload as EventMap["stardew:attempt"];
-			return `${data.action}: ${data.changed ? "changed" : "no change"} (${formatPercent(data.changeRatio)})`;
-		}
-		case "stardew:run-complete": {
-			const data = payload as EventMap["stardew:run-complete"];
-			return data.summary;
-		}
-		case "stardew:state-change": {
-			const data = payload as EventMap["stardew:state-change"];
 			const latest = data.state.lastRun;
 			return latest ? `最新运行: ${latest.status}` : "状态刷新";
 		}

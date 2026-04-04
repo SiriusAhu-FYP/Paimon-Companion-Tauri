@@ -6,15 +6,12 @@ This document defines the lightweight template pattern used for small functional
 
 ## Current Use
 
-Current templateized game:
+Current shared template infrastructure lives in:
 
-- `Stardew Valley`
-
-Relevant files:
-
-- `src/services/games/stardew-task-templates.ts`
 - `src/services/games/task-templates.ts`
 - `src/services/games/game-utils.ts`
+
+There is no active template-driven game in the current baseline. The template layer is retained for future small-task extensions.
 
 ## Template Shape
 
@@ -43,7 +40,7 @@ Do not force templates onto open-ended planner loops.
 
 Examples:
 
-- `Stardew Valley` small tasks fit templates well
+- menu / inventory / short movement probes fit templates well
 - `2048` remains a dedicated loop because it is a board-driven decision cycle
 
 ## Extension Path
