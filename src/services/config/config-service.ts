@@ -4,7 +4,7 @@
  * 敏感配置（API Key）走 SecretStore（见 secret-store.ts）。
  */
 
-import type { AppConfig, CharacterSettingsConfig } from "./types";
+import type { AppConfig, CharacterSettingsConfig, TTSProfile, TTSProviderConfig } from "./types";
 import { DEFAULT_CONFIG } from "./types";
 import { createLogger } from "@/services/logger";
 import { isTauriEnvironment } from "@/utils/window-sync";
@@ -72,6 +72,27 @@ function normalizeCharacterSettings(
 			...DEFAULT_CONFIG.character.behaviorConstraints,
 			...(character.behaviorConstraints ?? {}),
 		},
+	};
+}
+
+function normalizeTtsConfig(tts: TTSProviderConfig & { gptWeightsPath?: string }): TTSProviderConfig {
+	const rawProvider = (tts as { provider?: string }).provider;
+	const provider = rawProvider === "gpt-sovits" ? "browser-native" : (rawProvider ?? "browser-native");
+	return {
+		provider: provider as TTSProviderConfig["provider"],
+		baseUrl: provider === "browser-native" || provider === "mock" ? "" : (tts.baseUrl ?? ""),
+		speakerId: tts.speakerId ?? "",
+		voiceName: tts.voiceName ?? "",
+		speed: tts.speed ?? 1.0,
+		textLang: tts.textLang ?? "zh",
+	};
+}
+
+function normalizeTtsProfile(profile: TTSProfile & { gptWeightsPath?: string }): TTSProfile {
+	return {
+		id: profile.id,
+		name: profile.name,
+		...normalizeTtsConfig(profile),
 	};
 }
 
@@ -151,6 +172,10 @@ export async function loadConfig(): Promise<AppConfig> {
 	cachedConfig = deepMerge(DEFAULT_CONFIG, overrides);
 	cachedConfig = {
 		...cachedConfig,
+		tts: normalizeTtsConfig(cachedConfig.tts as TTSProviderConfig & { gptWeightsPath?: string }),
+		ttsProfiles: cachedConfig.ttsProfiles.map((profile) =>
+			normalizeTtsProfile(profile as TTSProfile & { gptWeightsPath?: string }),
+		),
 		character: normalizeCharacterSettings(
 			cachedConfig.character as CharacterSettingsConfig & { persona?: string },
 		),
