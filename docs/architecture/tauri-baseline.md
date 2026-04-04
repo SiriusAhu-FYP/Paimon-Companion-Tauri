@@ -2,108 +2,87 @@
 
 ## Purpose
 
-This document defines the baseline architecture of `paimon-companion-tauri` after the fork cleanup.
+This document records the current architectural baseline of `paimon-companion-tauri`.
 
-## Core Principle
+## Core Shape
 
-The app itself is pure Tauri:
+- Rust host for OS-facing capabilities
+- TypeScript services for orchestration and runtime logic
+- React UI for companion presentation, controls, and inspection
+- external model services over HTTP/SSE when needed
 
-- Rust host for system-facing capabilities
-- TypeScript for application logic
-- React for interface and Live2D presentation
+## Responsibility Split
 
-External AI services are still allowed and expected:
+Rust owns:
 
-- vLLM
-- GPT-SoVITS
-- other OpenAI-compatible endpoints
-
-## Boundary
-
-### Rust owns
-
-- system window discovery
+- window discovery
 - screen capture
 - input injection
-- secure secret access
+- secret access
 - local OS integration
 - HTTP / SSE proxy where browser constraints apply
 
-### TypeScript owns
+TypeScript owns:
 
 - orchestrator loop
-- capability selection
-- message assembly
-- safety / verification policy
+- safety and verification policy
 - runtime coordination
-- character state and companion feedback
-- reusable game task template definitions for finite action sets
+- perception/game-task services
+- companion state and feedback
+- reusable game task templates
+
+React owns:
+
+- stage output
+- control layout
+- debug surfaces
+- user-triggered inspection actions
 
 ## Functional Latency Policy
 
-For the current functional-validation stages:
+For the current functional path:
 
-- the real-time game loop does not use knowledge retrieval
-- embedding and rerank requests are kept out of the control path
+- knowledge retrieval is not in the real-time control path
+- embedding and rerank requests are excluded from live execution
 - vision/game-task services call the configured model endpoint directly when needed
 
-The knowledge module is still retained in the repo and runtime for:
+The knowledge module is still retained for:
 
 - chat / companion experiments
 - manual context injection
 - future non-real-time workflows
 
-Reason:
-
-- the functional loop is latency-bound, and extra retrieval / rerank hops materially hurt action turnaround
-
 ## Input Execution Model
 
-For the current host-control implementation:
+The current host-control implementation is foreground-oriented:
 
-- host actions are foreground-oriented
 - the target window is focused before key or mouse input is emitted
-- keyboard and mouse events are sent through standard Windows input APIs
+- keyboard and mouse events use standard Windows input APIs
 
-This means the system currently assumes a foreground-exclusive interaction model:
+This should be treated as foreground-exclusive control, not background-safe automation.
 
-- it does not guarantee coexistence with the user's own typing
-- it does not guarantee coexistence with IME composition
-- it should not be treated as a background-safe automation layer
+It does not guarantee coexistence with:
 
-If future stages require non-interfering control, the design will need one of:
+- user typing in another window
+- IME composition
+- parallel local mouse interaction
+
+If future stages require non-interfering control, the design will need:
 
 - app-specific automation hooks
-- reliable background message injection for a specific target
-- an isolated execution environment such as a VM or remote session
+- target-specific background injection that is known to work
+- or an isolated execution environment such as a VM or remote session
 
 ## Reusable Game Tasks
 
-For games with a small finite task set, the functional layer now supports reusable task templates.
+For games with a small finite task set, the functional layer supports reusable task templates.
 
-This is intended for things like:
+This fits tasks such as:
 
 - menu toggles
 - short movement probes
-- simple interaction tasks
-
-The pattern keeps:
-
-- shared screenshot / window / verification helpers in common modules
-- per-game task metadata and fallback action orderings in template definition files
-- service classes focused on orchestration, event emission, and run summaries
+- one-step interaction tasks
 
 Reference:
 
-- see `docs/architecture/game-task-templates.md`
-
-### React owns
-
-- control layout
-- stage output
-- inspection tools
-- user-triggered debug actions
-
-## Why This Matters
-
-This keeps the app free of an in-app Python sidecar while still allowing external model services to remain in Python where that is practical.
+- `docs/architecture/game-task-templates.md`
