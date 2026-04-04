@@ -1,3 +1,4 @@
+export { FasterWhisperLocalASRService, OpenAICompatibleASRService } from "./http-asr-service";
 export { MockASRService } from "./mock-asr-service";
 export { UnavailableASRService } from "./unavailable-asr-service";
-export type { IASRService, ASRProviderDescriptor } from "./types";
+export type { ASRAudioInput, IASRService, ASRProviderDescriptor } from "./types";

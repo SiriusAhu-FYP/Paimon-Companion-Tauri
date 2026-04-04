@@ -55,7 +55,7 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 		color: "#81c784",
 	},
 	"语音": {
-		events: ["audio:asr-result", "audio:tts-start", "audio:tts-end"],
+		events: ["audio:vad-start", "audio:vad-end", "audio:asr-result", "audio:tts-start", "audio:tts-end", "voice:state-change"],
 		color: "#64b5f6",
 	},
 	"LLM": {
@@ -116,12 +116,22 @@ function formatSummary(event: EventName, payload: unknown): string {
 			const data = payload as EventMap["audio:asr-result"];
 			return `${data.source}: ${truncate(data.text, 80)}`;
 		}
+		case "audio:vad-start":
+			return "VAD 开始录音";
+		case "audio:vad-end": {
+			const data = payload as EventMap["audio:vad-end"];
+			return `VAD 结束 (${Math.round(data.audioData.byteLength / 1024)} KB)`;
+		}
 		case "audio:tts-start": {
 			const data = payload as EventMap["audio:tts-start"];
 			return `TTS: ${truncate(data.text, 80)}`;
 		}
 		case "audio:tts-end":
 			return "TTS 完成";
+		case "voice:state-change": {
+			const data = payload as EventMap["voice:state-change"];
+			return `${data.state.status}${data.state.playbackLocked ? " / playback-lock" : ""}`;
+		}
 		case "llm:request-start": {
 			const data = payload as EventMap["llm:request-start"];
 			return `请求: ${truncate(data.userText, 80)}`;

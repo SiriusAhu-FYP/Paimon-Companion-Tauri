@@ -1,4 +1,4 @@
-import type { IASRService, ASRProviderDescriptor } from "./types";
+import type { ASRAudioInput, IASRService, ASRProviderDescriptor } from "./types";
 
 export class UnavailableASRService implements IASRService {
 	readonly descriptor: ASRProviderDescriptor;
@@ -10,7 +10,7 @@ export class UnavailableASRService implements IASRService {
 		};
 	}
 
-	async transcribe(_audio: ArrayBuffer): Promise<string> {
+	async transcribe(_audio: ASRAudioInput): Promise<string> {
 		throw new Error(`${this.descriptor.label} 已配置，但真实麦克风/上传链路尚未接通`);
 	}
 }

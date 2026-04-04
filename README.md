@@ -28,7 +28,7 @@ Current accepted baseline:
 
 What the baseline does not yet prove:
 
-- full migration of `VoiceL2D-MVP` voice-input capabilities
+- full validation of the restored `VoiceL2D-MVP` voice-input capabilities
 - full migration of `LLMPlay-MVP` source scope
 - full migration of `Video-Understanding-MVP` pipeline/evaluation capabilities
 - full post-fusion validation across all three source lines
@@ -61,6 +61,7 @@ pnpm tauri dev
 - The app stays Tauri-first, but local AI runtimes may still be attached as optional external services or sidecars when the ecosystem fit is better than forcing everything into Rust/TS.
 - External AI services may still run outside the app over HTTP/SSE.
 - ASR is being migrated with a provider/profile model rather than by bundling all speech-recognition weights into the installer.
+- A real chat-panel microphone path now exists, with browser-side capture/VAD plus pluggable cloud or local-runtime ASR upload.
 - The functional path intentionally excludes knowledge retrieval / embedding / rerank due to latency sensitivity.
 - The current host input model is foreground-oriented and does not guarantee coexistence with user typing or IME composition.
 - New game transfer work is gated behind source-repository fusion and validation.

@@ -15,6 +15,7 @@ pub fn run() {
 			commands::secret::secret_delete,
 			commands::http_proxy::proxy_http_request,
 			commands::http_proxy::proxy_binary_request,
+			commands::http_proxy::proxy_multipart_request,
 			commands::http_proxy::proxy_sse_request,
 			commands::window::list_windows,
 			commands::window::capture_window,

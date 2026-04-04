@@ -13,6 +13,7 @@ import type {
 	FunctionalRuntimeState,
 } from "./functional";
 import type { Game2048Move, Game2048State } from "./game-2048";
+import type { VoiceInputState } from "./voice";
 
 export interface RuntimeModeChangePayload {
 	mode: RuntimeMode;
@@ -197,6 +198,10 @@ export interface UnifiedVoiceInputPayload {
 	command: string | null;
 }
 
+export interface VoiceInputStateChangePayload {
+	state: VoiceInputState;
+}
+
 export interface EventMap {
 	"runtime:mode-change": RuntimeModeChangePayload;
 	"audio:vad-start": void;
@@ -204,6 +209,7 @@ export interface EventMap {
 	"audio:asr-result": AudioAsrResultPayload;
 	"audio:tts-start": AudioTtsStartPayload;
 	"audio:tts-end": void;
+	"voice:state-change": VoiceInputStateChangePayload;
 	"llm:request-start": LlmRequestStartPayload;
 	"llm:stream-chunk": LlmStreamChunkPayload;
 	"llm:tool-call": LlmToolCallPayload;

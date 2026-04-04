@@ -3,7 +3,12 @@ import { GptSovitsTTSService, MockTTSService } from "./tts";
 import type { ITTSService } from "./tts/types";
 import { MockLLMService, OpenAILLMService } from "./llm";
 import type { ILLMService } from "./llm/types";
-import { MockASRService, UnavailableASRService } from "./asr";
+import {
+	FasterWhisperLocalASRService,
+	MockASRService,
+	OpenAICompatibleASRService,
+	UnavailableASRService,
+} from "./asr";
 import type { IASRService } from "./asr";
 import { createLogger } from "./logger";
 
@@ -103,6 +108,36 @@ export function resolveASRProvider(config: AppConfig): IASRService {
 	if (asrConfig.provider === "mock") {
 		log.info("using mock ASR provider");
 		return new MockASRService();
+	}
+
+	if (asrConfig.provider === "openai-compatible") {
+		if (!asrConfig.baseUrl.trim()) {
+			log.info("OpenAI-compatible ASR configured but baseUrl missing, using mock fallback");
+			return new MockASRService();
+		}
+		log.info(`using OpenAI-compatible ASR provider: ${asrConfig.baseUrl}`);
+		return new OpenAICompatibleASRService({
+			baseUrl: asrConfig.baseUrl,
+			model: asrConfig.model,
+			language: asrConfig.language,
+			autoDetectLanguage: asrConfig.autoDetectLanguage,
+			secretKey: activeProfile ? `asr-api-key:${activeProfile.id}` : null,
+		});
+	}
+
+	if (asrConfig.provider === "faster-whisper-local") {
+		if (!asrConfig.baseUrl.trim()) {
+			log.info("Faster-Whisper local configured but baseUrl missing, using mock fallback");
+			return new MockASRService();
+		}
+		log.info(`using Faster-Whisper local ASR provider: ${asrConfig.baseUrl}`);
+		return new FasterWhisperLocalASRService({
+			baseUrl: asrConfig.baseUrl,
+			model: asrConfig.model,
+			language: asrConfig.language,
+			autoDetectLanguage: asrConfig.autoDetectLanguage,
+			vadEnabled: asrConfig.vadEnabled,
+		});
 	}
 
 	const labelMap: Record<Exclude<ASRProviderConfig["provider"], "mock">, string> = {
