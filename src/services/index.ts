@@ -1,21 +1,19 @@
 import { EventBus, eventBus } from "./event-bus";
 import { RuntimeService } from "./runtime";
 import { CharacterService } from "./character";
-import { KnowledgeService, OpenAIEmbeddingService, CompatibleRerankService } from "./knowledge";
+import { KnowledgeService } from "./knowledge";
 import { PerceptionService } from "./perception";
 import { SafetyService } from "./safety";
 import { OrchestratorService } from "./orchestrator";
 import { Game2048Service, StardewService } from "./games";
 import { EvaluationService } from "./evaluation";
-import { LLMService, MockLLMService, OpenAILLMService } from "./llm";
-import type { ILLMService } from "./llm/types";
-import { MockTTSService, GptSovitsTTSService } from "./tts";
-import type { ITTSService } from "./tts/types";
+import { LLMService } from "./llm";
 import { AudioPlayer } from "./audio";
 import { PipelineService } from "./pipeline";
 import { createLogger } from "./logger";
 import { getConfig } from "./config";
-import type { AppConfig, TTSProviderConfig } from "./config";
+import { configureKnowledgeProviders, reinitializeKnowledgeProviders } from "./knowledge-provider-manager";
+import { resolveLLMProvider, resolveTTSProvider } from "./provider-resolvers";
 
 const log = createLogger("services");
 
@@ -36,75 +34,6 @@ export interface ServiceContainer {
 }
 
 let services: ServiceContainer | null = null;
-
-function resolveLLMProvider(config: AppConfig): ILLMService {
-	// 优先使用活跃 LLM Profile
-	const activeProfile = config.activeLlmProfileId
-		? config.llmProfiles.find((p) => p.id === config.activeLlmProfileId)
-		: null;
-
-	const provider = activeProfile?.provider ?? config.llm.provider;
-	const baseUrl = activeProfile?.baseUrl ?? config.llm.baseUrl;
-	const model = activeProfile?.model ?? config.llm.model;
-	const temperature = activeProfile?.temperature ?? config.llm.temperature;
-	const maxTokens = activeProfile?.maxTokens ?? config.llm.maxTokens;
-	const profileId = activeProfile?.id ?? null;
-
-	if (provider === "mock") {
-		log.info("using mock LLM provider");
-		return new MockLLMService();
-	}
-	if (provider === "openai-compatible") {
-		if (!baseUrl || !model) {
-			log.info("openai-compatible configured but baseUrl/model missing, using mock fallback");
-			return new MockLLMService();
-		}
-		log.info(`using OpenAI-compatible LLM provider: ${baseUrl}, model=${model}`);
-		return new OpenAILLMService(
-			{ provider, baseUrl, model, temperature, maxTokens },
-			profileId,
-		);
-	}
-	log.info(`unknown LLM provider "${provider}", using mock fallback`);
-	return new MockLLMService();
-}
-
-function resolveTTSProvider(config: AppConfig): ITTSService {
-	// 优先使用活跃 TTS Profile
-	const activeProfile = config.activeTtsProfileId
-		? config.ttsProfiles.find((p) => p.id === config.activeTtsProfileId)
-		: null;
-
-	const ttsCfg: TTSProviderConfig = activeProfile
-		? {
-			provider: activeProfile.provider,
-			baseUrl: activeProfile.baseUrl,
-			speakerId: activeProfile.speakerId,
-			speed: activeProfile.speed,
-			gptWeightsPath: activeProfile.gptWeightsPath,
-			sovitsWeightsPath: activeProfile.sovitsWeightsPath,
-			refAudioPath: activeProfile.refAudioPath,
-			promptText: activeProfile.promptText,
-			promptLang: activeProfile.promptLang,
-			textLang: activeProfile.textLang,
-		}
-		: config.tts;
-
-	if (ttsCfg.provider === "mock") {
-		log.info("using mock TTS provider");
-		return new MockTTSService();
-	}
-	if (ttsCfg.provider === "gpt-sovits") {
-		if (!ttsCfg.baseUrl) {
-			log.info("GPT-SoVITS configured but baseUrl missing, using mock fallback");
-			return new MockTTSService();
-		}
-		log.info(`using GPT-SoVITS TTS provider: ${ttsCfg.baseUrl}`);
-		return new GptSovitsTTSService(ttsCfg);
-	}
-	log.info(`unknown TTS provider "${ttsCfg.provider}", using mock fallback`);
-	return new MockTTSService();
-}
 
 export function initServices(): ServiceContainer {
 	if (services) {
@@ -141,23 +70,7 @@ export function initServices(): ServiceContainer {
 
 	// Keep knowledge alive for companion/chat workflows, but do not route the
 	// latency-sensitive functional game loop through embedding or rerank.
-	// Phase 3.5: 初始化 Embedding Service + Rerank Service + Knowledge
-	const embProfile = resolveEmbeddingProfile(config);
-	if (embProfile) {
-		const embeddingService = new OpenAIEmbeddingService(
-			{ baseUrl: embProfile.baseUrl, model: embProfile.model, dimension: embProfile.dimension },
-			embProfile.id,
-		);
-		knowledge.setEmbeddingService(embeddingService);
-	}
-	const rerankProfile = resolveRerankProfile(config);
-	if (rerankProfile) {
-		const rerankService = new CompatibleRerankService(
-			{ baseUrl: rerankProfile.baseUrl, model: rerankProfile.model },
-			rerankProfile.id,
-		);
-		knowledge.setRerankService(rerankService);
-	}
+	configureKnowledgeProviders(knowledge, config);
 	knowledge.initialize().catch((err) => {
 		log.error("knowledge initialization failed", err);
 	});
@@ -231,35 +144,6 @@ export function refreshProviders() {
 	});
 }
 
-function resolveEmbeddingProfile(config: AppConfig) {
-	const activeProfile = config.knowledge.activeEmbeddingProfileId
-		? config.knowledge.embeddingProfiles.find((p) => p.id === config.knowledge.activeEmbeddingProfileId)
-		: null;
-	if (activeProfile && activeProfile.baseUrl && activeProfile.model) {
-		return activeProfile;
-	}
-	// fallback to inline embedding config (legacy)
-	if (config.knowledge.embedding.baseUrl && config.knowledge.embedding.model) {
-		return { id: "__inline__", ...config.knowledge.embedding };
-	}
-	return null;
-}
-
-function resolveRerankProfile(config: AppConfig) {
-	if (!config.knowledge.rerankEnabled) return null;
-	const activeProfile = config.knowledge.activeRerankProfileId
-		? config.knowledge.rerankProfiles.find((p) => p.id === config.knowledge.activeRerankProfileId)
-		: null;
-	if (activeProfile && activeProfile.baseUrl && activeProfile.model) {
-		return activeProfile;
-	}
-	// fallback to inline rerank config
-	if (config.knowledge.rerank.baseUrl && config.knowledge.rerank.model) {
-		return { id: "__inline_rerank__", name: "inline", ...config.knowledge.rerank };
-	}
-	return null;
-}
-
 /**
  * Embedding / Rerank profile 变更后调用——重建对应 service + 重新初始化知识库。
  */
@@ -269,39 +153,7 @@ export async function refreshEmbeddingService() {
 		return;
 	}
 	const config = getConfig();
-
-	// 刷新 embedding（无档案时清理旧 service，保持配置一致性）
-	const embProfile = resolveEmbeddingProfile(config);
-	if (embProfile) {
-		const embeddingService = new OpenAIEmbeddingService(
-			{ baseUrl: embProfile.baseUrl, model: embProfile.model, dimension: embProfile.dimension },
-			embProfile.id,
-		);
-		services.knowledge.setEmbeddingService(embeddingService);
-	} else {
-		services.knowledge.setEmbeddingService(null);
-	}
-
-	// 刷新 rerank
-	const rerankProfile = resolveRerankProfile(config);
-	if (rerankProfile) {
-		const rerankService = new CompatibleRerankService(
-			{ baseUrl: rerankProfile.baseUrl, model: rerankProfile.model },
-			rerankProfile.id,
-		);
-		services.knowledge.setRerankService(rerankService);
-	} else {
-		services.knowledge.setRerankService(null);
-	}
-
-	await services.knowledge.reinitialize();
-	log.info("knowledge providers refreshed", {
-		embeddingProfileId: embProfile?.id ?? "none",
-		embeddingModel: embProfile?.model ?? "none",
-		rerankProfileId: rerankProfile?.id ?? "none",
-		rerankModel: rerankProfile?.model ?? "none",
-		rerankEnabled: config.knowledge.rerankEnabled,
-	});
+	await reinitializeKnowledgeProviders(services.knowledge, config);
 }
 
 export { eventBus } from "./event-bus";

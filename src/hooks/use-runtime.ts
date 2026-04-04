@@ -1,16 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback } from "react";
 import { getServices } from "@/services";
 import type { RuntimeMode } from "@/types";
+import { useServiceState } from "./use-service-state";
 
 export function useRuntime() {
-	const { runtime, bus } = getServices();
-	const [mode, setMode] = useState<RuntimeMode>(runtime.getMode());
-
-	useEffect(() => {
-		return bus.on("runtime:mode-change", (payload) => {
-			setMode(payload.mode);
-		});
-	}, [bus]);
+	const { runtime } = getServices();
+	const mode = useServiceState<RuntimeMode, "runtime:mode-change">({
+		getInitialState: () => runtime.getMode(),
+		event: "runtime:mode-change",
+		getNextState: (payload) => payload.mode,
+	});
 
 	const stop = useCallback(() => runtime.stop(), [runtime]);
 	const resume = useCallback(() => runtime.resume(), [runtime]);
