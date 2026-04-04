@@ -2,6 +2,8 @@ import type { EventBus } from "@/services/event-bus";
 import type { CharacterProfile } from "@/types";
 import type { CharacterService } from "@/services/character";
 import type { RuntimeService } from "@/services/runtime";
+import { getServices } from "@/services";
+import { proxyRequest } from "@/services/config";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("mock");
@@ -45,7 +47,6 @@ export async function mockVoicePipeline(bus: EventBus, runtime?: RuntimeService)
 
 	// 使用服务容器中的 pipeline 走完整链路
 	try {
-		const { getServices } = await import("@/services");
 		const { pipeline } = getServices();
 		await pipeline.run("你好，派蒙！今天有什么好吃的推荐吗？");
 	} catch (err) {
@@ -70,7 +71,6 @@ export function exposeMockTools(bus: EventBus, character: CharacterService, runt
 		// TTS 调试：设置合成失败注入索引（null 清除）
 		setTTSFailIndex: async (index: number | null) => {
 			try {
-				const { getServices } = await import("@/services");
 				const { pipeline } = getServices();
 				pipeline.getSpeechQueue().setDebugFailIndex(index);
 			} catch (err) {
@@ -80,7 +80,6 @@ export function exposeMockTools(bus: EventBus, character: CharacterService, runt
 		// TTS 调试：开关静音裁剪（默认关闭）
 		setTrimEnabled: async (enabled: boolean) => {
 			try {
-				const { getServices } = await import("@/services");
 				const { pipeline } = getServices();
 				pipeline.getSpeechQueue().setTrimEnabled(enabled);
 			} catch (err) {
@@ -89,11 +88,9 @@ export function exposeMockTools(bus: EventBus, character: CharacterService, runt
 		},
 		// Phase 3 M6: 网络能力测试
 		testProxy: async (url: string) => {
-			const { proxyRequest } = await import("@/services/config");
 			return proxyRequest({ url, method: "GET", timeoutMs: 10000 });
 		},
 		testSecretProxy: async (url: string, secretKey: string) => {
-			const { proxyRequest } = await import("@/services/config");
 			return proxyRequest({ url, method: "GET", secretKey, timeoutMs: 10000 });
 		},
 	};

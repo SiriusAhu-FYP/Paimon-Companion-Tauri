@@ -1,4 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from "react";
+import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
 	onMouthSync, onControlCommand,
 	broadcastControl, isTauriEnvironment,
@@ -54,7 +56,6 @@ export function StageWindow() {
 
 		async function applyAlwaysOnTop() {
 			try {
-				const { getCurrentWindow } = await import("@tauri-apps/api/window");
 				const win = getCurrentWindow();
 				if (stageMode === "docked") {
 					await win.setAlwaysOnTop(false);
@@ -75,7 +76,6 @@ export function StageWindow() {
 
 		async function applyCursorEvents() {
 			try {
-				const { getCurrentWindow } = await import("@tauri-apps/api/window");
 				const win = getCurrentWindow();
 				const shouldIgnore = displayMode === "clean" && stageMode === "docked";
 				await win.setIgnoreCursorEvents(shouldIgnore);
@@ -152,7 +152,6 @@ export function StageWindow() {
 
 	const handleControlCommand = useCallback(async (cmd: ControlCommand) => {
 		try {
-			const { getCurrentWindow } = await import("@tauri-apps/api/window");
 			const win = getCurrentWindow();
 
 			switch (cmd.type) {
@@ -184,53 +183,51 @@ export function StageWindow() {
 				await win.show();
 				await win.setFocus();
 				break;
-				case "reset-position":
-					try {
-						const { LogicalPosition } = await import("@tauri-apps/api/dpi");
-						await win.setPosition(new LogicalPosition(100, 100));
-					} catch { /* */ }
-					break;
-				case "set-mode":
-					setStageMode(cmd.mode);
-					break;
-				case "set-always-on-top":
-					setAlwaysOnTop(cmd.value);
-					break;
-				case "restore-always-on-top":
-					break;
-				case "set-display-mode":
-					setDisplayMode(cmd.displayMode);
-					break;
-				case "set-model":
-					if (cmd.modelPath !== currentModelPath.current) {
-						await switchModel(cmd.modelPath);
-					}
-					break;
-				case "set-expression":
-					rendererRef.current?.setExpression(cmd.expressionName);
-					break;
-				case "set-scale-lock":
-					setScaleLocked(cmd.locked);
-					break;
-				case "set-eye-mode":
-					setEyeMode(cmd.mode);
-					break;
-				case "set-size":
-					try {
-						const { LogicalSize } = await import("@tauri-apps/api/dpi");
-						await win.setSize(new LogicalSize(cmd.width, cmd.height));
-					} catch { /* */ }
-					break;
-				case "reset-zoom":
-					rendererRef.current?.resetZoom();
-					saveZoom(1);
-					break;
-				case "set-passthrough":
-					await win.setIgnoreCursorEvents(cmd.enabled);
-					if (canvasRef.current) {
-						canvasRef.current.style.opacity = cmd.enabled ? "0" : "1";
-					}
-					break;
+			case "reset-position":
+				try {
+					await win.setPosition(new LogicalPosition(100, 100));
+				} catch { /* */ }
+				break;
+			case "set-mode":
+				setStageMode(cmd.mode);
+				break;
+			case "set-always-on-top":
+				setAlwaysOnTop(cmd.value);
+				break;
+			case "restore-always-on-top":
+				break;
+			case "set-display-mode":
+				setDisplayMode(cmd.displayMode);
+				break;
+			case "set-model":
+				if (cmd.modelPath !== currentModelPath.current) {
+					await switchModel(cmd.modelPath);
+				}
+				break;
+			case "set-expression":
+				rendererRef.current?.setExpression(cmd.expressionName);
+				break;
+			case "set-scale-lock":
+				setScaleLocked(cmd.locked);
+				break;
+			case "set-eye-mode":
+				setEyeMode(cmd.mode);
+				break;
+			case "set-size":
+				try {
+					await win.setSize(new LogicalSize(cmd.width, cmd.height));
+				} catch { /* */ }
+				break;
+			case "reset-zoom":
+				rendererRef.current?.resetZoom();
+				saveZoom(1);
+				break;
+			case "set-passthrough":
+				await win.setIgnoreCursorEvents(cmd.enabled);
+				if (canvasRef.current) {
+					canvasRef.current.style.opacity = cmd.enabled ? "0" : "1";
+				}
+				break;
 			}
 		} catch {
 			if (cmd.type === "hide-stage") {
@@ -314,7 +311,6 @@ export function StageWindow() {
 			rendererRef.current = null;
 
 			syncStateToHost({ visible: false });
-			const { getCurrentWindow } = await import("@tauri-apps/api/window");
 			await getCurrentWindow().hide();
 		} catch {
 			rendererRef.current?.destroy();
