@@ -17,19 +17,14 @@ export interface LLMProviderConfig {
 
 // ── TTS Provider ──
 
-export type TTSProviderType = "gpt-sovits" | "mock";
+export type TTSProviderType = "browser-native" | "mock" | "volcengine" | "aliyun";
 
 export interface TTSProviderConfig {
 	provider: TTSProviderType;
 	baseUrl: string;
 	speakerId: string;
+	voiceName: string;
 	speed: number;
-	// GPT-SoVITS 专属字段（服务端路径）
-	gptWeightsPath: string;
-	sovitsWeightsPath: string;
-	refAudioPath: string;
-	promptText: string;
-	promptLang: string;
 	textLang: string;
 }
 
@@ -72,7 +67,7 @@ export interface LLMProfile {
 	maxTokens: number;
 }
 
-// ── TTS Profile（可复用的配置档案，TTS 不等于 GPT-SoVITS）──
+// ── TTS Profile（可复用的配置档案）──
 
 export interface TTSProfile {
 	id: string;
@@ -80,12 +75,8 @@ export interface TTSProfile {
 	provider: TTSProviderType;
 	baseUrl: string;
 	speakerId: string;
+	voiceName: string;
 	speed: number;
-	gptWeightsPath: string;
-	sovitsWeightsPath: string;
-	refAudioPath: string;
-	promptText: string;
-	promptLang: string;
 	textLang: string;
 }
 
@@ -168,15 +159,11 @@ export const DEFAULT_CONFIG: AppConfig = {
 		maxTokens: 4096,
 	},
 	tts: {
-		provider: "mock",
-		baseUrl: "http://localhost:9880",
+		provider: "browser-native",
+		baseUrl: "",
 		speakerId: "",
+		voiceName: "",
 		speed: 1.0,
-		gptWeightsPath: "",
-		sovitsWeightsPath: "",
-		refAudioPath: "",
-		promptText: "",
-		promptLang: "zh",
 		textLang: "zh",
 	},
 	asr: {

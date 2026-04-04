@@ -26,6 +26,10 @@ export class AudioPlayer {
 		return this.playing;
 	}
 
+	pushMouthData(value: number) {
+		this.emitMouth(value);
+	}
+
 	async play(audioData: ArrayBuffer): Promise<void> {
 		if (this.playing) {
 			log.warn("already playing, stopping previous");

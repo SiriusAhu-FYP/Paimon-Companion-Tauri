@@ -1,5 +1,5 @@
 import type { AppConfig, ASRProviderConfig, TTSProviderConfig } from "./config";
-import { GptSovitsTTSService, MockTTSService } from "./tts";
+import { BrowserNativeTTSService, MockTTSService, UnavailableTTSService } from "./tts";
 import type { ITTSService } from "./tts/types";
 import { MockLLMService, OpenAILLMService } from "./llm";
 import type { ILLMService } from "./llm/types";
@@ -56,12 +56,8 @@ export function resolveTTSProvider(config: AppConfig): ITTSService {
 			provider: activeProfile.provider,
 			baseUrl: activeProfile.baseUrl,
 			speakerId: activeProfile.speakerId,
+			voiceName: activeProfile.voiceName,
 			speed: activeProfile.speed,
-			gptWeightsPath: activeProfile.gptWeightsPath,
-			sovitsWeightsPath: activeProfile.sovitsWeightsPath,
-			refAudioPath: activeProfile.refAudioPath,
-			promptText: activeProfile.promptText,
-			promptLang: activeProfile.promptLang,
 			textLang: activeProfile.textLang,
 		}
 		: config.tts;
@@ -70,13 +66,17 @@ export function resolveTTSProvider(config: AppConfig): ITTSService {
 		log.info("using mock TTS provider");
 		return new MockTTSService();
 	}
-	if (ttsConfig.provider === "gpt-sovits") {
-		if (!ttsConfig.baseUrl) {
-			log.info("GPT-SoVITS configured but baseUrl missing, using mock fallback");
-			return new MockTTSService();
-		}
-		log.info(`using GPT-SoVITS TTS provider: ${ttsConfig.baseUrl}`);
-		return new GptSovitsTTSService(ttsConfig);
+	if (ttsConfig.provider === "browser-native") {
+		log.info("using browser-native TTS provider");
+		return new BrowserNativeTTSService(ttsConfig);
+	}
+	if (ttsConfig.provider === "volcengine") {
+		log.info("configured Volcengine TTS provider");
+		return new UnavailableTTSService("火山引擎 TTS");
+	}
+	if (ttsConfig.provider === "aliyun") {
+		log.info("configured Aliyun TTS provider");
+		return new UnavailableTTSService("阿里云 TTS");
 	}
 
 	log.info(`unknown TTS provider "${ttsConfig.provider}", using mock fallback`);

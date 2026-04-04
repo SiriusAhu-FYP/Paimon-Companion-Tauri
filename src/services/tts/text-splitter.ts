@@ -135,7 +135,7 @@ function mergeShortSegments(parts: string[], minLen: number): string[] {
  * 判断非 CJK 为主的文本应该标记为哪种语言。
  *
  * 优先级：假名存在→ja，含汉字→zh，韩文/西里尔/阿拉伯/泰文→unsupported，
- * 其余拉丁文字（含法文等带重音字符）统一归为 en（GPT-SoVITS 可处理）。
+ * 其余拉丁文字（含法文等带重音字符）统一归为 en（当前浏览器原生语音通常可处理）。
  */
 function detectNonCJKLang(text: string): SplitSegment["lang"] {
 	// 含假名 → 即使占比不高也标为 ja（短日文片段可能夹杂标点）
@@ -187,7 +187,7 @@ function separateLanguages(parts: string[]): SplitSegment[] {
 			const matchEnd = matchStart + match[0].length;
 			const englishText = match[0].trim();
 
-			// 短英文块留在中文段内，GPT-SoVITS zh 模式可自然读出
+			// 短英文块留在中文段内，浏览器原生中文语音通常也能自然读出
 			if (englishText.length < 20) continue;
 
 			// 英文块前面的中文部分

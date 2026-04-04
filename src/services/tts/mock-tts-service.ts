@@ -8,6 +8,8 @@ const log = createLogger("mock-tts");
  * 产出 WAV 格式 ArrayBuffer。
  */
 export class MockTTSService implements ITTSService {
+	readonly deliveryMode = "buffer" as const;
+
 	async synthesize(text: string, _config?: VoiceConfig): Promise<ArrayBuffer> {
 		// 根据文本长度模拟合成延迟
 		const delayMs = 200 + text.length * 15;
