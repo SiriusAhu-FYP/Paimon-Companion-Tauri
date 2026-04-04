@@ -56,11 +56,10 @@ Public progress tracker for `paimon-companion-tauri`.
     event log and status bar now surface live runtime / functional events; control panel also exposes capture -> decision -> action -> verification drill-down, but richer artifact export is still pending
   - [x] add reusable task templates for new games
 
-P1 close-out note:
+P1 close-out:
 
-- live manual validation completed for the `2048` path on `2026-04-03`
-- the functional `2048` loop, evaluation harness, and searchable host-window picker are treated as the accepted P1 baseline
-- any `P2` work should start on a fresh branch rather than extending the P1 validation branch
+- accepted baseline: validated `2048` path on `2026-04-03`
+- `P2` should start from a fresh branch
 
 - [ ] P2: Unified System Validation
   - [ ] P2.1 Relational Core Integration
