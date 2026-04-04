@@ -7,7 +7,6 @@ Current high-value entry points:
 - `architecture/tauri-baseline.md`
 - `architecture/game-task-templates.md`
 - `evaluation/2048-baseline.md`
-- `evaluation/stardew-baseline.md`
 
 Current state:
 

@@ -1,4 +1,4 @@
-export type EvaluationGame = "2048" | "stardew";
+export type EvaluationGame = "2048";
 export type EvaluationCaseTargetMode = "auto-detect" | "selected-target";
 export type EvaluationCaseStatus = "running" | "completed" | "failed";
 

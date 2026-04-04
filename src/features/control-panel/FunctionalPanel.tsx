@@ -1,13 +1,11 @@
 import { useCallback } from "react";
-import { useEvaluation, useFunctional, useGame2048, useStardew } from "@/hooks";
-import type { StardewTaskId } from "@/types";
+import { useEvaluation, useFunctional, useGame2048 } from "@/hooks";
 import { createLogger } from "@/services/logger";
 import { EvaluationSection } from "./EvaluationSection";
 import { FunctionalDebugPanel } from "./FunctionalDebugPanel";
 import { Game2048Section } from "./Game2048Section";
 import { HostToolsSection } from "./HostToolsSection";
 import { PanelRoot } from "./panel-shell";
-import { StardewSection } from "./StardewSection";
 
 const log = createLogger("functional-panel");
 
@@ -22,12 +20,6 @@ export function FunctionalPanel() {
 		runMouse,
 	} = useFunctional();
 	const { state: game2048State, detectTarget, runSingleStep } = useGame2048();
-	const {
-		state: stardewState,
-		detectTarget: detectStardewTarget,
-		setSelectedTask: setSelectedStardewTask,
-		runTask: runStardewTask,
-	} = useStardew();
 	const { state: evaluationState, runCase } = useEvaluation();
 
 	const handleDetect2048Target = useCallback(async () => {
@@ -46,22 +38,6 @@ export function FunctionalPanel() {
 		}
 	}, [runCase]);
 
-	const handleDetectStardewTarget = useCallback(async () => {
-		try {
-			await detectStardewTarget();
-		} catch (err) {
-			log.error("failed to detect Stardew target", err);
-		}
-	}, [detectStardewTarget]);
-
-	const handleRunStardewTask = useCallback(async (taskId?: StardewTaskId) => {
-		try {
-			await runStardewTask(taskId, functionalState.selectedTarget ?? undefined);
-		} catch (err) {
-			log.error("failed to run Stardew task", err);
-		}
-	}, [functionalState.selectedTarget, runStardewTask]);
-
 	return (
 		<PanelRoot title="功能实验">
 			<HostToolsSection
@@ -78,13 +54,6 @@ export function FunctionalPanel() {
 				onDetectTarget={handleDetect2048Target}
 				onRunSingleStep={runSingleStep}
 			/>
-			<StardewSection
-				functionalState={functionalState}
-				stardewState={stardewState}
-				onDetectTarget={handleDetectStardewTarget}
-				onSetSelectedTask={setSelectedStardewTask}
-				onRunTask={handleRunStardewTask}
-			/>
 			<EvaluationSection
 				evaluationState={evaluationState}
 				functionalState={functionalState}
@@ -94,7 +63,6 @@ export function FunctionalPanel() {
 			<FunctionalDebugPanel
 				functionalState={functionalState}
 				game2048State={game2048State}
-				stardewState={stardewState}
 				evaluationState={evaluationState}
 				onClearTaskHistory={clearHistory}
 			/>
