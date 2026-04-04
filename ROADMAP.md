@@ -71,7 +71,8 @@ P1 close-out:
     - [x] add ASR provider/profile configuration surface in settings
     - [x] restore a real voice-input path instead of manual/mock-only ASR
     - [x] support at least one cloud ASR provider and one local-runtime provider
-    - [x] retire the old external-Python local TTS path from the active runtime baseline
+    - [x] keep GPT-SoVITS as the accepted local TTS baseline from `VoiceL2D-MVP`
+    - [x] align accepted ASR providers with the source plan: `vosk-local`, `volcengine`, `aliyun`
     - [ ] support local model management via locate-existing-path or post-install download flow
     - [x] restore microphone capture, VAD segmentation, and playback-time mic lock
     - [ ] validate voice -> LLM -> TTS -> Live2D end-to-end in the Tauri host

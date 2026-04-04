@@ -1,13 +1,14 @@
 import type { AppConfig, ASRProviderConfig, TTSProviderConfig } from "./config";
-import { BrowserNativeTTSService, MockTTSService, UnavailableTTSService } from "./tts";
+import { GptSovitsTTSService, MockTTSService } from "./tts";
 import type { ITTSService } from "./tts/types";
 import { MockLLMService, OpenAILLMService } from "./llm";
 import type { ILLMService } from "./llm/types";
 import {
-	FasterWhisperLocalASRService,
+	AliyunASRService,
 	MockASRService,
-	OpenAICompatibleASRService,
+	VolcengineASRService,
 	UnavailableASRService,
+	VoskLocalASRService,
 } from "./asr";
 import type { IASRService } from "./asr";
 import { createLogger } from "./logger";
@@ -56,8 +57,12 @@ export function resolveTTSProvider(config: AppConfig): ITTSService {
 			provider: activeProfile.provider,
 			baseUrl: activeProfile.baseUrl,
 			speakerId: activeProfile.speakerId,
-			voiceName: activeProfile.voiceName,
 			speed: activeProfile.speed,
+			gptWeightsPath: activeProfile.gptWeightsPath,
+			sovitsWeightsPath: activeProfile.sovitsWeightsPath,
+			refAudioPath: activeProfile.refAudioPath,
+			promptText: activeProfile.promptText,
+			promptLang: activeProfile.promptLang,
 			textLang: activeProfile.textLang,
 		}
 		: config.tts;
@@ -66,17 +71,13 @@ export function resolveTTSProvider(config: AppConfig): ITTSService {
 		log.info("using mock TTS provider");
 		return new MockTTSService();
 	}
-	if (ttsConfig.provider === "browser-native") {
-		log.info("using browser-native TTS provider");
-		return new BrowserNativeTTSService(ttsConfig);
-	}
-	if (ttsConfig.provider === "volcengine") {
-		log.info("configured Volcengine TTS provider");
-		return new UnavailableTTSService("火山引擎 TTS");
-	}
-	if (ttsConfig.provider === "aliyun") {
-		log.info("configured Aliyun TTS provider");
-		return new UnavailableTTSService("阿里云 TTS");
+	if (ttsConfig.provider === "gpt-sovits") {
+		if (!ttsConfig.baseUrl) {
+			log.info("GPT-SoVITS configured but baseUrl missing, using mock fallback");
+			return new MockTTSService();
+		}
+		log.info(`using GPT-SoVITS TTS provider: ${ttsConfig.baseUrl}`);
+		return new GptSovitsTTSService(ttsConfig);
 	}
 
 	log.info(`unknown TTS provider "${ttsConfig.provider}", using mock fallback`);
@@ -110,13 +111,41 @@ export function resolveASRProvider(config: AppConfig): IASRService {
 		return new MockASRService();
 	}
 
-	if (asrConfig.provider === "openai-compatible") {
+	if (asrConfig.provider === "vosk-local") {
 		if (!asrConfig.baseUrl.trim()) {
-			log.info("OpenAI-compatible ASR configured but baseUrl missing, using mock fallback");
+			log.info("Vosk local ASR configured but baseUrl missing, using mock fallback");
 			return new MockASRService();
 		}
-		log.info(`using OpenAI-compatible ASR provider: ${asrConfig.baseUrl}`);
-		return new OpenAICompatibleASRService({
+		log.info(`using Vosk local ASR provider: ${asrConfig.baseUrl}`);
+		return new VoskLocalASRService({
+			baseUrl: asrConfig.baseUrl,
+			model: asrConfig.model,
+			language: asrConfig.language,
+			autoDetectLanguage: asrConfig.autoDetectLanguage,
+			vadEnabled: asrConfig.vadEnabled,
+		});
+	}
+	if (asrConfig.provider === "volcengine") {
+		if (!asrConfig.baseUrl.trim()) {
+			log.info("Volcengine ASR configured but baseUrl missing, using mock fallback");
+			return new MockASRService();
+		}
+		log.info(`using Volcengine ASR provider: ${asrConfig.baseUrl}`);
+		return new VolcengineASRService({
+			baseUrl: asrConfig.baseUrl,
+			model: asrConfig.model,
+			language: asrConfig.language,
+			autoDetectLanguage: asrConfig.autoDetectLanguage,
+			secretKey: activeProfile ? `asr-api-key:${activeProfile.id}` : null,
+		});
+	}
+	if (asrConfig.provider === "aliyun") {
+		if (!asrConfig.baseUrl.trim()) {
+			log.info("Aliyun ASR configured but baseUrl missing, using mock fallback");
+			return new MockASRService();
+		}
+		log.info(`using Aliyun ASR provider: ${asrConfig.baseUrl}`);
+		return new AliyunASRService({
 			baseUrl: asrConfig.baseUrl,
 			model: asrConfig.model,
 			language: asrConfig.language,
@@ -125,24 +154,8 @@ export function resolveASRProvider(config: AppConfig): IASRService {
 		});
 	}
 
-	if (asrConfig.provider === "faster-whisper-local") {
-		if (!asrConfig.baseUrl.trim()) {
-			log.info("Faster-Whisper local configured but baseUrl missing, using mock fallback");
-			return new MockASRService();
-		}
-		log.info(`using Faster-Whisper local ASR provider: ${asrConfig.baseUrl}`);
-		return new FasterWhisperLocalASRService({
-			baseUrl: asrConfig.baseUrl,
-			model: asrConfig.model,
-			language: asrConfig.language,
-			autoDetectLanguage: asrConfig.autoDetectLanguage,
-			vadEnabled: asrConfig.vadEnabled,
-		});
-	}
-
 	const labelMap: Record<Exclude<ASRProviderConfig["provider"], "mock">, string> = {
-		"openai-compatible": "OpenAI-compatible ASR",
-		"faster-whisper-local": "Faster-Whisper local sidecar",
+		"vosk-local": "Vosk local ASR",
 		volcengine: "Volcengine ASR",
 		aliyun: "Aliyun ASR",
 	};

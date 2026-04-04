@@ -14,13 +14,14 @@ import WarningIcon from "@mui/icons-material/Warning";
 import {
 	type AppConfig, type LLMProviderType, type TTSProviderType,
 	type LLMProfile, type TTSProfile,
+	type TTSProviderConfig,
 	DEFAULT_CONFIG, SECRET_KEYS,
 	loadConfig, updateConfig,
 	proxyRequest,
 	setSecret, getSecret, deleteSecret,
 } from "@/services/config";
 import { createLogger } from "@/services/logger";
-import { BrowserNativeTTSService, MockTTSService, splitText, normalizeForSpeech, SpeechQueue } from "@/services/tts";
+import { GptSovitsTTSService, MockTTSService, splitText, normalizeForSpeech, SpeechQueue } from "@/services/tts";
 import { AudioPlayer } from "@/services/audio/audio-player";
 import { HelpTooltip } from "@/components";
 import { refreshProviders } from "@/services";
@@ -70,7 +71,8 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 					profileId: profile.id,
 					name: profile.name,
 					baseUrl: profile.baseUrl,
-					voiceName: profile.voiceName,
+					gptPath: profile.gptWeightsPath,
+					sovitsPath: profile.sovitsWeightsPath,
 				});
 				return profile;
 			}
@@ -122,29 +124,19 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		setTtsTestResult(null);
 		try {
 			const ttsCfg = getActiveTtsConfig();
-			if (ttsCfg.provider === "mock") {
-				setTtsTestResult({ ok: true, text: "Mock TTS 始终可用" });
-				return;
-			}
-			if (ttsCfg.provider === "browser-native") {
-				if (typeof window !== "undefined" && "speechSynthesis" in window) {
-					setTtsTestResult({ ok: true, text: "浏览器原生 TTS 可用" });
-				} else {
-					setTtsTestResult({ ok: false, text: "当前环境不支持浏览器原生 TTS" });
-				}
-				return;
-			}
 			if (!ttsCfg.baseUrl || !ttsCfg.baseUrl.trim()) {
 				setTtsTestResult({ ok: false, text: "请先在档案中配置服务地址" });
 				return;
 			}
+			const base = ttsCfg.baseUrl.replace(/\/+$/, "");
+			const testUrl = `${base}/set_gpt_weights?weights_path=/tmp/dummy`;
 			const resp = await proxyRequest({
-				url: ttsCfg.baseUrl,
+				url: testUrl,
 				method: "GET",
 				timeoutMs: 8000,
 			});
 			setTtsTestResult({ ok: true, text: `服务可达 (HTTP ${resp.status})` });
-			log.info("TTS connection test passed", { status: resp.status, provider: ttsCfg.provider });
+			log.info("TTS connection test passed", { status: resp.status });
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			setTtsTestResult({ ok: false, text: msg });
@@ -161,14 +153,15 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		setMessage(null);
 		try {
 			const ttsCfg = getActiveTtsConfig();
-			let ttsService: BrowserNativeTTSService | MockTTSService;
-			if (ttsCfg.provider === "browser-native") {
-				ttsService = new BrowserNativeTTSService(ttsCfg);
-			} else if (ttsCfg.provider === "mock") {
-				ttsService = new MockTTSService();
-			} else {
-				setMessage({ type: "warning", text: "云端 TTS 还未接入当前运行时，暂时只可直测浏览器原生或 Mock" });
+			if (!ttsCfg.baseUrl || !ttsCfg.baseUrl.trim()) {
+				setMessage({ type: "error", text: "请先在档案中配置服务地址" });
 				return;
+			}
+			let ttsService: GptSovitsTTSService | MockTTSService;
+			if (ttsCfg.provider === "gpt-sovits") {
+				ttsService = new GptSovitsTTSService(ttsCfg as unknown as TTSProviderConfig);
+			} else {
+				ttsService = new MockTTSService();
 			}
 			const player = new AudioPlayer();
 			const queue = new SpeechQueue(ttsService, player, (speaking) => {
@@ -648,11 +641,15 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 	const defaultTTS = (): TTSProfile => ({
 		id: `tts-${Date.now()}`,
 		name: "",
-		provider: "browser-native",
-		baseUrl: "",
+		provider: "gpt-sovits",
+		baseUrl: "http://localhost:9880",
 		speakerId: "",
-		voiceName: "",
 		speed: 1.0,
+		gptWeightsPath: "",
+		sovitsWeightsPath: "",
+		refAudioPath: "",
+		promptText: "",
+		promptLang: "zh",
 		textLang: "zh",
 	});
 
@@ -708,8 +705,7 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 		await onPersist(newProfiles, id === activeId ? "" : activeId);
 	};
 
-	const isCloudTts = editingProfile?.provider === "volcengine" || editingProfile?.provider === "aliyun";
-	const isBrowserNative = editingProfile?.provider === "browser-native";
+	const isGptSovits = editingProfile?.provider === "gpt-sovits";
 
 	return (
 		<>
@@ -762,23 +758,34 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 								value={editingProfile.provider}
 								onChange={(e: SelectChangeEvent) => setEditingProfile({ ...editingProfile, provider: e.target.value as TTSProviderType })}>
 								<MenuItem value="mock">Mock（模拟）</MenuItem>
-								<MenuItem value="browser-native">浏览器原生 TTS</MenuItem>
-								<MenuItem value="volcengine">火山引擎 TTS</MenuItem>
-								<MenuItem value="aliyun">阿里云 TTS</MenuItem>
+								<MenuItem value="gpt-sovits">GPT-SoVITS</MenuItem>
 							</Select>
-							{isCloudTts && (
-								<TextField size="small" fullWidth label="服务地址"
-									value={editingProfile.baseUrl}
-									onChange={(e) => setEditingProfile({ ...editingProfile, baseUrl: e.target.value })} />
-							)}
+							<TextField size="small" fullWidth label="服务地址"
+								value={editingProfile.baseUrl}
+								onChange={(e) => setEditingProfile({ ...editingProfile, baseUrl: e.target.value })} />
 
-							{isBrowserNative && (
+							{isGptSovits && (
 								<>
-									<TextField size="small" fullWidth label="Voice 名称（可选）"
-										value={editingProfile.voiceName}
-										onChange={(e) => setEditingProfile({ ...editingProfile, voiceName: e.target.value })}
-										helperText="留空则自动选择当前系统可用语音" />
+									<TextField size="small" fullWidth label="GPT 权重路径"
+										value={editingProfile.gptWeightsPath}
+										onChange={(e) => setEditingProfile({ ...editingProfile, gptWeightsPath: e.target.value })} />
+									<TextField size="small" fullWidth label="SoVITS 权重路径"
+										value={editingProfile.sovitsWeightsPath}
+										onChange={(e) => setEditingProfile({ ...editingProfile, sovitsWeightsPath: e.target.value })} />
+									<TextField size="small" fullWidth label="参考音频路径"
+										value={editingProfile.refAudioPath}
+										onChange={(e) => setEditingProfile({ ...editingProfile, refAudioPath: e.target.value })} />
+									<TextField size="small" fullWidth label="参考音频文本"
+										value={editingProfile.promptText}
+										onChange={(e) => setEditingProfile({ ...editingProfile, promptText: e.target.value })} />
 									<Stack direction="row" spacing={0.5}>
+										<Select size="small" sx={{ flex: 1 }} label="参考语言"
+											value={editingProfile.promptLang}
+											onChange={(e: SelectChangeEvent) => setEditingProfile({ ...editingProfile, promptLang: e.target.value })}>
+											<MenuItem value="zh">中文</MenuItem>
+											<MenuItem value="en">English</MenuItem>
+											<MenuItem value="ja">日本語</MenuItem>
+										</Select>
 										<Select size="small" sx={{ flex: 1 }} label="合成语言"
 											value={editingProfile.textLang}
 											onChange={(e: SelectChangeEvent) => setEditingProfile({ ...editingProfile, textLang: e.target.value })}>
@@ -788,15 +795,9 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 										</Select>
 									</Stack>
 									<Alert severity="info" sx={{ py: 0 }}>
-										本地 TTS 仅接受原生浏览器/TS 方案，不再把外部 Python 语音服务视为主线能力。
+										TTS 当前只接受 GPT-SoVITS 路线。
 									</Alert>
 								</>
-							)}
-
-							{isCloudTts && (
-								<Alert severity="info" sx={{ py: 0 }}>
-									火山引擎 / 阿里云 TTS 属于接受方向，但当前分支还未完成接入。
-								</Alert>
 							)}
 
 							<Stack direction="row" spacing={0.5} justifyContent="space-between" alignItems="center">

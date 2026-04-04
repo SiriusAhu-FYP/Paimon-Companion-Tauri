@@ -58,11 +58,12 @@ pnpm tauri dev
 
 ## Notes
 
-- The app stays Tauri-first. Optional local sidecars are still acceptable for some heavy workloads such as ASR, but local TTS is no longer treated as an external Python-service path.
+- The app stays Tauri-first. Optional local sidecars remain acceptable for heavy workloads where the source projects already depend on them.
 - External AI services may still run outside the app over HTTP/SSE.
 - ASR is being migrated with a provider/profile model rather than by bundling all speech-recognition weights into the installer.
 - A real chat-panel microphone path now exists, with browser-side capture/VAD plus pluggable cloud or local-runtime ASR upload.
-- Local TTS now targets native Rust/TS-compatible paths, with browser-native speech as the current accepted baseline.
+- Local TTS stays on the GPT-SoVITS path inherited from `VoiceL2D-MVP`.
+- Accepted ASR families are currently `vosk-local`, `volcengine`, and `aliyun`.
 - The functional path intentionally excludes knowledge retrieval / embedding / rerank due to latency sensitivity.
 - The current host input model is foreground-oriented and does not guarantee coexistence with user typing or IME composition.
 - New game transfer work is gated behind source-repository fusion and validation.

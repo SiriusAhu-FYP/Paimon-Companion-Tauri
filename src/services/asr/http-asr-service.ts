@@ -99,28 +99,38 @@ abstract class BaseHttpASRService implements IASRService {
 	}
 }
 
-export class OpenAICompatibleASRService extends BaseHttpASRService {
-	constructor(options: Omit<HttpASRServiceOptions, "label" | "defaultPath">) {
-		super({
-			...options,
-			label: "OpenAI-compatible ASR",
-			defaultPath: "/v1/audio/transcriptions",
-		});
-	}
-}
-
-export class FasterWhisperLocalASRService extends BaseHttpASRService {
+export class VoskLocalASRService extends BaseHttpASRService {
 	constructor(options: Omit<HttpASRServiceOptions, "label" | "defaultPath"> & {
 		vadEnabled: boolean;
 	}) {
 		super({
 			...options,
-			label: "Faster-Whisper local sidecar",
+			label: "Vosk local sidecar",
 			defaultPath: "/transcribe",
 			extraFields: {
 				...(options.extraFields ?? {}),
-				vad_filter: options.vadEnabled ? "true" : "false",
+				vad_enabled: options.vadEnabled ? "true" : "false",
 			},
+		});
+	}
+}
+
+export class VolcengineASRService extends BaseHttpASRService {
+	constructor(options: Omit<HttpASRServiceOptions, "label" | "defaultPath">) {
+		super({
+			...options,
+			label: "Volcengine ASR",
+			defaultPath: "",
+		});
+	}
+}
+
+export class AliyunASRService extends BaseHttpASRService {
+	constructor(options: Omit<HttpASRServiceOptions, "label" | "defaultPath">) {
+		super({
+			...options,
+			label: "Aliyun ASR",
+			defaultPath: "",
 		});
 	}
 }

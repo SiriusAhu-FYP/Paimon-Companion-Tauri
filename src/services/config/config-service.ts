@@ -77,13 +77,17 @@ function normalizeCharacterSettings(
 
 function normalizeTtsConfig(tts: TTSProviderConfig & { gptWeightsPath?: string }): TTSProviderConfig {
 	const rawProvider = (tts as { provider?: string }).provider;
-	const provider = rawProvider === "gpt-sovits" ? "browser-native" : (rawProvider ?? "browser-native");
+	const provider = rawProvider === "browser-native" ? "gpt-sovits" : (rawProvider ?? "mock");
 	return {
 		provider: provider as TTSProviderConfig["provider"],
-		baseUrl: provider === "browser-native" || provider === "mock" ? "" : (tts.baseUrl ?? ""),
+		baseUrl: tts.baseUrl ?? "",
 		speakerId: tts.speakerId ?? "",
-		voiceName: tts.voiceName ?? "",
 		speed: tts.speed ?? 1.0,
+		gptWeightsPath: (tts as TTSProviderConfig & { gptWeightsPath?: string }).gptWeightsPath ?? "",
+		sovitsWeightsPath: (tts as TTSProviderConfig & { sovitsWeightsPath?: string }).sovitsWeightsPath ?? "",
+		refAudioPath: (tts as TTSProviderConfig & { refAudioPath?: string }).refAudioPath ?? "",
+		promptText: (tts as TTSProviderConfig & { promptText?: string }).promptText ?? "",
+		promptLang: (tts as TTSProviderConfig & { promptLang?: string }).promptLang ?? "zh",
 		textLang: tts.textLang ?? "zh",
 	};
 }

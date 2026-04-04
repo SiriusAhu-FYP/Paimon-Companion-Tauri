@@ -26,7 +26,7 @@ For ASR, the practical split is:
   - download management when local assets are fetched by the app
   - local command or sidecar launching if later accepted
 - external ASR runtime when needed:
-  - Python `faster-whisper`
+  - the original Python `vosk` service path
   - local HTTP service wrapping a native/Rust/Python recognizer
   - cloud ASR APIs such as Volcengine or Aliyun
 
@@ -57,8 +57,7 @@ The app should treat ASR the same way it already treats LLM and TTS:
 The first accepted provider families are:
 
 - `mock`
-- `openai-compatible`
-- `faster-whisper-local`
+- `vosk-local`
 - `volcengine`
 - `aliyun`
 
@@ -66,7 +65,7 @@ The important point is the abstraction, not that every provider is fully wired o
 
 ## Local Runtime Rule
 
-For local ASR, a Python or native sidecar is acceptable.
+For local ASR, the inherited Python `vosk` path remains acceptable, and a native sidecar is also acceptable if it fits the same provider contract.
 
 This is not treated as architectural failure.
 
