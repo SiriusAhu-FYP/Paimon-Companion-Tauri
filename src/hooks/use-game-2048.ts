@@ -1,16 +1,15 @@
-import { useEffect, useState, useCallback } from "react";
+import { useCallback } from "react";
 import { getServices } from "@/services";
 import type { FunctionalTarget } from "@/types";
+import { useServiceState } from "./use-service-state";
 
 export function useGame2048() {
-	const { game2048, bus } = getServices();
-	const [state, setState] = useState(game2048.getState());
-
-	useEffect(() => {
-		return bus.on("game2048:state-change", ({ state: nextState }) => {
-			setState(nextState);
-		});
-	}, [bus]);
+	const { game2048 } = getServices();
+	const state = useServiceState({
+		getInitialState: () => game2048.getState(),
+		event: "game2048:state-change",
+		getNextState: ({ state: nextState }) => nextState,
+	});
 
 	const runSingleStep = useCallback((target?: FunctionalTarget) => {
 		return game2048.runSingleStep(target);

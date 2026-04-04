@@ -1,25 +1,22 @@
-import { useEffect, useState, useCallback } from "react";
+import { useCallback } from "react";
 import { getServices } from "@/services";
 import type { FunctionalTarget, HostMouseAction, HostMouseButton } from "@/types";
+import { useServiceState } from "./use-service-state";
 
 export function useFunctional() {
-	const { orchestrator, bus } = getServices();
-	const [state, setState] = useState(orchestrator.getState());
-
-	useEffect(() => {
-		return bus.on("orchestrator:state-change", ({ state: nextState }) => {
-			setState(nextState);
-		});
-	}, [bus]);
+	const { orchestrator } = getServices();
+	const state = useServiceState({
+		getInitialState: () => orchestrator.getState(),
+		event: "orchestrator:state-change",
+		getNextState: ({ state: nextState }) => nextState,
+	});
 
 	const setTarget = useCallback((target: FunctionalTarget | null) => {
 		orchestrator.setTarget(target);
-		setState(orchestrator.getState());
 	}, [orchestrator]);
 
 	const clearHistory = useCallback(() => {
 		orchestrator.clearHistory();
-		setState(orchestrator.getState());
 	}, [orchestrator]);
 
 	const runCapture = useCallback((target?: FunctionalTarget) => {
