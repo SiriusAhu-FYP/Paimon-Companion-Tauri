@@ -11,7 +11,6 @@ const SUPPORTED_LANGS = new Set(["zh", "en", "ja"]);
 
 interface SynthResult {
 	index: number;
-	mode: "audio" | "direct";
 	audio: ArrayBuffer | null;
 	error?: string;
 	synthStartMs: number;
@@ -73,9 +72,7 @@ export class SpeechQueue {
 	/** 中断当前 speakAll，停止所有进行中的合成+播放 */
 	stop() {
 		this._stopped = true;
-		this.tts.stop?.();
 		this.player.stop();
-		this.player.pushMouthData(0);
 		log.info("[queue] stopped");
 	}
 
@@ -147,7 +144,7 @@ export class SpeechQueue {
 			}
 
 			// 处理当前段
-			if (current.mode === "audio" && (!current.audio || current.audio.byteLength === 0)) {
+			if (!current.audio || current.audio.byteLength === 0) {
 				if (current.error) {
 					log.warn(`[queue][${i + 1}/${segments.length}] skipped: ${current.error}`);
 					errors.push(current.error);
@@ -162,25 +159,15 @@ export class SpeechQueue {
 
 			const playStartMs = performance.now();
 			try {
-				if (current.mode === "direct") {
-					if (!this.tts.speakDirect) {
-						throw new Error("direct TTS provider missing speakDirect()");
+				let audioToPlay = current.audio;
+				if (this._trimEnabled) {
+					try {
+						audioToPlay = trimSilence(current.audio);
+					} catch (err) {
+						log.warn(`[trim][${i + 1}/${segments.length}] trim failed, using original: ${err}`);
 					}
-					await this.tts.speakDirect(segments[i].text, { lang: segments[i].lang }, {
-						onMouthData: (value) => this.player.pushMouthData(value),
-					});
-					this.player.pushMouthData(0);
-				} else {
-					let audioToPlay = current.audio!;
-					if (this._trimEnabled) {
-						try {
-							audioToPlay = trimSilence(current.audio!);
-						} catch (err) {
-							log.warn(`[trim][${i + 1}/${segments.length}] trim failed, using original: ${err}`);
-						}
-					}
-					await this.player.play(audioToPlay);
 				}
+				await this.player.play(audioToPlay);
 			} catch (err) {
 				log.warn(`[queue][${i + 1}/${segments.length}] playback failed: ${err}`);
 			}
@@ -247,7 +234,6 @@ export class SpeechQueue {
 			const now = performance.now();
 			return Promise.resolve({
 				index,
-				mode: "audio",
 				audio: null,
 				error: `unsupported lang: ${segment.lang}`,
 				synthStartMs: now,
@@ -264,21 +250,9 @@ export class SpeechQueue {
 		const synthStartMs = performance.now();
 		log.debug(`[synth][${index + 1}] start: "${segment.text.slice(0, 40)}..." lang=${segment.lang}`);
 
-		if (this.tts.deliveryMode === "direct") {
-			const synthDoneMs = performance.now();
-			return {
-				index,
-				mode: "direct",
-				audio: null,
-				synthStartMs,
-				synthDoneMs,
-			};
-		}
-
 		if (this._debugFailIndex === index) {
 			return {
 				index,
-				mode: "audio",
 				audio: null,
 				error: `[debug] forced failure at index ${index}`,
 				synthStartMs,
@@ -287,18 +261,15 @@ export class SpeechQueue {
 		}
 
 		try {
-			if (!this.tts.synthesize) {
-				throw new Error("buffer TTS provider missing synthesize()");
-			}
 			const audio = await this.tts.synthesize(segment.text, { lang: segment.lang });
 			const synthDoneMs = performance.now();
 			log.info(
 				`[synth][${index + 1}] done: ${audio.byteLength} bytes ` +
 				`${(synthDoneMs - synthStartMs).toFixed(0)}ms lang=${segment.lang}`,
 			);
-			return { index, mode: "audio", audio, synthStartMs, synthDoneMs };
+			return { index, audio, synthStartMs, synthDoneMs };
 		} catch (err) {
-			return { index, mode: "audio", audio: null, error: String(err), synthStartMs, synthDoneMs: performance.now() };
+			return { index, audio: null, error: String(err), synthStartMs, synthDoneMs: performance.now() };
 		}
 	}
 }

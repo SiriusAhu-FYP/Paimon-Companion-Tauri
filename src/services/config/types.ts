@@ -17,25 +17,24 @@ export interface LLMProviderConfig {
 
 // ── TTS Provider ──
 
-export type TTSProviderType = "browser-native" | "mock" | "volcengine" | "aliyun";
+export type TTSProviderType = "gpt-sovits" | "mock";
 
 export interface TTSProviderConfig {
 	provider: TTSProviderType;
 	baseUrl: string;
 	speakerId: string;
-	voiceName: string;
 	speed: number;
+	gptWeightsPath: string;
+	sovitsWeightsPath: string;
+	refAudioPath: string;
+	promptText: string;
+	promptLang: string;
 	textLang: string;
 }
 
 // ── ASR Provider ──
 
-export type ASRProviderType =
-	| "mock"
-	| "openai-compatible"
-	| "faster-whisper-local"
-	| "volcengine"
-	| "aliyun";
+export type ASRProviderType = "mock" | "vosk-local" | "volcengine" | "aliyun";
 
 export type ASRModelSource = "cloud" | "local-path" | "download";
 
@@ -75,8 +74,12 @@ export interface TTSProfile {
 	provider: TTSProviderType;
 	baseUrl: string;
 	speakerId: string;
-	voiceName: string;
 	speed: number;
+	gptWeightsPath: string;
+	sovitsWeightsPath: string;
+	refAudioPath: string;
+	promptText: string;
+	promptLang: string;
 	textLang: string;
 }
 
@@ -159,17 +162,21 @@ export const DEFAULT_CONFIG: AppConfig = {
 		maxTokens: 4096,
 	},
 	tts: {
-		provider: "browser-native",
-		baseUrl: "",
+		provider: "mock",
+		baseUrl: "http://localhost:9880",
 		speakerId: "",
-		voiceName: "",
 		speed: 1.0,
+		gptWeightsPath: "",
+		sovitsWeightsPath: "",
+		refAudioPath: "",
+		promptText: "",
+		promptLang: "zh",
 		textLang: "zh",
 	},
 	asr: {
 		provider: "mock",
 		baseUrl: "http://127.0.0.1:8765",
-		model: "base",
+		model: "vosk-model-cn",
 		language: "zh",
 		autoDetectLanguage: false,
 		modelSource: "local-path",

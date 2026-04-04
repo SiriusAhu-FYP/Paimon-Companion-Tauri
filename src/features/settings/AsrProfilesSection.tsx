@@ -38,8 +38,7 @@ interface AsrProfilesSectionProps {
 
 const providerLabels: Record<ASRProviderType, string> = {
 	mock: "Mock（模拟）",
-	"openai-compatible": "OpenAI 兼容接口",
-	"faster-whisper-local": "Faster-Whisper 本地服务",
+	"vosk-local": "Vosk 本地服务",
 	volcengine: "火山引擎 ASR",
 	aliyun: "阿里云 ASR",
 };
@@ -74,13 +73,13 @@ export function AsrProfilesSection({
 	const defaultProfile = (): ASRProfile => ({
 		id: `asr-${Date.now()}`,
 		name: "",
-		provider: "openai-compatible",
+		provider: "vosk-local",
 		apiKey: "",
-		baseUrl: "",
-		model: "",
+		baseUrl: "http://127.0.0.1:8765",
+		model: "vosk-model-cn",
 		language: "zh",
 		autoDetectLanguage: false,
-		modelSource: "cloud",
+		modelSource: "local-path",
 		modelPath: "",
 		downloadUrl: "",
 		vadEnabled: true,
@@ -155,10 +154,9 @@ export function AsrProfilesSection({
 	};
 
 	const isCloudProvider =
-		editingProfile?.provider === "openai-compatible"
-		|| editingProfile?.provider === "volcengine"
+		editingProfile?.provider === "volcengine"
 		|| editingProfile?.provider === "aliyun";
-	const isLocalProvider = editingProfile?.provider === "faster-whisper-local";
+	const isLocalProvider = editingProfile?.provider === "vosk-local";
 
 	return (
 		<>
@@ -193,7 +191,7 @@ export function AsrProfilesSection({
 			</Stack>
 
 			<Alert severity="info" sx={{ py: 0, mt: 0.75 }}>
-				ASR 现在已经接入麦克风/VAD/上传链路，但本地重模型仍不默认打进安装包。推荐通过云接口或本地 sidecar / 本地已有模型路径接入。
+				ASR 当前目标 provider 只有三类：Vosk 本地服务、火山引擎、阿里云。其它路线不再作为主线接受方案。
 			</Alert>
 
 			<Popover
@@ -249,7 +247,7 @@ export function AsrProfilesSection({
 									label="服务地址"
 									value={editingProfile.baseUrl}
 									onChange={(event) => setEditingProfile({ ...editingProfile, baseUrl: event.target.value })}
-									helperText={isLocalProvider ? "本地 Python/Rust sidecar 或 HTTP 服务地址" : "云端 ASR 接口基地址"}
+									helperText={isLocalProvider ? "原有 Python Vosk 服务或兼容 HTTP 包装服务地址" : "云端 ASR 接口地址"}
 								/>
 							)}
 
@@ -383,7 +381,7 @@ export function AsrProfilesSection({
 							/>
 
 							<Alert severity="warning" sx={{ py: 0 }}>
-								Tauri 主应用负责 UI、设置、麦克风状态和编排；本地重模型优先通过外部 Python/本地服务接入，而不是直接打包进桌面应用。
+								Tauri 主应用负责 UI、设置、麦克风状态和编排；本地 ASR 继续接受原有 Python Vosk 服务。
 							</Alert>
 
 							<Stack direction="row" spacing={0.5} justifyContent="space-between" alignItems="center">

@@ -52,12 +52,12 @@ These are not yet accepted replacements:
 | Live2D rendering and model control | `src/features/live2d/live2d-renderer.ts`, `src/features/stage/StageWindow.tsx`, `src/features/stage/StageHost.tsx` | `merged` | Live2D stage rendering, model switching, expressions, zoom, and stage behavior are already present. | Keep as accepted baseline. |
 | Chat panel with manual text input | `src/features/chat/ChatPanel.tsx` | `merged` | Manual chat interaction is present in the Tauri UI. | Keep as accepted baseline. |
 | Character/persona management | `src/services/character/character-service.ts`, `src/features/control-panel/ControlPanel.tsx` | `merged` | Character cards, persona loading, switching, and expression mapping exist. | Keep as accepted baseline. |
-| TTS generation + sequential playback + lip sync | `src/services/tts/browser-native-tts-service.ts`, `src/services/pipeline/pipeline-service.ts`, `src/services/audio/audio-player.ts` | `partial` | The local TTS baseline now uses browser-native speech instead of the old external Python GPT-SoVITS path. Playback and mouth movement still exist, but cloud TTS providers are not wired yet. | Accept browser-native local TTS and add approved cloud providers later if needed. |
+| TTS generation + sequential playback + lip sync | `src/services/tts/gptsovits-tts-service.ts`, `src/services/pipeline/pipeline-service.ts`, `src/services/audio/audio-player.ts` | `partial` | The accepted local TTS path remains GPT-SoVITS, matching `VoiceL2D-MVP`. Playback and mouth movement exist, but live end-to-end validation inside the Tauri host is still pending. | Keep GPT-SoVITS as the accepted baseline and validate the full voice loop in `P2.2`. |
 | Frontend/backend transport via WebSocket | `src/services/index.ts`, `src/services/event-bus/event-bus.ts` | `replaced` | The Tauri app is single-runtime and no longer needs the MVP’s WebSocket boundary. | Keep this replacement. |
 | MCP-driven expression commands from LLM | `src/services/character/character-service.ts`, `src/features/stage/StageWindow.tsx` | `replaced` | Expression control now flows through local events rather than a separate MCP roundtrip. | Keep this replacement. |
 | Microphone capture | `src/services/voice-input/voice-input-service.ts`, `src/features/chat/ChatPanel.tsx` | `partial` | The Tauri app now has a real chat-panel microphone path again, using browser/WebView capture instead of the MVP’s Python `sounddevice` loop. | Validate behavior and decide whether lower-level native capture is still needed. |
 | VAD-based speech segmentation | `src/services/voice-input/voice-input-service.ts` | `partial` | A lightweight browser-side VAD gate now cuts speech segments, but it is not the same implementation as the MVP’s `webrtcvad` pipeline. | Validate quality and replace only if the simpler gate is insufficient. |
-| Real ASR pipeline (`GLM-ASR` / `Faster-Whisper`) | `src/services/asr/http-asr-service.ts`, `src/services/provider-resolvers.ts`, `src/features/settings/AsrProfilesSection.tsx` | `partial` | The app now supports real cloud/local-runtime ASR providers through upload-based profiles, but not every MVP provider shape has been restored yet. | Validate at least one cloud provider and one local sidecar in live use. |
+| Real ASR pipeline (`vosk` / cloud ASR) | `src/services/asr/http-asr-service.ts`, `src/services/provider-resolvers.ts`, `src/features/settings/AsrProfilesSection.tsx` | `partial` | The app now targets the inherited local `vosk` route plus cloud ASR providers (`volcengine`, `aliyun`) through upload-based profiles. Live validation is still pending. | Validate at least one cloud provider and the local `vosk` path in live use. |
 | Audio lock / anti-feedback during playback | `src/services/voice-input/voice-input-service.ts` | `partial` | Playback now locks the microphone path to reduce TTS feedback, but it has not yet been accepted through live validation. | Validate in `P2.2` hand testing. |
 
 ### `Video-Understanding-MVP`
@@ -81,8 +81,8 @@ Current high-level audit result:
   - accepted core: Tauri-native host control + validated `2048` loop
   - unresolved: source scope beyond current `2048`, especially `sokoban` and exact prompt/reflection carry-over
 - `VoiceL2D-MVP`: `partial`
-  - accepted core: Live2D + chat + character + TTS/lip-sync
-  - unresolved: microphone, VAD, and real ASR chain
+  - accepted core: Live2D + chat + character + GPT-SoVITS TTS/lip-sync
+  - unresolved: microphone, VAD, and live validation of the `vosk` / cloud ASR chain
 - `Video-Understanding-MVP`: `partial`
   - accepted core: screenshot capture and single-frame model use
   - unresolved: most of the reusable video-understanding toolkit and evaluation stack
