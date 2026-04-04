@@ -1,5 +1,11 @@
+export interface ASRAudioInput {
+	data: ArrayBuffer;
+	mimeType: string;
+	fileName: string;
+}
+
 export interface IASRService {
-	transcribe(audio: ArrayBuffer): Promise<string>;
+	transcribe(audio: ASRAudioInput): Promise<string>;
 }
 
 export interface ASRProviderDescriptor {

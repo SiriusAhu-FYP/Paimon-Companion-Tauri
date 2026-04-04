@@ -12,6 +12,7 @@ import { LLMService } from "./llm";
 import { AudioPlayer } from "./audio";
 import type { IASRService } from "./asr";
 import { PipelineService } from "./pipeline";
+import { VoiceInputService } from "./voice-input";
 import { createLogger } from "./logger";
 import { getConfig } from "./config";
 import { configureKnowledgeProviders, reinitializeKnowledgeProviders } from "./knowledge-provider-manager";
@@ -34,6 +35,7 @@ export interface ServiceContainer {
 	asr: IASRService;
 	player: AudioPlayer;
 	pipeline: PipelineService;
+	voiceInput: VoiceInputService;
 }
 
 let services: ServiceContainer | null = null;
@@ -87,6 +89,11 @@ export function initServices(): ServiceContainer {
 		tts: ttsProvider,
 		player,
 	});
+	const voiceInput = new VoiceInputService({
+		bus: eventBus,
+		pipeline,
+		asr,
+	});
 	const unified = new UnifiedRuntimeService({
 		bus: eventBus,
 		runtime,
@@ -110,6 +117,7 @@ export function initServices(): ServiceContainer {
 		asr,
 		player,
 		pipeline,
+		voiceInput,
 	};
 
 	log.info("all services initialized", {
@@ -144,6 +152,7 @@ export function refreshProviders() {
 
 	services.llm.setProvider(newLLMProvider);
 	services.asr = newASRProvider;
+	services.voiceInput.setASRService(newASRProvider);
 
 	const sq = services.pipeline.getSpeechQueue();
 	sq.setTTS(newTTSProvider);

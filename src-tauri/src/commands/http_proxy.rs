@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use reqwest::{header, Client, Method};
+use reqwest::{header, multipart::{Form, Part}, Client, Method};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_keyring::KeyringExt;
@@ -17,6 +17,26 @@ pub struct ProxyRequest {
 	pub secret_key: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProxyMultipartFile {
+	pub field_name: String,
+	pub file_name: String,
+	pub mime_type: String,
+	pub bytes: Vec<u8>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProxyMultipartRequest {
+	pub url: String,
+	pub method: Option<String>,
+	pub headers: Option<HashMap<String, String>>,
+	pub fields: Option<HashMap<String, String>>,
+	pub secret_key: Option<String>,
+	pub file: ProxyMultipartFile,
+}
+
 /// 返回给前端的代理响应
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,6 +47,34 @@ pub struct ProxyResponse {
 }
 
 const SERVICE_PREFIX: &str = "com.siriusahu.paimon-companion-tauri";
+
+fn inject_auth_header(
+	app: &AppHandle,
+	request_secret_key: &Option<String>,
+	req_builder: reqwest::RequestBuilder,
+) -> Result<reqwest::RequestBuilder, String> {
+	let mut req_builder = req_builder;
+	if let Some(secret_key) = request_secret_key {
+		let service = format!("{SERVICE_PREFIX}:{secret_key}");
+		match app.keyring().get_password(&service, secret_key) {
+			Ok(Some(token)) => {
+				req_builder =
+					req_builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
+			}
+			Ok(None) => {}
+			Err(e) => {
+				let msg = e.to_string();
+				if !(msg.contains("No matching entry")
+					|| msg.contains("not found")
+					|| msg.contains("NoEntry"))
+				{
+					return Err(format!("keyring read failed: {msg}"));
+				}
+			}
+		}
+	}
+	Ok(req_builder)
+}
 
 #[tauri::command]
 pub async fn proxy_http_request(
@@ -65,28 +113,7 @@ pub async fn proxy_http_request(
 	}
 
 	// 从 keyring 读取密钥并注入 Authorization header
-	if let Some(secret_key) = &request.secret_key {
-		let service = format!("{SERVICE_PREFIX}:{secret_key}");
-		match app.keyring().get_password(&service, secret_key) {
-			Ok(Some(token)) => {
-				req_builder =
-					req_builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
-			}
-			// 密钥未配置时继续请求（不注入 header），由远端返回 401
-			Ok(None) => {}
-			Err(e) => {
-				let msg = e.to_string();
-				if msg.contains("No matching entry")
-					|| msg.contains("not found")
-					|| msg.contains("NoEntry")
-				{
-					// 同上：视为未配置，继续请求
-				} else {
-					return Err(format!("keyring read failed: {msg}"));
-				}
-			}
-		}
-	}
+	req_builder = inject_auth_header(&app, &request.secret_key, req_builder)?;
 
 	// 注入 body
 	if let Some(body) = request.body {
@@ -153,12 +180,7 @@ pub async fn proxy_binary_request(
 		}
 	}
 
-	if let Some(secret_key) = &request.secret_key {
-		let service = format!("{SERVICE_PREFIX}:{secret_key}");
-		if let Ok(Some(token)) = app.keyring().get_password(&service, secret_key) {
-			req_builder = req_builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
-		}
-	}
+	req_builder = inject_auth_header(&app, &request.secret_key, req_builder)?;
 
 	if let Some(body) = request.body {
 		req_builder = req_builder.body(body);
@@ -219,12 +241,7 @@ pub async fn proxy_sse_request(
 	}
 
 	// 注入密钥
-	if let Some(secret_key) = &request.secret_key {
-		let service = format!("{SERVICE_PREFIX}:{secret_key}");
-		if let Ok(Some(token)) = app.keyring().get_password(&service, secret_key) {
-			req_builder = req_builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
-		}
-	}
+	req_builder = inject_auth_header(&app, &request.secret_key, req_builder)?;
 
 	if let Some(body) = request.body {
 		req_builder = req_builder.body(body);
@@ -267,4 +284,77 @@ pub async fn proxy_sse_request(
 
 	let _ = window.emit(&channel_id, serde_json::json!({ "type": "done" }));
 	Ok(())
+}
+
+#[tauri::command]
+pub async fn proxy_multipart_request(
+	app: AppHandle,
+	request: ProxyMultipartRequest,
+) -> Result<ProxyResponse, String> {
+	let client = Client::builder()
+		.no_proxy()
+		.build()
+		.map_err(|e| format!("failed to create HTTP client: {e}"))?;
+
+	let method = match request
+		.method
+		.as_deref()
+		.unwrap_or("POST")
+		.to_uppercase()
+		.as_str()
+	{
+		"POST" => Method::POST,
+		"PUT" => Method::PUT,
+		"PATCH" => Method::PATCH,
+		other => return Err(format!("unsupported multipart HTTP method: {other}")),
+	};
+
+	let mut req_builder = client.request(method, &request.url);
+
+	if let Some(headers) = &request.headers {
+		for (k, v) in headers {
+			req_builder = req_builder.header(k, v);
+		}
+	}
+
+	req_builder = inject_auth_header(&app, &request.secret_key, req_builder)?;
+
+	let mut form = Form::new();
+	if let Some(fields) = &request.fields {
+		for (key, value) in fields {
+			form = form.text(key.to_string(), value.to_string());
+		}
+	}
+
+	let part = Part::bytes(request.file.bytes)
+		.file_name(request.file.file_name)
+		.mime_str(&request.file.mime_type)
+		.map_err(|e| format!("invalid multipart mime type: {e}"))?;
+	form = form.part(request.file.field_name, part);
+
+	let response = req_builder
+		.multipart(form)
+		.send()
+		.await
+		.map_err(|e| format!("multipart HTTP request failed: {e}"))?;
+
+	let status = response.status().as_u16();
+
+	let mut resp_headers = HashMap::new();
+	for (k, v) in response.headers() {
+		if let Ok(val) = v.to_str() {
+			resp_headers.insert(k.to_string(), val.to_string());
+		}
+	}
+
+	let body = response
+		.text()
+		.await
+		.map_err(|e| format!("failed to read multipart response body: {e}"))?;
+
+	Ok(ProxyResponse {
+		status,
+		headers: resp_headers,
+		body,
+	})
 }

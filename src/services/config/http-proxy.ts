@@ -29,6 +29,20 @@ export interface ProxyResponse {
 	body: string;
 }
 
+export interface ProxyMultipartRequestOptions {
+	url: string;
+	method?: string;
+	headers?: Record<string, string>;
+	fields?: Record<string, string>;
+	secretKey?: string;
+	file: {
+		fieldName: string;
+		fileName: string;
+		mimeType: string;
+		bytes: ArrayBuffer;
+	};
+}
+
 /**
  * 发送代理 HTTP 请求。
  * 当提供 secretKey 时，必须走 Rust 代理（密钥不进前端）。
@@ -198,4 +212,49 @@ export async function proxyBinaryRequest(options: ProxyRequestOptions): Promise<
 	} finally {
 		clearTimeout(timer);
 	}
+}
+
+export async function proxyMultipartRequest(options: ProxyMultipartRequestOptions): Promise<ProxyResponse> {
+	if (!isTauriEnvironment()) {
+		const form = new FormData();
+		for (const [key, value] of Object.entries(options.fields ?? {})) {
+			form.append(key, value);
+		}
+		const file = new File([options.file.bytes], options.file.fileName, { type: options.file.mimeType });
+		form.append(options.file.fieldName, file);
+
+		const response = await fetch(options.url, {
+			method: options.method ?? "POST",
+			headers: options.headers,
+			body: form,
+		});
+
+		const headers: Record<string, string> = {};
+		response.headers.forEach((value, key) => {
+			headers[key] = value;
+		});
+
+		return {
+			status: response.status,
+			headers,
+			body: await response.text(),
+		};
+	}
+
+	const request = {
+		url: options.url,
+		method: options.method ?? "POST",
+		headers: options.headers ?? {},
+		fields: options.fields ?? {},
+		secretKey: options.secretKey ?? null,
+		file: {
+			fieldName: options.file.fieldName,
+			fileName: options.file.fileName,
+			mimeType: options.file.mimeType,
+			bytes: Array.from(new Uint8Array(options.file.bytes)),
+		},
+	};
+
+	log.debug(`multipart proxy request: ${request.method} ${request.url}`);
+	return invoke<ProxyResponse>("proxy_multipart_request", { request });
 }

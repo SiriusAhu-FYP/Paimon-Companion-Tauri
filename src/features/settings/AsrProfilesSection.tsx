@@ -193,7 +193,7 @@ export function AsrProfilesSection({
 			</Stack>
 
 			<Alert severity="info" sx={{ py: 0, mt: 0.75 }}>
-				当前这一步先接入 ASR provider 与模型管理，不把本地模型打进安装包。真实麦克风/VAD/识别链会在后续 `P2.2` 继续接通。
+				ASR 现在已经接入麦克风/VAD/上传链路，但本地重模型仍不默认打进安装包。推荐通过云接口或本地 sidecar / 本地已有模型路径接入。
 			</Alert>
 
 			<Popover

@@ -71,6 +71,15 @@ Current scope:
 - speech output is real and uses the normal `PipelineService` TTS path
 - voice input is currently a manual/mock ASR path for interaction validation, not a full microphone capture stack
 
+Separate from `Unified Run`, the normal chat path now has a real microphone entry again:
+
+- `对话` 面板提供麦克风开关
+- browser/Tauri WebView captures microphone audio
+- a light browser-side VAD gate cuts speech segments
+- recognized text is routed back through the normal companion pipeline
+
+This is the first restored `VoiceL2D-MVP` voice-input path, but it still needs end-to-end acceptance testing.
+
 This should be treated as groundwork only.
 
 It does not by itself prove that the three functional source repositories have been fully fused.
