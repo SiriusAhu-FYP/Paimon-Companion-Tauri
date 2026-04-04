@@ -1,8 +1,10 @@
-import type { AppConfig, TTSProviderConfig } from "./config";
+import type { AppConfig, ASRProviderConfig, TTSProviderConfig } from "./config";
 import { GptSovitsTTSService, MockTTSService } from "./tts";
 import type { ITTSService } from "./tts/types";
 import { MockLLMService, OpenAILLMService } from "./llm";
 import type { ILLMService } from "./llm/types";
+import { MockASRService, UnavailableASRService } from "./asr";
+import type { IASRService } from "./asr";
 import { createLogger } from "./logger";
 
 const log = createLogger("providers");
@@ -74,4 +76,42 @@ export function resolveTTSProvider(config: AppConfig): ITTSService {
 
 	log.info(`unknown TTS provider "${ttsConfig.provider}", using mock fallback`);
 	return new MockTTSService();
+}
+
+export function resolveASRProvider(config: AppConfig): IASRService {
+	const activeProfile = config.activeAsrProfileId
+		? config.asrProfiles.find((profile) => profile.id === config.activeAsrProfileId)
+		: null;
+
+	const asrConfig: ASRProviderConfig = activeProfile
+		? {
+			provider: activeProfile.provider,
+			baseUrl: activeProfile.baseUrl,
+			model: activeProfile.model,
+			language: activeProfile.language,
+			autoDetectLanguage: activeProfile.autoDetectLanguage,
+			modelSource: activeProfile.modelSource,
+			modelPath: activeProfile.modelPath,
+			downloadUrl: activeProfile.downloadUrl,
+			vadEnabled: activeProfile.vadEnabled,
+			vadAggressiveness: activeProfile.vadAggressiveness,
+			silenceThresholdMs: activeProfile.silenceThresholdMs,
+			minSpeechMs: activeProfile.minSpeechMs,
+		}
+		: config.asr;
+
+	if (asrConfig.provider === "mock") {
+		log.info("using mock ASR provider");
+		return new MockASRService();
+	}
+
+	const labelMap: Record<Exclude<ASRProviderConfig["provider"], "mock">, string> = {
+		"openai-compatible": "OpenAI-compatible ASR",
+		"faster-whisper-local": "Faster-Whisper local sidecar",
+		volcengine: "Volcengine ASR",
+		aliyun: "Aliyun ASR",
+	};
+	const label = labelMap[asrConfig.provider];
+	log.info(`configured ASR provider: ${label}`);
+	return new UnavailableASRService(label);
 }

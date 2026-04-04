@@ -52,6 +52,7 @@ React owns:
 - debug surfaces
 - user-triggered inspection actions
 - unified-run validation controls
+- microphone capture UX and provider selection surfaces
 
 ## Current Unified Run Groundwork
 
@@ -73,6 +74,21 @@ Current scope:
 This should be treated as groundwork only.
 
 It does not by itself prove that the three functional source repositories have been fully fused.
+
+## ASR Direction
+
+For `VoiceL2D-MVP` restoration, ASR is not being forced into one implementation shape.
+
+The current direction is:
+
+- Tauri app owns settings, capture UX, orchestration, and secret handling
+- local heavy ASR can stay in an optional external runtime if that is the most practical path
+- local ASR weights are not part of the default installer
+- settings should let the user choose cloud API, existing local runtime/model path, or later a download flow
+
+Reference:
+
+- `docs/architecture/asr-migration-strategy.md`
 
 ## Functional Latency Policy
 

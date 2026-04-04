@@ -33,6 +33,32 @@ export interface TTSProviderConfig {
 	textLang: string;
 }
 
+// ── ASR Provider ──
+
+export type ASRProviderType =
+	| "mock"
+	| "openai-compatible"
+	| "faster-whisper-local"
+	| "volcengine"
+	| "aliyun";
+
+export type ASRModelSource = "cloud" | "local-path" | "download";
+
+export interface ASRProviderConfig {
+	provider: ASRProviderType;
+	baseUrl: string;
+	model: string;
+	language: string;
+	autoDetectLanguage: boolean;
+	modelSource: ASRModelSource;
+	modelPath: string;
+	downloadUrl: string;
+	vadEnabled: boolean;
+	vadAggressiveness: number;
+	silenceThresholdMs: number;
+	minSpeechMs: number;
+}
+
 // ── LLM Profile（可复用的配置档案）──
 
 export interface LLMProfile {
@@ -63,6 +89,26 @@ export interface TTSProfile {
 	textLang: string;
 }
 
+// ── ASR Profile（可复用的语音识别配置档案） ──
+
+export interface ASRProfile {
+	id: string;
+	name: string;
+	provider: ASRProviderType;
+	apiKey: string;
+	baseUrl: string;
+	model: string;
+	language: string;
+	autoDetectLanguage: boolean;
+	modelSource: ASRModelSource;
+	modelPath: string;
+	downloadUrl: string;
+	vadEnabled: boolean;
+	vadAggressiveness: number;
+	silenceThresholdMs: number;
+	minSpeechMs: number;
+}
+
 // ── Character（应用设置：当前卡 ID、用户附加人设）──
 
 export interface BehaviorConstraintsConfig {
@@ -89,11 +135,14 @@ export type { KnowledgeConfig, EmbeddingProviderConfig, EmbeddingProfile, Knowle
 export interface AppConfig {
 	llm: LLMProviderConfig;
 	tts: TTSProviderConfig;
+	asr: ASRProviderConfig;
 	character: CharacterSettingsConfig;
 	llmProfiles: LLMProfile[];
 	ttsProfiles: TTSProfile[];
+	asrProfiles: ASRProfile[];
 	activeLlmProfileId: string;
 	activeTtsProfileId: string;
+	activeAsrProfileId: string;
 	knowledge: import("@/types/knowledge").KnowledgeConfig;
 }
 
@@ -103,6 +152,7 @@ export interface AppConfig {
 export const SECRET_KEYS = {
 	LLM_API_KEY: (profileId: string) => `llm-api-key:${profileId}`,
 	TTS_API_KEY: "tts-api-key",
+	ASR_API_KEY: (profileId: string) => `asr-api-key:${profileId}`,
 	EMBEDDING_API_KEY: (profileId: string) => `embedding-api-key:${profileId}`,
 	RERANK_API_KEY: (profileId: string) => `rerank-api-key:${profileId}`,
 } as const;
@@ -129,6 +179,20 @@ export const DEFAULT_CONFIG: AppConfig = {
 		promptLang: "zh",
 		textLang: "zh",
 	},
+	asr: {
+		provider: "mock",
+		baseUrl: "http://127.0.0.1:8765",
+		model: "base",
+		language: "zh",
+		autoDetectLanguage: false,
+		modelSource: "local-path",
+		modelPath: "",
+		downloadUrl: "",
+		vadEnabled: true,
+		vadAggressiveness: 2,
+		silenceThresholdMs: 800,
+		minSpeechMs: 1000,
+	},
 	character: {
 		activeProfileId: "",
 		customPersona: "你是旅行者的好伙伴派蒙，说话活泼可爱，喜欢吃东西。",
@@ -140,8 +204,10 @@ export const DEFAULT_CONFIG: AppConfig = {
 	},
 	llmProfiles: [],
 	ttsProfiles: [],
+	asrProfiles: [],
 	activeLlmProfileId: "",
 	activeTtsProfileId: "",
+	activeAsrProfileId: "",
 	knowledge: {
 		embedding: {
 			baseUrl: "",

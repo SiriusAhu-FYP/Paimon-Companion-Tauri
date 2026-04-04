@@ -21,6 +21,7 @@ function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfi
 	return {
 		llm: { ...defaults.llm, ...overrides.llm },
 		tts: { ...defaults.tts, ...overrides.tts },
+		asr: { ...defaults.asr, ...overrides.asr },
 		character: {
 			...defaults.character,
 			...overrides.character,
@@ -31,8 +32,10 @@ function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfi
 		},
 		llmProfiles: overrides.llmProfiles ?? defaults.llmProfiles,
 		ttsProfiles: overrides.ttsProfiles ?? defaults.ttsProfiles,
+		asrProfiles: overrides.asrProfiles ?? defaults.asrProfiles,
 		activeLlmProfileId: overrides.activeLlmProfileId ?? defaults.activeLlmProfileId,
 		activeTtsProfileId: overrides.activeTtsProfileId ?? defaults.activeTtsProfileId,
+		activeAsrProfileId: overrides.activeAsrProfileId ?? defaults.activeAsrProfileId,
 		knowledge: {
 			embedding: {
 				...defaults.knowledge.embedding,
@@ -155,6 +158,7 @@ export async function loadConfig(): Promise<AppConfig> {
 	log.info("config loaded", {
 		llmProvider: cachedConfig.llm.provider,
 		ttsProvider: cachedConfig.tts.provider,
+		asrProvider: cachedConfig.asr.provider,
 	});
 	return cachedConfig;
 }
@@ -181,6 +185,7 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
 	log.info("config updated", {
 		llmProvider: updated.llm.provider,
 		ttsProvider: updated.tts.provider,
+		asrProvider: updated.asr.provider,
 	});
 	return updated;
 }
@@ -190,11 +195,14 @@ export async function resetConfig(): Promise<AppConfig> {
 		...DEFAULT_CONFIG,
 		llm: { ...DEFAULT_CONFIG.llm },
 		tts: { ...DEFAULT_CONFIG.tts },
+		asr: { ...DEFAULT_CONFIG.asr },
 		character: { ...DEFAULT_CONFIG.character },
 		llmProfiles: [],
 		ttsProfiles: [],
+		asrProfiles: [],
 		activeLlmProfileId: "",
 		activeTtsProfileId: "",
+		activeAsrProfileId: "",
 	};
 
 	if (isTauriEnvironment()) {

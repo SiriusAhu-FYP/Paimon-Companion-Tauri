@@ -67,7 +67,11 @@ P1 close-out:
     - [x] classify each capability as merged / partial / missing / replaced
     - [x] document the accepted replacement decisions where implementation shape has changed
   - [ ] P2.2 `VoiceL2D-MVP` Completion
+    - [x] define ASR migration strategy around pluggable providers instead of bundled desktop weights
+    - [x] add ASR provider/profile configuration surface in settings
     - [ ] restore a real voice-input path instead of manual/mock-only ASR
+    - [ ] support at least one cloud ASR provider and one local-runtime provider
+    - [ ] support local model management via locate-existing-path or post-install download flow
     - [ ] restore microphone / VAD / ASR behavior needed for end-to-end interaction
     - [ ] validate voice -> LLM -> TTS -> Live2D end-to-end in the Tauri host
   - [ ] P2.3 `LLMPlay-MVP` Completion
@@ -101,3 +105,4 @@ P2 note:
 - the functional source-of-truth repos for this stage are `LLMPlay-MVP`, `VoiceL2D-MVP`, and `Video-Understanding-MVP`
 - the current `Unified Run` path is useful groundwork, but it is not by itself proof that source-repo fusion is complete
 - the first-pass fusion matrix is recorded in `docs/architecture/source-fusion-audit.md`
+- the ASR restoration strategy is recorded in `docs/architecture/asr-migration-strategy.md`
