@@ -6,6 +6,8 @@
  */
 
 import { isTauriEnvironment } from "@/utils/window-sync";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("http-proxy");
@@ -47,8 +49,6 @@ export async function proxyRequest(options: ProxyRequestOptions): Promise<ProxyR
 // ── Rust invoke 代理 ──
 
 async function invokeProxy(options: ProxyRequestOptions): Promise<ProxyResponse> {
-	const { invoke } = await import("@tauri-apps/api/core");
-
 	const request = {
 		url: options.url,
 		method: options.method ?? "GET",
@@ -113,9 +113,6 @@ export async function proxySSERequest(
 		return () => {};
 	}
 
-	const { invoke } = await import("@tauri-apps/api/core");
-	const { listen } = await import("@tauri-apps/api/event");
-
 	const channelId = `sse-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 	const unlisten = await listen<{ type: string; data?: string; body?: string; status?: number }>(
@@ -159,8 +156,6 @@ export async function proxySSERequest(
  */
 export async function proxyBinaryRequest(options: ProxyRequestOptions): Promise<ArrayBuffer> {
 	if (isTauriEnvironment()) {
-		const { invoke } = await import("@tauri-apps/api/core");
-
 		const request = {
 			url: options.url,
 			method: options.method ?? "GET",

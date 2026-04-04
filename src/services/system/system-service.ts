@@ -1,4 +1,5 @@
 import { isTauriEnvironment } from "@/utils/window-sync";
+import { invoke } from "@tauri-apps/api/core";
 import { createLogger } from "@/services/logger";
 import type {
 	HostMouseAction,
@@ -14,7 +15,6 @@ export async function listWindows(): Promise<HostWindowInfo[]> {
 		throw new Error("listWindows requires Tauri environment");
 	}
 
-	const { invoke } = await import("@tauri-apps/api/core");
 	const windows = await invoke<HostWindowInfo[]>("list_windows");
 
 	log.info(`listed ${windows.length} desktop windows`);
@@ -26,7 +26,6 @@ export async function captureWindow(handle: string): Promise<HostWindowCapture> 
 		throw new Error("captureWindow requires Tauri environment");
 	}
 
-	const { invoke } = await import("@tauri-apps/api/core");
 	const capture = await invoke<HostWindowCapture>("capture_window", {
 		request: { handle },
 	});
@@ -43,7 +42,6 @@ export async function focusWindow(handle: string): Promise<void> {
 		throw new Error("focusWindow requires Tauri environment");
 	}
 
-	const { invoke } = await import("@tauri-apps/api/core");
 	await invoke("focus_window", {
 		request: { handle },
 	});
@@ -56,7 +54,6 @@ export async function sendHostKey(handle: string, key: string): Promise<void> {
 		throw new Error("sendHostKey requires Tauri environment");
 	}
 
-	const { invoke } = await import("@tauri-apps/api/core");
 	await invoke("send_key", {
 		request: { handle, key },
 	});
@@ -77,7 +74,6 @@ export async function sendHostMouse(
 		throw new Error("sendHostMouse requires Tauri environment");
 	}
 
-	const { invoke } = await import("@tauri-apps/api/core");
 	await invoke("send_mouse", {
 		request: {
 			handle,

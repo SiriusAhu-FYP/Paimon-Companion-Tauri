@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { Suspense, lazy, useState, useCallback, useEffect, useRef } from "react";
 import { Box, IconButton, Tooltip } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
 import LightModeIcon from "@mui/icons-material/LightMode";
@@ -6,18 +6,30 @@ import DarkModeIcon from "@mui/icons-material/DarkMode";
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import ScienceIcon from "@mui/icons-material/Science";
 import TuneIcon from "@mui/icons-material/Tune";
+import { listen } from "@tauri-apps/api/event";
+import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
+import { getCurrentWindow, Window } from "@tauri-apps/api/window";
 import { StageHost, StageSlot } from "@/features/stage";
-import { ControlPanel, FunctionalPanel } from "@/features/control-panel";
-import { SettingsPanel } from "@/features/settings";
-import { KnowledgePanel } from "@/features/knowledge";
+import { ControlPanel } from "@/features/control-panel/ControlPanel";
 import { ChatPanel } from "@/features/chat";
-import { EventLog } from "@/app/EventLog";
 import { StatusBar } from "@/app/StatusBar";
-import { type StageDisplayMode, isTauriEnvironment } from "@/utils/window-sync";
+import { broadcastControl, type StageDisplayMode, isTauriEnvironment } from "@/utils/window-sync";
 import { createLogger } from "@/services/logger";
 import { useThemeMode } from "@/contexts/JoyThemeProvider";
 
 const log = createLogger("main-window");
+const FunctionalPanel = lazy(async () => import("@/features/control-panel/FunctionalPanel").then((module) => ({ default: module.FunctionalPanel })));
+const SettingsPanel = lazy(async () => import("@/features/settings/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
+const KnowledgePanel = lazy(async () => import("@/features/knowledge/KnowledgePanel").then((module) => ({ default: module.KnowledgePanel })));
+const EventLog = lazy(async () => import("@/app/EventLog").then((module) => ({ default: module.EventLog })));
+
+function PanelLoadingState() {
+	return (
+		<Box sx={{ p: 1.5, color: "text.secondary", fontSize: 12 }}>
+			加载中...
+		</Box>
+	);
+}
 
 export function MainWindow() {
 	const { mode, setMode } = useThemeMode();
@@ -43,8 +55,6 @@ export function MainWindow() {
 		if (!rect) return;
 
 		try {
-			const { Window } = await import("@tauri-apps/api/window");
-			const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
 			const mainWin = await Window.getByLabel("main");
 			const stageWin = await Window.getByLabel("stage");
 			if (!mainWin || !stageWin) return;
@@ -101,9 +111,7 @@ export function MainWindow() {
 			if (!isTauriEnvironment()) return;
 
 			try {
-				const { getCurrentWindow } = await import("@tauri-apps/api/window");
 				const mainWin = getCurrentWindow();
-				const { listen } = await import("@tauri-apps/api/event");
 
 				if (cancelled) return;
 
@@ -142,8 +150,6 @@ export function MainWindow() {
 
 	const handleShowStage = useCallback(async () => {
 		try {
-			const { Window } = await import("@tauri-apps/api/window");
-			const { broadcastControl } = await import("@/utils/window-sync");
 			const stageWin = await Window.getByLabel("stage");
 			if (stageWin) {
 				broadcastControl({ type: "show-stage" });
@@ -170,6 +176,13 @@ export function MainWindow() {
 	}, []);
 
 	const showSlot = stageVisible && stageMode === "docked";
+	const rightPanelContent = rightPanel === "settings"
+		? <SettingsPanel onClose={() => setRightPanel("control")} />
+		: rightPanel === "knowledge"
+			? <KnowledgePanel onClose={() => setRightPanel("control")} />
+			: rightPanel === "functional"
+				? <FunctionalPanel />
+				: <ControlPanel />;
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
@@ -283,15 +296,9 @@ export function MainWindow() {
 
 				{/* 右栏: 控制面板 / 设置 / 知识库 */}
 				<Box sx={{ width: 280, minWidth: 220, flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-					{rightPanel === "settings" ? (
-						<SettingsPanel onClose={() => setRightPanel("control")} />
-					) : rightPanel === "knowledge" ? (
-						<KnowledgePanel onClose={() => setRightPanel("control")} />
-					) : rightPanel === "functional" ? (
-						<FunctionalPanel />
-					) : (
-						<ControlPanel />
-					)}
+					<Suspense fallback={<PanelLoadingState />}>
+						{rightPanelContent}
+					</Suspense>
 				</Box>
 			</Box>
 
@@ -303,7 +310,9 @@ export function MainWindow() {
 					overflowY: "auto",
 					bgcolor: "background.default",
 				}}>
-					<EventLog />
+					<Suspense fallback={<PanelLoadingState />}>
+						<EventLog />
+					</Suspense>
 				</Box>
 			)}
 
