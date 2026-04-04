@@ -58,30 +58,45 @@ P1 close-out:
 - accepted baseline: validated `2048` path on `2026-04-03`
 - `P2` should start from a fresh branch
 
-- [ ] P2: Unified System Validation
-  - [x] P2.1 Relational Core Integration
-    - [x] integrate proactive companion behavior into the functional loop
-    - [x] expression mapping aligned with task/game state
-    - [x] speech output path for unified runs
-    - [x] voice input path where needed for interaction testing
-  - [ ] P2.2 Minecraft Transfer
-    - [ ] define initial Minecraft task set
-    - [ ] adapt perception for high-DOF play
-    - [ ] adapt action tools for Minecraft controls
-    - [ ] stabilize long-horizon planning and recovery
-  - [ ] P2.3 User Study
-    - [ ] define Group A functional-only condition
-    - [ ] define Group B full unified-system condition
-    - [ ] prepare small-sample study materials
-    - [ ] collect results
-    - [ ] summarize companionship / proactivity / workload outcomes
+- [ ] P2: Core Repository Fusion
+  - [x] groundwork: a thin unified runtime layer already exists for `2048` validation
+  - [ ] P2.1 Source Audit And Gap Mapping
+    - [ ] map `LLMPlay-MVP` features to the current Tauri codebase
+    - [ ] map `VoiceL2D-MVP` features to the current Tauri codebase
+    - [ ] map `Video-Understanding-MVP` features to the current Tauri codebase
+    - [ ] classify each capability as merged / partial / missing / replaced
+    - [ ] document the accepted replacement decisions where implementation shape has changed
+  - [ ] P2.2 `VoiceL2D-MVP` Completion
+    - [ ] restore a real voice-input path instead of manual/mock-only ASR
+    - [ ] restore microphone / VAD / ASR behavior needed for end-to-end interaction
+    - [ ] validate voice -> LLM -> TTS -> Live2D end-to-end in the Tauri host
+  - [ ] P2.3 `LLMPlay-MVP` Completion
+    - [ ] confirm the `2048` command-to-action loop fully covers the intended MVP scope
+    - [ ] decide which `LLMPlay-MVP` concepts are intentionally reimplemented instead of copied literally
+    - [ ] either merge the missing MVP capabilities or explicitly retire them in docs
+  - [ ] P2.4 `Video-Understanding-MVP` Completion
+    - [ ] decide which video-understanding pipeline pieces belong in the Tauri runtime
+    - [ ] integrate the missing reusable perception pieces that are still required
+    - [ ] carry over the relevant evaluation/benchmark logic where it still serves the product goal
+  - [ ] P2.5 Post-Fusion Validation
+    - [ ] verify that all three source lines coexist in one Tauri runtime
+    - [ ] verify companion behavior, expression, speech, and functional execution together
+    - [ ] define the accepted post-fusion baseline
 
-  - [ ] Stretch
-  - [ ] Genshin Impact transfer test
-  - [ ] broader pluginized multi-game support
-  - [ ] release packaging polish
+- [-] P3: Expansion After Fusion
+  - [-] Minecraft transfer
+    gated until `P2` source fusion is accepted
+  - [-] Genshin Impact transfer test
+    gated until `P2` source fusion is accepted
+  - [-] broader pluginized multi-game support
+    gated until `P2` source fusion is accepted
+  - [-] user study
+    gated until `P2` source fusion is accepted
+  - [-] release packaging polish
+    gated until `P2` source fusion is accepted
 
-P2.1 note:
+P2 note:
 
-- the current voice input path is a testing-oriented manual/mock ASR entry inside `功能实验 -> Unified Run`
-- it is sufficient for unified interaction validation, but it is not yet a production microphone + ASR stack
+- `paimon-live` is framework heritage only
+- the functional source-of-truth repos for this stage are `LLMPlay-MVP`, `VoiceL2D-MVP`, and `Video-Understanding-MVP`
+- the current `Unified Run` path is useful groundwork, but it is not by itself proof that source-repo fusion is complete

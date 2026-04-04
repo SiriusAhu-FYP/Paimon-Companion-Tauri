@@ -4,6 +4,19 @@
 
 This document records the current architectural baseline of `paimon-companion-tauri`.
 
+## Source Of Truth
+
+For planning purposes, there are two different kinds of heritage:
+
+- framework heritage: `paimon-live`
+- functional heritage: `LLMPlay-MVP`, `VoiceL2D-MVP`, `Video-Understanding-MVP`
+
+`paimon-live` is only the host/framework origin.
+
+The current product/mainline task is to fully fuse the functional heritage of the three MVP repositories into this Tauri runtime.
+
+That means new game transfer work is not the immediate next priority until the three-source fusion is audited and validated.
+
 ## Core Shape
 
 - Rust host for OS-facing capabilities
@@ -40,9 +53,9 @@ React owns:
 - user-triggered inspection actions
 - unified-run validation controls
 
-## Unified Run Layer
+## Current Unified Run Groundwork
 
-`P2.1` adds a thin unified runtime layer above the validated `2048` path.
+The current branch already contains a thin unified runtime layer above the validated `2048` path.
 
 It is responsible for:
 
@@ -56,6 +69,10 @@ Current scope:
 - `功能实验 -> Unified Run` supports direct unified single-step execution
 - speech output is real and uses the normal `PipelineService` TTS path
 - voice input is currently a manual/mock ASR path for interaction validation, not a full microphone capture stack
+
+This should be treated as groundwork only.
+
+It does not by itself prove that the three functional source repositories have been fully fused.
 
 ## Functional Latency Policy
 

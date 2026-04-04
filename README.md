@@ -9,12 +9,29 @@ This repository is the active Tauri implementation trunk.
 
 `P1 Functional Core Validation` is complete and merged into `main`.
 
+Current `P2` mainline is not new game expansion.
+
+It is now focused on fully integrating the functional heritage of these source repositories:
+
+- `E:\FYP-PROJECT\core\LLMPlay-MVP`
+- `E:\FYP-PROJECT\core\VoiceL2D-MVP`
+- `E:\FYP-PROJECT\core\Video-Understanding-MVP`
+
+`paimon-live` is treated as the desktop host/framework origin only.
+
 Current accepted baseline:
 
 - Windows host primitives for window discovery, capture, focus, and input
 - `2048` functional loop with capture -> decide -> execute -> verify
 - evaluation harness and functional debug tooling
 - companion UI, Live2D stage foundation, runtime/config/service scaffolding
+
+What the baseline does not yet prove:
+
+- full migration of `VoiceL2D-MVP` voice-input capabilities
+- full migration of `LLMPlay-MVP` source scope
+- full migration of `Video-Understanding-MVP` pipeline/evaluation capabilities
+- full post-fusion validation across all three source lines
 
 ## UI
 
@@ -45,4 +62,5 @@ pnpm tauri dev
 - External AI services may still run outside the app over HTTP/SSE.
 - The functional path intentionally excludes knowledge retrieval / embedding / rerank due to latency sensitivity.
 - The current host input model is foreground-oriented and does not guarantee coexistence with user typing or IME composition.
+- New game transfer work is gated behind source-repository fusion and validation.
 - Public progress is tracked in `ROADMAP.md`.
