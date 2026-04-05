@@ -4,7 +4,7 @@ This document records how `VoiceL2D-MVP` ASR should be restored inside the Tauri
 
 ## Goal
 
-Bring back real voice input without forcing heavyweight ASR models into the desktop installer.
+Bring back real voice input with a low-latency local default and cloud fallbacks.
 
 ## Boundary
 
@@ -19,31 +19,25 @@ For ASR, the practical split is:
   - voice toggle state
   - VAD state display
   - ASR provider/profile selection
-  - upload orchestration and result routing
+  - PCM capture orchestration and result routing
 - Rust/Tauri:
   - secret access
   - file/path integration
-  - download management when local assets are fetched by the app
-  - local command or sidecar launching if later accepted
+  - local `sherpa-onnx` command execution
+  - cloud request proxying when needed
 - external ASR runtime when needed:
-  - the bundled local `sherpa-onnx` runtime inside the Tauri app
-  - local HTTP service wrapping a native/Rust/Python recognizer
   - cloud ASR APIs such as Volcengine or Aliyun
 
 ## Packaging Rule
 
-Local ASR weights are not part of the default app package.
+The accepted local default is `local-sherpa`.
 
-Instead, ASR profiles must support three model-source modes:
+The repo currently prepares it via `pnpm setup:local-asr`, which fetches:
 
-- `cloud`
-  - model stays remote
-- `local-path`
-  - user locates an existing local model/runtime
-- `download`
-  - user chooses to download model assets after install
+- the local bilingual `sherpa-onnx` model assets
+- the matching native static archive required by `sherpa-onnx-sys`
 
-This keeps the installer small and avoids forcing all users to carry local ASR assets.
+This is intentionally repository-local preparation rather than an always-tracked git asset.
 
 ## Provider Rule
 
@@ -61,20 +55,15 @@ The first accepted provider families are:
 - `volcengine`
 - `aliyun`
 
-The important point is the abstraction, not that every provider is fully wired on day one.
-
 ## Local Runtime Rule
 
-For local ASR, the accepted default is now the bundled `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16` model. Cloud fallbacks remain acceptable through Volcengine and Aliyun.
+For local ASR, the accepted default is the bundled `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16` route. Cloud fallbacks remain acceptable through Volcengine and Aliyun.
 
-This is not treated as architectural failure.
+Current implementation constraints:
 
-The requirement is only:
-
-- the desktop app remains the main product runtime
-- the ASR runtime is pluggable
-- the dependency stays optional
-- the user can point the app at an existing local runtime or download assets later
+- local ASR no longer uses Python HTTP services
+- local ASR depends on a pre-fetched sherpa native archive exposed to Cargo through `.cargo/config.toml`
+- standalone `cargo check` should be preceded by `pnpm setup:local-asr` on a fresh machine
 
 ## Implementation Order
 
