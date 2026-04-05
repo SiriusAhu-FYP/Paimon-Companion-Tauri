@@ -56,6 +56,13 @@ pnpm install
 pnpm tauri dev
 ```
 
+Rust-only check:
+
+```bash
+pnpm setup:local-asr
+cargo check --manifest-path src-tauri/Cargo.toml
+```
+
 ## Notes
 
 - The app stays Tauri-first. Optional local sidecars remain acceptable for heavy workloads where the source projects already depend on them.
@@ -65,6 +72,7 @@ pnpm tauri dev
 - Local TTS stays on the GPT-SoVITS path inherited from `VoiceL2D-MVP`.
 - Accepted ASR families are currently `local-sherpa`, `volcengine`, and `aliyun`.
 - The default local ASR route is the bundled `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16` model.
+- `pnpm setup:local-asr` prepares both the local ASR model assets and the sherpa native archive needed by `cargo check`.
 - The functional path intentionally excludes knowledge retrieval / embedding / rerank due to latency sensitivity.
 - The current host input model is foreground-oriented and does not guarantee coexistence with user typing or IME composition.
 - New game transfer work is gated behind source-repository fusion and validation.
