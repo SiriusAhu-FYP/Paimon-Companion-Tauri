@@ -1,6 +1,7 @@
 import type { ASRAudioInput, IASRService, ASRProviderDescriptor } from "./types";
 
 export class UnavailableASRService implements IASRService {
+	readonly inputMode = "encoded" as const;
 	readonly descriptor: ASRProviderDescriptor;
 
 	constructor(label: string) {

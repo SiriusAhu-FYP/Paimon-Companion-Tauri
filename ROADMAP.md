@@ -72,8 +72,8 @@ P1 close-out:
     - [x] restore a real voice-input path instead of manual/mock-only ASR
     - [x] support at least one cloud ASR provider and one local-runtime provider
     - [x] keep GPT-SoVITS as the accepted local TTS baseline from `VoiceL2D-MVP`
-    - [x] align accepted ASR providers with the source plan: `vosk-local`, `volcengine`, `aliyun`
-    - [ ] support local model management via locate-existing-path or post-install download flow
+    - [x] align accepted ASR providers with the current product plan: `local-sherpa`, `volcengine`, `aliyun`
+    - [x] bundle the default local ASR model route around `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16`
     - [x] restore microphone capture, VAD segmentation, and playback-time mic lock
     - [ ] validate voice -> LLM -> TTS -> Live2D end-to-end in the Tauri host
   - [ ] P2.3 `LLMPlay-MVP` Completion

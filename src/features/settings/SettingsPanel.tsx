@@ -23,6 +23,7 @@ import {
 import { createLogger } from "@/services/logger";
 import { GptSovitsTTSService, MockTTSService, splitText, normalizeForSpeech, SpeechQueue } from "@/services/tts";
 import { AudioPlayer } from "@/services/audio/audio-player";
+import { checkLocalSherpaHealth } from "@/services/asr";
 import { HelpTooltip } from "@/components";
 import { refreshProviders } from "@/services";
 import { AsrProfilesSection } from "./AsrProfilesSection";
@@ -229,6 +230,15 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 				setAsrTestResult({ ok: true, text: "Mock ASR 始终可用" });
 				return;
 			}
+			if (asrCfg.provider === "local-sherpa") {
+				const health = await checkLocalSherpaHealth();
+				setAsrTestResult({
+					ok: true,
+					text: `本地模型已就绪：${health.modelName} @ ${health.modelDir}`,
+				});
+				log.info("local sherpa healthcheck passed", health);
+				return;
+			}
 			const baseUrl = (asrCfg.baseUrl || "").trim().replace(/\/+$/, "");
 			if (!baseUrl) {
 				setAsrTestResult({ ok: false, text: "请先在档案中配置服务地址" });
@@ -317,7 +327,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 
 		<SectionTitle>
 			ASR 配置
-			<HelpTooltip title="ASR 会作为独立 provider/profile 管理。本地模型不默认打包进应用，可选择本地路径、下载来源或云接口。" />
+			<HelpTooltip title="ASR 会作为独立 provider/profile 管理。本地默认路线是应用内置的 sherpa-onnx 双语模型；云端保留火山和阿里云。" />
 		</SectionTitle>
 		<AsrProfilesSection
 			profiles={config.asrProfiles}
@@ -353,7 +363,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		{/* ── LLM 测试 ── */}
 		<SectionTitle>
 			ASR 测试
-			<HelpTooltip title="这里只验证当前 ASR provider 的网络/服务可达性。真正的麦克风 -> 识别链路仍需在聊天区手测。" />
+			<HelpTooltip title="本地 sherpa 会验证内置模型是否已加载；云端 provider 会验证接口可达性。真正的麦克风 -> 识别链路仍需在聊天区手测。" />
 		</SectionTitle>
 		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
 			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>

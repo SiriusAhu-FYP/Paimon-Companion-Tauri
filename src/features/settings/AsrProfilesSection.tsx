@@ -17,7 +17,6 @@ import EditIcon from "@mui/icons-material/Edit";
 import AddIcon from "@mui/icons-material/Add";
 import WarningIcon from "@mui/icons-material/Warning";
 import {
-	type ASRModelSource,
 	type ASRProfile,
 	type ASRProviderType,
 	SECRET_KEYS,
@@ -38,15 +37,9 @@ interface AsrProfilesSectionProps {
 
 const providerLabels: Record<ASRProviderType, string> = {
 	mock: "Mock（模拟）",
-	"vosk-local": "Vosk 本地服务",
+	"local-sherpa": "本地离线 ASR（sherpa-onnx）",
 	volcengine: "火山引擎 ASR",
 	aliyun: "阿里云 ASR",
-};
-
-const sourceLabels: Record<ASRModelSource, string> = {
-	cloud: "云端托管",
-	"local-path": "指定本地模型路径",
-	download: "设置中下载到本地",
 };
 
 export function AsrProfilesSection({
@@ -73,15 +66,12 @@ export function AsrProfilesSection({
 	const defaultProfile = (): ASRProfile => ({
 		id: `asr-${Date.now()}`,
 		name: "",
-		provider: "vosk-local",
+		provider: "local-sherpa",
 		apiKey: "",
-		baseUrl: "http://127.0.0.1:8765",
-		model: "vosk-model-cn",
-		language: "zh",
-		autoDetectLanguage: false,
-		modelSource: "local-path",
-		modelPath: "",
-		downloadUrl: "",
+		baseUrl: "",
+		model: "sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16",
+		language: "zh-en",
+		autoDetectLanguage: true,
 		vadEnabled: true,
 		vadAggressiveness: 2,
 		silenceThresholdMs: 800,
@@ -156,7 +146,7 @@ export function AsrProfilesSection({
 	const isCloudProvider =
 		editingProfile?.provider === "volcengine"
 		|| editingProfile?.provider === "aliyun";
-	const isLocalProvider = editingProfile?.provider === "vosk-local";
+	const isLocalProvider = editingProfile?.provider === "local-sherpa";
 
 	return (
 		<>
@@ -191,7 +181,7 @@ export function AsrProfilesSection({
 			</Stack>
 
 			<Alert severity="info" sx={{ py: 0, mt: 0.75 }}>
-				ASR 当前目标 provider 只有三类：Vosk 本地服务、火山引擎、阿里云。其它路线不再作为主线接受方案。
+				ASR 当前只保留三类路线：内置本地 sherpa-onnx、火山引擎、阿里云。
 			</Alert>
 
 			<Popover
@@ -240,14 +230,14 @@ export function AsrProfilesSection({
 								/>
 							)}
 
-							{editingProfile.provider !== "mock" && (
+							{isCloudProvider && (
 								<TextField
 									size="small"
 									fullWidth
 									label="服务地址"
 									value={editingProfile.baseUrl}
 									onChange={(event) => setEditingProfile({ ...editingProfile, baseUrl: event.target.value })}
-									helperText={isLocalProvider ? "原有 Python Vosk 服务或兼容 HTTP 包装服务地址" : "云端 ASR 接口地址"}
+									helperText="云端 ASR 接口地址"
 								/>
 							)}
 
@@ -257,9 +247,45 @@ export function AsrProfilesSection({
 								label="模型名"
 								value={editingProfile.model}
 								onChange={(event) => setEditingProfile({ ...editingProfile, model: event.target.value })}
+								helperText={isLocalProvider ? "当前内置模型固定为 sherpa-onnx bilingual zipformer；此字段主要用于标识和显示。" : undefined}
 							/>
 
-							<Stack direction="row" spacing={0.5}>
+							{isCloudProvider ? (
+								<Stack direction="row" spacing={0.5}>
+									<TextField
+										size="small"
+										fullWidth
+										label="语言"
+										value={editingProfile.language}
+										onChange={(event) => setEditingProfile({ ...editingProfile, language: event.target.value })}
+										helperText="例如 zh / en / auto"
+									/>
+									<Select
+										size="small"
+										sx={{ minWidth: 150 }}
+										value={editingProfile.autoDetectLanguage ? "auto" : "fixed"}
+										onChange={(event: SelectChangeEvent) => setEditingProfile({
+											...editingProfile,
+											autoDetectLanguage: event.target.value === "auto",
+										})}
+									>
+										<MenuItem value="fixed">固定语言</MenuItem>
+										<MenuItem value="auto">自动识别</MenuItem>
+									</Select>
+								</Stack>
+							) : (
+								<Alert severity="info" sx={{ py: 0 }}>
+									内置本地 ASR 使用应用内置的 `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16`，默认支持中英双语，不再要求手动提供服务地址、下载地址或模型路径。
+								</Alert>
+							)}
+
+							{isLocalProvider && (
+								<Alert severity="warning" sx={{ py: 0 }}>
+									当前本地 ASR 为应用内置模型，仓库侧由固定脚本准备资源；设置页不再暴露 locate/download 入口。
+								</Alert>
+							)}
+
+							{!isLocalProvider && (
 								<TextField
 									size="small"
 									fullWidth
@@ -268,63 +294,6 @@ export function AsrProfilesSection({
 									onChange={(event) => setEditingProfile({ ...editingProfile, language: event.target.value })}
 									helperText="例如 zh / en / ja"
 								/>
-								<Select
-									size="small"
-									sx={{ minWidth: 150 }}
-									value={editingProfile.autoDetectLanguage ? "auto" : "fixed"}
-									onChange={(event: SelectChangeEvent) => setEditingProfile({
-										...editingProfile,
-										autoDetectLanguage: event.target.value === "auto",
-									})}
-								>
-									<MenuItem value="fixed">固定语言</MenuItem>
-									<MenuItem value="auto">自动识别</MenuItem>
-								</Select>
-							</Stack>
-
-							<Select
-								size="small"
-								fullWidth
-								value={editingProfile.modelSource}
-								onChange={(event: SelectChangeEvent) => setEditingProfile({
-									...editingProfile,
-									modelSource: event.target.value as ASRModelSource,
-								})}
-							>
-								{Object.entries(sourceLabels).map(([value, label]) => (
-									<MenuItem key={value} value={value}>{label}</MenuItem>
-								))}
-							</Select>
-
-							{editingProfile.modelSource === "local-path" && (
-								<TextField
-									size="small"
-									fullWidth
-									label="本地模型路径"
-									value={editingProfile.modelPath}
-									onChange={(event) => setEditingProfile({ ...editingProfile, modelPath: event.target.value })}
-									helperText="先支持手填路径；文件选择器可后续接入"
-								/>
-							)}
-
-							{editingProfile.modelSource === "download" && (
-								<>
-									<TextField
-										size="small"
-										fullWidth
-										label="下载地址"
-										value={editingProfile.downloadUrl}
-										onChange={(event) => setEditingProfile({ ...editingProfile, downloadUrl: event.target.value })}
-									/>
-									<TextField
-										size="small"
-										fullWidth
-										label="下载目标路径"
-										value={editingProfile.modelPath}
-										onChange={(event) => setEditingProfile({ ...editingProfile, modelPath: event.target.value })}
-										helperText="后续下载器会把模型放到这里或应用数据目录下"
-									/>
-								</>
 							)}
 
 							<Select
@@ -381,7 +350,7 @@ export function AsrProfilesSection({
 							/>
 
 							<Alert severity="warning" sx={{ py: 0 }}>
-								Tauri 主应用负责 UI、设置、麦克风状态和编排；本地 ASR 继续接受原有 Python Vosk 服务。
+								Tauri 主应用负责 UI、设置、麦克风状态和编排；本地离线 ASR 当前固定为内置 sherpa-onnx，云端则保留火山与阿里云两条接口。
 							</Alert>
 
 							<Stack direction="row" spacing={0.5} justifyContent="space-between" alignItems="center">

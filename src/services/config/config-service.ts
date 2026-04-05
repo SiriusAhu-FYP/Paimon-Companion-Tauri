@@ -4,7 +4,7 @@
  * 敏感配置（API Key）走 SecretStore（见 secret-store.ts）。
  */
 
-import type { AppConfig, CharacterSettingsConfig, TTSProfile, TTSProviderConfig } from "./types";
+import type { AppConfig, ASRProfile, ASRProviderConfig, CharacterSettingsConfig, TTSProfile, TTSProviderConfig } from "./types";
 import { DEFAULT_CONFIG } from "./types";
 import { createLogger } from "@/services/logger";
 import { isTauriEnvironment } from "@/utils/window-sync";
@@ -100,6 +100,31 @@ function normalizeTtsProfile(profile: TTSProfile & { gptWeightsPath?: string }):
 	};
 }
 
+function normalizeAsrConfig(asr: Partial<ASRProviderConfig> & { provider?: string }): ASRProviderConfig {
+	const rawProvider = (asr as { provider?: string }).provider;
+	const provider = rawProvider === "vosk-local" ? "local-sherpa" : (rawProvider ?? DEFAULT_CONFIG.asr.provider);
+	return {
+		provider: provider as ASRProviderConfig["provider"],
+		baseUrl: asr.baseUrl ?? "",
+		model: asr.model ?? DEFAULT_CONFIG.asr.model,
+		language: asr.language ?? DEFAULT_CONFIG.asr.language,
+		autoDetectLanguage: asr.autoDetectLanguage ?? DEFAULT_CONFIG.asr.autoDetectLanguage,
+		vadEnabled: asr.vadEnabled ?? DEFAULT_CONFIG.asr.vadEnabled,
+		vadAggressiveness: asr.vadAggressiveness ?? DEFAULT_CONFIG.asr.vadAggressiveness,
+		silenceThresholdMs: asr.silenceThresholdMs ?? DEFAULT_CONFIG.asr.silenceThresholdMs,
+		minSpeechMs: asr.minSpeechMs ?? DEFAULT_CONFIG.asr.minSpeechMs,
+	};
+}
+
+function normalizeAsrProfile(profile: ASRProfile & { provider?: string }): ASRProfile {
+	return {
+		id: profile.id,
+		name: profile.name,
+		apiKey: profile.apiKey ?? "",
+		...normalizeAsrConfig(profile),
+	};
+}
+
 // ── Tauri Store 后端 ──
 
 async function loadFromTauriStore(): Promise<Partial<AppConfig>> {
@@ -179,6 +204,10 @@ export async function loadConfig(): Promise<AppConfig> {
 		tts: normalizeTtsConfig(cachedConfig.tts as TTSProviderConfig & { gptWeightsPath?: string }),
 		ttsProfiles: cachedConfig.ttsProfiles.map((profile) =>
 			normalizeTtsProfile(profile as TTSProfile & { gptWeightsPath?: string }),
+		),
+		asr: normalizeAsrConfig(cachedConfig.asr as Partial<ASRProviderConfig> & { provider?: string }),
+		asrProfiles: cachedConfig.asrProfiles.map((profile) =>
+			normalizeAsrProfile(profile as ASRProfile & { provider?: string }),
 		),
 		character: normalizeCharacterSettings(
 			cachedConfig.character as CharacterSettingsConfig & { persona?: string },

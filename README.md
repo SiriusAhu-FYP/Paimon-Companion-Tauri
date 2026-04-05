@@ -63,7 +63,8 @@ pnpm tauri dev
 - ASR is being migrated with a provider/profile model rather than by bundling all speech-recognition weights into the installer.
 - A real chat-panel microphone path now exists, with browser-side capture/VAD plus pluggable cloud or local-runtime ASR upload.
 - Local TTS stays on the GPT-SoVITS path inherited from `VoiceL2D-MVP`.
-- Accepted ASR families are currently `vosk-local`, `volcengine`, and `aliyun`.
+- Accepted ASR families are currently `local-sherpa`, `volcengine`, and `aliyun`.
+- The default local ASR route is the bundled `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16` model.
 - The functional path intentionally excludes knowledge retrieval / embedding / rerank due to latency sensitivity.
 - The current host input model is foreground-oriented and does not guarantee coexistence with user typing or IME composition.
 - New game transfer work is gated behind source-repository fusion and validation.

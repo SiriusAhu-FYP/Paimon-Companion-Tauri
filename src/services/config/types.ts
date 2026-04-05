@@ -34,9 +34,7 @@ export interface TTSProviderConfig {
 
 // ── ASR Provider ──
 
-export type ASRProviderType = "mock" | "vosk-local" | "volcengine" | "aliyun";
-
-export type ASRModelSource = "cloud" | "local-path" | "download";
+export type ASRProviderType = "mock" | "local-sherpa" | "volcengine" | "aliyun";
 
 export interface ASRProviderConfig {
 	provider: ASRProviderType;
@@ -44,9 +42,6 @@ export interface ASRProviderConfig {
 	model: string;
 	language: string;
 	autoDetectLanguage: boolean;
-	modelSource: ASRModelSource;
-	modelPath: string;
-	downloadUrl: string;
 	vadEnabled: boolean;
 	vadAggressiveness: number;
 	silenceThresholdMs: number;
@@ -94,9 +89,6 @@ export interface ASRProfile {
 	model: string;
 	language: string;
 	autoDetectLanguage: boolean;
-	modelSource: ASRModelSource;
-	modelPath: string;
-	downloadUrl: string;
 	vadEnabled: boolean;
 	vadAggressiveness: number;
 	silenceThresholdMs: number;
@@ -174,14 +166,11 @@ export const DEFAULT_CONFIG: AppConfig = {
 		textLang: "zh",
 	},
 	asr: {
-		provider: "mock",
-		baseUrl: "http://127.0.0.1:8765",
-		model: "vosk-model-cn",
-		language: "zh",
-		autoDetectLanguage: false,
-		modelSource: "local-path",
-		modelPath: "",
-		downloadUrl: "",
+		provider: "local-sherpa",
+		baseUrl: "",
+		model: "sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16",
+		language: "zh-en",
+		autoDetectLanguage: true,
 		vadEnabled: true,
 		vadAggressiveness: 2,
 		silenceThresholdMs: 800,
