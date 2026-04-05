@@ -1,7 +1,4 @@
-use std::{
-	path::{Path, PathBuf},
-	sync::{Mutex, OnceLock},
-};
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sherpa_onnx::{OnlineRecognizer, OnlineRecognizerConfig};
@@ -9,8 +6,6 @@ use tauri::{AppHandle, Manager};
 
 const MODEL_NAME: &str = "sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16";
 const MODEL_ROOT: &str = "asr";
-
-static SHERPA_RECOGNIZER: OnceLock<Mutex<OnlineRecognizer>> = OnceLock::new();
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,22 +74,10 @@ fn create_recognizer(app: &AppHandle) -> Result<OnlineRecognizer, String> {
 		.ok_or_else(|| "failed to create local sherpa recognizer".to_string())
 }
 
-fn get_recognizer(app: &AppHandle) -> Result<&Mutex<OnlineRecognizer>, String> {
-	if let Some(recognizer) = SHERPA_RECOGNIZER.get() {
-		return Ok(recognizer);
-	}
-
-	let recognizer = create_recognizer(app)?;
-	let _ = SHERPA_RECOGNIZER.set(Mutex::new(recognizer));
-	SHERPA_RECOGNIZER
-		.get()
-		.ok_or_else(|| "failed to store local sherpa recognizer".to_string())
-}
-
 #[tauri::command]
 pub fn local_sherpa_healthcheck(app: AppHandle) -> Result<LocalSherpaHealthResponse, String> {
 	let model_dir = resolve_model_dir(&app)?;
-	let _ = get_recognizer(&app)?;
+	let _ = create_recognizer(&app)?;
 
 	Ok(LocalSherpaHealthResponse {
 		label: "Local sherpa-onnx ASR".to_string(),
@@ -112,10 +95,7 @@ pub fn local_sherpa_transcribe(
 		return Err("local sherpa received empty PCM samples".to_string());
 	}
 
-	let recognizer = get_recognizer(&app)?;
-	let recognizer = recognizer
-		.lock()
-		.map_err(|_| "local sherpa recognizer lock poisoned".to_string())?;
+	let recognizer = create_recognizer(&app)?;
 
 	let stream = recognizer.create_stream();
 	stream.accept_waveform(request.sample_rate, &request.samples);
