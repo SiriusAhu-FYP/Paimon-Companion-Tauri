@@ -5,10 +5,10 @@ import { MockLLMService, OpenAILLMService } from "./llm";
 import type { ILLMService } from "./llm/types";
 import {
 	AliyunASRService,
+	LocalSherpaASRService,
 	MockASRService,
 	VolcengineASRService,
 	UnavailableASRService,
-	VoskLocalASRService,
 } from "./asr";
 import type { IASRService } from "./asr";
 import { createLogger } from "./logger";
@@ -96,9 +96,6 @@ export function resolveASRProvider(config: AppConfig): IASRService {
 			model: activeProfile.model,
 			language: activeProfile.language,
 			autoDetectLanguage: activeProfile.autoDetectLanguage,
-			modelSource: activeProfile.modelSource,
-			modelPath: activeProfile.modelPath,
-			downloadUrl: activeProfile.downloadUrl,
 			vadEnabled: activeProfile.vadEnabled,
 			vadAggressiveness: activeProfile.vadAggressiveness,
 			silenceThresholdMs: activeProfile.silenceThresholdMs,
@@ -111,19 +108,9 @@ export function resolveASRProvider(config: AppConfig): IASRService {
 		return new MockASRService();
 	}
 
-	if (asrConfig.provider === "vosk-local") {
-		if (!asrConfig.baseUrl.trim()) {
-			log.info("Vosk local ASR configured but baseUrl missing, using mock fallback");
-			return new MockASRService();
-		}
-		log.info(`using Vosk local ASR provider: ${asrConfig.baseUrl}`);
-		return new VoskLocalASRService({
-			baseUrl: asrConfig.baseUrl,
-			model: asrConfig.model,
-			language: asrConfig.language,
-			autoDetectLanguage: asrConfig.autoDetectLanguage,
-			vadEnabled: asrConfig.vadEnabled,
-		});
+	if (asrConfig.provider === "local-sherpa") {
+		log.info(`using built-in local sherpa ASR provider: ${asrConfig.model}`);
+		return new LocalSherpaASRService();
 	}
 	if (asrConfig.provider === "volcengine") {
 		if (!asrConfig.baseUrl.trim()) {
@@ -155,7 +142,7 @@ export function resolveASRProvider(config: AppConfig): IASRService {
 	}
 
 	const labelMap: Record<Exclude<ASRProviderConfig["provider"], "mock">, string> = {
-		"vosk-local": "Vosk local ASR",
+		"local-sherpa": "Local sherpa ASR",
 		volcengine: "Volcengine ASR",
 		aliyun: "Aliyun ASR",
 	};

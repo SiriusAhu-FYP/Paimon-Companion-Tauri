@@ -80,11 +80,14 @@ export class VoiceInputService {
 	private audioContext: AudioContext | null = null;
 	private sourceNode: MediaStreamAudioSourceNode | null = null;
 	private analyser: AnalyserNode | null = null;
+	private processorNode: ScriptProcessorNode | null = null;
+	private muteGainNode: GainNode | null = null;
 	private analyserBuffer: Uint8Array | null = null;
 	private monitorTimer: number | null = null;
 	private mediaRecorder: MediaRecorder | null = null;
 	private recorderChunks: Blob[] = [];
 	private recorderMimeType = pickMimeType();
+	private pcmChunks: Float32Array[] = [];
 	private segmentStartedAt = 0;
 	private lastSpeechAt = 0;
 	private segmentDiscarded = false;
@@ -92,6 +95,7 @@ export class VoiceInputService {
 	private playbackLocked = false;
 	private interactionLocked = false;
 	private transcribing = false;
+	private recordingActive = false;
 
 	constructor(deps: {
 		bus: EventBus;
@@ -225,7 +229,7 @@ export class VoiceInputService {
 			});
 			return;
 		}
-		if (this.mediaRecorder?.state === "recording") {
+		if (this.recordingActive) {
 			this.updateState({
 				playbackLocked: false,
 				status: "recording",
@@ -265,6 +269,19 @@ export class VoiceInputService {
 			this.sourceNode.connect(this.analyser);
 			this.analyserBuffer = new Uint8Array(this.analyser.fftSize);
 		}
+		if (!this.processorNode || !this.muteGainNode) {
+			this.processorNode = this.audioContext.createScriptProcessor(4096, 1, 1);
+			this.muteGainNode = this.audioContext.createGain();
+			this.muteGainNode.gain.value = 0;
+			this.processorNode.onaudioprocess = (event) => {
+				if (!this.recordingActive) return;
+				const channel = event.inputBuffer.getChannelData(0);
+				this.pcmChunks.push(new Float32Array(channel));
+			};
+			this.sourceNode.connect(this.processorNode);
+			this.processorNode.connect(this.muteGainNode);
+			this.muteGainNode.connect(this.audioContext.destination);
+		}
 		this.updateState({
 			permission: "granted",
 		});
@@ -283,7 +300,18 @@ export class VoiceInputService {
 			this.analyser.disconnect();
 			this.analyser = null;
 		}
+		if (this.processorNode) {
+			this.processorNode.disconnect();
+			this.processorNode.onaudioprocess = null;
+			this.processorNode = null;
+		}
+		if (this.muteGainNode) {
+			this.muteGainNode.disconnect();
+			this.muteGainNode = null;
+		}
 		this.analyserBuffer = null;
+		this.pcmChunks = [];
+		this.recordingActive = false;
 		if (this.audioContext) {
 			await this.audioContext.close().catch(() => undefined);
 			this.audioContext = null;
@@ -313,7 +341,7 @@ export class VoiceInputService {
 	private async monitorTick() {
 		if (!this.state.enabled || !this.analyser || !this.analyserBuffer) return;
 		if (this.playbackLocked || this.interactionLocked || this.transcribing) {
-			if (this.mediaRecorder?.state === "recording") {
+			if (this.recordingActive) {
 				await this.interruptRecording(true);
 			}
 			this.syncState();
@@ -328,14 +356,14 @@ export class VoiceInputService {
 
 		if (speaking) {
 			this.lastSpeechAt = now;
-			if (this.mediaRecorder?.state !== "recording") {
+			if (!this.recordingActive) {
 				this.startRecording(now);
 			}
 			return;
 		}
 
 		if (
-			this.mediaRecorder?.state === "recording"
+			this.recordingActive
 			&& this.lastSpeechAt > 0
 			&& now - this.lastSpeechAt >= asr.silenceThresholdMs
 		) {
@@ -346,7 +374,7 @@ export class VoiceInputService {
 
 	private startRecording(now: number) {
 		if (!this.stream) return;
-		if (typeof MediaRecorder === "undefined") {
+		if (this.asr.inputMode === "encoded" && typeof MediaRecorder === "undefined") {
 			this.updateState({
 				status: "error",
 				lastError: "当前环境不支持 MediaRecorder",
@@ -355,40 +383,51 @@ export class VoiceInputService {
 		}
 
 		this.recorderChunks = [];
+		this.pcmChunks = [];
 		this.segmentStartedAt = now;
 		this.lastSpeechAt = now;
 		this.segmentDiscarded = false;
 		this.recorderMimeType = pickMimeType();
+		this.recordingActive = true;
 
-		this.mediaRecorder = new MediaRecorder(this.stream, { mimeType: this.recorderMimeType });
-		this.mediaRecorder.ondataavailable = (event) => {
-			if (event.data.size > 0) {
-				this.recorderChunks.push(event.data);
-			}
-		};
-		this.mediaRecorder.onstop = () => {
-			const resolve = this.pendingRecorderStopResolve;
-			this.pendingRecorderStopResolve = null;
-			void this.handleRecorderStop()
-				.catch((err) => {
-					const message = err instanceof Error ? err.message : String(err);
-					this.updateState({ lastError: message });
-					this.bus.emit("system:error", {
-						module: "voice-input",
-						error: message,
-					});
-				})
-				.finally(() => resolve?.());
-		};
-		this.mediaRecorder.start();
+		if (this.asr.inputMode === "encoded") {
+			this.mediaRecorder = new MediaRecorder(this.stream, { mimeType: this.recorderMimeType });
+			this.mediaRecorder.ondataavailable = (event) => {
+				if (event.data.size > 0) {
+					this.recorderChunks.push(event.data);
+				}
+			};
+			this.mediaRecorder.onstop = () => {
+				const resolve = this.pendingRecorderStopResolve;
+				this.pendingRecorderStopResolve = null;
+				void this.handleRecorderStop()
+					.catch((err) => {
+						const message = err instanceof Error ? err.message : String(err);
+						this.updateState({ lastError: message });
+						this.bus.emit("system:error", {
+							module: "voice-input",
+							error: message,
+						});
+					})
+					.finally(() => resolve?.());
+			};
+			this.mediaRecorder.start();
+		}
 		this.bus.emit("audio:vad-start");
 		this.syncState();
 	}
 
 	private async stopRecording(discard: boolean) {
-		const recorder = this.mediaRecorder;
-		if (!recorder || recorder.state !== "recording") return;
+		if (!this.recordingActive) return;
 		this.segmentDiscarded = discard;
+		this.recordingActive = false;
+
+		const recorder = this.mediaRecorder;
+		if (!recorder || recorder.state !== "recording") {
+			await this.handleRecorderStop();
+			return;
+		}
+
 		await new Promise<void>((resolve) => {
 			this.pendingRecorderStopResolve = resolve;
 			recorder.stop();
@@ -396,30 +435,51 @@ export class VoiceInputService {
 	}
 
 	private async interruptRecording(discard: boolean) {
-		if (this.mediaRecorder?.state === "recording") {
+		if (this.recordingActive) {
 			await this.stopRecording(discard);
 		}
 	}
 
 	private async handleRecorderStop() {
+		const sampleRate = this.audioContext?.sampleRate ?? 16000;
+		const pcmSamples = this.combinePcmChunks();
 		const chunks = this.recorderChunks;
 		const mimeType = this.recorderMimeType;
 		this.recorderChunks = [];
 		this.mediaRecorder = null;
 
-		if (this.segmentDiscarded || !chunks.length) {
+		if (this.segmentDiscarded || (!chunks.length && pcmSamples.length === 0)) {
 			this.segmentDiscarded = false;
 			this.syncState();
 			return;
 		}
 
-		const blob = new Blob(chunks, { type: mimeType });
-		const audioData = await blob.arrayBuffer();
+		const audioData = chunks.length
+			? await new Blob(chunks, { type: mimeType }).arrayBuffer()
+			: new ArrayBuffer(0);
 		this.bus.emit("audio:vad-end", { audioData });
-		await this.transcribeAndDispatch(audioData, mimeType);
+		await this.transcribeAndDispatch(audioData, mimeType, pcmSamples, sampleRate);
 	}
 
-	private async transcribeAndDispatch(audioData: ArrayBuffer, mimeType: string) {
+	private combinePcmChunks(): Float32Array {
+		if (!this.pcmChunks.length) return new Float32Array(0);
+		const totalLength = this.pcmChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+		const merged = new Float32Array(totalLength);
+		let offset = 0;
+		for (const chunk of this.pcmChunks) {
+			merged.set(chunk, offset);
+			offset += chunk.length;
+		}
+		this.pcmChunks = [];
+		return merged;
+	}
+
+	private async transcribeAndDispatch(
+		audioData: ArrayBuffer,
+		mimeType: string,
+		samples: Float32Array,
+		sampleRate: number,
+	) {
 		this.transcribing = true;
 		this.syncState();
 
@@ -428,6 +488,8 @@ export class VoiceInputService {
 				data: audioData,
 				mimeType,
 				fileName: fileNameForMimeType(mimeType),
+				samples,
+				sampleRate,
 			})).trim();
 
 			this.updateState({

@@ -47,13 +47,14 @@ function extractTranscript(body: string): string {
 }
 
 abstract class BaseHttpASRService implements IASRService {
+	readonly inputMode = "encoded" as const;
 	readonly descriptor: ASRProviderDescriptor;
 	protected readonly options: HttpASRServiceOptions;
 
 	constructor(options: HttpASRServiceOptions) {
 		this.options = options;
 		this.descriptor = {
-			kind: "configured",
+			kind: "cloud",
 			label: options.label,
 		};
 	}
@@ -96,22 +97,6 @@ abstract class BaseHttpASRService implements IASRService {
 			throw new Error("ASR 返回为空");
 		}
 		return text;
-	}
-}
-
-export class VoskLocalASRService extends BaseHttpASRService {
-	constructor(options: Omit<HttpASRServiceOptions, "label" | "defaultPath"> & {
-		vadEnabled: boolean;
-	}) {
-		super({
-			...options,
-			label: "Vosk local sidecar",
-			defaultPath: "/transcribe",
-			extraFields: {
-				...(options.extraFields ?? {}),
-				vad_enabled: options.vadEnabled ? "true" : "false",
-			},
-		});
 	}
 }
 

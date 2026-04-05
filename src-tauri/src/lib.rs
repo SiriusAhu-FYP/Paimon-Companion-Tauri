@@ -22,6 +22,8 @@ pub fn run() {
 			commands::window::focus_window,
 			commands::window::send_key,
 			commands::window::send_mouse,
+			commands::local_asr::local_sherpa_healthcheck,
+			commands::local_asr::local_sherpa_transcribe,
 		])
 		.on_window_event(|window, event| {
 			if let tauri::WindowEvent::CloseRequested { .. } = event {

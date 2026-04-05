@@ -4,8 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "setup:local-asr": "powershell -ExecutionPolicy Bypass -File .\\scripts\\ensure-local-asr-model.ps1",
+    "dev": "pnpm setup:local-asr && vite",
+    "build": "pnpm setup:local-asr && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "kill-port": "powershell -Command \"Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }\""

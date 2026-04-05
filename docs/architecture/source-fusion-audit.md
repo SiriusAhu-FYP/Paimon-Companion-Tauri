@@ -57,7 +57,7 @@ These are not yet accepted replacements:
 | MCP-driven expression commands from LLM | `src/services/character/character-service.ts`, `src/features/stage/StageWindow.tsx` | `replaced` | Expression control now flows through local events rather than a separate MCP roundtrip. | Keep this replacement. |
 | Microphone capture | `src/services/voice-input/voice-input-service.ts`, `src/features/chat/ChatPanel.tsx` | `partial` | The Tauri app now has a real chat-panel microphone path again, using browser/WebView capture instead of the MVP’s Python `sounddevice` loop. | Validate behavior and decide whether lower-level native capture is still needed. |
 | VAD-based speech segmentation | `src/services/voice-input/voice-input-service.ts` | `partial` | A lightweight browser-side VAD gate now cuts speech segments, but it is not the same implementation as the MVP’s `webrtcvad` pipeline. | Validate quality and replace only if the simpler gate is insufficient. |
-| Real ASR pipeline (`vosk` / cloud ASR) | `src/services/asr/http-asr-service.ts`, `src/services/provider-resolvers.ts`, `src/features/settings/AsrProfilesSection.tsx` | `partial` | The app now targets the inherited local `vosk` route plus cloud ASR providers (`volcengine`, `aliyun`) through upload-based profiles. Live validation is still pending. | Validate at least one cloud provider and the local `vosk` path in live use. |
+| Real ASR pipeline (bundled `sherpa-onnx` / cloud ASR) | `src/services/asr/local-sherpa-asr-service.ts`, `src/services/asr/http-asr-service.ts`, `src/services/provider-resolvers.ts`, `src/features/settings/AsrProfilesSection.tsx` | `partial` | The app now targets a bundled local `sherpa-onnx` bilingual model plus cloud ASR providers (`volcengine`, `aliyun`). Live validation is still pending. | Validate at least one cloud provider and the bundled local path in live use. |
 | Audio lock / anti-feedback during playback | `src/services/voice-input/voice-input-service.ts` | `partial` | Playback now locks the microphone path to reduce TTS feedback, but it has not yet been accepted through live validation. | Validate in `P2.2` hand testing. |
 
 ### `Video-Understanding-MVP`
@@ -82,7 +82,7 @@ Current high-level audit result:
   - unresolved: source scope beyond current `2048`, especially `sokoban` and exact prompt/reflection carry-over
 - `VoiceL2D-MVP`: `partial`
   - accepted core: Live2D + chat + character + GPT-SoVITS TTS/lip-sync
-  - unresolved: microphone, VAD, and live validation of the `vosk` / cloud ASR chain
+  - unresolved: microphone, VAD, and live validation of the bundled local / cloud ASR chain
 - `Video-Understanding-MVP`: `partial`
   - accepted core: screenshot capture and single-frame model use
   - unresolved: most of the reusable video-understanding toolkit and evaluation stack

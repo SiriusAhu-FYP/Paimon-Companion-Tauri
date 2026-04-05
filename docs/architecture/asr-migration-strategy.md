@@ -26,7 +26,7 @@ For ASR, the practical split is:
   - download management when local assets are fetched by the app
   - local command or sidecar launching if later accepted
 - external ASR runtime when needed:
-  - the original Python `vosk` service path
+  - the bundled local `sherpa-onnx` runtime inside the Tauri app
   - local HTTP service wrapping a native/Rust/Python recognizer
   - cloud ASR APIs such as Volcengine or Aliyun
 
@@ -57,7 +57,7 @@ The app should treat ASR the same way it already treats LLM and TTS:
 The first accepted provider families are:
 
 - `mock`
-- `vosk-local`
+- `local-sherpa`
 - `volcengine`
 - `aliyun`
 
@@ -65,7 +65,7 @@ The important point is the abstraction, not that every provider is fully wired o
 
 ## Local Runtime Rule
 
-For local ASR, the inherited Python `vosk` path remains acceptable, and a native sidecar is also acceptable if it fits the same provider contract.
+For local ASR, the accepted default is now the bundled `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16` model. Cloud fallbacks remain acceptable through Volcengine and Aliyun.
 
 This is not treated as architectural failure.
 
