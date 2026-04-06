@@ -1,26 +1,28 @@
 # Docs
 
-Tracked project docs are kept here.
+Tracked public project docs live here.
 
-Current high-value entry points:
+## Entry Points
 
+- `../README.md`
+  project status, setup, and public-facing summary
+- `../ROADMAP.md`
+  phase-level progress and accepted direction changes
 - `architecture/tauri-baseline.md`
+  current Tauri runtime baseline and responsibility split
 - `architecture/core-repo-integration.md`
+  which source repositories are in scope and how fusion is judged
 - `architecture/source-fusion-audit.md`
+  detailed merged / partial / missing / replaced matrix
 - `architecture/companion-runtime.md`
+  target runtime direction for local perception, cloud reasoning, and MCP control
 - `architecture/runtime-backend-migration.md`
+  runtime modules that should move from frontend to backend over time
 - `architecture/expression-protocol.md`
+  accepted first-pass companion emotion/expression protocol
 - `architecture/asr-migration-strategy.md`
+  accepted ASR direction and packaging assumptions
 - `architecture/game-task-templates.md`
+  reusable game task template baseline
 - `evaluation/2048-baseline.md`
-
-Current state:
-
-- `P1 Functional Core Validation` is complete on `main`
-- `P2` has been refocused to full source-repository fusion before any new game transfer
-- `P2.2` has now accepted a local live-validation baseline: `local-sherpa` microphone input plus `GPT-SoVITS` output and Live2D response
-- `P2.3` is now scoped first around companion expression / motion protocol, with game-plugin protocol work deferred to a later step
-- the first `P2.3` implementation pass is a small emotion taxonomy plus randomized per-model expression candidates
-- the next planning step now ties `LLMPlay-MVP` and `Video-Understanding-MVP` together through an MCP-facing companion runtime rather than through rigid reply formatting
-- backend migration of runtime-owned logic is now tracked as a cross-cutting rule rather than a separate big-bang refactor
-- the functional desktop workflow now lives under the dedicated `功能实验` panel
+  accepted functional evaluation baseline for `2048`

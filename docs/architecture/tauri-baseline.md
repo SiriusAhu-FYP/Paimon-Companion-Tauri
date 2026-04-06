@@ -86,9 +86,9 @@ Separate from `Unified Run`, the normal chat path now has a real microphone entr
 - a light browser-side VAD gate cuts speech segments
 - recognized text is routed back through the normal companion pipeline
 
-This is the first restored `VoiceL2D-MVP` voice-input path, but it still needs end-to-end acceptance testing.
+This path is now accepted as the current `P2.2` live voice baseline.
 
-This should be treated as groundwork only.
+`Unified Run` itself should still be treated as groundwork only.
 
 It does not by itself prove that the three functional source repositories have been fully fused.
 
@@ -151,14 +151,17 @@ Reference:
 
 ## ASR Direction
 
-For `VoiceL2D-MVP` restoration, ASR is not being forced into one implementation shape.
+For `VoiceL2D-MVP` restoration, the accepted baseline is now clear:
 
-The current direction is:
+- the Tauri app owns capture UX, settings, orchestration, and secret handling
+- the default local ASR route is bundled `local-sherpa`
+- cloud fallbacks remain `volcengine` and `aliyun`
 
-- Tauri app owns settings, capture UX, orchestration, and secret handling
-- local heavy ASR can stay in an optional external runtime if that is the most practical path
-- local ASR weights are not part of the default installer
-- settings should let the user choose cloud API, existing local runtime/model path, or later a download flow
+Current packaging rule:
+
+- `pnpm setup:local-asr` prepares the local model assets and native sherpa archive required by Rust builds
+- the accepted local live-validation baseline is `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D response
+- cloud ASR remains a supported option, but not part of the accepted live baseline yet
 
 Reference:
 

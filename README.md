@@ -11,11 +11,11 @@ This repository is the active Tauri implementation trunk.
 
 Current `P2` mainline is not new game expansion.
 
-It is now focused on fully integrating the functional heritage of these source repositories:
+It is focused on fully integrating the functional heritage of these source repositories:
 
-- `E:\FYP-PROJECT\core\LLMPlay-MVP`
-- `E:\FYP-PROJECT\core\VoiceL2D-MVP`
-- `E:\FYP-PROJECT\core\Video-Understanding-MVP`
+- `LLMPlay-MVP`
+- `VoiceL2D-MVP`
+- `Video-Understanding-MVP`
 
 `paimon-live` is treated as the desktop host/framework origin only.
 
@@ -32,12 +32,12 @@ What the baseline does not yet prove:
 - full migration of `Video-Understanding-MVP` pipeline/evaluation capabilities
 - full post-fusion validation across all three source lines
 
-Current next-step priority:
+Current fusion direction:
 
-- `P2.3` has established the current expression-linkage baseline
-- the next design focus is `P2.4`: bring `LLMPlay-MVP` back in through MCP-facing semantic game control, stronger reflection, and prompt/template cleanup
-- current accepted result: companion replies can already drive model-aware Live2D expression changes
-- future target: formalize both companion-expression control and gameplay control through MCP rather than leave them as internal-only bridges
+- accepted `P2.2` baseline: local voice input -> companion pipeline -> `GPT-SoVITS` -> Live2D response
+- accepted `P2.3` sub-baseline: companion replies can already drive model-aware Live2D expression changes
+- current next focus: `P2.4` and `P2.5`
+- long-term control boundary: MCP for both companion actions and gameplay actions
 
 ## UI
 
@@ -73,19 +73,18 @@ cargo check --manifest-path src-tauri/Cargo.toml
 
 - The app stays Tauri-first. Optional local sidecars remain acceptable for heavy workloads where the source projects already depend on them.
 - External AI services may still run outside the app over HTTP/SSE.
-- ASR is being migrated with a provider/profile model rather than by bundling all speech-recognition weights into the installer.
-- A real chat-panel microphone path now exists, with browser-side capture/VAD plus pluggable cloud or local-runtime ASR upload.
 - Local TTS stays on the GPT-SoVITS path inherited from `VoiceL2D-MVP`.
+- A real chat-panel microphone path now exists, with browser-side capture/VAD plus pluggable cloud or local-runtime ASR upload.
 - Accepted ASR families are currently `local-sherpa`, `volcengine`, and `aliyun`.
 - The default local ASR route is the bundled `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16` model.
 - `pnpm setup:local-asr` prepares both the local ASR model assets and the sherpa native archive needed by `cargo check`.
 - The current local bilingual ASR baseline is practical for both Chinese and English, but mixed-language recognition is still effectively resolved one utterance at a time rather than as robust intra-sentence code-switching.
 - The currently accepted `P2.2` live voice baseline is local-only: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D reaction.
 - Cloud ASR providers remain supported configuration options, but they are not yet part of the accepted live-validation baseline.
-- The next fusion step is to formalize an MCP-facing runtime where local VLM perception, cloud reasoning, companion expression control, and semantic gameplay actions can coexist without a rigid visible reply format.
-- The runtime direction follows `Video-Understanding-MVP`: local fast descriptions first, rolling summary queue second, cloud reasoning third.
+- The next fusion step is to formalize an MCP-facing runtime where local perception, cloud reasoning, companion expression control, and semantic gameplay actions can coexist without a rigid visible reply format.
 - Production tuning should start from an `8-10s` local description window and preserve at least the latest `1min` of summarized context.
 - The functional path intentionally excludes knowledge retrieval / embedding / rerank due to latency sensitivity.
 - The current host input model is foreground-oriented and does not guarantee coexistence with user typing or IME composition.
 - New game transfer work is gated behind source-repository fusion and validation.
 - Public progress is tracked in `ROADMAP.md`.
+- Architecture references live under `docs/`.
