@@ -2,9 +2,9 @@
 
 This document is the first-pass fusion audit for the three functional source repositories:
 
-- `E:\FYP-PROJECT\core\LLMPlay-MVP`
-- `E:\FYP-PROJECT\core\VoiceL2D-MVP`
-- `E:\FYP-PROJECT\core\Video-Understanding-MVP`
+- `LLMPlay-MVP`
+- `VoiceL2D-MVP`
+- `Video-Understanding-MVP`
 
 It records what has already landed in `paimon-companion-tauri`, what is still missing, and which source capabilities have been intentionally replaced by a different Tauri-native implementation.
 
@@ -28,7 +28,6 @@ These source capabilities are considered intentionally replaced rather than lite
 
 These are not yet accepted replacements:
 
-- manual/mock ASR in place of real microphone/VAD/ASR
 - single-frame screenshot reasoning in place of the broader video-understanding pipeline/toolkit
 - `2048`-only functional validation in place of the full intended `LLMPlay-MVP` source scope
 
@@ -93,11 +92,13 @@ This means the three-source fusion is not yet complete.
 
 The next implementation order should be:
 
-1. `P2.3 Companion Expression Protocol`
-   - formalize how LLM/runtime output selects emotion, expression, and motion
-2. `P2.4 LLMPlay-MVP Completion`
+1. `P2.4 LLMPlay-MVP Completion`
    - settle retained scope, retirement decisions, and later game-plugin boundaries
-3. `P2.5 Video-Understanding-MVP Completion`
+2. `P2.5 Video-Understanding-MVP Completion`
    - merge only the toolkit pieces that still serve the Tauri product
-4. `P2.6 Post-Fusion Validation`
+3. `P2.6 Post-Fusion Validation`
    - validate the combined runtime after the three-source gaps are closed
+
+Accepted prerequisite already in place:
+
+- `P2.3` has established the current expression-linkage baseline for companion replies

@@ -30,9 +30,8 @@ Current intended baseline:
 
 Reference baseline from `Video-Understanding-MVP`:
 
-- local vLLM endpoint on `http://localhost:8000/v1`
-- queue expiry baseline around `10000ms`
-- screenshot interval can reach `500ms` in the MVP experiments, but production runtime should treat `1fps` as an upper-bound stress case rather than a fixed requirement
+- the MVP validated a low-latency local VLM endpoint pattern
+- the MVP also explored sub-second capture intervals, but production runtime should treat `1fps` as an upper-bound stress case rather than a fixed requirement
 
 For this Tauri product, the practical target is:
 

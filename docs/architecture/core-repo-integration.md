@@ -8,9 +8,9 @@ There are two different kinds of inheritance:
 
 - framework inheritance: `paimon-live`
 - functional inheritance:
-  - `E:\FYP-PROJECT\core\LLMPlay-MVP`
-  - `E:\FYP-PROJECT\core\VoiceL2D-MVP`
-  - `E:\FYP-PROJECT\core\Video-Understanding-MVP`
+  - `LLMPlay-MVP`
+  - `VoiceL2D-MVP`
+  - `Video-Understanding-MVP`
 
 `paimon-live` is already accepted as the host/framework base and does not need further audit here.
 
@@ -30,7 +30,7 @@ Before any new game transfer work is treated as mainline:
 
 - current Tauri repo already has a validated `2048` action loop
 - current implementation is not a literal `FastMCP` copy of the MVP
-- full scope mapping still needs to be documented
+- full scope mapping is documented in the source-fusion audit, but implementation gaps remain
 - `Sokoban` remains in scope because it is a faster reasoning-quality validation game than many open-world tasks
 - the next `LLMPlay-MVP` fusion step is to recover semantic game control, stronger reflection, and prompt-template discipline
 - future direction is still MCP, but with game semantics exposed above raw key/mouse steps
@@ -47,6 +47,8 @@ Before any new game transfer work is treated as mainline:
 - the original project’s broader video-understanding pipeline is not yet fully represented
 - reusable pipeline/evaluation pieces still need explicit audit and migration decisions
 - the intended direction is local fast VLM descriptions plus cloud temporal summarization, not cloud-only frame-by-frame reasoning
+
+For the detailed capability matrix, use `source-fusion-audit.md`.
 
 ## Accepted Interpretation Rule
 
