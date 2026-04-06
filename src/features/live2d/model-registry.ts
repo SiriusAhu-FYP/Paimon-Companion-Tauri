@@ -6,6 +6,10 @@ import type { ModelInfo } from "./live2d-renderer";
  */
 export const MODEL_REGISTRY: ModelInfo[] = [
 	{
+		name: "paimengVts",
+		path: "/Resources/paimengVts/3paimeng Vts.model3.json",
+	},
+	{
 		name: "英伦兔兔",
 		path: "/Resources/Commercial_models/英伦兔兔/英伦兔兔.model3.json",
 	},
@@ -39,4 +43,4 @@ export const MODEL_REGISTRY: ModelInfo[] = [
 	},
 ];
 
-export const DEFAULT_MODEL = MODEL_REGISTRY[0]; // 英伦兔兔
+export const DEFAULT_MODEL = MODEL_REGISTRY[0]; // paimengVts
