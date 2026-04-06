@@ -87,6 +87,8 @@ P1 close-out:
   - [ ] P2.4 `LLMPlay-MVP` Completion
     - [ ] keep `Sokoban` in scope as the second reasoning-oriented validation game
     - [ ] define a shared game prompt template (`example.md`) before rewriting per-game prompts
+    - [ ] lock the first companion MCP contract and game semantic action contract before broad plugin work
+    - [ ] define the minimum retained `Sokoban` validation scope before implementation
     - [ ] replace the current weak reflection/history loop with a stronger decision-history design derived from `LLMPlay-MVP`
     - [ ] define an MCP-facing semantic action contract so the model can call game actions without relying on rigid visible reply formatting
     - [ ] decide which gameplay semantics belong in core MCP tools and which belong in per-game config/plugins
