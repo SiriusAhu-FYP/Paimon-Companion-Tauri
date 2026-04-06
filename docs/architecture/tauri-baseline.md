@@ -17,6 +17,11 @@ The current product/mainline task is to fully fuse the functional heritage of th
 
 That means new game transfer work is not the immediate next priority until the three-source fusion is audited and validated.
 
+The immediate next priority inside that fusion work is narrower still:
+
+- formalize the companion expression / motion protocol first
+- defer general game-plugin protocol design until after that layer is settled
+
 ## Core Shape
 
 - Rust host for OS-facing capabilities
@@ -83,6 +88,21 @@ This is the first restored `VoiceL2D-MVP` voice-input path, but it still needs e
 This should be treated as groundwork only.
 
 It does not by itself prove that the three functional source repositories have been fully fused.
+
+## Current Character Protocol State
+
+The current runtime already supports:
+
+- reply-driven emotion changes
+- expression switching in the Stage window
+- speaking-state and mouth-sync updates
+
+What it does not yet have as a fully accepted protocol:
+
+- a stable action vocabulary for motion selection
+- a reusable contract that cleanly separates companion expression actions from future game-control actions
+
+That protocol layer is now the explicit focus of `P2.3`.
 
 ## ASR Direction
 

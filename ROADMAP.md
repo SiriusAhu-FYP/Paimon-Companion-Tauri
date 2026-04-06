@@ -78,15 +78,21 @@ P1 close-out:
     - [x] validate voice -> LLM -> TTS -> Live2D end-to-end in the Tauri host
     - [-] improve mixed-language recognition inside a single utterance
       deferred: the current bilingual local ASR baseline is acceptable for Chinese or English utterances, but intra-sentence code-switching is not yet treated as a solved requirement
-  - [ ] P2.3 `LLMPlay-MVP` Completion
+  - [ ] P2.3 Companion Expression Protocol
+    - [ ] define a stable protocol from LLM/runtime output to character emotion, expression, and motion selection
+    - [ ] separate accepted expression actions from future game-control actions
+    - [ ] wire Live2D motion triggering into the same protocol, not only expression switching and mouth sync
+    - [ ] validate that companion replies can consistently drive visible Live2D behavior through this protocol
+  - [ ] P2.4 `LLMPlay-MVP` Completion
     - [ ] confirm the `2048` command-to-action loop fully covers the intended MVP scope
     - [ ] decide which `LLMPlay-MVP` concepts are intentionally reimplemented instead of copied literally
+    - [ ] decide how much of the future game-plugin protocol belongs in the core runtime versus per-game config
     - [ ] either merge the missing MVP capabilities or explicitly retire them in docs
-  - [ ] P2.4 `Video-Understanding-MVP` Completion
+  - [ ] P2.5 `Video-Understanding-MVP` Completion
     - [ ] decide which video-understanding pipeline pieces belong in the Tauri runtime
     - [ ] integrate the missing reusable perception pieces that are still required
     - [ ] carry over the relevant evaluation/benchmark logic where it still serves the product goal
-  - [ ] P2.5 Post-Fusion Validation
+  - [ ] P2.6 Post-Fusion Validation
     - [ ] verify that all three source lines coexist in one Tauri runtime
     - [ ] verify companion behavior, expression, speech, and functional execution together
     - [ ] define the accepted post-fusion baseline
@@ -112,3 +118,4 @@ P2 note:
 - the ASR restoration strategy is recorded in `docs/architecture/asr-migration-strategy.md`
 - accepted `P2.2` baseline: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D response
 - cloud ASR providers remain configured options, but they are not part of the accepted `P2.2` live-validation baseline
+- `P2.3` is intentionally about companion expression / motion protocol first, not about full game-plugin protocol yet

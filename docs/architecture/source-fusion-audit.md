@@ -54,7 +54,7 @@ These are not yet accepted replacements:
 | Character/persona management | `src/services/character/character-service.ts`, `src/features/control-panel/ControlPanel.tsx` | `merged` | Character cards, persona loading, switching, and expression mapping exist. | Keep as accepted baseline. |
 | TTS generation + sequential playback + lip sync | `src/services/tts/gptsovits-tts-service.ts`, `src/services/pipeline/pipeline-service.ts`, `src/services/audio/audio-player.ts` | `merged` | GPT-SoVITS playback, sequential output, and Live2D mouth/response linkage are now validated in the Tauri host. | Keep as accepted baseline. |
 | Frontend/backend transport via WebSocket | `src/services/index.ts`, `src/services/event-bus/event-bus.ts` | `replaced` | The Tauri app is single-runtime and no longer needs the MVP’s WebSocket boundary. | Keep this replacement. |
-| MCP-driven expression commands from LLM | `src/services/character/character-service.ts`, `src/features/stage/StageWindow.tsx` | `replaced` | Expression control now flows through local events rather than a separate MCP roundtrip. | Keep this replacement. |
+| MCP-driven expression commands from LLM | `src/services/character/character-service.ts`, `src/features/stage/StageWindow.tsx`, `src/main.tsx` | `partial` | Emotion-to-expression control is already wired through local events, but the broader reusable expression / motion protocol is not yet formalized. | Make this the first target of `P2.3`. |
 | Microphone capture | `src/services/voice-input/voice-input-service.ts`, `src/features/chat/ChatPanel.tsx` | `merged` | The Tauri app has a real chat-panel microphone path again, using browser/WebView capture instead of the MVP’s Python `sounddevice` loop, and it is now live-validated. | Keep as accepted baseline. |
 | VAD-based speech segmentation | `src/services/voice-input/voice-input-service.ts` | `merged` | The lighter browser-side VAD gate is now accepted through live validation as the current replacement for the MVP’s older `webrtcvad` path. | Keep current implementation unless quality issues force a revisit. |
 | Real ASR pipeline (bundled `sherpa-onnx` / cloud ASR) | `src/services/asr/local-sherpa-asr-service.ts`, `src/services/asr/http-asr-service.ts`, `src/services/provider-resolvers.ts`, `src/features/settings/AsrProfilesSection.tsx` | `partial` | The bundled local `sherpa-onnx` path is now live-validated and accepted. Cloud ASR providers (`volcengine`, `aliyun`) remain supported but are not part of the accepted live-validation baseline yet. | Treat local sherpa as accepted baseline; validate a cloud path later only if it remains product-relevant. |
@@ -79,7 +79,7 @@ Current high-level audit result:
 
 - `LLMPlay-MVP`: `partial`
   - accepted core: Tauri-native host control + validated `2048` loop
-  - unresolved: source scope beyond current `2048`, especially `sokoban` and exact prompt/reflection carry-over
+  - unresolved: companion expression / motion protocol, source scope beyond current `2048`, especially `sokoban`, pluginization strategy, and exact prompt/reflection carry-over
 - `VoiceL2D-MVP`: `partial`
   - accepted core: Live2D + chat + character + microphone + VAD + bundled local sherpa ASR + GPT-SoVITS TTS/lip-sync
   - unresolved: cloud ASR validation and any future quality upgrades such as better mixed-language utterance handling
@@ -93,9 +93,11 @@ This means the three-source fusion is not yet complete.
 
 The next implementation order should be:
 
-1. `P2.3 LLMPlay-MVP Completion`
-   - settle full retained scope vs retired scope
-2. `P2.4 Video-Understanding-MVP Completion`
+1. `P2.3 Companion Expression Protocol`
+   - formalize how LLM/runtime output selects emotion, expression, and motion
+2. `P2.4 LLMPlay-MVP Completion`
+   - settle retained scope, retirement decisions, and later game-plugin boundaries
+3. `P2.5 Video-Understanding-MVP Completion`
    - merge only the toolkit pieces that still serve the Tauri product
-3. `P2.5 Post-Fusion Validation`
+4. `P2.6 Post-Fusion Validation`
    - validate the combined runtime after the three-source gaps are closed
