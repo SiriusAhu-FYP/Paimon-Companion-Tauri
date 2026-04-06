@@ -30,6 +30,8 @@ export interface ModelInfo {
 	path: string;
 	/** 可选：当模型文件本身未声明 Expressions 时，使用这里的回退列表 */
 	expressionNames?: string[];
+	/** 可选：模型加载后立即应用的初始参数覆盖 */
+	initialParameters?: Array<{ id: string; value: number }>;
 }
 
 /**
@@ -225,6 +227,17 @@ export class Live2DRenderer {
 			log.warn(`expression fail: ${name}`, err);
 			return false;
 		}
+	}
+
+	/**
+	 * 直接设置单个参数值，用于模型初始化时的默认状态修正。
+	 */
+	setParameterValue(parameterId: string, value: number) {
+		if (!this.model) return;
+		try {
+			const coreModel = this.model.internalModel?.coreModel;
+			coreModel?.setParameterValueById?.(parameterId, value, 1.0);
+		} catch { /* */ }
 	}
 
 	/**
