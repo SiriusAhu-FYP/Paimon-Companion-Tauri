@@ -96,7 +96,7 @@ export class UnifiedRuntimeService {
 		this.state.phase = "acting";
 		this.state.lastCommand = "2048-step";
 		this.state.lastRun = cloneRun(run);
-		this.applyEmotion("surprised");
+		this.applyEmotion("neutral");
 		this.bus.emit("unified:run-start", {
 			runId: run.id,
 			trigger,
@@ -111,7 +111,7 @@ export class UnifiedRuntimeService {
 			run.summary = result.summary;
 			run.companionText = result.companionText;
 			run.selectedMove = result.selectedMove;
-			run.emotion = result.boardChanged ? "happy" : "surprised";
+			run.emotion = result.boardChanged ? "happy" : "dazed";
 			this.state.lastCompanionText = result.companionText;
 			this.applyEmotion(run.emotion);
 

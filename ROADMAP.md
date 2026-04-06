@@ -79,9 +79,9 @@ P1 close-out:
     - [-] improve mixed-language recognition inside a single utterance
       deferred: the current bilingual local ASR baseline is acceptable for Chinese or English utterances, but intra-sentence code-switching is not yet treated as a solved requirement
   - [ ] P2.3 Companion Expression Protocol
-    - [ ] define a stable protocol from LLM/runtime output to character emotion, expression, and motion selection
+    - [x] define a first-pass emotion taxonomy and randomized per-model expression candidate mapping
+    - [ ] extend the same protocol to motion selection
     - [ ] separate accepted expression actions from future game-control actions
-    - [ ] wire Live2D motion triggering into the same protocol, not only expression switching and mouth sync
     - [ ] validate that companion replies can consistently drive visible Live2D behavior through this protocol
   - [ ] P2.4 `LLMPlay-MVP` Completion
     - [ ] confirm the `2048` command-to-action loop fully covers the intended MVP scope
@@ -119,3 +119,4 @@ P2 note:
 - accepted `P2.2` baseline: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D response
 - cloud ASR providers remain configured options, but they are not part of the accepted `P2.2` live-validation baseline
 - `P2.3` is intentionally about companion expression / motion protocol first, not about full game-plugin protocol yet
+- the first pass of `P2.3` should stay semantically small and distinct: `neutral`, `happy`, `angry`, `sad`, `delighted`, `alarmed`, `dazed`

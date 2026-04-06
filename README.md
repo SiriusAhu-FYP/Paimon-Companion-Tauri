@@ -36,6 +36,7 @@ Current next-step priority:
 
 - `P2.3` now focuses first on a companion expression / motion protocol
 - game-plugin protocol work is intentionally deferred until after that layer is settled
+- a first-pass emotion taxonomy is now being landed around `neutral`, `happy`, `angry`, `sad`, `delighted`, `alarmed`, and `dazed`, with randomized per-model expression candidates
 
 ## UI
 

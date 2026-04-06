@@ -2,6 +2,7 @@ import type { CharacterProfile, CharacterState } from "@/types";
 import type { EventBus } from "@/services/event-bus";
 import { createLogger } from "@/services/logger";
 import { loadCharacterProfilesFromPublic } from "./character-cards";
+import { pickExpressionCandidate, resolveEmotionCandidates } from "./expression-protocol";
 
 const log = createLogger("character");
 
@@ -63,15 +64,32 @@ export class CharacterService {
 		this.notifyStateChange();
 	}
 
-	setEmotion(emotion: string) {
-		if (emotion === this.state.emotion) return;
+	setActiveModel(modelPath: string | null) {
+		if (modelPath === this.state.activeModel) return;
+		this.state.activeModel = modelPath;
+		this.notifyStateChange();
+		log.info(`active model → ${modelPath ?? "none"}`);
+	}
 
+	setEmotion(emotion: string) {
+		const emotionChanged = emotion !== this.state.emotion;
 		this.state.emotion = emotion;
-		const expressionName = this.profile?.expressionMap[emotion] ?? emotion;
+		const candidates = resolveEmotionCandidates(
+			this.state.activeModel,
+			this.profile?.expressionMap,
+			emotion,
+		);
+		const expressionName = pickExpressionCandidate(candidates) ?? emotion;
 
 		this.bus.emit("character:expression", { emotion, expressionName });
-		this.notifyStateChange();
-		log.info(`emotion → ${emotion}`);
+		if (emotionChanged) {
+			this.notifyStateChange();
+		}
+		log.info(`emotion → ${emotion}`, {
+			activeModel: this.state.activeModel,
+			expressionName,
+			candidateCount: candidates.length,
+		});
 	}
 
 	setSpeaking(isSpeaking: boolean) {
