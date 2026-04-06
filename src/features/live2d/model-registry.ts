@@ -23,7 +23,6 @@ export const MODEL_REGISTRY: ModelInfo[] = [
 			"表情9",
 			"鼠标L",
 			"鼠标R",
-			"水印",
 		],
 	},
 	{
