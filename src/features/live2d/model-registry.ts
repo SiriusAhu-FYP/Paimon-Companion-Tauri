@@ -8,9 +8,6 @@ export const MODEL_REGISTRY: ModelInfo[] = [
 	{
 		name: "paimengVts",
 		path: "/Resources/Commercial_models/paimengVts/3paimeng Vts.model3.json",
-		initialParameters: [
-			{ id: "Param19", value: -1 },
-		],
 		expressionNames: [
 			"按键1",
 			"按键2",
@@ -32,9 +29,6 @@ export const MODEL_REGISTRY: ModelInfo[] = [
 	{
 		name: "英伦兔兔",
 		path: "/Resources/Commercial_models/英伦兔兔/英伦兔兔.model3.json",
-		initialParameters: [
-			{ id: "Param31", value: 0 },
-		],
 	},
 	{
 		name: "Hiyori",

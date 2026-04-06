@@ -8,10 +8,12 @@ import {
 } from "@/utils/window-sync";
 import CloseIcon from "@mui/icons-material/Close";
 import { Live2DRenderer, DEFAULT_MODEL, MODEL_REGISTRY } from "@/features/live2d";
-import type { ModelInfo } from "@/features/live2d";
 import type { EyeMode } from "@/features/live2d";
 import { createLogger } from "@/services/logger";
-import { saveZoom, loadZoom } from "@/utils/stage-storage";
+import {
+	saveZoom, loadZoom,
+	loadModelExpression, saveModelExpression,
+} from "@/utils/stage-storage";
 
 const log = createLogger("stage-window");
 
@@ -19,17 +21,6 @@ function resolveExpressionNames(modelPath: string, renderer: Live2DRenderer): st
 	const reported = renderer.getExpressionNames();
 	if (reported.length > 0) return reported;
 	return MODEL_REGISTRY.find((model) => model.path === modelPath)?.expressionNames ?? [];
-}
-
-function getModelInfo(modelPath: string): ModelInfo | undefined {
-	return MODEL_REGISTRY.find((model) => model.path === modelPath);
-}
-
-function applyInitialModelState(modelPath: string, renderer: Live2DRenderer) {
-	const model = getModelInfo(modelPath);
-	model?.initialParameters?.forEach(({ id, value }) => {
-		renderer.setParameterValue(id, value);
-	});
 }
 
 export function StageWindow() {
@@ -122,10 +113,13 @@ export function StageWindow() {
 				modelPath,
 				autoFit: true,
 			});
-			applyInitialModelState(modelPath, renderer);
 			renderer.setEyeMode(eyeModeRef.current);
 			const savedZoom = loadZoom();
 			if (savedZoom !== 1) renderer.setZoom(savedZoom);
+			const rememberedExpression = loadModelExpression(modelPath);
+			if (rememberedExpression) {
+				await renderer.setExpression(rememberedExpression);
+			}
 			setLoadStatus("ok");
 			log.info(`model loaded: ${modelPath}`);
 
@@ -154,10 +148,13 @@ export function StageWindow() {
 
 		try {
 			await renderer.switchModel(modelPath);
-			applyInitialModelState(modelPath, renderer);
 			renderer.setEyeMode(eyeModeRef.current);
 			const savedZoom = loadZoom();
 			if (savedZoom !== 1) renderer.setZoom(savedZoom);
+			const rememberedExpression = loadModelExpression(modelPath);
+			if (rememberedExpression) {
+				await renderer.setExpression(rememberedExpression);
+			}
 			setLoadStatus("ok");
 			log.info(`model switched: ${modelPath}`);
 
@@ -232,7 +229,12 @@ export function StageWindow() {
 				}
 				break;
 			case "set-expression":
-				rendererRef.current?.setExpression(cmd.expressionName);
+				if (rendererRef.current) {
+					const ok = await rendererRef.current.setExpression(cmd.expressionName);
+					if (ok) {
+						saveModelExpression(currentModelPath.current, cmd.expressionName);
+					}
+				}
 				break;
 			case "set-scale-lock":
 				setScaleLocked(cmd.locked);
