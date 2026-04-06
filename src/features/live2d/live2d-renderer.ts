@@ -61,7 +61,6 @@ export class Live2DRenderer {
 	private mouthTarget = 0;
 	private mouthCurrent = 0;
 	private lipSyncHandler: (() => void) | null = null;
-	private forcedParameterHandler: (() => void) | null = null;
 	private forcedParameters = new Map<string, number>();
 
 	// 眼神模式——默认 fixed，由外部通过 setEyeMode() 激活
@@ -144,11 +143,7 @@ export class Live2DRenderer {
 		if (this.lipSyncHandler && this.model) {
 			try { this.model.internalModel?.off("beforeModelUpdate", this.lipSyncHandler); } catch { /* */ }
 		}
-		if (this.forcedParameterHandler && this.model) {
-			try { this.model.internalModel?.off("afterMotionUpdate", this.forcedParameterHandler); } catch { /* */ }
-		}
 		this.lipSyncHandler = null;
-		this.forcedParameterHandler = null;
 		if (this.model) {
 			try {
 				this.app.stage.removeChild(this.model);
@@ -337,13 +332,7 @@ export class Live2DRenderer {
 				this.model.internalModel?.off("beforeModelUpdate", this.lipSyncHandler);
 			} catch { /* */ }
 		}
-		if (this.forcedParameterHandler && this.model) {
-			try {
-				this.model.internalModel?.off("afterMotionUpdate", this.forcedParameterHandler);
-			} catch { /* */ }
-		}
 		this.lipSyncHandler = null;
-		this.forcedParameterHandler = null;
 		if (this.model) {
 			try { this.model.destroy(); } catch { /* */ }
 			this.model = null;
@@ -429,17 +418,6 @@ export class Live2DRenderer {
 
 		this.lipSyncHandler = handler;
 		this.model.internalModel.on("beforeModelUpdate", handler);
-		const forcedHandler = () => {
-			if (!this.model || this.forcedParameters.size === 0) return;
-			try {
-				const coreModel = this.model.internalModel?.coreModel;
-				this.forcedParameters.forEach((value, id) => {
-					coreModel?.setParameterValueById?.(id, value, 1.0);
-				});
-			} catch { /* */ }
-		};
-		this.forcedParameterHandler = forcedHandler;
-		this.model.internalModel.on("afterMotionUpdate", forcedHandler);
 	}
 
 	private fitModel(canvasW: number, canvasH: number) {
