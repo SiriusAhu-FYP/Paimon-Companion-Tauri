@@ -113,6 +113,27 @@ export function ControlPanel() {
 		await mockVoicePipeline(bus, runtime);
 	}, []);
 
+	const handleExpressionTimeoutChange = useCallback((rawValue: string) => {
+		const parsed = Number(rawValue);
+		const nextValue = Number.isFinite(parsed)
+			? Math.max(5, Math.min(600, Math.round(parsed)))
+			: DEFAULT_CONFIG.character.expressionIdleTimeoutSeconds;
+
+		setConfig((current) => ({
+			...current,
+			character: {
+				...current.character,
+				expressionIdleTimeoutSeconds: nextValue,
+			},
+		}));
+	}, []);
+
+	const persistExpressionTimeout = useCallback(async () => {
+		const { character } = getServices();
+		character.setExpressionIdleTimeoutSeconds(config.character.expressionIdleTimeoutSeconds);
+		await updateConfig({ character: { ...config.character } });
+	}, [config.character]);
+
 	return (
 		<PanelRoot title="控制面板">
 			<PanelCard>
@@ -165,6 +186,21 @@ export function ControlPanel() {
 				</Select>
 				<Typography variant="body2">情绪：{emotion}</Typography>
 				<Typography variant="body2">说话中：{isSpeaking ? "是" : "否"}</Typography>
+				<Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 1 }}>
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>表情回闲置时间</Typography>
+					<HelpTooltip title="非 neutral 表情在没有新的情绪事件时，等待多久自动回到 idle。默认 60 秒。" />
+				</Stack>
+				<TextField
+					size="small"
+					type="number"
+					sx={{ width: 140, mt: 0.5 }}
+					value={config.character.expressionIdleTimeoutSeconds}
+					placeholder="60"
+					onChange={(event) => handleExpressionTimeoutChange(event.target.value)}
+					onBlur={persistExpressionTimeout}
+					inputProps={{ min: 5, max: 600, step: 5 }}
+					helperText="默认 60 秒"
+				/>
 			</PanelCard>
 
 			<Divider />

@@ -25,6 +25,7 @@ async function bootstrap() {
 		} else {
 			mockCharacterInit(services.character);
 		}
+		services.character.setExpressionIdleTimeoutSeconds(charCfg.expressionIdleTimeoutSeconds);
 		services.character.setActiveModel(DEFAULT_MODEL.path);
 		exposeMockTools(services.bus, services.character, services.runtime);
 

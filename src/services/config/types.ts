@@ -109,6 +109,8 @@ export interface CharacterSettingsConfig {
 	activeProfileId: string;
 	/** 用户自定义附加人设，拼入 system prompt（优先级低于卡内 system_prompt / persona） */
 	customPersona: string;
+	/** 非 neutral 表情在没有新的情绪更新时自动回归 neutral 的等待秒数 */
+	expressionIdleTimeoutSeconds: number;
 	behaviorConstraints: BehaviorConstraintsConfig;
 }
 
@@ -179,6 +181,7 @@ export const DEFAULT_CONFIG: AppConfig = {
 	character: {
 		activeProfileId: "",
 		customPersona: "你是旅行者的好伙伴派蒙，说话活泼可爱，喜欢吃东西。",
+		expressionIdleTimeoutSeconds: 60,
 		behaviorConstraints: {
 			enabled: true,
 			maxReplyLength: 150,
