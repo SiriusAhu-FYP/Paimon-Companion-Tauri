@@ -12,7 +12,7 @@ import type { EyeMode } from "@/features/live2d";
 import { createLogger } from "@/services/logger";
 import {
 	saveZoom, loadZoom,
-	loadModelExpression, saveModelExpression,
+	loadModelExpression, saveModelExpression, clearModelExpression,
 } from "@/utils/stage-storage";
 
 const log = createLogger("stage-window");
@@ -119,12 +119,15 @@ export function StageWindow() {
 				modelPath,
 				autoFit: true,
 			});
+			renderer.resetExpression();
 			renderer.setEyeMode(eyeModeRef.current);
 			const savedZoom = loadZoom();
 			if (savedZoom !== 1) renderer.setZoom(savedZoom);
 			const rememberedExpression = loadModelExpression(modelPath);
 			if (rememberedExpression && !isBlockedExpression(rememberedExpression)) {
 				await renderer.setExpression(rememberedExpression);
+			} else if (rememberedExpression) {
+				clearModelExpression(modelPath);
 			}
 			setLoadStatus("ok");
 			log.info(`model loaded: ${modelPath}`);
@@ -154,12 +157,15 @@ export function StageWindow() {
 
 		try {
 			await renderer.switchModel(modelPath);
+			renderer.resetExpression();
 			renderer.setEyeMode(eyeModeRef.current);
 			const savedZoom = loadZoom();
 			if (savedZoom !== 1) renderer.setZoom(savedZoom);
 			const rememberedExpression = loadModelExpression(modelPath);
 			if (rememberedExpression && !isBlockedExpression(rememberedExpression)) {
 				await renderer.setExpression(rememberedExpression);
+			} else if (rememberedExpression) {
+				clearModelExpression(modelPath);
 			}
 			setLoadStatus("ok");
 			log.info(`model switched: ${modelPath}`);
@@ -236,9 +242,12 @@ export function StageWindow() {
 				break;
 			case "set-expression":
 				if (isBlockedExpression(cmd.expressionName)) {
+					rendererRef.current?.resetExpression();
+					clearModelExpression(currentModelPath.current);
 					break;
 				}
 				if (rendererRef.current) {
+					rendererRef.current.resetExpression();
 					const ok = await rendererRef.current.setExpression(cmd.expressionName);
 					if (ok) {
 						saveModelExpression(currentModelPath.current, cmd.expressionName);
