@@ -103,6 +103,12 @@ P1 close-out:
     - [ ] verify companion behavior, expression, speech, and functional execution together
     - [ ] define the accepted post-fusion baseline
 
+Cross-cutting rule during `P2` and later:
+
+- when work touches runtime-owned frontend modules that are already better suited to the backend, migrate that slice during the same implementation pass where practical
+- current definite migration targets are recorded in `docs/architecture/runtime-backend-migration.md`
+- each migration must be followed by a focused manual regression check before it is treated as accepted
+
 - [-] P3: Expansion After Fusion
   - [-] Minecraft transfer
     gated until `P2` source fusion is accepted
