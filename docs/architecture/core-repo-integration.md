@@ -31,7 +31,9 @@ Before any new game transfer work is treated as mainline:
 - current Tauri repo already has a validated `2048` action loop
 - current implementation is not a literal `FastMCP` copy of the MVP
 - full scope mapping still needs to be documented
-- immediate next fusion task is the companion expression / motion protocol, not full game pluginization yet
+- `Sokoban` remains in scope because it is a faster reasoning-quality validation game than many open-world tasks
+- the next `LLMPlay-MVP` fusion step is to recover semantic game control, stronger reflection, and prompt-template discipline
+- future direction is still MCP, but with game semantics exposed above raw key/mouse steps
 
 `VoiceL2D-MVP`
 
@@ -44,6 +46,7 @@ Before any new game transfer work is treated as mainline:
 - current Tauri repo already has window capture and screenshot-driven decision making
 - the original project’s broader video-understanding pipeline is not yet fully represented
 - reusable pipeline/evaluation pieces still need explicit audit and migration decisions
+- the intended direction is local fast VLM descriptions plus cloud temporal summarization, not cloud-only frame-by-frame reasoning
 
 ## Accepted Interpretation Rule
 

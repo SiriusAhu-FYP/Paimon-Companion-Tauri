@@ -85,14 +85,19 @@ P1 close-out:
     - [ ] migrate the accepted expression-control path toward a formal MCP-facing contract
     - [ ] keep motion as an optional enhancement rather than the current acceptance gate
   - [ ] P2.4 `LLMPlay-MVP` Completion
-    - [ ] confirm the `2048` command-to-action loop fully covers the intended MVP scope
-    - [ ] decide which `LLMPlay-MVP` concepts are intentionally reimplemented instead of copied literally
-    - [ ] decide how much of the future game-plugin protocol belongs in the core runtime versus per-game config
+    - [ ] keep `Sokoban` in scope as the second reasoning-oriented validation game
+    - [ ] define a shared game prompt template (`example.md`) before rewriting per-game prompts
+    - [ ] replace the current weak reflection/history loop with a stronger decision-history design derived from `LLMPlay-MVP`
+    - [ ] define an MCP-facing semantic action contract so the model can call game actions without relying on rigid visible reply formatting
+    - [ ] decide which gameplay semantics belong in core MCP tools and which belong in per-game config/plugins
     - [ ] either merge the missing MVP capabilities or explicitly retire them in docs
   - [ ] P2.5 `Video-Understanding-MVP` Completion
-    - [ ] decide which video-understanding pipeline pieces belong in the Tauri runtime
+    - [ ] define the local-fast / cloud-summarize companion runtime around `Qwen3-VL-2B-Instruct` style local frame descriptions plus cloud temporal reasoning
+    - [ ] start from `8-10s` rolling local-description windows and preserve at least the latest `1min` of summary context
     - [ ] integrate the missing reusable perception pieces that are still required
     - [ ] carry over the relevant evaluation/benchmark logic where it still serves the product goal
+    - [-] add no-progress escalation and selected-frame cloud rescue
+      deferred: keep this as a future optimization path, not a current implementation gate
   - [ ] P2.6 Post-Fusion Validation
     - [ ] verify that all three source lines coexist in one Tauri runtime
     - [ ] verify companion behavior, expression, speech, and functional execution together
@@ -117,6 +122,7 @@ P2 note:
 - the current `Unified Run` path is useful groundwork, but it is not by itself proof that source-repo fusion is complete
 - the first-pass fusion matrix is recorded in `docs/architecture/source-fusion-audit.md`
 - the ASR restoration strategy is recorded in `docs/architecture/asr-migration-strategy.md`
+- the companion runtime direction is recorded in `docs/architecture/companion-runtime.md`
 - accepted `P2.2` baseline: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D response
 - cloud ASR providers remain configured options, but they are not part of the accepted `P2.2` live-validation baseline
 - `P2.3` is intentionally about companion expression / motion protocol first, not about full game-plugin protocol yet
