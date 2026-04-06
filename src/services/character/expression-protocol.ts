@@ -1,5 +1,10 @@
 import type { CharacterExpressionMap, CompanionEmotion } from "@/types";
 
+export interface CharacterMotionCandidate {
+	motionGroup: string;
+	index: number;
+}
+
 export const COMPANION_EMOTIONS: CompanionEmotion[] = [
 	"neutral",
 	"happy",
@@ -36,6 +41,16 @@ export const MODEL_EXPRESSION_PROTOCOLS: Record<string, CharacterExpressionMap> 
 	},
 };
 
+export const MODEL_MOTION_PROTOCOLS: Record<string, Partial<Record<CompanionEmotion, CharacterMotionCandidate[]>>> = {
+	[BUNNY_MODEL]: {
+		happy: [{ motionGroup: "Custom", index: 0 }],
+		delighted: [{ motionGroup: "Custom", index: 0 }],
+		angry: [{ motionGroup: "Custom", index: 1 }],
+		alarmed: [{ motionGroup: "Custom", index: 1 }],
+		dazed: [{ motionGroup: "Custom", index: 1 }],
+	},
+};
+
 export function isCompanionEmotion(value: string): value is CompanionEmotion {
 	return COMPANION_EMOTIONS.includes(value as CompanionEmotion);
 }
@@ -69,6 +84,29 @@ export function pickExpressionCandidate(candidates: string[], exclude?: string |
 
 	const eligible = exclude
 		? candidates.filter((candidate) => candidate !== exclude)
+		: candidates;
+	const pool = eligible.length > 0 ? eligible : candidates;
+	const index = Math.floor(Math.random() * pool.length);
+	return pool[index] ?? null;
+}
+
+export function resolveMotionCandidates(
+	activeModel: string | null,
+	emotion: string,
+): CharacterMotionCandidate[] {
+	if (!activeModel || !isCompanionEmotion(emotion)) return [];
+	return [...(MODEL_MOTION_PROTOCOLS[activeModel]?.[emotion] ?? [])];
+}
+
+export function pickMotionCandidate(
+	candidates: CharacterMotionCandidate[],
+	exclude?: CharacterMotionCandidate | null,
+): CharacterMotionCandidate | null {
+	if (candidates.length === 0) return null;
+
+	const eligible = exclude
+		? candidates.filter((candidate) =>
+			candidate.motionGroup !== exclude.motionGroup || candidate.index !== exclude.index)
 		: candidates;
 	const pool = eligible.length > 0 ? eligible : candidates;
 	const index = Math.floor(Math.random() * pool.length);

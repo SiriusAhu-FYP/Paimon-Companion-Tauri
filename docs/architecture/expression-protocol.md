@@ -9,9 +9,9 @@ This pass is intentionally narrow:
 - define a small, distinct emotion vocabulary
 - let each emotion map to multiple candidate expressions
 - randomize within those candidates at runtime
-- keep motion selection out of scope for now
+- allow optional per-model motion candidates where the model actually exposes motions
 
-The protocol currently controls `LLM/runtime -> emotion -> Live2D expression`.
+The protocol currently controls `LLM/runtime -> emotion -> Live2D expression/motion`.
 
 ## Emotion Set
 
@@ -58,11 +58,29 @@ Design rule:
 | `alarmed` | `Crazy`, `perspire` |
 | `dazed` | `Silly`, `perspire`, `Sluggish` |
 
+## First-Pass Motion Mapping
+
+### `paimengVts`
+
+- no mapped motions yet
+- current model file does not declare reusable motion groups
+
+### `英伦兔兔`
+
+| Emotion | Candidate motions |
+|---|---|
+| `happy` | `Custom[0]` |
+| `delighted` | `Custom[0]` |
+| `angry` | `Custom[1]` |
+| `alarmed` | `Custom[1]` |
+| `dazed` | `Custom[1]` |
+
 ## Notes
 
 - This is a model-aware protocol. The same emotion can map to different expression names on different models.
 - Randomization only happens inside one emotion bucket. It does not change the emotion selected by LLM/runtime.
+- Motion is optional. If the current model has no mapped motion candidates, the protocol falls back to expression-only behavior.
 - Repeated triggers of the same emotion try to select a different candidate first. If no alternative exists, the current expression is kept and only the timer is refreshed.
 - Non-`neutral` expressions auto-reset back to `neutral` after 60 seconds without a newer expression trigger.
 - The bunny model still behaves more like a compositional expression set than a pure one-expression model. The current protocol keeps it on single-expression candidates for simplicity.
-- Motion selection should be added later as another layer on top of the same emotion vocabulary, not as a separate incompatible system.
+- Motion still uses a coarse first-pass mapping. It should be refined after live validation confirms which bunny motions actually read as intended.

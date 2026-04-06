@@ -45,6 +45,9 @@ async function bootstrap() {
 			broadcastFullState(payload.emotion);
 			broadcastControl({ type: "set-expression", expressionName: payload.expressionName });
 		});
+		services.bus.on("character:motion", (payload) => {
+			broadcastControl({ type: "set-motion", motionGroup: payload.motionGroup, index: payload.index });
+		});
 
 		onControlCommand((cmd) => {
 			if (cmd.type === "request-state") {

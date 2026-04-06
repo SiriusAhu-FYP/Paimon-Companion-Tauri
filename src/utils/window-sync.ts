@@ -36,6 +36,7 @@ export type ControlCommand =
 	| { type: "sync-state"; state: StageState }
 	| { type: "set-model"; modelPath: string }
 	| { type: "set-expression"; expressionName: string }
+	| { type: "set-motion"; motionGroup: string; index: number }
 	| { type: "report-expressions"; expressions: string[] }
 	| { type: "set-scale-lock"; locked: boolean }
 	| { type: "set-eye-mode"; mode: EyeMode }
