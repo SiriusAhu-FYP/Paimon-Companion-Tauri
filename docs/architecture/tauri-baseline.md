@@ -17,10 +17,11 @@ The current product/mainline task is to fully fuse the functional heritage of th
 
 That means new game transfer work is not the immediate next priority until the three-source fusion is audited and validated.
 
-The immediate next priority inside that fusion work is narrower still:
+The immediate next priority inside that fusion work has now shifted:
 
-- formalize the companion expression / motion protocol first
-- defer general game-plugin protocol design until after that layer is settled
+- accept the current expression-linkage baseline from `P2.3`
+- use it as one part of a broader MCP-facing companion/game runtime
+- fold in `LLMPlay-MVP` semantic control and `Video-Understanding-MVP` local/cloud perception design
 
 ## Core Shape
 
@@ -28,6 +29,8 @@ The immediate next priority inside that fusion work is narrower still:
 - TypeScript services for orchestration and runtime logic
 - React UI for companion presentation, controls, and inspection
 - external model services over HTTP/SSE when needed
+
+The long-term external control boundary should be MCP.
 
 ## Responsibility Split
 
@@ -102,14 +105,49 @@ What it does not yet have as a fully accepted protocol:
 - a stable action vocabulary for motion selection
 - a reusable contract that cleanly separates companion expression actions from future game-control actions
 
-That protocol layer is now the explicit focus of `P2.3`.
+That protocol layer has now reached an accepted first-pass baseline in `P2.3`.
 
 The current first implementation pass of `P2.3` should stay narrow:
 
 - emotion categories stay semantically distinct instead of overfitting model-specific expression names
 - current protocol target set: `neutral`, `happy`, `angry`, `sad`, `delighted`, `alarmed`, `dazed`
 - each model may offer multiple expression candidates for one category, with runtime random selection
-- motion remains a later extension of the same protocol rather than part of the first cut
+- motion remains secondary to expression linkage in the current acceptance baseline
+
+Future direction:
+
+- the expression-control path should be formalized as MCP
+- the same MCP boundary should later carry gameplay actions as well
+
+## Companion Runtime Direction
+
+The intended runtime direction now follows the broad pattern already explored in `Video-Understanding-MVP`:
+
+1. local fast visual descriptions
+2. rolling description queue
+3. cloud temporal reasoning
+4. MCP tool calls for companion and gameplay actions
+
+Current design target:
+
+- local VLM runs in WSL or another low-latency Linux node
+- local model baseline should be aligned with `Qwen3-VL-2B-Instruct` style fast image description
+- rolling summary windows should start from `8-10s`
+- the runtime should preserve at least the latest `1min` of summarized context
+
+The local VLM is not the final reasoning authority.
+
+Its job is to keep the companion perceptive at low latency.
+
+The cloud model is responsible for:
+
+- temporal understanding
+- companion reply generation
+- MCP tool usage when expression or gameplay actions are needed
+
+Reference:
+
+- `docs/architecture/companion-runtime.md`
 
 ## ASR Direction
 
@@ -174,3 +212,5 @@ This fits tasks such as:
 Reference:
 
 - `docs/architecture/game-task-templates.md`
+
+The longer-term goal is to evolve these helpers into MCP-facing semantic game actions, where per-game config maps actions such as `open_inventory` to host-level execution details.

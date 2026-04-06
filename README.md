@@ -34,12 +34,10 @@ What the baseline does not yet prove:
 
 Current next-step priority:
 
-- `P2.3` now focuses first on a companion expression / motion protocol
-- game-plugin protocol work is intentionally deferred until after that layer is settled
-- a first-pass emotion taxonomy is now being landed around `neutral`, `happy`, `angry`, `sad`, `delighted`, `alarmed`, and `dazed`, with randomized per-model expression candidates
-- that same first-pass protocol now also supports optional per-model motion candidates when the active model exposes reusable motions
+- `P2.3` has established the current expression-linkage baseline
+- the next design focus is `P2.4`: bring `LLMPlay-MVP` back in through MCP-facing semantic game control, stronger reflection, and prompt/template cleanup
 - current accepted result: companion replies can already drive model-aware Live2D expression changes
-- future target: formalize that expression-control path as MCP rather than leave it as an internal-only bridge
+- future target: formalize both companion-expression control and gameplay control through MCP rather than leave them as internal-only bridges
 
 ## UI
 
@@ -84,7 +82,9 @@ cargo check --manifest-path src-tauri/Cargo.toml
 - The current local bilingual ASR baseline is practical for both Chinese and English, but mixed-language recognition is still effectively resolved one utterance at a time rather than as robust intra-sentence code-switching.
 - The currently accepted `P2.2` live voice baseline is local-only: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D reaction.
 - Cloud ASR providers remain supported configuration options, but they are not yet part of the accepted live-validation baseline.
-- The next fusion step is not general game pluginization yet; it is to formalize how LLM or runtime output selects character emotion, expression, and motion in a reusable protocol.
+- The next fusion step is to formalize an MCP-facing runtime where local VLM perception, cloud reasoning, companion expression control, and semantic gameplay actions can coexist without a rigid visible reply format.
+- The runtime direction follows `Video-Understanding-MVP`: local fast descriptions first, rolling summary queue second, cloud reasoning third.
+- Production tuning should start from an `8-10s` local description window and preserve at least the latest `1min` of summarized context.
 - The functional path intentionally excludes knowledge retrieval / embedding / rerank due to latency sensitivity.
 - The current host input model is foreground-oriented and does not guarantee coexistence with user typing or IME composition.
 - New game transfer work is gated behind source-repository fusion and validation.
