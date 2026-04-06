@@ -64,8 +64,13 @@ export function resolveEmotionCandidates(
 	return [emotion];
 }
 
-export function pickExpressionCandidate(candidates: string[]): string | null {
+export function pickExpressionCandidate(candidates: string[], exclude?: string | null): string | null {
 	if (candidates.length === 0) return null;
-	const index = Math.floor(Math.random() * candidates.length);
-	return candidates[index] ?? null;
+
+	const eligible = exclude
+		? candidates.filter((candidate) => candidate !== exclude)
+		: candidates;
+	const pool = eligible.length > 0 ? eligible : candidates;
+	const index = Math.floor(Math.random() * pool.length);
+	return pool[index] ?? null;
 }

@@ -5,6 +5,7 @@ import { loadCharacterProfilesFromPublic } from "./character-cards";
 import { pickExpressionCandidate, resolveEmotionCandidates } from "./expression-protocol";
 
 const log = createLogger("character");
+const EXPRESSION_IDLE_TIMEOUT_MS = 60_000;
 
 /**
  * 角色状态真源：当前档案、表情/说话状态、可用角色卡列表。
@@ -14,6 +15,8 @@ export class CharacterService {
 	private profile: CharacterProfile | null = null;
 	private catalog: CharacterProfile[] = [];
 	private bus: EventBus;
+	private lastExpressionName: string | null = null;
+	private expressionResetTimer: ReturnType<typeof setTimeout> | null = null;
 
 	constructor(bus: EventBus) {
 		this.bus = bus;
@@ -60,6 +63,8 @@ export class CharacterService {
 		this.profile = { ...profile };
 		this.state.characterId = profile.id;
 		this.state.emotion = profile.defaultEmotion;
+		this.lastExpressionName = null;
+		this.clearExpressionResetTimer();
 		log.info(`loaded character profile: ${profile.name} (${profile.id})`);
 		this.notifyStateChange();
 	}
@@ -73,18 +78,31 @@ export class CharacterService {
 
 	setEmotion(emotion: string) {
 		const emotionChanged = emotion !== this.state.emotion;
-		this.state.emotion = emotion;
 		const candidates = resolveEmotionCandidates(
 			this.state.activeModel,
 			this.profile?.expressionMap,
 			emotion,
 		);
-		const expressionName = pickExpressionCandidate(candidates) ?? emotion;
+		const previousExpression = !emotionChanged ? this.lastExpressionName : null;
+		const expressionName = pickExpressionCandidate(candidates, previousExpression) ?? emotion;
 
+		if (!emotionChanged && previousExpression && expressionName === previousExpression) {
+			this.scheduleExpressionReset(emotion);
+			log.info(`emotion timer refreshed: ${emotion}`, {
+				activeModel: this.state.activeModel,
+				expressionName,
+				candidateCount: candidates.length,
+			});
+			return;
+		}
+
+		this.state.emotion = emotion;
+		this.lastExpressionName = expressionName;
 		this.bus.emit("character:expression", { emotion, expressionName });
 		if (emotionChanged) {
 			this.notifyStateChange();
 		}
+		this.scheduleExpressionReset(emotion);
 		log.info(`emotion → ${emotion}`, {
 			activeModel: this.state.activeModel,
 			expressionName,
@@ -104,5 +122,23 @@ export class CharacterService {
 			emotion: this.state.emotion,
 			isSpeaking: this.state.isSpeaking,
 		});
+	}
+
+	private scheduleExpressionReset(emotion: string) {
+		this.clearExpressionResetTimer();
+		if (emotion === "neutral") return;
+
+		this.expressionResetTimer = setTimeout(() => {
+			this.expressionResetTimer = null;
+			this.lastExpressionName = null;
+			this.setEmotion("neutral");
+		}, EXPRESSION_IDLE_TIMEOUT_MS);
+	}
+
+	private clearExpressionResetTimer() {
+		if (this.expressionResetTimer) {
+			clearTimeout(this.expressionResetTimer);
+			this.expressionResetTimer = null;
+		}
 	}
 }
