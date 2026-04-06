@@ -2,6 +2,12 @@
 
 This document records the first implementation pass of the `P2.3` companion expression protocol.
 
+Current acceptance boundary:
+
+- companion replies can already drive model-aware Live2D expression changes
+- motion is present only as a non-blocking enhancement
+- future architecture should expose this control path through MCP, not leave it as an app-internal contract only
+
 ## Scope
 
 This pass is intentionally narrow:
@@ -12,6 +18,12 @@ This pass is intentionally narrow:
 - allow optional per-model motion candidates where the model actually exposes motions
 
 The protocol currently controls `LLM/runtime -> emotion -> Live2D expression/motion`.
+
+For the current phase, the most important part is still:
+
+- `LLM/runtime -> emotion -> Live2D expression`
+
+The motion branch should be treated as optional until it is better validated.
 
 ## Emotion Set
 

@@ -81,8 +81,9 @@ P1 close-out:
   - [ ] P2.3 Companion Expression Protocol
     - [x] define a first-pass emotion taxonomy and randomized per-model expression candidate mapping
     - [x] extend the same protocol to first-pass motion selection where models expose reusable motions
-    - [ ] separate accepted expression actions from future game-control actions
-    - [ ] validate that companion replies can consistently drive visible Live2D behavior through this protocol
+    - [x] validate that companion replies can consistently drive visible Live2D expression changes through this protocol
+    - [ ] migrate the accepted expression-control path toward a formal MCP-facing contract
+    - [ ] keep motion as an optional enhancement rather than the current acceptance gate
   - [ ] P2.4 `LLMPlay-MVP` Completion
     - [ ] confirm the `2048` command-to-action loop fully covers the intended MVP scope
     - [ ] decide which `LLMPlay-MVP` concepts are intentionally reimplemented instead of copied literally
@@ -120,3 +121,5 @@ P2 note:
 - cloud ASR providers remain configured options, but they are not part of the accepted `P2.2` live-validation baseline
 - `P2.3` is intentionally about companion expression / motion protocol first, not about full game-plugin protocol yet
 - the first pass of `P2.3` should stay semantically small and distinct: `neutral`, `happy`, `angry`, `sad`, `delighted`, `alarmed`, `dazed`
+- current accepted `P2.3` sub-baseline: companion replies can already drive model-aware Live2D expression changes
+- future architecture requirement: this expression-control path should ultimately be exposed through MCP rather than remain an internal-only control contract
