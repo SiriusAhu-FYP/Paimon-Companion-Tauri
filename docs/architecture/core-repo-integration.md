@@ -31,12 +31,13 @@ Before any new game transfer work is treated as mainline:
 - current Tauri repo already has a validated `2048` action loop
 - current implementation is not a literal `FastMCP` copy of the MVP
 - full scope mapping still needs to be documented
+- immediate next fusion task is the companion expression / motion protocol, not full game pluginization yet
 
 `VoiceL2D-MVP`
 
 - current Tauri repo already has Live2D, LLM, TTS, chat, and expression control
-- real microphone / VAD / ASR behavior is not yet restored as an accepted baseline
-- current voice entry is still testing-oriented manual/mock input
+- local microphone / VAD / `local-sherpa` ASR / GPT-SoVITS / Live2D response is now an accepted live baseline
+- remaining open work is protocol quality and cloud-path validation, not basic voice restoration
 
 `Video-Understanding-MVP`
 

@@ -16,4 +16,5 @@ Current state:
 - `P1 Functional Core Validation` is complete on `main`
 - `P2` has been refocused to full source-repository fusion before any new game transfer
 - `P2.2` has now accepted a local live-validation baseline: `local-sherpa` microphone input plus `GPT-SoVITS` output and Live2D response
+- `P2.3` is now scoped first around companion expression / motion protocol, with game-plugin protocol work deferred to a later step
 - the functional desktop workflow now lives under the dedicated `功能实验` panel

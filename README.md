@@ -32,6 +32,11 @@ What the baseline does not yet prove:
 - full migration of `Video-Understanding-MVP` pipeline/evaluation capabilities
 - full post-fusion validation across all three source lines
 
+Current next-step priority:
+
+- `P2.3` now focuses first on a companion expression / motion protocol
+- game-plugin protocol work is intentionally deferred until after that layer is settled
+
 ## UI
 
 The desktop UI is currently split into:
@@ -75,6 +80,7 @@ cargo check --manifest-path src-tauri/Cargo.toml
 - The current local bilingual ASR baseline is practical for both Chinese and English, but mixed-language recognition is still effectively resolved one utterance at a time rather than as robust intra-sentence code-switching.
 - The currently accepted `P2.2` live voice baseline is local-only: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D reaction.
 - Cloud ASR providers remain supported configuration options, but they are not yet part of the accepted live-validation baseline.
+- The next fusion step is not general game pluginization yet; it is to formalize how LLM or runtime output selects character emotion, expression, and motion in a reusable protocol.
 - The functional path intentionally excludes knowledge retrieval / embedding / rerank due to latency sensitivity.
 - The current host input model is foreground-oriented and does not guarantee coexistence with user typing or IME composition.
 - New game transfer work is gated behind source-repository fusion and validation.
