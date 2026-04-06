@@ -95,6 +95,24 @@ export function MainWindow() {
 		debouncedSync();
 	}, [debouncedSync]);
 
+	useEffect(() => {
+		if (stageMode !== "docked" || !stageVisible) return;
+
+		const handleMouseMove = (event: MouseEvent) => {
+			const rect = slotRectRef.current;
+			if (!rect) return;
+
+			const localX = event.clientX - rect.left;
+			const localY = event.clientY - rect.top;
+			if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) return;
+
+			broadcastControl({ type: "set-pointer", x: localX, y: localY });
+		};
+
+		window.addEventListener("mousemove", handleMouseMove);
+		return () => window.removeEventListener("mousemove", handleMouseMove);
+	}, [stageMode, stageVisible]);
+
 	// docked 跟随主窗口 move/resize
 	useEffect(() => {
 		if (stageMode !== "docked" || !stageVisible) {

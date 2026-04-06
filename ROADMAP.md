@@ -76,6 +76,8 @@ P1 close-out:
     - [x] bundle the default local ASR model route around `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16`
     - [x] restore microphone capture, VAD segmentation, and playback-time mic lock
     - [ ] validate voice -> LLM -> TTS -> Live2D end-to-end in the Tauri host
+    - [-] improve mixed-language recognition inside a single utterance
+      deferred: the current bilingual local ASR baseline is acceptable for Chinese or English utterances, but intra-sentence code-switching is not yet treated as a solved requirement
   - [ ] P2.3 `LLMPlay-MVP` Completion
     - [ ] confirm the `2048` command-to-action loop fully covers the intended MVP scope
     - [ ] decide which `LLMPlay-MVP` concepts are intentionally reimplemented instead of copied literally

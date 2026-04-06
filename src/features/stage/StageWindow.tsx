@@ -213,6 +213,9 @@ export function StageWindow() {
 			case "set-eye-mode":
 				setEyeMode(cmd.mode);
 				break;
+			case "set-pointer":
+				rendererRef.current?.focusMouse(cmd.x, cmd.y);
+				break;
 			case "set-size":
 				try {
 					await win.setSize(new LogicalSize(cmd.width, cmd.height));

@@ -38,6 +38,7 @@ export type ControlCommand =
 	| { type: "report-expressions"; expressions: string[] }
 	| { type: "set-scale-lock"; locked: boolean }
 	| { type: "set-eye-mode"; mode: EyeMode }
+	| { type: "set-pointer"; x: number; y: number }
 	| { type: "set-size"; width: number; height: number }
 	| { type: "reset-zoom" }
 	| { type: "set-passthrough"; enabled: boolean };
