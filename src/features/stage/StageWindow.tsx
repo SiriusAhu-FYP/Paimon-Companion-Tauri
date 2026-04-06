@@ -16,11 +16,17 @@ import {
 } from "@/utils/stage-storage";
 
 const log = createLogger("stage-window");
+const BLOCKED_EXPRESSIONS = new Set(["watermark", "水印"]);
+
+function isBlockedExpression(name: string | null | undefined): boolean {
+	return !!name && BLOCKED_EXPRESSIONS.has(name);
+}
 
 function resolveExpressionNames(modelPath: string, renderer: Live2DRenderer): string[] {
 	const reported = renderer.getExpressionNames();
-	if (reported.length > 0) return reported;
-	return MODEL_REGISTRY.find((model) => model.path === modelPath)?.expressionNames ?? [];
+	if (reported.length > 0) return reported.filter((name) => !isBlockedExpression(name));
+	return (MODEL_REGISTRY.find((model) => model.path === modelPath)?.expressionNames ?? [])
+		.filter((name) => !isBlockedExpression(name));
 }
 
 export function StageWindow() {
@@ -117,7 +123,7 @@ export function StageWindow() {
 			const savedZoom = loadZoom();
 			if (savedZoom !== 1) renderer.setZoom(savedZoom);
 			const rememberedExpression = loadModelExpression(modelPath);
-			if (rememberedExpression) {
+			if (rememberedExpression && !isBlockedExpression(rememberedExpression)) {
 				await renderer.setExpression(rememberedExpression);
 			}
 			setLoadStatus("ok");
@@ -152,7 +158,7 @@ export function StageWindow() {
 			const savedZoom = loadZoom();
 			if (savedZoom !== 1) renderer.setZoom(savedZoom);
 			const rememberedExpression = loadModelExpression(modelPath);
-			if (rememberedExpression) {
+			if (rememberedExpression && !isBlockedExpression(rememberedExpression)) {
 				await renderer.setExpression(rememberedExpression);
 			}
 			setLoadStatus("ok");
@@ -229,6 +235,9 @@ export function StageWindow() {
 				}
 				break;
 			case "set-expression":
+				if (isBlockedExpression(cmd.expressionName)) {
+					break;
+				}
 				if (rendererRef.current) {
 					const ok = await rendererRef.current.setExpression(cmd.expressionName);
 					if (ok) {
