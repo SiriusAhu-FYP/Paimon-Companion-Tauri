@@ -5,6 +5,7 @@ import type { RuntimeService } from "@/services/runtime";
 import { getServices } from "@/services";
 import { proxyRequest } from "@/services/config";
 import { createLogger } from "@/services/logger";
+import { DEFAULT_PROTOCOL_EXPRESSION_MAP } from "@/services/character/expression-protocol";
 
 const log = createLogger("mock");
 
@@ -18,13 +19,7 @@ export const MOCK_CHARACTER_PROFILE: CharacterProfile = {
 	messageExamples: "",
 	systemPrompt: "",
 	defaultEmotion: "neutral",
-	expressionMap: {
-		neutral: "exp_neutral",
-		happy: "exp_happy",
-		sad: "exp_sad",
-		angry: "exp_angry",
-		surprised: "exp_surprised",
-	},
+	expressionMap: DEFAULT_PROTOCOL_EXPRESSION_MAP,
 	source: "manual",
 };
 

@@ -104,6 +104,13 @@ What it does not yet have as a fully accepted protocol:
 
 That protocol layer is now the explicit focus of `P2.3`.
 
+The current first implementation pass of `P2.3` should stay narrow:
+
+- emotion categories stay semantically distinct instead of overfitting model-specific expression names
+- current protocol target set: `neutral`, `happy`, `angry`, `sad`, `delighted`, `alarmed`, `dazed`
+- each model may offer multiple expression candidates for one category, with runtime random selection
+- motion remains a later extension of the same protocol rather than part of the first cut
+
 ## ASR Direction
 
 For `VoiceL2D-MVP` restoration, ASR is not being forced into one implementation shape.

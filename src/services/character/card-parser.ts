@@ -1,4 +1,4 @@
-import type { CharacterProfile } from "@/types";
+import type { CharacterExpressionMap, CharacterProfile } from "@/types";
 
 /** SillyTavern chara_card_v2 根对象（最小字段） */
 export interface SillyTavernV2Card {
@@ -35,7 +35,7 @@ function mergePersona(description: string, personality: string): string {
  */
 export function parseSillyTavernV2ToProfile(
 	raw: unknown,
-	options: { sourceFile: string; defaultExpressionMap: Record<string, string> },
+	options: { sourceFile: string; defaultExpressionMap: CharacterExpressionMap },
 ): CharacterProfile {
 	const card = raw as SillyTavernV2Card;
 	if (card?.spec !== "chara_card_v2" || !card.data) {

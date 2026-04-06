@@ -14,6 +14,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import SaveIcon from "@mui/icons-material/Save";
 import { HelpTooltip } from "@/components";
 import { MODEL_REGISTRY, DEFAULT_MODEL } from "@/features/live2d";
+import { getServices } from "@/services";
 import {
 	broadcastControl, onControlCommand,
 	type StageDisplayMode, type ControlCommand, type EyeMode,
@@ -62,6 +63,7 @@ export function StageHost({
 	onAlwaysOnTopChange,
 	onDisplayModeChange,
 }: StageHostProps) {
+	const { character } = getServices();
 	const [scaleLocked, setScaleLocked] = useState(loadScaleLock);
 	const [eyeMode, setEyeMode] = useState<EyeMode>("random-path");
 	const [customPresets, setCustomPresets] = useState<SizePreset[]>(loadCustomPresets);
@@ -101,12 +103,17 @@ export function StageHost({
 		const path = event.target.value;
 		setSelectedModel(path);
 		setExpressions(getRegistryExpressions(path));
+		character.setActiveModel(path);
 		broadcastControl({ type: "set-model", modelPath: path });
-	}, []);
+	}, [character]);
 
 	useEffect(() => {
 		setExpressions((current) => (current.length > 0 ? current : getRegistryExpressions(selectedModel)));
 	}, [selectedModel]);
+
+	useEffect(() => {
+		character.setActiveModel(selectedModel);
+	}, [character, selectedModel]);
 
 	const handleExpression = useCallback((name: string) => {
 		broadcastControl({ type: "set-expression", expressionName: name });

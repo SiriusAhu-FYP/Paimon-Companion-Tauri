@@ -5,6 +5,7 @@ import { initServices } from "@/services";
 import { mockCharacterInit, exposeMockTools } from "@/utils/mock";
 import { broadcastState, broadcastControl, onControlCommand } from "@/utils/window-sync";
 import { windowLabel } from "@/utils/window-label";
+import { DEFAULT_MODEL } from "@/features/live2d";
 import { ThemeModeProvider } from "./contexts/JoyThemeProvider";
 import App from "./App";
 import "./App.css";
@@ -24,6 +25,7 @@ async function bootstrap() {
 		} else {
 			mockCharacterInit(services.character);
 		}
+		services.character.setActiveModel(DEFAULT_MODEL.path);
 		exposeMockTools(services.bus, services.character, services.runtime);
 
 		const broadcastFullState = (expressionEmotion?: string) => {

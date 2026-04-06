@@ -11,7 +11,13 @@ export type {
 } from "./evaluation";
 export type { RuntimeMode, RuntimeState } from "./runtime";
 export type { VoiceInputState, VoiceInputStatus } from "./voice";
-export type { CharacterProfile, CharacterProfileSource, CharacterState } from "./character";
+export type {
+	CharacterExpressionMap,
+	CharacterProfile,
+	CharacterProfileSource,
+	CharacterState,
+	CompanionEmotion,
+} from "./character";
 export type {
 	UnifiedRunPhase,
 	UnifiedRunTrigger,
