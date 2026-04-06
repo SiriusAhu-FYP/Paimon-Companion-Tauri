@@ -73,6 +73,7 @@ cargo check --manifest-path src-tauri/Cargo.toml
 - Accepted ASR families are currently `local-sherpa`, `volcengine`, and `aliyun`.
 - The default local ASR route is the bundled `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16` model.
 - `pnpm setup:local-asr` prepares both the local ASR model assets and the sherpa native archive needed by `cargo check`.
+- The current local bilingual ASR baseline is practical for both Chinese and English, but mixed-language recognition is still effectively resolved one utterance at a time rather than as robust intra-sentence code-switching.
 - The functional path intentionally excludes knowledge retrieval / embedding / rerank due to latency sensitivity.
 - The current host input model is foreground-oriented and does not guarantee coexistence with user typing or IME composition.
 - New game transfer work is gated behind source-repository fusion and validation.
