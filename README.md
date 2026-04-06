@@ -38,6 +38,8 @@ Current next-step priority:
 - game-plugin protocol work is intentionally deferred until after that layer is settled
 - a first-pass emotion taxonomy is now being landed around `neutral`, `happy`, `angry`, `sad`, `delighted`, `alarmed`, and `dazed`, with randomized per-model expression candidates
 - that same first-pass protocol now also supports optional per-model motion candidates when the active model exposes reusable motions
+- current accepted result: companion replies can already drive model-aware Live2D expression changes
+- future target: formalize that expression-control path as MCP rather than leave it as an internal-only bridge
 
 ## UI
 
