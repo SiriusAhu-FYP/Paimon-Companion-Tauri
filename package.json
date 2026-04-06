@@ -9,7 +9,7 @@
     "build": "pnpm setup:local-asr && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "kill-port": "powershell -Command \"$connections = Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue; if ($connections) { $connections | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }; exit 0\""
+    "kill-port": "powershell -Command \"$ports = 31420,31421; $connections = Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in $ports }; if ($connections) { $connections | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }; exit 0\""
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
