@@ -2,7 +2,13 @@ import type { CharacterProfile, CharacterState } from "@/types";
 import type { EventBus } from "@/services/event-bus";
 import { createLogger } from "@/services/logger";
 import { loadCharacterProfilesFromPublic } from "./character-cards";
-import { pickExpressionCandidate, resolveEmotionCandidates } from "./expression-protocol";
+import type { CharacterMotionCandidate } from "./expression-protocol";
+import {
+	pickExpressionCandidate,
+	pickMotionCandidate,
+	resolveEmotionCandidates,
+	resolveMotionCandidates,
+} from "./expression-protocol";
 
 const log = createLogger("character");
 const DEFAULT_EXPRESSION_IDLE_TIMEOUT_MS = 60_000;
@@ -16,6 +22,7 @@ export class CharacterService {
 	private catalog: CharacterProfile[] = [];
 	private bus: EventBus;
 	private lastExpressionName: string | null = null;
+	private lastMotion: CharacterMotionCandidate | null = null;
 	private expressionResetTimer: ReturnType<typeof setTimeout> | null = null;
 	private expressionIdleTimeoutMs = DEFAULT_EXPRESSION_IDLE_TIMEOUT_MS;
 
@@ -65,6 +72,7 @@ export class CharacterService {
 		this.state.characterId = profile.id;
 		this.state.emotion = profile.defaultEmotion;
 		this.lastExpressionName = null;
+		this.lastMotion = null;
 		this.clearExpressionResetTimer();
 		log.info(`loaded character profile: ${profile.name} (${profile.id})`);
 		this.notifyStateChange();
@@ -97,6 +105,8 @@ export class CharacterService {
 		);
 		const previousExpression = !emotionChanged ? this.lastExpressionName : null;
 		const expressionName = pickExpressionCandidate(candidates, previousExpression) ?? emotion;
+		const motionCandidates = resolveMotionCandidates(this.state.activeModel, emotion);
+		const motion = pickMotionCandidate(motionCandidates, !emotionChanged ? this.lastMotion : null);
 
 		if (!emotionChanged && previousExpression && expressionName === previousExpression) {
 			this.scheduleExpressionReset(emotion);
@@ -104,13 +114,18 @@ export class CharacterService {
 				activeModel: this.state.activeModel,
 				expressionName,
 				candidateCount: candidates.length,
+				motionCandidateCount: motionCandidates.length,
 			});
 			return;
 		}
 
 		this.state.emotion = emotion;
 		this.lastExpressionName = expressionName;
+		this.lastMotion = motion;
 		this.bus.emit("character:expression", { emotion, expressionName });
+		if (motion) {
+			this.bus.emit("character:motion", motion);
+		}
 		if (emotionChanged) {
 			this.notifyStateChange();
 		}
@@ -119,6 +134,8 @@ export class CharacterService {
 			activeModel: this.state.activeModel,
 			expressionName,
 			candidateCount: candidates.length,
+			motionGroup: motion?.motionGroup ?? null,
+			motionIndex: motion?.index ?? null,
 		});
 	}
 
@@ -143,6 +160,7 @@ export class CharacterService {
 		this.expressionResetTimer = setTimeout(() => {
 			this.expressionResetTimer = null;
 			this.lastExpressionName = null;
+			this.lastMotion = null;
 			this.setEmotion("neutral");
 		}, this.expressionIdleTimeoutMs);
 	}

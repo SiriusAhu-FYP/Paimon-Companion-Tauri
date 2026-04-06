@@ -260,6 +260,9 @@ export function StageWindow() {
 					}
 				}
 				break;
+			case "set-motion":
+				rendererRef.current?.playMotion(cmd.motionGroup, cmd.index);
+				break;
 			case "set-scale-lock":
 				setScaleLocked(cmd.locked);
 				break;

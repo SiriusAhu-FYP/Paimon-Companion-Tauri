@@ -80,7 +80,7 @@ P1 close-out:
       deferred: the current bilingual local ASR baseline is acceptable for Chinese or English utterances, but intra-sentence code-switching is not yet treated as a solved requirement
   - [ ] P2.3 Companion Expression Protocol
     - [x] define a first-pass emotion taxonomy and randomized per-model expression candidate mapping
-    - [ ] extend the same protocol to motion selection
+    - [x] extend the same protocol to first-pass motion selection where models expose reusable motions
     - [ ] separate accepted expression actions from future game-control actions
     - [ ] validate that companion replies can consistently drive visible Live2D behavior through this protocol
   - [ ] P2.4 `LLMPlay-MVP` Completion
