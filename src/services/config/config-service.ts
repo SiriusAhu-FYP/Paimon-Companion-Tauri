@@ -68,6 +68,8 @@ function normalizeCharacterSettings(
 	return {
 		activeProfileId: character.activeProfileId ?? DEFAULT_CONFIG.character.activeProfileId,
 		customPersona,
+		expressionIdleTimeoutSeconds:
+			character.expressionIdleTimeoutSeconds ?? DEFAULT_CONFIG.character.expressionIdleTimeoutSeconds,
 		behaviorConstraints: {
 			...DEFAULT_CONFIG.character.behaviorConstraints,
 			...(character.behaviorConstraints ?? {}),

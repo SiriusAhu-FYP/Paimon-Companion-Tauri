@@ -5,7 +5,7 @@ import { loadCharacterProfilesFromPublic } from "./character-cards";
 import { pickExpressionCandidate, resolveEmotionCandidates } from "./expression-protocol";
 
 const log = createLogger("character");
-const EXPRESSION_IDLE_TIMEOUT_MS = 60_000;
+const DEFAULT_EXPRESSION_IDLE_TIMEOUT_MS = 60_000;
 
 /**
  * 角色状态真源：当前档案、表情/说话状态、可用角色卡列表。
@@ -17,6 +17,7 @@ export class CharacterService {
 	private bus: EventBus;
 	private lastExpressionName: string | null = null;
 	private expressionResetTimer: ReturnType<typeof setTimeout> | null = null;
+	private expressionIdleTimeoutMs = DEFAULT_EXPRESSION_IDLE_TIMEOUT_MS;
 
 	constructor(bus: EventBus) {
 		this.bus = bus;
@@ -76,6 +77,17 @@ export class CharacterService {
 		log.info(`active model → ${modelPath ?? "none"}`);
 	}
 
+	setExpressionIdleTimeoutSeconds(seconds: number | null | undefined) {
+		const normalizedSeconds = Number.isFinite(seconds)
+			? Math.max(5, Math.min(600, Math.round(seconds as number)))
+			: DEFAULT_EXPRESSION_IDLE_TIMEOUT_MS / 1000;
+		this.expressionIdleTimeoutMs = normalizedSeconds * 1000;
+		log.info(`expression idle timeout → ${normalizedSeconds}s`);
+		if (this.state.emotion !== "neutral") {
+			this.scheduleExpressionReset(this.state.emotion);
+		}
+	}
+
 	setEmotion(emotion: string) {
 		const emotionChanged = emotion !== this.state.emotion;
 		const candidates = resolveEmotionCandidates(
@@ -132,7 +144,7 @@ export class CharacterService {
 			this.expressionResetTimer = null;
 			this.lastExpressionName = null;
 			this.setEmotion("neutral");
-		}, EXPRESSION_IDLE_TIMEOUT_MS);
+		}, this.expressionIdleTimeoutMs);
 	}
 
 	private clearExpressionResetTimer() {
