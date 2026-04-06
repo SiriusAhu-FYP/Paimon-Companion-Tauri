@@ -32,7 +32,7 @@ export const MODEL_REGISTRY: ModelInfo[] = [
 		name: "英伦兔兔",
 		path: "/Resources/Commercial_models/英伦兔兔/英伦兔兔.model3.json",
 		forcedParameters: [
-			{ id: "Param31", value: -1 },
+			{ id: "Param31", value: 0 },
 		],
 	},
 	{
