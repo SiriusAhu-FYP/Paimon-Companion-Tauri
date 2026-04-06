@@ -66,7 +66,7 @@ P1 close-out:
     - [x] map `Video-Understanding-MVP` features to the current Tauri codebase
     - [x] classify each capability as merged / partial / missing / replaced
     - [x] document the accepted replacement decisions where implementation shape has changed
-  - [ ] P2.2 `VoiceL2D-MVP` Completion
+  - [x] P2.2 `VoiceL2D-MVP` Completion
     - [x] define ASR migration strategy around pluggable providers instead of bundled desktop weights
     - [x] add ASR provider/profile configuration surface in settings
     - [x] restore a real voice-input path instead of manual/mock-only ASR
@@ -75,7 +75,7 @@ P1 close-out:
     - [x] align accepted ASR providers with the current product plan: `local-sherpa`, `volcengine`, `aliyun`
     - [x] bundle the default local ASR model route around `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16`
     - [x] restore microphone capture, VAD segmentation, and playback-time mic lock
-    - [ ] validate voice -> LLM -> TTS -> Live2D end-to-end in the Tauri host
+    - [x] validate voice -> LLM -> TTS -> Live2D end-to-end in the Tauri host
     - [-] improve mixed-language recognition inside a single utterance
       deferred: the current bilingual local ASR baseline is acceptable for Chinese or English utterances, but intra-sentence code-switching is not yet treated as a solved requirement
   - [ ] P2.3 `LLMPlay-MVP` Completion
@@ -110,3 +110,5 @@ P2 note:
 - the current `Unified Run` path is useful groundwork, but it is not by itself proof that source-repo fusion is complete
 - the first-pass fusion matrix is recorded in `docs/architecture/source-fusion-audit.md`
 - the ASR restoration strategy is recorded in `docs/architecture/asr-migration-strategy.md`
+- accepted `P2.2` baseline: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D response
+- cloud ASR providers remain configured options, but they are not part of the accepted `P2.2` live-validation baseline

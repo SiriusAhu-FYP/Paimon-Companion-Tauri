@@ -15,5 +15,5 @@ Current state:
 
 - `P1 Functional Core Validation` is complete on `main`
 - `P2` has been refocused to full source-repository fusion before any new game transfer
-- `P2.2` now has an explicit ASR migration strategy: provider/profile based, optional local runtime, no default bundled weights
+- `P2.2` has now accepted a local live-validation baseline: `local-sherpa` microphone input plus `GPT-SoVITS` output and Live2D response
 - the functional desktop workflow now lives under the dedicated `功能实验` panel

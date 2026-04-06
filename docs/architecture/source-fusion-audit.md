@@ -52,13 +52,13 @@ These are not yet accepted replacements:
 | Live2D rendering and model control | `src/features/live2d/live2d-renderer.ts`, `src/features/stage/StageWindow.tsx`, `src/features/stage/StageHost.tsx` | `merged` | Live2D stage rendering, model switching, expressions, zoom, and stage behavior are already present. | Keep as accepted baseline. |
 | Chat panel with manual text input | `src/features/chat/ChatPanel.tsx` | `merged` | Manual chat interaction is present in the Tauri UI. | Keep as accepted baseline. |
 | Character/persona management | `src/services/character/character-service.ts`, `src/features/control-panel/ControlPanel.tsx` | `merged` | Character cards, persona loading, switching, and expression mapping exist. | Keep as accepted baseline. |
-| TTS generation + sequential playback + lip sync | `src/services/tts/gptsovits-tts-service.ts`, `src/services/pipeline/pipeline-service.ts`, `src/services/audio/audio-player.ts` | `partial` | The accepted local TTS path remains GPT-SoVITS, matching `VoiceL2D-MVP`. Playback and mouth movement exist, but live end-to-end validation inside the Tauri host is still pending. | Keep GPT-SoVITS as the accepted baseline and validate the full voice loop in `P2.2`. |
+| TTS generation + sequential playback + lip sync | `src/services/tts/gptsovits-tts-service.ts`, `src/services/pipeline/pipeline-service.ts`, `src/services/audio/audio-player.ts` | `merged` | GPT-SoVITS playback, sequential output, and Live2D mouth/response linkage are now validated in the Tauri host. | Keep as accepted baseline. |
 | Frontend/backend transport via WebSocket | `src/services/index.ts`, `src/services/event-bus/event-bus.ts` | `replaced` | The Tauri app is single-runtime and no longer needs the MVP’s WebSocket boundary. | Keep this replacement. |
 | MCP-driven expression commands from LLM | `src/services/character/character-service.ts`, `src/features/stage/StageWindow.tsx` | `replaced` | Expression control now flows through local events rather than a separate MCP roundtrip. | Keep this replacement. |
-| Microphone capture | `src/services/voice-input/voice-input-service.ts`, `src/features/chat/ChatPanel.tsx` | `partial` | The Tauri app now has a real chat-panel microphone path again, using browser/WebView capture instead of the MVP’s Python `sounddevice` loop. | Validate behavior and decide whether lower-level native capture is still needed. |
-| VAD-based speech segmentation | `src/services/voice-input/voice-input-service.ts` | `partial` | A lightweight browser-side VAD gate now cuts speech segments, but it is not the same implementation as the MVP’s `webrtcvad` pipeline. | Validate quality and replace only if the simpler gate is insufficient. |
-| Real ASR pipeline (bundled `sherpa-onnx` / cloud ASR) | `src/services/asr/local-sherpa-asr-service.ts`, `src/services/asr/http-asr-service.ts`, `src/services/provider-resolvers.ts`, `src/features/settings/AsrProfilesSection.tsx` | `partial` | The app now targets a bundled local `sherpa-onnx` bilingual model plus cloud ASR providers (`volcengine`, `aliyun`). Live validation is still pending. | Validate at least one cloud provider and the bundled local path in live use. |
-| Audio lock / anti-feedback during playback | `src/services/voice-input/voice-input-service.ts` | `partial` | Playback now locks the microphone path to reduce TTS feedback, but it has not yet been accepted through live validation. | Validate in `P2.2` hand testing. |
+| Microphone capture | `src/services/voice-input/voice-input-service.ts`, `src/features/chat/ChatPanel.tsx` | `merged` | The Tauri app has a real chat-panel microphone path again, using browser/WebView capture instead of the MVP’s Python `sounddevice` loop, and it is now live-validated. | Keep as accepted baseline. |
+| VAD-based speech segmentation | `src/services/voice-input/voice-input-service.ts` | `merged` | The lighter browser-side VAD gate is now accepted through live validation as the current replacement for the MVP’s older `webrtcvad` path. | Keep current implementation unless quality issues force a revisit. |
+| Real ASR pipeline (bundled `sherpa-onnx` / cloud ASR) | `src/services/asr/local-sherpa-asr-service.ts`, `src/services/asr/http-asr-service.ts`, `src/services/provider-resolvers.ts`, `src/features/settings/AsrProfilesSection.tsx` | `partial` | The bundled local `sherpa-onnx` path is now live-validated and accepted. Cloud ASR providers (`volcengine`, `aliyun`) remain supported but are not part of the accepted live-validation baseline yet. | Treat local sherpa as accepted baseline; validate a cloud path later only if it remains product-relevant. |
+| Audio lock / anti-feedback during playback | `src/services/voice-input/voice-input-service.ts` | `merged` | Playback-time microphone lock is now accepted through live validation. | Keep as accepted baseline. |
 
 ### `Video-Understanding-MVP`
 
@@ -81,8 +81,8 @@ Current high-level audit result:
   - accepted core: Tauri-native host control + validated `2048` loop
   - unresolved: source scope beyond current `2048`, especially `sokoban` and exact prompt/reflection carry-over
 - `VoiceL2D-MVP`: `partial`
-  - accepted core: Live2D + chat + character + GPT-SoVITS TTS/lip-sync
-  - unresolved: microphone, VAD, and live validation of the bundled local / cloud ASR chain
+  - accepted core: Live2D + chat + character + microphone + VAD + bundled local sherpa ASR + GPT-SoVITS TTS/lip-sync
+  - unresolved: cloud ASR validation and any future quality upgrades such as better mixed-language utterance handling
 - `Video-Understanding-MVP`: `partial`
   - accepted core: screenshot capture and single-frame model use
   - unresolved: most of the reusable video-understanding toolkit and evaluation stack
@@ -93,11 +93,9 @@ This means the three-source fusion is not yet complete.
 
 The next implementation order should be:
 
-1. `P2.2 VoiceL2D-MVP Completion`
-   - restore real voice input first
-2. `P2.3 LLMPlay-MVP Completion`
+1. `P2.3 LLMPlay-MVP Completion`
    - settle full retained scope vs retired scope
-3. `P2.4 Video-Understanding-MVP Completion`
+2. `P2.4 Video-Understanding-MVP Completion`
    - merge only the toolkit pieces that still serve the Tauri product
-4. `P2.5 Post-Fusion Validation`
+3. `P2.5 Post-Fusion Validation`
    - validate the combined runtime after the three-source gaps are closed
