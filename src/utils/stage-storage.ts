@@ -89,3 +89,9 @@ export function saveModelExpression(modelPath: string, expressionName: string): 
 	state[modelPath] = expressionName;
 	saveModelExpressionStateMap(state);
 }
+
+export function clearModelExpression(modelPath: string): void {
+	const state = loadModelExpressionStateMap();
+	delete state[modelPath];
+	saveModelExpressionStateMap(state);
+}
