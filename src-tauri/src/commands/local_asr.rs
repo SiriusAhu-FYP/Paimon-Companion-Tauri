@@ -34,20 +34,28 @@ fn resolve_model_dir(app: &AppHandle) -> Result<PathBuf, String> {
 		return Ok(candidate);
 	}
 
-	let workspace_fallback = std::env::current_dir()
-		.map_err(|err| format!("failed to resolve current dir: {err}"))?
-		.join("src-tauri")
-		.join("resources")
-		.join(MODEL_ROOT)
-		.join(MODEL_NAME);
+	let current_dir = std::env::current_dir()
+		.map_err(|err| format!("failed to resolve current dir: {err}"))?;
 
-	if workspace_fallback.exists() {
-		return Ok(workspace_fallback);
+	let fallback_candidates = [
+		current_dir.join("resources").join(MODEL_ROOT).join(MODEL_NAME),
+		current_dir
+			.join("src-tauri")
+			.join("resources")
+			.join(MODEL_ROOT)
+			.join(MODEL_NAME),
+	];
+
+	for fallback in fallback_candidates {
+		if fallback.exists() {
+			return Ok(fallback);
+		}
 	}
 
 	Err(format!(
-		"local sherpa model directory not found: {}",
-		workspace_fallback.display()
+		"local sherpa model directory not found from resource dir {} or current dir {}",
+		candidate.display(),
+		current_dir.display()
 	))
 }
 
