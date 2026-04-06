@@ -7,12 +7,18 @@ import {
 	type ControlCommand, type StageDisplayMode,
 } from "@/utils/window-sync";
 import CloseIcon from "@mui/icons-material/Close";
-import { Live2DRenderer, DEFAULT_MODEL } from "@/features/live2d";
+import { Live2DRenderer, DEFAULT_MODEL, MODEL_REGISTRY } from "@/features/live2d";
 import type { EyeMode } from "@/features/live2d";
 import { createLogger } from "@/services/logger";
 import { saveZoom, loadZoom } from "@/utils/stage-storage";
 
 const log = createLogger("stage-window");
+
+function resolveExpressionNames(modelPath: string, renderer: Live2DRenderer): string[] {
+	const reported = renderer.getExpressionNames();
+	if (reported.length > 0) return reported;
+	return MODEL_REGISTRY.find((model) => model.path === modelPath)?.expressionNames ?? [];
+}
 
 export function StageWindow() {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -110,7 +116,7 @@ export function StageWindow() {
 			setLoadStatus("ok");
 			log.info(`model loaded: ${modelPath}`);
 
-			const expressions = renderer.getExpressionNames();
+			const expressions = resolveExpressionNames(modelPath, renderer);
 			broadcastControl({ type: "report-expressions", expressions });
 		} catch (err) {
 			setLoadStatus("error");
@@ -141,7 +147,7 @@ export function StageWindow() {
 			setLoadStatus("ok");
 			log.info(`model switched: ${modelPath}`);
 
-			const expressions = renderer.getExpressionNames();
+			const expressions = resolveExpressionNames(modelPath, renderer);
 			broadcastControl({ type: "report-expressions", expressions });
 		} catch (err) {
 			setLoadStatus("error");
