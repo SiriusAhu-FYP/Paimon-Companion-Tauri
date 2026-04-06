@@ -27,6 +27,10 @@ import { createLogger } from "@/services/logger";
 
 const log = createLogger("stage-host");
 
+function getRegistryExpressions(modelPath: string): string[] {
+	return MODEL_REGISTRY.find((model) => model.path === modelPath)?.expressionNames ?? [];
+}
+
 interface StageHostProps {
 	onShowStage: () => void;
 	stageVisible: boolean;
@@ -86,16 +90,23 @@ export function StageHost({
 				setExpressions(cmd.expressions);
 				log.info(`received ${cmd.expressions.length} expressions from stage`);
 			}
-		}).then((unsub) => { cleanup = unsub; });
+		}).then((unsub) => {
+			cleanup = unsub;
+			broadcastControl({ type: "request-expressions" });
+		});
 		return () => { cleanup?.(); };
 	}, []);
 
 	const handleModelChange = useCallback((event: SelectChangeEvent) => {
 		const path = event.target.value;
 		setSelectedModel(path);
-		setExpressions([]);
+		setExpressions(getRegistryExpressions(path));
 		broadcastControl({ type: "set-model", modelPath: path });
 	}, []);
+
+	useEffect(() => {
+		setExpressions((current) => (current.length > 0 ? current : getRegistryExpressions(selectedModel)));
+	}, [selectedModel]);
 
 	const handleExpression = useCallback((name: string) => {
 		broadcastControl({ type: "set-expression", expressionName: name });

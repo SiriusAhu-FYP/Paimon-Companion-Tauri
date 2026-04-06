@@ -25,6 +25,7 @@ export type EyeMode = "fixed" | "follow-mouse" | "random-path";
 
 export type ControlCommand =
 	| { type: "request-state" }
+	| { type: "request-expressions" }
 	| { type: "hide-stage" }
 	| { type: "show-stage" }
 	| { type: "reset-position" }

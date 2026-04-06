@@ -161,6 +161,13 @@ export function StageWindow() {
 			const win = getCurrentWindow();
 
 			switch (cmd.type) {
+			case "request-expressions": {
+				const renderer = rendererRef.current;
+				if (!renderer) break;
+				const expressions = resolveExpressionNames(currentModelPath.current, renderer);
+				broadcastControl({ type: "report-expressions", expressions });
+				break;
+			}
 			case "hide-stage":
 				rendererRef.current?.destroy();
 				rendererRef.current = null;
