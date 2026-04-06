@@ -29,6 +29,10 @@ function resolveExpressionNames(modelPath: string, renderer: Live2DRenderer): st
 		.filter((name) => !isBlockedExpression(name));
 }
 
+function getForcedParameters(modelPath: string): Array<{ id: string; value: number }> {
+	return MODEL_REGISTRY.find((model) => model.path === modelPath)?.forcedParameters ?? [];
+}
+
 export function StageWindow() {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const rendererRef = useRef<Live2DRenderer | null>(null);
@@ -119,6 +123,7 @@ export function StageWindow() {
 				modelPath,
 				autoFit: true,
 			});
+			renderer.setForcedParameters(getForcedParameters(modelPath));
 			renderer.resetExpression();
 			renderer.setEyeMode(eyeModeRef.current);
 			const savedZoom = loadZoom();
@@ -157,6 +162,7 @@ export function StageWindow() {
 
 		try {
 			await renderer.switchModel(modelPath);
+			renderer.setForcedParameters(getForcedParameters(modelPath));
 			renderer.resetExpression();
 			renderer.setEyeMode(eyeModeRef.current);
 			const savedZoom = loadZoom();
