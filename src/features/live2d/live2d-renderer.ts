@@ -28,6 +28,8 @@ export interface ModelInfo {
 	name: string;
 	/** model3.json 的路径（相对于 public） */
 	path: string;
+	/** 可选：当模型文件本身未声明 Expressions 时，使用这里的回退列表 */
+	expressionNames?: string[];
 }
 
 /**
