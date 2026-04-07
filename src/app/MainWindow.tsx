@@ -14,6 +14,7 @@ import { StageHost, StageSlot } from "@/features/stage";
 import { ControlPanel } from "@/features/control-panel/ControlPanel";
 import { ChatPanel } from "@/features/chat";
 import { StatusBar } from "@/app/StatusBar";
+import { ResizablePane } from "@/components";
 import { broadcastControl, type StageDisplayMode, isTauriEnvironment } from "@/utils/window-sync";
 import { createLogger } from "@/services/logger";
 import { useThemeMode } from "@/contexts/JoyThemeProvider";
@@ -344,16 +345,26 @@ export function MainWindow() {
 
 			{/* 可折叠事件日志（在状态栏上方） */}
 			{eventLogOpen && (
-				<Box sx={{
-					height: 180, flexShrink: 0,
-					borderTop: "1px solid", borderColor: "secondary.main",
-					overflowY: "auto",
-					bgcolor: "background.default",
-				}}>
+				<ResizablePane
+					axis="y"
+					storageKey="event-log-height"
+					initialSize={260}
+					minSize={180}
+					maxSize={520}
+					handlePlacement="start"
+					className="resizable-pane resizable-pane-vertical"
+					handleClassName="resizable-pane-handle resizable-pane-handle-vertical"
+					style={{
+						flexShrink: 0,
+						borderTop: "1px solid var(--mui-palette-secondary-main, rgba(255,255,255,0.12))",
+						background: "var(--mui-palette-background-default, transparent)",
+						overflow: "hidden",
+					}}
+				>
 					<Suspense fallback={<PanelLoadingState />}>
 						<EventLog />
 					</Suspense>
-				</Box>
+				</ResizablePane>
 			)}
 
 			{/* 底部状态栏——始终在最底部 */}

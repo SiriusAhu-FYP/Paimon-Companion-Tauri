@@ -6,12 +6,14 @@ import type {
 import type { EventMap, EventName } from "@/types";
 
 export interface EventLogEntry {
+	key: string;
 	event: EventName;
 	timestamp: number;
 	timestampLabel: string;
 	category: string;
 	color: string;
 	summary: string;
+	payloadPreviewText: string;
 	payloadText: string;
 }
 
@@ -88,13 +90,13 @@ function truncate(text: string, limit = PAYLOAD_PREVIEW_LIMIT): string {
 	return `${text.slice(0, Math.max(0, limit - 1))}…`;
 }
 
-function serializePayload(payload: unknown): string {
+function serializePayload(payload: unknown, pretty = false): string {
 	if (payload == null) return "—";
-	if (typeof payload === "string") return truncate(payload);
+	if (typeof payload === "string") return pretty ? payload : truncate(payload);
 	if (typeof payload === "number" || typeof payload === "boolean") return String(payload);
 
 	try {
-		return truncate(JSON.stringify(payload));
+		return pretty ? JSON.stringify(payload, null, 2) : truncate(JSON.stringify(payload));
 	} catch {
 		return "[unserializable payload]";
 	}
@@ -292,13 +294,15 @@ function toEntry(entry: EventHistoryEntry): EventLogEntry | null {
 
 	const category = getCategoryForEvent(entry.event);
 	return {
+		key: `${entry.timestamp}-${entry.event}`,
 		event: entry.event,
 		timestamp: entry.timestamp,
 		timestampLabel: new Date(entry.timestamp).toLocaleTimeString(),
 		category: category.name,
 		color: category.color,
 		summary: formatSummary(entry.event, entry.payload),
-		payloadText: serializePayload(entry.payload),
+		payloadPreviewText: serializePayload(entry.payload),
+		payloadText: serializePayload(entry.payload, true),
 	};
 }
 
