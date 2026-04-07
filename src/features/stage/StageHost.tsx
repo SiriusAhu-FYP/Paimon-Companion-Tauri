@@ -25,6 +25,7 @@ import {
 	type SizePreset,
 } from "@/utils/stage-storage";
 import { createLogger } from "@/services/logger";
+import { useI18n } from "@/contexts/I18nProvider";
 
 const log = createLogger("stage-host");
 
@@ -63,6 +64,7 @@ export function StageHost({
 	onAlwaysOnTopChange,
 	onDisplayModeChange,
 }: StageHostProps) {
+	const { t } = useI18n();
 	const { character } = getServices();
 	const [scaleLocked, setScaleLocked] = useState(loadScaleLock);
 	const [eyeMode, setEyeMode] = useState<EyeMode>("random-path");
@@ -195,22 +197,22 @@ export function StageHost({
 	const isFloating = stageMode === "floating";
 
 	const EYE_MODES: { mode: EyeMode; label: string }[] = [
-		{ mode: "fixed", label: "静止" },
-		{ mode: "follow-mouse", label: "跟随" },
-		{ mode: "random-path", label: "随机" },
+		{ mode: "fixed", label: t("静止", "Fixed") },
+		{ mode: "follow-mouse", label: t("跟随", "Follow") },
+		{ mode: "random-path", label: t("随机", "Random") },
 	];
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100%", p: 1.5, gap: 1 }}>
 			<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
-				Stage
+				{t("舞台", "Stage")}
 			</Typography>
 
 			{/* 模型切换 */}
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>模型</Typography>
-					<HelpTooltip title="切换 Live2D 模型。切换后 Stage 窗口会重新加载" />
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("模型", "Model")}</Typography>
+					<HelpTooltip title={t("切换 Live2D 模型。切换后 Stage 窗口会重新加载", "Switch the Live2D model. The Stage window reloads after switching.")} />
 				</Stack>
 				<FormControl size="small" fullWidth>
 					<Select
@@ -231,8 +233,8 @@ export function StageHost({
 		{expressions.length > 0 && (
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>表情</Typography>
-					<HelpTooltip title="模型自带的表情文件。点击后 Stage 中的模型会切换表情" />
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("表情", "Expressions")}</Typography>
+					<HelpTooltip title={t("模型自带的表情文件。点击后 Stage 中的模型会切换表情", "Built-in model expressions. Click to switch the model expression in Stage.")} />
 				</Stack>
 				<Box sx={{
 					display: "flex",
@@ -264,23 +266,23 @@ export function StageHost({
 			{/* 窗口控制 */}
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>窗口</Typography>
-					<HelpTooltip title="控制 Stage 播出窗口的显示与隐藏" />
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("窗口", "Window")}</Typography>
+					<HelpTooltip title={t("控制 Stage 播出窗口的显示与隐藏", "Show or hide the Stage window.")} />
 				</Stack>
 				<Stack direction="row" spacing={0.5}>
 					{!stageVisible ? (
 						<Button variant="contained" size="small" onClick={onShowStage} startIcon={<VisibilityIcon />}>
-							启动
+							{t("启动", "Show")}
 						</Button>
 					) : (
 						<Button variant="outlined" size="small" onClick={handleClose} startIcon={<CloseIcon />}>
-								关闭
+								{t("关闭", "Hide")}
 							</Button>
 					)}
-					<Tooltip title="将 Stage 窗口移回默认位置">
+					<Tooltip title={t("将 Stage 窗口移回默认位置", "Move the Stage window back to its default position")}>
 						<span>
 							<Button variant="outlined" size="small" onClick={handleReset} disabled={!stageVisible} startIcon={<RestartAltIcon />}>
-								重置
+								{t("重置", "Reset")}
 							</Button>
 						</span>
 					</Tooltip>
@@ -290,15 +292,15 @@ export function StageHost({
 			{/* 模式切换 */}
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>模式</Typography>
-					<HelpTooltip title="贴靠：Stage 固定在主界面模型区域；浮动：Stage 可自由移动" />
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("模式", "Mode")}</Typography>
+					<HelpTooltip title={t("贴靠：Stage 固定在主界面模型区域；浮动：Stage 可自由移动", "Docked keeps Stage in the main model area; floating allows free movement.")} />
 				</Stack>
 				<ButtonGroup size="small" fullWidth>
 					<Button variant={isDocked ? "contained" : "outlined"} onClick={() => handleSetMode("docked")}>
-						贴靠
+						{t("贴靠", "Docked")}
 					</Button>
 					<Button variant={!isDocked ? "contained" : "outlined"} onClick={() => handleSetMode("floating")}>
-						浮动
+						{t("浮动", "Floating")}
 					</Button>
 				</ButtonGroup>
 			</Box>
@@ -306,10 +308,10 @@ export function StageHost({
 			{/* 置顶 */}
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>置顶</Typography>
-					<HelpTooltip title="置顶：Stage 窗口压在其他应用之上。贴靠模式下由 pin 关系自动管理，置顶锁定。" />
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("置顶", "Always On Top")}</Typography>
+					<HelpTooltip title={t("置顶：Stage 窗口压在其他应用之上。贴靠模式下由 pin 关系自动管理，置顶锁定。", "Always on top keeps Stage above other windows. Docked mode manages this automatically.")} />
 				</Stack>
-				<Tooltip title={isDocked ? "贴靠模式下置顶由 pin 关系自动管理" : ""}>
+				<Tooltip title={isDocked ? t("贴靠模式下置顶由 pin 关系自动管理", "Docked mode manages always-on-top automatically") : ""}>
 					<span>
 						<Button
 							variant={alwaysOnTop && !isDocked ? "contained" : "outlined"}
@@ -319,7 +321,7 @@ export function StageHost({
 							onClick={handleToggleAlwaysOnTop}
 							startIcon={isDocked ? <LockIcon /> : <PushPinIcon />}
 						>
-							{isDocked ? "已锁定" : alwaysOnTop ? "置顶: 开" : "置顶: 关"}
+							{isDocked ? t("已锁定", "Locked") : alwaysOnTop ? t("置顶: 开", "Top: On") : t("置顶: 关", "Top: Off")}
 						</Button>
 					</span>
 				</Tooltip>
@@ -328,8 +330,8 @@ export function StageHost({
 			{/* 显示模式 */}
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>显示</Typography>
-					<HelpTooltip title="clean：纯净播出画面，控制条隐藏；interactive：hover 显示控制条" />
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("显示", "Display")}</Typography>
+					<HelpTooltip title={t("clean：纯净播出画面，控制条隐藏；interactive：hover 显示控制条", "clean hides the toolbar; interactive shows controls on hover.")} />
 				</Stack>
 				<ButtonGroup size="small" fullWidth>
 					<Button variant={displayMode === "interactive" ? "contained" : "outlined"} onClick={() => {
@@ -349,8 +351,8 @@ export function StageHost({
 		{stageVisible && (
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>穿透</Typography>
-					<HelpTooltip title="开启后 Stage 窗口完全透明且不可被点击，但 Live2D 仍在渲染，仍可被桌面录制或窗口捕获。通过此按钮恢复。" />
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("穿透", "Passthrough")}</Typography>
+					<HelpTooltip title={t("开启后 Stage 窗口完全透明且不可被点击，但 Live2D 仍在渲染，仍可被桌面录制或窗口捕获。通过此按钮恢复。", "Makes the Stage window transparent and click-through while still rendering. Use the button again to restore it.")} />
 				</Stack>
 				<Button
 					variant={passthrough ? "contained" : "outlined"}
@@ -360,7 +362,7 @@ export function StageHost({
 					startIcon={passthrough ? <VisibilityOffIcon /> : <VisibilityIcon />}
 					color={passthrough ? "warning" : "inherit"}
 				>
-					{passthrough ? "穿透中（点击恢复）" : "开启穿透"}
+					{passthrough ? t("穿透中（点击恢复）", "Passthrough (click to restore)") : t("开启穿透", "Enable Passthrough")}
 				</Button>
 			</Box>
 		)}
@@ -370,8 +372,8 @@ export function StageHost({
 		{/* 缩放锁定 */}
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>缩放</Typography>
-					<HelpTooltip title="在 Stage 窗口中使用鼠标滚轮可缩放模型。锁定后禁止滚轮缩放。" />
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("缩放", "Zoom")}</Typography>
+					<HelpTooltip title={t("在 Stage 窗口中使用鼠标滚轮可缩放模型。锁定后禁止滚轮缩放。", "Use the mouse wheel in the Stage window to zoom. Locking disables wheel zoom.")} />
 				</Stack>
 			<Stack direction="row" spacing={0.5}>
 				<Button
@@ -382,16 +384,16 @@ export function StageHost({
 					startIcon={scaleLocked ? <LockIcon /> : <LockOpenIcon />}
 					color={scaleLocked ? "warning" : "inherit"}
 				>
-					{scaleLocked ? "已锁定" : "未锁定"}
+					{scaleLocked ? t("已锁定", "Locked") : t("未锁定", "Unlocked")}
 				</Button>
-				<Tooltip title="重置缩放比例为默认值">
+				<Tooltip title={t("重置缩放比例为默认值", "Reset zoom to the default value")}>
 					<Button
 						variant="outlined"
 						size="small"
 						onClick={() => broadcastControl({ type: "reset-zoom" })}
 						startIcon={<RestartAltIcon />}
 					>
-						重置
+						{t("重置", "Reset")}
 					</Button>
 				</Tooltip>
 			</Stack>
@@ -400,8 +402,8 @@ export function StageHost({
 			{/* 眼神模式 */}
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>眼神</Typography>
-					<HelpTooltip title="静止：注视前方；跟随：跟随鼠标位置；随机：沿自然路径随机注视" />
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("眼神", "Eyes")}</Typography>
+					<HelpTooltip title={t("静止：注视前方；跟随：跟随鼠标位置；随机：沿自然路径随机注视", "Fixed looks forward; follow tracks the pointer; random follows a natural path.")} />
 				</Stack>
 				<ButtonGroup size="small" fullWidth>
 					{EYE_MODES.map(({ mode, label }) => (
@@ -422,8 +424,8 @@ export function StageHost({
 					<Divider />
 					<Box>
 						<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-							<Typography variant="caption" color="text.secondary" fontWeight={600}>窗口尺寸</Typography>
-							<HelpTooltip title="调整 Stage 窗口大小以获得更好的窗口捕获清晰度。窗口越大，捕获通常越清晰。" />
+							<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("窗口尺寸", "Window Size")}</Typography>
+							<HelpTooltip title={t("调整 Stage 窗口大小以获得更好的窗口捕获清晰度。窗口越大，捕获通常越清晰。", "Adjust the Stage size for clearer capture. Larger windows are usually clearer.")} />
 						</Stack>
 
 						{/* 内置预设 */}
@@ -468,14 +470,14 @@ export function StageHost({
 								onClick={() => setShowSaveInput(true)}
 								sx={{ fontSize: 11, textTransform: "none" }}
 							>
-								保存自定义尺寸
+								{t("保存自定义尺寸", "Save Custom Size")}
 							</Button>
 						) : (
 							<Stack spacing={0.5}>
 								<Stack direction="row" spacing={0.5}>
 									<TextField
 										size="small"
-										placeholder="名称"
+										placeholder={t("名称", "Name")}
 										value={saveLabel}
 										onChange={(e) => setSaveLabel(e.target.value)}
 										sx={{ flex: 1, "& input": { fontSize: 11, py: 0.5 } }}
@@ -484,7 +486,7 @@ export function StageHost({
 								<Stack direction="row" spacing={0.5} alignItems="center">
 									<TextField
 										size="small"
-										placeholder="宽"
+										placeholder={t("宽", "Width")}
 										type="number"
 										value={saveW}
 										onChange={(e) => setSaveW(e.target.value)}
@@ -493,7 +495,7 @@ export function StageHost({
 									<Typography variant="caption" color="text.secondary">x</Typography>
 									<TextField
 										size="small"
-										placeholder="高"
+										placeholder={t("高", "Height")}
 										type="number"
 										value={saveH}
 										onChange={(e) => setSaveH(e.target.value)}
@@ -502,10 +504,10 @@ export function StageHost({
 								</Stack>
 								<Stack direction="row" spacing={0.5}>
 									<Button size="small" variant="contained" onClick={handleSaveCustomPreset} sx={{ fontSize: 11 }}>
-										保存
+										{t("保存", "Save")}
 									</Button>
 									<Button size="small" variant="text" onClick={() => setShowSaveInput(false)} sx={{ fontSize: 11 }}>
-										取消
+										{t("取消", "Cancel")}
 									</Button>
 								</Stack>
 							</Stack>

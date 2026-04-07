@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState, useCallback, useEffect, useRef } from "react";
-import { Box, IconButton, ToggleButton, ToggleButtonGroup, Tooltip } from "@mui/material";
+import { Box, Button, IconButton, Tooltip } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
@@ -223,32 +223,23 @@ export function MainWindow() {
 					Paimon Companion Tauri
 				</Box>
 				<Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-					<Tooltip title={t("语言", "Language")}>
-						<Box sx={{ display: "flex", alignItems: "center", mr: 0.5 }}>
-							<TranslateIcon sx={{ fontSize: 16, color: "text.secondary", mr: 0.5 }} />
-							<ToggleButtonGroup
-								size="small"
-								exclusive
-								value={locale}
-								onChange={(_, nextLocale) => {
-									if (nextLocale === "zh" || nextLocale === "en") {
-										setLocale(nextLocale);
-									}
-								}}
-								sx={{
-									height: 26,
-									"& .MuiToggleButton-root": {
-										px: 0.9,
-										py: 0.2,
-										fontSize: 11,
-										lineHeight: 1,
-									},
-								}}
-							>
-								<ToggleButton value="zh">中文</ToggleButton>
-								<ToggleButton value="en">EN</ToggleButton>
-							</ToggleButtonGroup>
-						</Box>
+					<Tooltip title={t("切换语言", "Switch language")}>
+						<Button
+							size="small"
+							variant="outlined"
+							startIcon={<TranslateIcon sx={{ fontSize: 14 }} />}
+							onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
+							sx={{
+								minWidth: 0,
+								px: 1,
+								py: 0.35,
+								fontSize: 11,
+								lineHeight: 1,
+								mr: 0.5,
+							}}
+						>
+							{locale === "zh" ? "EN" : "中文"}
+						</Button>
 					</Tooltip>
 					<Tooltip title={mode === "dark" ? t("切换亮色", "Switch to light mode") : t("切换暗色", "Switch to dark mode")}>
 						<IconButton

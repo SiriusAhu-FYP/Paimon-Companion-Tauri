@@ -10,6 +10,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import { Live2DRenderer, DEFAULT_MODEL, MODEL_REGISTRY } from "@/features/live2d";
 import type { EyeMode } from "@/features/live2d";
 import { createLogger } from "@/services/logger";
+import { useI18n } from "@/contexts/I18nProvider";
 import {
 	saveZoom, loadZoom,
 	loadModelExpression, saveModelExpression, clearModelExpression,
@@ -34,6 +35,7 @@ function getForcedParameters(modelPath: string): Array<{ id: string; value: numb
 }
 
 export function StageWindow() {
+	const { t } = useI18n();
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const rendererRef = useRef<Live2DRenderer | null>(null);
 	const [loadStatus, setLoadStatus] = useState<"loading" | "ok" | "error">("loading");
@@ -410,16 +412,16 @@ export function StageWindow() {
 						className="stage-toolbar-label"
 						{...(isFloating ? { "data-tauri-drag-region": true } : {})}
 					>
-						{isFloating ? "⋮⋮ 浮动" : "贴靠"}
+						{isFloating ? `⋮⋮ ${t("浮动", "Floating")}` : t("贴靠", "Docked")}
 					</span>
 					<div className="stage-toolbar-actions">
-						<button className="stage-tb-btn" onClick={toggleMode} title="切换模式">
-							{isFloating ? "⊞ 贴靠" : "⇱ 浮动"}
+						<button className="stage-tb-btn" onClick={toggleMode} title={t("切换模式", "Switch mode")}>
+							{isFloating ? `⊞ ${t("贴靠", "Docked")}` : `⇱ ${t("浮动", "Floating")}`}
 						</button>
-						<button className="stage-tb-btn" onClick={toggleDisplayMode} title="切换为 clean 模式">
+						<button className="stage-tb-btn" onClick={toggleDisplayMode} title={t("切换显示模式", "Switch display mode")}>
 							clean
 						</button>
-						<button className="stage-tb-btn stage-tb-close" onClick={handleClose} title="关闭">
+						<button className="stage-tb-btn stage-tb-close" onClick={handleClose} title={t("关闭", "Close")}>
 							<CloseIcon sx={{ fontSize: 16 }} />
 						</button>
 					</div>
@@ -428,8 +430,8 @@ export function StageWindow() {
 
 			{loadStatus === "error" ? (
 				<div style={{ color: "#F87171", textAlign: "center", marginTop: 40, padding: "0 16px" }}>
-					<p style={{ marginBottom: 8 }}>Live2D 加载失败</p>
-					<p style={{ fontSize: 12, opacity: 0.85 }}>{loadErrorMessage ?? "未知错误"}</p>
+					<p style={{ marginBottom: 8 }}>{t("Live2D 加载失败", "Live2D failed to load")}</p>
+					<p style={{ fontSize: 12, opacity: 0.85 }}>{loadErrorMessage ?? t("未知错误", "Unknown error")}</p>
 				</div>
 			) : (
 				<canvas
