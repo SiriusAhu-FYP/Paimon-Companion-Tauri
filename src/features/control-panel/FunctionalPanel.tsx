@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useEvaluation, useFunctional, useGame2048, useUnifiedRuntime } from "@/hooks";
 import { createLogger } from "@/services/logger";
+import { useI18n } from "@/contexts/I18nProvider";
 import { EvaluationSection } from "./EvaluationSection";
 import { FunctionalDebugPanel } from "./FunctionalDebugPanel";
 import { Game2048Section } from "./Game2048Section";
@@ -11,6 +12,7 @@ import { UnifiedRunSection } from "./UnifiedRunSection";
 const log = createLogger("functional-panel");
 
 export function FunctionalPanel() {
+	const { t } = useI18n();
 	const {
 		state: functionalState,
 		setTarget,
@@ -55,7 +57,7 @@ export function FunctionalPanel() {
 	}, [functionalState.selectedTarget, runSingleStep]);
 
 	return (
-		<PanelRoot title="功能实验">
+		<PanelRoot title={t("功能实验", "Functional Lab")}>
 			<UnifiedRunSection
 				unifiedState={unifiedState}
 				onRunUnified2048={runUnified2048Step}

@@ -7,6 +7,7 @@ import { broadcastState, broadcastControl, onControlCommand } from "@/utils/wind
 import { windowLabel } from "@/utils/window-label";
 import { DEFAULT_MODEL } from "@/features/live2d";
 import { ThemeModeProvider } from "./contexts/JoyThemeProvider";
+import { I18nProvider } from "./contexts/I18nProvider";
 import App from "./App";
 import "./App.css";
 
@@ -64,7 +65,9 @@ async function bootstrap() {
 	ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 		<React.StrictMode>
 			<ThemeModeProvider>
-				<App />
+				<I18nProvider>
+					<App />
+				</I18nProvider>
 			</ThemeModeProvider>
 		</React.StrictMode>,
 	);

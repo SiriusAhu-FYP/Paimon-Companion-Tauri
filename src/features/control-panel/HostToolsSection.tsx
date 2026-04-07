@@ -12,6 +12,7 @@ import MicIcon from "@mui/icons-material/Mic";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import { HelpTooltip } from "@/components";
+import { useI18n } from "@/contexts/I18nProvider";
 import { listWindows } from "@/services/system";
 import { createLogger } from "@/services/logger";
 import type {
@@ -37,6 +38,7 @@ export function HostToolsSection(props: {
 		target?: FunctionalTarget,
 	) => Promise<unknown>;
 }) {
+	const { t } = useI18n();
 	const [micStatus, setMicStatus] = useState<"idle" | "ok" | "denied" | "error">("idle");
 	const [windowsLoading, setWindowsLoading] = useState(false);
 	const [windowList, setWindowList] = useState<HostWindowInfo[]>([]);
@@ -172,21 +174,21 @@ export function HostToolsSection(props: {
 	return (
 		<PanelCard compact>
 			<SectionHeader
-				title="宿主工具"
-				right={<HelpTooltip title="测试麦克风、窗口发现和基础输入能力。" />}
+				title={t("宿主工具", "Host Tools")}
+				right={<HelpTooltip title={t("测试麦克风、窗口发现和基础输入能力。", "Test microphone, window discovery, and basic input capabilities.")} />}
 			/>
 
 			<Stack direction="row" spacing={0.5} alignItems="center">
 				<Button variant="outlined" size="small" onClick={handleMicTest} startIcon={<MicIcon />}>
-					麦克风
+					{t("麦克风", "Microphone")}
 				</Button>
 				{micStatus === "ok" && <CheckCircleIcon color="success" sx={{ fontSize: 14 }} />}
 				{micStatus !== "idle" && micStatus !== "ok" && <CancelIcon color="error" sx={{ fontSize: 14 }} />}
 				<Button variant="outlined" size="small" onClick={handleListWindows} disabled={windowsLoading}>
-					{windowsLoading ? "枚举中..." : "枚举窗口"}
+					{windowsLoading ? t("枚举中...", "Listing...") : t("枚举窗口", "List Windows")}
 				</Button>
 				<InfoLine>
-					{windowList.length > 0 ? `${filteredWindowList.length} / ${windowList.length}` : "未获取"}
+					{windowList.length > 0 ? `${filteredWindowList.length} / ${windowList.length}` : t("未获取", "Not loaded")}
 				</InfoLine>
 			</Stack>
 
@@ -197,10 +199,10 @@ export function HostToolsSection(props: {
 						fullWidth
 						value={windowQuery}
 						onChange={(event) => setWindowQuery(event.target.value)}
-						placeholder="搜索标题 / 进程 / 类名 / PID"
+						placeholder={t("搜索标题 / 进程 / 类名 / PID", "Search title / process / class / PID")}
 					/>
 					<Button size="small" variant="text" onClick={() => setWindowQuery("")} disabled={!windowQuery.trim()}>
-						清空
+						{t("清空", "Clear")}
 					</Button>
 				</Stack>
 			)}
@@ -229,7 +231,7 @@ export function HostToolsSection(props: {
 									PID {windowInfo.processId} · {windowInfo.processName || "unknown"} · {windowInfo.className}
 								</InfoLine>
 								<InfoLine mb={0.5}>
-									{windowInfo.visible ? "visible" : "hidden"} · {windowInfo.minimized ? "minimized" : "normal"}
+									{windowInfo.visible ? t("可见", "visible") : t("隐藏", "hidden")} · {windowInfo.minimized ? t("最小化", "minimized") : t("正常", "normal")}
 								</InfoLine>
 								<Stack direction="row" justifyContent="flex-end" spacing={0.25} sx={{ flexWrap: "wrap" }}>
 									<Button
@@ -238,7 +240,7 @@ export function HostToolsSection(props: {
 										onClick={() => selectWindowTarget(windowInfo)}
 										sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
 									>
-										目标
+										{t("目标", "Target")}
 									</Button>
 									<Button
 										size="small"
@@ -247,7 +249,7 @@ export function HostToolsSection(props: {
 										disabled={props.functionalState.activeTaskId !== null}
 										sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
 									>
-										聚焦
+										{t("聚焦", "Focus")}
 									</Button>
 									<Button
 										size="small"
@@ -256,7 +258,7 @@ export function HostToolsSection(props: {
 										disabled={props.functionalState.activeTaskId !== null}
 										sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
 									>
-										截图
+										{t("截图", "Capture")}
 									</Button>
 								</Stack>
 							</PanelCard>
@@ -264,12 +266,12 @@ export function HostToolsSection(props: {
 					</Stack>
 					{filteredWindowList.length > WINDOW_LIST_PREVIEW_LIMIT && (
 						<InfoLine>
-							仅展示前 {WINDOW_LIST_PREVIEW_LIMIT} 条，请继续搜索。
+							{t("仅展示前", "Showing only the first")} {WINDOW_LIST_PREVIEW_LIMIT} {t("条，请继续搜索。", "results. Refine the search.")}
 						</InfoLine>
 					)}
 					{filteredWindowList.length === 0 && (
 						<InfoLine>
-							没有匹配结果。
+							{t("没有匹配结果。", "No matching results.")}
 						</InfoLine>
 					)}
 				</Box>
@@ -279,7 +281,7 @@ export function HostToolsSection(props: {
 				<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.75 }}>
 					<CircularProgress size={12} />
 					<InfoLine>
-						执行中：{props.functionalState.latestTask?.name ?? "功能任务"}
+						{t("执行中", "Running")}：{props.functionalState.latestTask?.name ?? t("功能任务", "Functional task")}
 					</InfoLine>
 				</Stack>
 			)}
@@ -287,17 +289,17 @@ export function HostToolsSection(props: {
 			{props.functionalState.selectedTarget && (
 				<PanelCard compact>
 					<InfoLine mb={0.5}>
-						当前目标：{props.functionalState.selectedTarget.title || props.functionalState.selectedTarget.handle}
+						{t("当前目标", "Current Target")}：{props.functionalState.selectedTarget.title || props.functionalState.selectedTarget.handle}
 					</InfoLine>
 					<Stack direction="row" spacing={0.5} sx={{ mb: 0.5, flexWrap: "wrap" }}>
 						<Button size="small" variant="outlined" onClick={() => props.runFocus(props.functionalState.selectedTarget ?? undefined)} disabled={props.functionalState.activeTaskId !== null}>
-							聚焦
+							{t("聚焦", "Focus")}
 						</Button>
 						<Button size="small" variant="outlined" onClick={() => props.runCapture(props.functionalState.selectedTarget ?? undefined)} disabled={props.functionalState.activeTaskId !== null}>
-							截图
+							{t("截图", "Capture")}
 						</Button>
 						<Button size="small" variant="outlined" onClick={handleMouseClickCenter} disabled={props.functionalState.activeTaskId !== null}>
-							点击中心
+							{t("点击中心", "Click Center")}
 						</Button>
 						<Button size="small" variant="outlined" onClick={() => handleSendKey("Enter")} disabled={props.functionalState.activeTaskId !== null}>
 							Enter
@@ -326,7 +328,7 @@ export function HostToolsSection(props: {
 							onClick={() => handleSendKey(manualKey)}
 							disabled={!manualKey.trim() || props.functionalState.activeTaskId !== null}
 						>
-							发送
+							{t("发送", "Send")}
 						</Button>
 					</Stack>
 				</PanelCard>

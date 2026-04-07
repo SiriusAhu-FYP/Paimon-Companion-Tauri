@@ -25,6 +25,7 @@ import { GptSovitsTTSService, MockTTSService, splitText, normalizeForSpeech, Spe
 import { AudioPlayer } from "@/services/audio/audio-player";
 import { checkLocalSherpaHealth } from "@/services/asr";
 import { HelpTooltip } from "@/components";
+import { useI18n } from "@/contexts/I18nProvider";
 import { refreshProviders } from "@/services";
 import { AsrProfilesSection } from "./AsrProfilesSection";
 
@@ -35,6 +36,7 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
+	const { t } = useI18n();
 	const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
 	const [message, setMessage] = useState<{ type: "success" | "error" | "info" | "warning"; text: string } | null>(null);
 	const [llmTestResult, setLlmTestResult] = useState<{ ok: boolean; text: string } | null>(null);
@@ -279,13 +281,13 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1, height: "100%", overflowY: "auto" }}>
 			<Stack direction="row" alignItems="center" spacing={1}>
-				<Tooltip title="返回控制面板">
+				<Tooltip title={t("返回控制面板", "Back to control panel")}>
 					<IconButton size="small" onClick={onClose}>
 						<ArrowBackIcon fontSize="small" />
 					</IconButton>
 				</Tooltip>
 				<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
-					设置
+					{t("设置", "Settings")}
 				</Typography>
 			</Stack>
 
