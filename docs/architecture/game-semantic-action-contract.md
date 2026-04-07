@@ -117,6 +117,15 @@ At minimum, a game package should define:
 - rules / affordances
 - prompt fragments derived from the shared game prompt template
 
+The first implementation direction in the Tauri codebase is a lightweight manifest file per game.
+
+Current manifests live under:
+
+- `src/config/games/2048.json`
+- `src/config/games/sokoban.json`
+
+These manifests are intentionally small and focused on semantic action vocabulary plus low-level execution translation.
+
 ## Core vs Plugin Split
 
 Keep these in the shared core:

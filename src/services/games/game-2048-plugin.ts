@@ -1,46 +1,12 @@
 import type {
 	Game2048ActionId,
 	SemanticGameActionDefinition,
-	SemanticGamePluginDefinition,
+	SemanticGameManifest,
 } from "@/types";
+import { getSemanticGameManifest } from "./semantic-game-registry";
 
-export const GAME_2048_DEFAULT_ACTION_ORDER: Game2048ActionId[] = [
-	"move_up",
-	"move_left",
-	"move_right",
-	"move_down",
-];
-
-export const GAME_2048_PLUGIN: SemanticGamePluginDefinition<Game2048ActionId> = {
-	gameId: "2048",
-	displayName: "2048",
-	actions: [
-		{
-			id: "move_up",
-			label: "Up",
-			description: "Shift the board upward once.",
-			steps: [{ kind: "send-key", key: "Up" }],
-		},
-		{
-			id: "move_left",
-			label: "Left",
-			description: "Shift the board left once.",
-			steps: [{ kind: "send-key", key: "Left" }],
-		},
-		{
-			id: "move_right",
-			label: "Right",
-			description: "Shift the board right once.",
-			steps: [{ kind: "send-key", key: "Right" }],
-		},
-		{
-			id: "move_down",
-			label: "Down",
-			description: "Shift the board downward once.",
-			steps: [{ kind: "send-key", key: "Down" }],
-		},
-	],
-};
+export const GAME_2048_PLUGIN: SemanticGameManifest<Game2048ActionId> = getSemanticGameManifest("2048");
+export const GAME_2048_DEFAULT_ACTION_ORDER: Game2048ActionId[] = [...GAME_2048_PLUGIN.defaultActionOrder];
 
 const ACTION_MAP = new Map<Game2048ActionId, SemanticGameActionDefinition<Game2048ActionId>>(
 	GAME_2048_PLUGIN.actions.map((action) => [action.id, action]),

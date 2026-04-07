@@ -1,0 +1,35 @@
+{
+	"gameId": "sokoban",
+	"displayName": "Sokoban",
+	"defaultActionOrder": ["move_up", "move_left", "move_right", "move_down"],
+	"notes": [
+		"You can only push boxes, never pull them.",
+		"Avoid pushing boxes into unrecoverable corners."
+	],
+	"actions": [
+		{
+			"id": "move_up",
+			"label": "Up",
+			"description": "Move the player up once, pushing a box only if the path allows it.",
+			"steps": [{ "kind": "send-key", "key": "Up" }]
+		},
+		{
+			"id": "move_left",
+			"label": "Left",
+			"description": "Move the player left once, pushing a box only if the path allows it.",
+			"steps": [{ "kind": "send-key", "key": "Left" }]
+		},
+		{
+			"id": "move_right",
+			"label": "Right",
+			"description": "Move the player right once, pushing a box only if the path allows it.",
+			"steps": [{ "kind": "send-key", "key": "Right" }]
+		},
+		{
+			"id": "move_down",
+			"label": "Down",
+			"description": "Move the player down once, pushing a box only if the path allows it.",
+			"steps": [{ "kind": "send-key", "key": "Down" }]
+		}
+	]
+}
