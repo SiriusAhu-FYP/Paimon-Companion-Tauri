@@ -1,5 +1,6 @@
 import { Box, Chip, Stack, Typography } from "@mui/material";
 import type { ReactNode } from "react";
+import { formatGame2048Action } from "@/services/games";
 import type {
 	EvaluationCaseResult,
 	FunctionalTaskRecord,
@@ -54,9 +55,9 @@ export function buildLatestGameRun(game2048State: Game2048State): DebugRun | nul
 		strategy: gameRun.analysis.strategy,
 		reasoning: gameRun.analysis.reasoning,
 		analysisSource: gameRun.analysis.source,
-		preferred: gameRun.analysis.preferredMoves,
+		preferred: gameRun.analysis.preferredMoves.map((move) => formatGame2048Action(move)),
 		attempts: gameRun.attempts.map((attempt) => ({
-			label: attempt.move,
+			label: formatGame2048Action(attempt.move),
 			changed: attempt.changed,
 			changeRatio: attempt.changeRatio,
 		})),
