@@ -44,7 +44,7 @@ export function Game2048Section(props: {
 					onClick={props.onRunSingleStep}
 					disabled={props.functionalState.activeTaskId !== null || props.game2048State.activeRunId !== null}
 				>
-					运行单步
+					执行一轮方向验证
 				</Button>
 			</Stack>
 
