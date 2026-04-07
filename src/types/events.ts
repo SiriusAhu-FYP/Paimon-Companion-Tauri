@@ -43,6 +43,8 @@ export interface LlmRequestStartPayload {
 	userText: string;
 	companionRuntimeContextUsed?: boolean;
 	companionRuntimeTarget?: string | null;
+	companionRuntimeContextLength?: number;
+	knowledgeContextLength?: number;
 }
 
 export interface LlmStreamChunkPayload {

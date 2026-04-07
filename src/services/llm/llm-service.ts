@@ -68,11 +68,6 @@ export class LLMService {
 		this.history.push({ role: "user", content: userText });
 		const companionRuntimeContext = this.companionRuntime.getPromptContext();
 		const companionRuntimeTarget = this.companionRuntime.getState().target?.title ?? null;
-		this.bus.emit("llm:request-start", {
-			userText,
-			companionRuntimeContextUsed: companionRuntimeContext.length > 0,
-			companionRuntimeTarget,
-		});
 
 		const appCharacter = getConfig().character;
 
@@ -94,6 +89,14 @@ export class LLMService {
 			log.warn("knowledge retrieval failed, using liveContext only", err);
 			knowledgeContext = this.knowledge.getAssembledLiveContext();
 		}
+
+		this.bus.emit("llm:request-start", {
+			userText,
+			companionRuntimeContextUsed: companionRuntimeContext.length > 0,
+			companionRuntimeTarget,
+			companionRuntimeContextLength: companionRuntimeContext.length,
+			knowledgeContextLength: knowledgeContext.length,
+		});
 
 		const promptCtx = {
 			characterProfile: this.character.getProfile(),

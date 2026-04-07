@@ -60,6 +60,15 @@ function buildBehaviorConstraintsSection(bc: BehaviorConstraintsConfig): string 
 export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 	const sections: string[] = [];
 
+	sections.push(
+		[
+			"【当前屏幕理解优先级】",
+			"如果用户在询问“现在看到了什么”“当前发生了什么”或类似问题，并且提供了最近游戏时序观察，那么你必须优先依据这些最近观察回答。",
+			"不要把角色 lore、知识库内容、世界观设定、过往游戏经验当成当前屏幕事实。",
+			"如果最近观察不足以支持某个判断，就明确说看不清、无法确认，而不是自行脑补成 Boss 战、血量危险或其他游戏场景。",
+		].join("\n"),
+	);
+
 	if (ctx.behaviorConstraints) {
 		const bcSection = buildBehaviorConstraintsSection(ctx.behaviorConstraints);
 		if (bcSection) {
