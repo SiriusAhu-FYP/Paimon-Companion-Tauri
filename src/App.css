@@ -125,8 +125,7 @@
 	flex-shrink: 0;
 }
 
-.event-log-search,
-.event-log-select {
+.event-log-search {
 	border: 1px solid rgba(255, 255, 255, 0.14);
 	background: rgba(255, 255, 255, 0.04);
 	color: rgba(255, 255, 255, 0.82);
@@ -139,10 +138,6 @@
 .event-log-search {
 	min-width: 220px;
 	flex: 1 1 220px;
-}
-
-.event-log-select {
-	min-width: 180px;
 }
 
 .event-log-search::placeholder {

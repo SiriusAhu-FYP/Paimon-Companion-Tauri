@@ -13,6 +13,8 @@ interface ResizablePaneProps {
 	className?: string;
 	handleClassName?: string;
 	style?: CSSProperties;
+	onResizeStart?: () => void;
+	onResizeEnd?: (size: number) => void;
 	children: ReactNode;
 }
 
@@ -31,6 +33,8 @@ export function ResizablePane(props: ResizablePaneProps) {
 		className,
 		handleClassName,
 		style,
+		onResizeStart,
+		onResizeEnd,
 		children,
 	} = props;
 	const localStorageKey = `paimon-companion-tauri:resizable-pane:${storageKey}`;
@@ -68,9 +72,11 @@ export function ResizablePane(props: ResizablePaneProps) {
 		};
 
 		const stopDragging = () => {
+			if (!dragStateRef.current) return;
 			dragStateRef.current = null;
 			document.body.style.userSelect = "";
 			document.body.style.cursor = "";
+			onResizeEnd?.(size);
 		};
 
 		window.addEventListener("pointermove", handlePointerMove);
@@ -82,7 +88,7 @@ export function ResizablePane(props: ResizablePaneProps) {
 			window.removeEventListener("pointerup", stopDragging);
 			window.removeEventListener("pointercancel", stopDragging);
 		};
-	}, [axis, handlePlacement, maxSize, minSize]);
+	}, [axis, handlePlacement, maxSize, minSize, onResizeEnd, size]);
 
 	const paneStyle = useMemo(() => {
 		const sizedStyle = axis === "y" ? { height: size } : { width: size };
@@ -103,6 +109,7 @@ export function ResizablePane(props: ResizablePaneProps) {
 					};
 					document.body.style.userSelect = "none";
 					document.body.style.cursor = axis === "y" ? "row-resize" : "col-resize";
+					onResizeStart?.();
 				}}
 			/>
 			{children}

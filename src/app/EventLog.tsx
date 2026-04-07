@@ -33,22 +33,14 @@ export function EventLog() {
 	const { t } = useI18n();
 	const { entries, clear, latestEntry } = useEventLog(200);
 	const [activeFilter, setActiveFilter] = useState<string | null>(null);
-	const [eventFilter, setEventFilter] = useState<string>("");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedKey, setSelectedKey] = useState<string | null>(null);
 	const [copyMessage, setCopyMessage] = useState<string | null>(null);
-
-	const eventOptions = useMemo(() => {
-		return Array.from(new Set(entries.map((entry) => entry.event))).sort();
-	}, [entries]);
 
 	const filteredEntries = useMemo(() => {
 		const normalizedQuery = searchQuery.trim().toLowerCase();
 		return entries.filter((entry) => {
 			if (activeFilter && entry.category !== activeFilter) {
-				return false;
-			}
-			if (eventFilter && entry.event !== eventFilter) {
 				return false;
 			}
 			if (!normalizedQuery) {
@@ -61,7 +53,7 @@ export function EventLog() {
 				entry.payloadText,
 			].join(" ").toLowerCase().includes(normalizedQuery);
 		});
-	}, [activeFilter, entries, eventFilter, searchQuery]);
+	}, [activeFilter, entries, searchQuery]);
 
 	useEffect(() => {
 		if (!filteredEntries.length) {
@@ -69,7 +61,7 @@ export function EventLog() {
 			return;
 		}
 		if (!selectedKey || !filteredEntries.some((entry) => entry.key === selectedKey)) {
-			setSelectedKey(filteredEntries[0].key);
+			setSelectedKey(filteredEntries[filteredEntries.length - 1]?.key ?? null);
 		}
 	}, [filteredEntries, selectedKey]);
 
@@ -79,7 +71,7 @@ export function EventLog() {
 		return () => window.clearTimeout(timer);
 	}, [copyMessage]);
 
-	const selectedEntry = filteredEntries.find((entry) => entry.key === selectedKey) ?? filteredEntries[0] ?? null;
+	const selectedEntry = filteredEntries.find((entry) => entry.key === selectedKey) ?? filteredEntries[filteredEntries.length - 1] ?? null;
 
 	return (
 		<section className="event-log">
@@ -114,16 +106,6 @@ export function EventLog() {
 					onChange={(event) => setSearchQuery(event.target.value)}
 					placeholder={t("搜索事件名 / 摘要 / payload", "Search event / summary / payload")}
 				/>
-				<select
-					className="event-log-select"
-					value={eventFilter}
-					onChange={(event) => setEventFilter(event.target.value)}
-				>
-					<option value="">{t("全部事件", "All events")}</option>
-					{eventOptions.map((eventName) => (
-						<option key={eventName} value={eventName}>{eventName}</option>
-					))}
-				</select>
 				<div className="event-log-filters">
 					{Object.entries(EVENT_CATEGORIES).map(([name, { color }]) => (
 						<button
