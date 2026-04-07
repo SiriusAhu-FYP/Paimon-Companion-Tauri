@@ -5,17 +5,25 @@ import type { ChatMessage } from "./types";
 export interface PromptContext {
 	characterProfile: CharacterProfile | null;
 	knowledgeContext: string;
+	companionRuntimeContext: string;
 	customPersona: string;
 	behaviorConstraints?: BehaviorConstraintsConfig;
 }
 
 /** 知识块过长时截断（Phase 3.5：精选检索结果，阈值调低） */
 const MAX_KNOWLEDGE_CHARS = 4000;
+const MAX_COMPANION_RUNTIME_CHARS = 2000;
 
 function truncateKnowledge(text: string): string {
 	const t = text.trim();
 	if (t.length <= MAX_KNOWLEDGE_CHARS) return t;
 	return `${t.slice(0, MAX_KNOWLEDGE_CHARS)}\n\n[…知识上下文已截断…]`;
+}
+
+function truncateCompanionRuntime(text: string): string {
+	const t = text.trim();
+	if (t.length <= MAX_COMPANION_RUNTIME_CHARS) return t;
+	return `${t.slice(0, MAX_COMPANION_RUNTIME_CHARS)}\n\n[…时序观察上下文已截断…]`;
 }
 
 /** 构建行为约束段落，位于 system prompt 最前面以获得最高遵从度 */
@@ -80,6 +88,11 @@ export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 		sections.push(`【附加人设】\n${custom}`);
 	}
 
+	const companionRuntime = truncateCompanionRuntime(ctx.companionRuntimeContext ?? "");
+	if (companionRuntime) {
+		sections.push(`【最近游戏时序观察】\n${companionRuntime}`);
+	}
+
 	const knowledge = truncateKnowledge(ctx.knowledgeContext ?? "");
 	if (knowledge) {
 		sections.push(`【当前参考知识与任务上下文】\n${knowledge}`);
@@ -108,6 +121,7 @@ export function summarizePromptContext(ctx: PromptContext): Record<string, unkno
 		personaLen: (ctx.characterProfile?.persona ?? "").length,
 		scenarioLen: (ctx.characterProfile?.scenario ?? "").length,
 		customPersonaLen: (ctx.customPersona ?? "").length,
+		companionRuntimeLen: (ctx.companionRuntimeContext ?? "").length,
 		knowledgeLen: (ctx.knowledgeContext ?? "").length,
 		behaviorConstraintsEnabled: ctx.behaviorConstraints?.enabled ?? false,
 	};

@@ -77,6 +77,10 @@ function buildFallbackSummary(frames: readonly CompanionFrameDescriptionRecord[]
 		.join("；")}`;
 }
 
+function formatTime(timestamp: number): string {
+	return new Date(timestamp).toLocaleTimeString();
+}
+
 export class CompanionRuntimeService {
 	private bus: EventBus;
 	private perception: PerceptionService;
@@ -103,6 +107,55 @@ export class CompanionRuntimeService {
 			frameQueue: this.state.frameQueue.map(cloneFrameRecord),
 			summaryHistory: this.state.summaryHistory.map(cloneSummaryRecord),
 		};
+	}
+
+	getPromptContext(): string {
+		const latestTimestamp = this.state.lastSummary?.createdAt ?? this.state.lastFrame?.capturedAt ?? 0;
+		if (!latestTimestamp) {
+			return "";
+		}
+		if (Date.now() - latestTimestamp > this.state.historyRetentionMs) {
+			return "";
+		}
+
+		const parts: string[] = [];
+		const targetTitle = this.state.target?.title?.trim() || this.state.lastFrame?.targetTitle;
+		if (targetTitle) {
+			parts.push(`当前观察目标：${targetTitle}`);
+		}
+
+		if (this.state.lastSummary) {
+			const summary = this.state.lastSummary;
+			const durationSeconds = Math.max(1, Math.round((summary.windowEndedAt - summary.windowStartedAt) / 1000));
+			parts.push(
+				[
+					`最近时序总结（${summary.source}，约 ${durationSeconds}s 窗口，生成于 ${formatTime(summary.createdAt)}）`,
+					summary.summary,
+				].join("\n"),
+			);
+		}
+
+		const recentFrames = this.state.frameQueue.slice(-3);
+		if (recentFrames.length) {
+			parts.push(
+				[
+					"最近帧描述：",
+					...recentFrames.map((frame) => `- [${formatTime(frame.capturedAt)}] ${truncateLine(frame.description, 120)}`),
+				].join("\n"),
+			);
+		}
+
+		const recentSummaries = this.state.summaryHistory.slice(-3);
+		if (recentSummaries.length > 1) {
+			parts.push(
+				[
+					"最近总结历史：",
+					...recentSummaries.map((summary) => `- [${formatTime(summary.createdAt)}] ${truncateLine(summary.summary, 120)}`),
+				].join("\n"),
+			);
+		}
+
+		return parts.join("\n\n").trim();
 	}
 
 	async start(target: FunctionalTarget): Promise<void> {

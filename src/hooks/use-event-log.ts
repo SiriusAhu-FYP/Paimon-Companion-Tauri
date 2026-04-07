@@ -144,7 +144,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "llm:request-start": {
 			const data = payload as EventMap["llm:request-start"];
-			return `请求: ${truncate(data.userText, 80)}`;
+			return `请求: ${truncate(data.userText, 80)}${data.companionRuntimeContextUsed ? " / runtime context" : ""}`;
 		}
 		case "llm:tool-call": {
 			const data = payload as EventMap["llm:tool-call"];
