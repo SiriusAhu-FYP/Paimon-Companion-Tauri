@@ -107,6 +107,10 @@ export class Game2048Service {
 	}
 
 	async runSingleStep(targetOverride?: FunctionalTarget): Promise<Game2048RunRecord> {
+		if (this.state.activeRunId) {
+			throw new Error(`2048 run already in progress: ${this.state.activeRunId}`);
+		}
+
 		let target = targetOverride ?? this.orchestrator.getState().selectedTarget;
 		if (!target) {
 			target = await this.detectTargetWindow();
@@ -115,24 +119,14 @@ export class Game2048Service {
 			throw new Error("no target window selected and no 2048 window could be detected");
 		}
 
-		const baselineSnapshot = await ensureReferenceSnapshot(
-			this.orchestrator,
-			target,
-			"unable to capture baseline snapshot",
-		);
-		if (isSnapshotLowConfidence(baselineSnapshot)) {
-			throw new Error(
-				`2048 baseline capture looks invalid (${describeSnapshotQuality(baselineSnapshot)}). Check browser/game capture first.`,
-			);
-		}
-		const analysis = await this.buildAnalysis(target, baselineSnapshot);
-		const run: Game2048RunRecord = {
-			id: `2048-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+		const runId = `2048-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+		let run: Game2048RunRecord = {
+			id: runId,
 			status: "running",
 			target: { ...target },
 			startedAt: Date.now(),
 			endedAt: null,
-			analysis,
+			analysis: buildPendingAnalysis(),
 			attempts: [],
 			selectedMove: null,
 			boardChanged: false,
@@ -143,15 +137,33 @@ export class Game2048Service {
 
 		this.state.activeRunId = run.id;
 		this.state.lastRun = cloneRun(run);
-		this.bus.emit("game2048:run-start", {
-			runId: run.id,
-			targetHandle: target.handle,
-			targetTitle: target.title,
-			preferredMoves: [...analysis.preferredMoves],
-		});
 		this.emitState();
 
 		try {
+			const baselineSnapshot = await ensureReferenceSnapshot(
+				this.orchestrator,
+				target,
+				"unable to capture baseline snapshot",
+			);
+			if (isSnapshotLowConfidence(baselineSnapshot)) {
+				throw new Error(
+					`2048 baseline capture looks invalid (${describeSnapshotQuality(baselineSnapshot)}). Check browser/game capture first.`,
+				);
+			}
+			const analysis = await this.buildAnalysis(target, baselineSnapshot);
+			run = {
+				...run,
+				analysis,
+			};
+			this.state.lastRun = cloneRun(run);
+			this.emitState();
+
+			this.bus.emit("game2048:run-start", {
+				runId: run.id,
+				targetHandle: target.handle,
+				targetTitle: target.title,
+				preferredMoves: [...analysis.preferredMoves],
+			});
 			await this.orchestrator.runFocusTask(target);
 
 			let referenceSnapshot = baselineSnapshot;
@@ -336,6 +348,16 @@ export class Game2048Service {
 	private emitState() {
 		this.bus.emit("game2048:state-change", { state: this.getState() });
 	}
+}
+
+function buildPendingAnalysis(): Game2048Analysis {
+	return {
+		source: "heuristic",
+		reflection: "Preparing the next 2048 step.",
+		strategy: "capture the board, choose a semantic move ordering, then verify the result",
+		reasoning: "The runtime is still capturing the baseline snapshot and analysis context.",
+		preferredMoves: [...DEFAULT_MOVE_ORDER],
+	};
 }
 
 function buildHeuristicAnalysis(previousMove: Game2048Move | null, recentDecisionSummary: string[]): Game2048Analysis {

@@ -1,12 +1,12 @@
 import { Alert, Button, Stack } from "@mui/material";
-import type { FunctionalRuntimeState, FunctionalTarget, Game2048State } from "@/types";
+import type { FunctionalRuntimeState, Game2048State } from "@/types";
 import { InfoLine, PanelCard, SectionHeader, SectionStatusChip } from "./panel-shell";
 
 export function Game2048Section(props: {
 	functionalState: FunctionalRuntimeState;
 	game2048State: Game2048State;
 	onDetectTarget: () => Promise<unknown>;
-	onRunSingleStep: (target?: FunctionalTarget) => Promise<unknown>;
+	onRunSingleStep: () => Promise<unknown>;
 }) {
 	const game2048Error = props.game2048State.lastRun?.status === "failed"
 		? props.game2048State.lastRun.error
@@ -41,7 +41,7 @@ export function Game2048Section(props: {
 				<Button
 					size="small"
 					variant="contained"
-					onClick={() => props.onRunSingleStep(props.functionalState.selectedTarget ?? undefined)}
+					onClick={props.onRunSingleStep}
 					disabled={props.functionalState.activeTaskId !== null || props.game2048State.activeRunId !== null}
 				>
 					运行单步
