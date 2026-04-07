@@ -294,7 +294,7 @@ function toEntry(entry: EventHistoryEntry): EventLogEntry | null {
 
 	const category = getCategoryForEvent(entry.event);
 	return {
-		key: `${entry.timestamp}-${entry.event}`,
+		key: String(entry.sequence),
 		event: entry.event,
 		timestamp: entry.timestamp,
 		timestampLabel: new Date(entry.timestamp).toLocaleTimeString(),
@@ -317,13 +317,11 @@ export function useEventLog(limit = DEFAULT_LIMIT) {
 
 	const entries = useMemo(() => {
 		const next: EventLogEntry[] = [];
-		for (let index = history.length - 1; index >= 0; index -= 1) {
+		const startIndex = Math.max(0, history.length - limit);
+		for (let index = startIndex; index < history.length; index += 1) {
 			const normalized = toEntry(history[index]);
 			if (normalized) {
 				next.push(normalized);
-			}
-			if (next.length >= limit) {
-				break;
 			}
 		}
 		return {
@@ -339,7 +337,7 @@ export function useEventLog(limit = DEFAULT_LIMIT) {
 	return {
 		entries: entries.entries,
 		clear,
-		latestEntry: entries.entries[0] ?? null,
+		latestEntry: entries.entries[entries.entries.length - 1] ?? null,
 		totalTrackedEntries: entries.totalTrackedEntries,
 	};
 }

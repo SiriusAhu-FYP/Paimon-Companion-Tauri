@@ -49,6 +49,7 @@ export function MainWindow() {
 	const unlistenMoveRef = useRef<(() => void) | null>(null);
 	const unlistenResizeRef = useRef<(() => void) | null>(null);
 	const syncDebounceRef = useRef(0);
+	const suspendDockedSyncRef = useRef(false);
 	const stageModeRef = useRef(stageMode);
 	const stageVisibleRef = useRef(stageVisible);
 
@@ -89,7 +90,7 @@ export function MainWindow() {
 		if (syncDebounceRef.current) cancelAnimationFrame(syncDebounceRef.current);
 		syncDebounceRef.current = requestAnimationFrame(() => {
 			syncDebounceRef.current = 0;
-			if (stageModeRef.current === "docked" && stageVisibleRef.current) {
+			if (!suspendDockedSyncRef.current && stageModeRef.current === "docked" && stageVisibleRef.current) {
 				syncStagePosition();
 			}
 		});
@@ -359,6 +360,13 @@ export function MainWindow() {
 						borderTop: "1px solid var(--mui-palette-secondary-main, rgba(255,255,255,0.12))",
 						background: "var(--mui-palette-background-default, transparent)",
 						overflow: "hidden",
+					}}
+					onResizeStart={() => {
+						suspendDockedSyncRef.current = true;
+					}}
+					onResizeEnd={() => {
+						suspendDockedSyncRef.current = false;
+						debouncedSync();
 					}}
 				>
 					<Suspense fallback={<PanelLoadingState />}>
