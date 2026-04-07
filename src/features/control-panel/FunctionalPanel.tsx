@@ -46,6 +46,14 @@ export function FunctionalPanel() {
 		}
 	}, [runCase]);
 
+	const handleRunSingle2048Step = useCallback(async () => {
+		try {
+			await runSingleStep(functionalState.selectedTarget ?? undefined);
+		} catch (err) {
+			log.error("failed to run 2048 single step", err);
+		}
+	}, [functionalState.selectedTarget, runSingleStep]);
+
 	return (
 		<PanelRoot title="功能实验">
 			<UnifiedRunSection
@@ -68,7 +76,7 @@ export function FunctionalPanel() {
 				functionalState={functionalState}
 				game2048State={game2048State}
 				onDetectTarget={handleDetect2048Target}
-				onRunSingleStep={runSingleStep}
+				onRunSingleStep={handleRunSingle2048Step}
 			/>
 			<EvaluationSection
 				evaluationState={evaluationState}
