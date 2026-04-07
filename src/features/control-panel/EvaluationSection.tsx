@@ -1,5 +1,6 @@
 import { Alert, Button, Stack, Typography } from "@mui/material";
 import type { EvaluationState, FunctionalRuntimeState, Game2048State } from "@/types";
+import { useI18n } from "@/contexts/I18nProvider";
 import { InfoLine, PanelCard, SectionHeader, SectionStatusChip } from "./panel-shell";
 
 export function EvaluationSection(props: {
@@ -8,6 +9,7 @@ export function EvaluationSection(props: {
 	game2048State: Game2048State;
 	onRunCase: (caseId: string) => Promise<unknown>;
 }) {
+	const { t } = useI18n();
 	const evaluationError = props.evaluationState.latestResult?.status === "failed"
 		? props.evaluationState.latestResult.summary
 		: null;
@@ -15,11 +17,11 @@ export function EvaluationSection(props: {
 	return (
 		<PanelCard compact>
 			<SectionHeader
-				title="评测"
-				subtitle="固定 case"
+				title={t("评测", "Evaluation")}
+				subtitle={t("固定 case", "Fixed cases")}
 				right={(
 					<SectionStatusChip
-						label={props.evaluationState.activeCaseId ? "评测中" : "就绪"}
+						label={props.evaluationState.activeCaseId ? t("评测中", "Running") : t("就绪", "Ready")}
 						color={props.evaluationState.activeCaseId ? "warning" : "default"}
 					/>
 				)}
@@ -32,7 +34,7 @@ export function EvaluationSection(props: {
 							{definition.name}
 						</Typography>
 						<InfoLine mb={0.5}>
-							[{definition.game}] {definition.description} · {definition.iterations} 次
+							[{definition.game}] {definition.description} · {definition.iterations} {t("次", "runs")}
 						</InfoLine>
 						<Button
 							size="small"
@@ -40,7 +42,7 @@ export function EvaluationSection(props: {
 							onClick={() => props.onRunCase(definition.id)}
 							disabled={props.evaluationState.activeCaseId !== null || props.game2048State.activeRunId !== null || props.functionalState.activeTaskId !== null}
 						>
-							运行
+							{t("运行", "Run")}
 						</Button>
 					</PanelCard>
 				))}
@@ -52,11 +54,11 @@ export function EvaluationSection(props: {
 				</Alert>
 			)}
 
-			<InfoLine>最近评测：{props.evaluationState.latestResult?.caseName ?? "尚未执行"}</InfoLine>
+			<InfoLine>{t("最近评测", "Latest Evaluation")}：{props.evaluationState.latestResult?.caseName ?? t("尚未执行", "Not run yet")}</InfoLine>
 			<InfoLine>
-				成功率：{props.evaluationState.latestResult ? `${(props.evaluationState.latestResult.metrics.successRate * 100).toFixed(0)}%` : "—"}
+				{t("成功率", "Success")}：{props.evaluationState.latestResult ? `${(props.evaluationState.latestResult.metrics.successRate * 100).toFixed(0)}%` : "—"}
 				{" · "}
-				平均延迟：{props.evaluationState.latestResult ? `${props.evaluationState.latestResult.metrics.averageLatencyMs.toFixed(0)}ms` : "—"}
+				{t("平均延迟", "Avg latency")}：{props.evaluationState.latestResult ? `${props.evaluationState.latestResult.metrics.averageLatencyMs.toFixed(0)}ms` : "—"}
 			</InfoLine>
 		</PanelCard>
 	);

@@ -1,9 +1,11 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import { EVENT_CATEGORIES, useEventLog } from "@/hooks";
+import { useI18n } from "@/contexts/I18nProvider";
 
 export function EventLog() {
 	const [activeFilter, setActiveFilter] = useState<string | null>(null);
 	const { entries, clear, latestEntry } = useEventLog();
+	const { t } = useI18n();
 
 	const filteredEntries = useMemo(() =>
 		activeFilter ? entries.filter((e) => e.category === activeFilter) : entries,
@@ -13,11 +15,11 @@ export function EventLog() {
 		<section className="event-log">
 			<div className="event-log-header">
 				<div className="event-log-title-group">
-					<h3>事件日志</h3>
-					<span className="event-log-meta">{filteredEntries.length} 条</span>
+					<h3>{t("事件日志", "Event Log")}</h3>
+					<span className="event-log-meta">{filteredEntries.length} {t("条", "items")}</span>
 					{latestEntry && (
 						<span className="event-log-latest" title={latestEntry.payloadText}>
-							最近: {latestEntry.summary}
+							{t("最近", "Latest")}: {latestEntry.summary}
 						</span>
 					)}
 				</div>
@@ -32,12 +34,12 @@ export function EventLog() {
 							{name}
 						</button>
 					))}
-					<button className="event-log-clear-btn" onClick={clear}>清空</button>
+					<button className="event-log-clear-btn" onClick={clear}>{t("清空", "Clear")}</button>
 				</div>
 			</div>
 			<div className="event-log-entries">
 				{filteredEntries.length === 0 ? (
-					<p className="event-log-empty">暂无事件</p>
+					<p className="event-log-empty">{t("暂无事件", "No events yet")}</p>
 				) : (
 					filteredEntries.map((entry, i) => {
 						return (

@@ -1,5 +1,6 @@
 import { Alert, Box, Chip, Divider, Stack, Typography } from "@mui/material";
 import type { EvaluationState, FunctionalRuntimeState, Game2048State } from "@/types";
+import { useI18n } from "@/contexts/I18nProvider";
 import { PipelineStagesSection } from "./functional-debug/PipelineStagesSection";
 import { TaskInspectionSection } from "./functional-debug/TaskInspectionSection";
 import { EvaluationSummaryCard } from "./functional-debug/shared";
@@ -12,15 +13,16 @@ interface FunctionalDebugPanelProps {
 }
 
 export function FunctionalDebugPanel(props: FunctionalDebugPanelProps) {
+	const { t } = useI18n();
 	return (
 		<Box sx={{ mt: 1, p: 0.75, border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
 			<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.75 }}>
 				<Box>
 					<Typography variant="caption" color="text.secondary" fontWeight={700}>
-						Functional Debug Drill-down
+						{t("功能调试钻取", "Functional Debug Drill-down")}
 					</Typography>
 					<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
-						把 capture / decision / action / verification 拆开看
+						{t("把 capture / decision / action / verification 拆开看", "Inspect capture / decision / action / verification separately")}
 					</Typography>
 				</Box>
 				{props.functionalState.selectedTarget ? (
@@ -31,13 +33,13 @@ export function FunctionalDebugPanel(props: FunctionalDebugPanelProps) {
 						sx={{ maxWidth: 160, "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" } }}
 					/>
 				) : (
-					<Chip label="未选目标" size="small" variant="outlined" />
+					<Chip label={t("未选目标", "No target")} size="small" variant="outlined" />
 				)}
 			</Stack>
 
 			{props.functionalState.safetyBlockedReason && (
 				<Alert severity="warning" sx={{ mb: 0.75, py: 0 }}>
-					安全阻断: {props.functionalState.safetyBlockedReason}
+					{t("安全阻断", "Safety Block")}：{props.functionalState.safetyBlockedReason}
 				</Alert>
 			)}
 

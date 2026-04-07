@@ -121,6 +121,7 @@ export type { KnowledgeConfig, EmbeddingProviderConfig, EmbeddingProfile, Knowle
 // ── 顶层 AppConfig ──
 
 export interface AppConfig {
+	locale: "zh" | "en";
 	llm: LLMProviderConfig;
 	tts: TTSProviderConfig;
 	asr: ASRProviderConfig;
@@ -148,6 +149,7 @@ export const SECRET_KEYS = {
 // ── 默认值 ──
 
 export const DEFAULT_CONFIG: AppConfig = {
+	locale: "zh",
 	llm: {
 		provider: "mock",
 		baseUrl: "",

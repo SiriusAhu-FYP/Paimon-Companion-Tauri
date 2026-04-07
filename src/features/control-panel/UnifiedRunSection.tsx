@@ -1,6 +1,7 @@
 import { Alert, Button, FormControlLabel, Stack, Switch, TextField } from "@mui/material";
 import { useState } from "react";
 import type { UnifiedRuntimeState } from "@/types";
+import { useI18n } from "@/contexts/I18nProvider";
 import { InfoLine, PanelCard, SectionHeader, SectionStatusChip } from "./panel-shell";
 
 export function UnifiedRunSection(props: {
@@ -11,17 +12,18 @@ export function UnifiedRunSection(props: {
 	onSetVoiceInputEnabled: (enabled: boolean) => void;
 	busy: boolean;
 }) {
+	const { t } = useI18n();
 	const [voiceText, setVoiceText] = useState("帮我看一下 2048 下一步");
 	const [error, setError] = useState<string | null>(null);
 
 	return (
 		<PanelCard compact>
 			<SectionHeader
-				title="Unified Run"
-				subtitle="陪伴表达、表情和功能动作走同一条链"
+				title={t("统一运行", "Unified Run")}
+				subtitle={t("陪伴表达、表情和功能动作走同一条链", "Companion speech, emotion, and functional actions share one path")}
 				right={(
 					<SectionStatusChip
-						label={props.unifiedState.activeRunId ? props.unifiedState.phase : "就绪"}
+						label={props.unifiedState.activeRunId ? props.unifiedState.phase : t("就绪", "Ready")}
 						color={props.unifiedState.activeRunId ? "warning" : "default"}
 					/>
 				)}
@@ -41,7 +43,7 @@ export function UnifiedRunSection(props: {
 					}}
 					disabled={props.busy}
 				>
-					运行统一单步
+					{t("运行统一单步", "Run Unified Step")}
 				</Button>
 			</Stack>
 
@@ -54,7 +56,7 @@ export function UnifiedRunSection(props: {
 							onChange={(_, checked) => props.onSetSpeechEnabled(checked)}
 						/>
 					)}
-					label="自动播报"
+					label={t("自动播报", "Auto speech")}
 				/>
 				<FormControlLabel
 					control={(
@@ -64,7 +66,7 @@ export function UnifiedRunSection(props: {
 							onChange={(_, checked) => props.onSetVoiceInputEnabled(checked)}
 						/>
 					)}
-					label="语音入口"
+					label={t("语音入口", "Voice input")}
 				/>
 			</Stack>
 
@@ -74,7 +76,7 @@ export function UnifiedRunSection(props: {
 					fullWidth
 					value={voiceText}
 					onChange={(event) => setVoiceText(event.target.value)}
-					placeholder="模拟语音输入，例如：帮我看一下 2048 下一步"
+					placeholder={t("模拟语音输入，例如：帮我看一下 2048 下一步", "Simulated voice input, e.g. help me decide the next 2048 move")}
 					sx={{ "& .MuiInputBase-input": { fontSize: 12 } }}
 				/>
 				<Button
@@ -90,7 +92,7 @@ export function UnifiedRunSection(props: {
 						}
 					}}
 				>
-					提交
+					{t("提交", "Submit")}
 				</Button>
 			</Stack>
 
@@ -100,12 +102,12 @@ export function UnifiedRunSection(props: {
 				</Alert>
 			)}
 
-			<InfoLine>阶段：{props.unifiedState.phase}</InfoLine>
-			<InfoLine>最近语音：{props.unifiedState.lastVoiceInput ?? "—"}</InfoLine>
-			<InfoLine>最近命令：{props.unifiedState.lastCommand ?? "—"}</InfoLine>
-			<InfoLine>最近播报：{props.unifiedState.lastCompanionText ?? "—"}</InfoLine>
+			<InfoLine>{t("阶段", "Phase")}：{props.unifiedState.phase}</InfoLine>
+			<InfoLine>{t("最近语音", "Latest Voice")}：{props.unifiedState.lastVoiceInput ?? "—"}</InfoLine>
+			<InfoLine>{t("最近命令", "Latest Command")}：{props.unifiedState.lastCommand ?? "—"}</InfoLine>
+			<InfoLine>{t("最近播报", "Latest Speech")}：{props.unifiedState.lastCompanionText ?? "—"}</InfoLine>
 			<InfoLine>
-				最近统一结果：{props.unifiedState.lastRun?.summary ?? "尚未执行"}
+				{t("最近统一结果", "Latest Unified Result")}：{props.unifiedState.lastRun?.summary ?? t("尚未执行", "Not run yet")}
 			</InfoLine>
 		</PanelCard>
 	);

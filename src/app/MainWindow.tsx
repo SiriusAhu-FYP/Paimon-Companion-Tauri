@@ -1,11 +1,12 @@
 import { Suspense, lazy, useState, useCallback, useEffect, useRef } from "react";
-import { Box, IconButton, Tooltip } from "@mui/material";
+import { Box, IconButton, ToggleButton, ToggleButtonGroup, Tooltip } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import ScienceIcon from "@mui/icons-material/Science";
 import TuneIcon from "@mui/icons-material/Tune";
+import TranslateIcon from "@mui/icons-material/Translate";
 import { listen } from "@tauri-apps/api/event";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { getCurrentWindow, Window } from "@tauri-apps/api/window";
@@ -16,6 +17,7 @@ import { StatusBar } from "@/app/StatusBar";
 import { broadcastControl, type StageDisplayMode, isTauriEnvironment } from "@/utils/window-sync";
 import { createLogger } from "@/services/logger";
 import { useThemeMode } from "@/contexts/JoyThemeProvider";
+import { useI18n } from "@/contexts/I18nProvider";
 
 const log = createLogger("main-window");
 const FunctionalPanel = lazy(async () => import("@/features/control-panel/FunctionalPanel").then((module) => ({ default: module.FunctionalPanel })));
@@ -24,15 +26,17 @@ const KnowledgePanel = lazy(async () => import("@/features/knowledge/KnowledgePa
 const EventLog = lazy(async () => import("@/app/EventLog").then((module) => ({ default: module.EventLog })));
 
 function PanelLoadingState() {
+	const { t } = useI18n();
 	return (
 		<Box sx={{ p: 1.5, color: "text.secondary", fontSize: 12 }}>
-			加载中...
+			{t("加载中...", "Loading...")}
 		</Box>
 	);
 }
 
 export function MainWindow() {
 	const { mode, setMode } = useThemeMode();
+	const { locale, setLocale, t } = useI18n();
 	const [stageVisible, setStageVisible] = useState(true);
 	const [stageMode, setStageMode] = useState<"docked" | "floating">("docked");
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
@@ -219,7 +223,34 @@ export function MainWindow() {
 					Paimon Companion Tauri
 				</Box>
 				<Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-					<Tooltip title={mode === "dark" ? "切换亮色" : "切换暗色"}>
+					<Tooltip title={t("语言", "Language")}>
+						<Box sx={{ display: "flex", alignItems: "center", mr: 0.5 }}>
+							<TranslateIcon sx={{ fontSize: 16, color: "text.secondary", mr: 0.5 }} />
+							<ToggleButtonGroup
+								size="small"
+								exclusive
+								value={locale}
+								onChange={(_, nextLocale) => {
+									if (nextLocale === "zh" || nextLocale === "en") {
+										setLocale(nextLocale);
+									}
+								}}
+								sx={{
+									height: 26,
+									"& .MuiToggleButton-root": {
+										px: 0.9,
+										py: 0.2,
+										fontSize: 11,
+										lineHeight: 1,
+									},
+								}}
+							>
+								<ToggleButton value="zh">中文</ToggleButton>
+								<ToggleButton value="en">EN</ToggleButton>
+							</ToggleButtonGroup>
+						</Box>
+					</Tooltip>
+					<Tooltip title={mode === "dark" ? t("切换亮色", "Switch to light mode") : t("切换暗色", "Switch to dark mode")}>
 						<IconButton
 							size="small"
 							onClick={() => setMode(mode === "dark" ? "light" : "dark")}
@@ -228,7 +259,7 @@ export function MainWindow() {
 							{mode === "dark" ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
 						</IconButton>
 					</Tooltip>
-					<Tooltip title="控制面板">
+					<Tooltip title={t("控制面板", "Control Panel")}>
 						<IconButton
 							size="small"
 							onClick={() => setRightPanel("control")}
@@ -237,7 +268,7 @@ export function MainWindow() {
 							<TuneIcon fontSize="small" />
 						</IconButton>
 					</Tooltip>
-					<Tooltip title="知识库">
+					<Tooltip title={t("知识库", "Knowledge")}>
 						<IconButton
 							size="small"
 							onClick={() => setRightPanel("knowledge")}
@@ -246,7 +277,7 @@ export function MainWindow() {
 							<AutoStoriesIcon fontSize="small" />
 						</IconButton>
 					</Tooltip>
-					<Tooltip title="功能实验">
+					<Tooltip title={t("功能实验", "Functional Lab")}>
 						<IconButton
 							size="small"
 							onClick={() => setRightPanel("functional")}
@@ -255,7 +286,7 @@ export function MainWindow() {
 							<ScienceIcon fontSize="small" />
 						</IconButton>
 					</Tooltip>
-					<Tooltip title="设置">
+					<Tooltip title={t("设置", "Settings")}>
 						<IconButton
 							size="small"
 							onClick={() => setRightPanel("settings")}

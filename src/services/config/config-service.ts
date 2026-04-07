@@ -19,6 +19,7 @@ let cachedConfig: AppConfig | null = null;
 
 function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfig {
 	return {
+		locale: overrides.locale ?? defaults.locale,
 		llm: { ...defaults.llm, ...overrides.llm },
 		tts: { ...defaults.tts, ...overrides.tts },
 		asr: { ...defaults.asr, ...overrides.asr },
