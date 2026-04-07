@@ -95,7 +95,7 @@ P1 close-out:
     - [x] move semantic game action definitions into lightweight per-game config manifests
     - [x] restore a first minimal `Sokoban` validation skeleton on the same semantic action foundation
     - [x] decide which gameplay semantics belong in core MCP tools and which belong in per-game config/plugins
-    - [ ] either merge the missing MVP capabilities or explicitly retire them in docs
+    - [x] either merge the missing MVP capabilities or explicitly retire them in docs
   - [ ] P2.5 `Video-Understanding-MVP` Completion
     - [ ] define the local-fast / cloud-summarize companion runtime around `Qwen3-VL-2B-Instruct` style local frame descriptions plus cloud temporal reasoning
     - [ ] start from `8-10s` rolling local-description windows and preserve at least the latest `1min` of summary context
@@ -132,6 +132,7 @@ P2 note:
 - the functional source-of-truth repos for this stage are `LLMPlay-MVP`, `VoiceL2D-MVP`, and `Video-Understanding-MVP`
 - the current `Unified Run` path is useful groundwork, but it is not by itself proof that source-repo fusion is complete
 - the first-pass fusion matrix is recorded in `docs/architecture/source-fusion-audit.md`
+- retained / replaced / retired `LLMPlay-MVP` decisions are recorded in `docs/architecture/llmplay-retained-scope.md`
 - the ASR restoration strategy is recorded in `docs/architecture/asr-migration-strategy.md`
 - the companion runtime direction is recorded in `docs/architecture/companion-runtime.md`
 - accepted `P2.2` baseline: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D response

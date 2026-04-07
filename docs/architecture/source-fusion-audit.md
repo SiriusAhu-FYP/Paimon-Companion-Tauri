@@ -42,7 +42,7 @@ These are not yet accepted replacements:
 | Tool-call based action interface (`FastMCP`) | `src/services/orchestrator/orchestrator-service.ts`, `src/services/unified/unified-runtime-service.ts` | `replaced` | Runtime actions no longer travel through an external MCP server; they are in-process Tauri service calls now. | Document this as a permanent architecture decision. |
 | Game-specific MCP tool packs (`2048`, `sokoban`) | `src/services/games/game-2048-service.ts`, `src/services/games/sokoban-service.ts` | `partial` | `2048` is validated and `sokoban` now has a restored minimal validation skeleton on the same semantic-action foundation. The future external MCP boundary is still not the final shape yet. | Keep `sokoban` in retained scope while MCP-facing tool packaging stays a later convergence step. |
 | Decision-history/reflection loop around repeated moves | `src/services/games/game-2048-service.ts`, `src/services/games/sokoban-service.ts`, `src/features/control-panel/FunctionalDebugPanel.tsx`, `src/services/evaluation/evaluation-service.ts` | `partial` | The runtime now records plan signatures, attempted moves, successful moves, and repeated-failure counts for both `2048` and `sokoban`, which is much closer to the MVP’s reflection shape. Longer-horizon planning memory is still lighter than the original research prototype. | Accept the current stronger decision-history baseline and only extend it further if later games expose a real gap. |
-| Prompt-pack/game-prompt structure | `src/services/games/game-2048-service.ts`, `src/services/llm/prompt-builder.ts` | `partial` | Prompting exists, but source prompt organization has not been audited line-by-line. | Define a shared game prompt template first, then rewrite per-game prompts from that template. |
+| Prompt-pack/game-prompt structure | `src/services/games/game-2048-service.ts`, `src/services/games/sokoban-service.ts`, `prompts/example.md` | `replaced` | The MVP’s per-game prompt text is no longer the accepted source shape. The Tauri baseline now uses one shared game prompt template plus lightweight per-game filling. | Keep the shared template direction as the accepted replacement. |
 
 ### `VoiceL2D-MVP`
 
@@ -77,8 +77,8 @@ These are not yet accepted replacements:
 Current high-level audit result:
 
 - `LLMPlay-MVP`: `partial`
-  - accepted core: Tauri-native host control + validated `2048` loop
-  - unresolved: retained source scope beyond current `2048`, especially `sokoban`, stronger reflection, shared prompt template design, and MCP-facing semantic action boundaries
+  - accepted core: Tauri-native host control + validated `2048` loop + retained `Sokoban` validation skeleton + stronger decision-history loop
+  - unresolved: MCP-facing gameplay exposure and later plugin generalization, not whether the Python MVP structure itself must be copied
 - `VoiceL2D-MVP`: `partial`
   - accepted core: Live2D + chat + character + microphone + VAD + bundled local sherpa ASR + GPT-SoVITS TTS/lip-sync
   - unresolved: cloud ASR validation and any future quality upgrades such as better mixed-language utterance handling
@@ -102,3 +102,4 @@ The next implementation order should be:
 Accepted prerequisite already in place:
 
 - `P2.3` has established the current expression-linkage baseline for companion replies
+- retained / replaced / retired `LLMPlay-MVP` decisions are recorded in `llmplay-retained-scope.md`

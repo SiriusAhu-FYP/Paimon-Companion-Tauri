@@ -14,6 +14,8 @@ Tracked public project docs live here.
   which source repositories are in scope and how fusion is judged
 - `architecture/source-fusion-audit.md`
   detailed merged / partial / missing / replaced matrix
+- `architecture/llmplay-retained-scope.md`
+  retained / replaced / retired decisions for the `LLMPlay-MVP` line
 - `architecture/companion-runtime.md`
   target runtime direction for local perception, cloud reasoning, and MCP control
 - `architecture/companion-mcp-contract.md`
