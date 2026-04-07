@@ -1,5 +1,5 @@
 import { Alert, Box, Chip, Divider, Stack, Typography } from "@mui/material";
-import type { EvaluationState, FunctionalRuntimeState, Game2048State } from "@/types";
+import type { EvaluationState, FunctionalRuntimeState, Game2048State, SokobanState } from "@/types";
 import { useI18n } from "@/contexts/I18nProvider";
 import { PipelineStagesSection } from "./functional-debug/PipelineStagesSection";
 import { TaskInspectionSection } from "./functional-debug/TaskInspectionSection";
@@ -8,6 +8,7 @@ import { EvaluationSummaryCard } from "./functional-debug/shared";
 interface FunctionalDebugPanelProps {
 	functionalState: FunctionalRuntimeState;
 	game2048State: Game2048State;
+	sokobanState: SokobanState;
 	evaluationState: EvaluationState;
 	onClearTaskHistory: () => void;
 }
@@ -46,6 +47,7 @@ export function FunctionalDebugPanel(props: FunctionalDebugPanelProps) {
 			<PipelineStagesSection
 				functionalState={props.functionalState}
 				game2048State={props.game2048State}
+				sokobanState={props.sokobanState}
 			/>
 
 			{(props.functionalState.latestTask || props.functionalState.taskHistory.length > 0) && (

@@ -1,16 +1,17 @@
 import { Alert, Chip, Stack, Typography } from "@mui/material";
-import type { FunctionalRuntimeState, Game2048State } from "@/types";
+import type { FunctionalRuntimeState, Game2048State, SokobanState } from "@/types";
 import { buildLatestGameRun, formatDuration, formatPercent, formatTime, SnapshotCard, StageCard } from "./shared";
 
 interface PipelineStagesSectionProps {
 	functionalState: FunctionalRuntimeState;
 	game2048State: Game2048State;
+	sokobanState: SokobanState;
 }
 
 export function PipelineStagesSection(props: PipelineStagesSectionProps) {
 	const latestTask = props.functionalState.latestTask;
 	const latestSnapshot = props.functionalState.latestSnapshot;
-	const latestRun = buildLatestGameRun(props.game2048State);
+	const latestRun = buildLatestGameRun(props.game2048State, props.sokobanState);
 
 	const captureStageStatus = latestSnapshot
 		? "success"

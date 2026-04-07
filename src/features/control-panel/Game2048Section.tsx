@@ -6,6 +6,7 @@ import { InfoLine, PanelCard, SectionHeader, SectionStatusChip } from "./panel-s
 export function Game2048Section(props: {
 	functionalState: FunctionalRuntimeState;
 	game2048State: Game2048State;
+	busy: boolean;
 	onDetectTarget: () => Promise<unknown>;
 	onRunSingleStep: () => Promise<unknown>;
 }) {
@@ -36,7 +37,7 @@ export function Game2048Section(props: {
 					size="small"
 					variant="outlined"
 					onClick={props.onDetectTarget}
-					disabled={props.functionalState.activeTaskId !== null || props.game2048State.activeRunId !== null}
+					disabled={props.busy}
 				>
 					{t("检测窗口", "Detect Window")}
 				</Button>
@@ -44,7 +45,7 @@ export function Game2048Section(props: {
 					size="small"
 					variant="contained"
 					onClick={props.onRunSingleStep}
-					disabled={props.functionalState.activeTaskId !== null || props.game2048State.activeRunId !== null}
+					disabled={props.busy}
 				>
 					{t("执行一轮方向验证", "Run Direction Validation")}
 				</Button>

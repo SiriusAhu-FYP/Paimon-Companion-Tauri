@@ -1,14 +1,15 @@
 import { Box, Chip, Stack, Typography } from "@mui/material";
 import type { ReactNode } from "react";
-import { formatGame2048Action } from "@/services/games";
+import { formatGame2048Action, formatSokobanAction } from "@/services/games";
 import type {
 	EvaluationCaseResult,
 	FunctionalTaskRecord,
 	Game2048State,
+	SokobanState,
 } from "@/types";
 
 export interface DebugRun {
-	game: "2048";
+	game: "2048" | "Sokoban";
 	startedAt: number;
 	status: string;
 	summary: string;
@@ -41,27 +42,50 @@ export function getTaskStatusColor(status: FunctionalTaskRecord["status"]): "suc
 	return "warning";
 }
 
-export function buildLatestGameRun(game2048State: Game2048State): DebugRun | null {
-	const gameRun = game2048State.lastRun;
-	if (!gameRun) return null;
+export function buildLatestGameRun(game2048State: Game2048State, sokobanState: SokobanState): DebugRun | null {
+	const gameRun2048 = game2048State.lastRun
+		? {
+			game: "2048" as const,
+			startedAt: game2048State.lastRun.startedAt,
+			status: game2048State.lastRun.status,
+			summary: game2048State.lastRun.summary,
+			companionText: game2048State.lastRun.companionText,
+			reflection: game2048State.lastRun.analysis.reflection,
+			strategy: game2048State.lastRun.analysis.strategy,
+			reasoning: game2048State.lastRun.analysis.reasoning,
+			analysisSource: game2048State.lastRun.analysis.source,
+			preferred: game2048State.lastRun.analysis.preferredMoves.map((move) => formatGame2048Action(move)),
+			attempts: game2048State.lastRun.attempts.map((attempt) => ({
+				label: formatGame2048Action(attempt.move),
+				changed: attempt.changed,
+				changeRatio: attempt.changeRatio,
+			})),
+		}
+		: null;
 
-	return {
-		game: "2048",
-		startedAt: gameRun.startedAt,
-		status: gameRun.status,
-		summary: gameRun.summary,
-		companionText: gameRun.companionText,
-		reflection: gameRun.analysis.reflection,
-		strategy: gameRun.analysis.strategy,
-		reasoning: gameRun.analysis.reasoning,
-		analysisSource: gameRun.analysis.source,
-		preferred: gameRun.analysis.preferredMoves.map((move) => formatGame2048Action(move)),
-		attempts: gameRun.attempts.map((attempt) => ({
-			label: formatGame2048Action(attempt.move),
-			changed: attempt.changed,
-			changeRatio: attempt.changeRatio,
-		})),
-	};
+	const sokobanRun = sokobanState.lastRun
+		? {
+			game: "Sokoban" as const,
+			startedAt: sokobanState.lastRun.startedAt,
+			status: sokobanState.lastRun.status,
+			summary: sokobanState.lastRun.summary,
+			companionText: sokobanState.lastRun.companionText,
+			reflection: sokobanState.lastRun.analysis.reflection,
+			strategy: sokobanState.lastRun.analysis.strategy,
+			reasoning: sokobanState.lastRun.analysis.reasoning,
+			analysisSource: sokobanState.lastRun.analysis.source,
+			preferred: sokobanState.lastRun.analysis.plannedMoves.map((move) => formatSokobanAction(move)),
+			attempts: sokobanState.lastRun.attempts.map((attempt) => ({
+				label: formatSokobanAction(attempt.move),
+				changed: attempt.changed,
+				changeRatio: attempt.changeRatio,
+			})),
+		}
+		: null;
+
+	if (!gameRun2048) return sokobanRun;
+	if (!sokobanRun) return gameRun2048;
+	return gameRun2048.startedAt >= sokobanRun.startedAt ? gameRun2048 : sokobanRun;
 }
 
 export function SnapshotCard(props: {

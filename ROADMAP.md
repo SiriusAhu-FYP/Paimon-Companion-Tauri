@@ -93,6 +93,7 @@ P1 close-out:
     - [x] define an MCP-facing semantic action contract so the model can call game actions without relying on rigid visible reply formatting
     - [x] land the first semantic action runtime foundation by migrating `2048` away from raw key assumptions
     - [x] move semantic game action definitions into lightweight per-game config manifests
+    - [x] restore a first minimal `Sokoban` validation skeleton on the same semantic action foundation
     - [x] decide which gameplay semantics belong in core MCP tools and which belong in per-game config/plugins
     - [ ] either merge the missing MVP capabilities or explicitly retire them in docs
   - [ ] P2.5 `Video-Understanding-MVP` Completion
