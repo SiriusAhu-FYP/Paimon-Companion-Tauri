@@ -14,6 +14,12 @@ import type {
 	PerceptionSnapshot,
 } from "@/types";
 import {
+	formatGame2048Action,
+	GAME_2048_DEFAULT_ACTION_ORDER,
+	getGame2048Action,
+	listGame2048ActionDescriptions,
+} from "./game-2048-plugin";
+import {
 	chooseWindowByKeywords,
 	describeSnapshotQuality,
 	ensureReferenceSnapshot,
@@ -23,11 +29,12 @@ import {
 	normalizeCompatibleOpenAIBaseUrl,
 } from "./game-utils";
 import { buildSharedGamePrompt } from "./game-prompt-template";
+import { executeSemanticAction } from "./semantic-action-runtime";
 
 const log = createLogger("game-2048");
 const MAX_RUN_HISTORY = 10;
 const MAX_DECISION_HISTORY = 8;
-const DEFAULT_MOVE_ORDER: Game2048Move[] = ["Up", "Left", "Right", "Down"];
+const DEFAULT_MOVE_ORDER: Game2048Move[] = [...GAME_2048_DEFAULT_ACTION_ORDER];
 const TARGET_KEYWORDS = ["2048", "play 2048", "gabriele cirulli", "threes"];
 
 interface VisionCompletionResponse {
@@ -150,9 +157,14 @@ export class Game2048Service {
 			let referenceSnapshot = baselineSnapshot;
 
 			for (const move of analysis.preferredMoves) {
-				const task = await this.orchestrator.runSendKeyTask(move, target);
-				const beforeSnapshot = task.beforeSnapshot ?? referenceSnapshot;
-				const afterSnapshot = task.afterSnapshot;
+				await executeSemanticAction(
+					this.orchestrator,
+					target,
+					getGame2048Action(move),
+				);
+				const latestTask = this.orchestrator.getState().latestTask;
+				const beforeSnapshot = latestTask?.beforeSnapshot ?? referenceSnapshot;
+				const afterSnapshot = latestTask?.afterSnapshot;
 
 				if (!afterSnapshot) {
 					throw new Error(`missing post-action snapshot for move ${move}`);
@@ -333,17 +345,18 @@ function buildHeuristicAnalysis(previousMove: Game2048Move | null, recentDecisio
 	const historyHint = recentDecisionSummary.length
 		? "Recent history exists, so avoid repeating the same failed ordering without a new reason."
 		: "No prior decision history is available yet.";
+	const previousMoveLabel = previousMove ? formatGame2048Action(previousMove) : null;
 
 	return {
 		source: "heuristic",
-		reflection: previousMove
-			? `The last verified move was ${previousMove}. ${historyHint}`
+		reflection: previousMoveLabel
+			? `The last verified move was ${previousMoveLabel}. ${historyHint}`
 			: `No verified prior move exists yet. ${historyHint}`,
-		strategy: previousMove
-			? `reuse last verified move ${previousMove} first, then bias toward upper-left stability`
+		strategy: previousMoveLabel
+			? `reuse last verified move ${previousMoveLabel} first, then bias toward upper-left stability`
 			: "prefer keeping the board stable toward the upper-left corner: Up -> Left -> Right -> Down",
-		reasoning: previousMove
-			? `The last verified move was ${previousMove}, so test it first before falling back to the stable corner strategy.`
+		reasoning: previousMoveLabel
+			? `The last verified move was ${previousMoveLabel}, so test it first before falling back to the stable corner strategy.`
 			: "Without image reasoning, default to a conservative upper-left stacking strategy.",
 		preferredMoves,
 	};
@@ -358,7 +371,7 @@ function buildVisionPrompt(
 		gameName: "2048",
 		taskName: "single-step board improvement",
 		targetWindow: targetTitle,
-		actionList: DEFAULT_MOVE_ORDER.map((move) => `${move}: shift the board once in that direction`),
+		actionList: listGame2048ActionDescriptions(),
 		gameRules: [
 			"Merge equal tiles and avoid scattering high-value tiles.",
 			"Prefer keeping the highest tile anchored in one corner.",
@@ -366,7 +379,7 @@ function buildVisionPrompt(
 		],
 		stateCues: [
 			previousMove
-				? `Last verified successful move: ${previousMove}. Reuse it only if the current board still supports it.`
+				? `Last verified successful move: ${formatGame2048Action(previousMove)}. Reuse it only if the current board still supports it.`
 				: "No verified successful move is available from the previous turn.",
 			"Look for board stability, merge opportunities, and whether one side is becoming fragmented.",
 			"Avoid recommending a move ordering that merely repeats a failed pattern without a new reason.",
@@ -380,7 +393,7 @@ function buildVisionPrompt(
 		"Analyze the current screenshot and decide the next single-step priority order.",
 		"Return strict JSON with keys: reflection, strategy, reasoning, preferredMoves.",
 		"reflection should briefly explain what you learned from the recent decision history before acting again.",
-		`preferredMoves must be an array containing each of these move strings exactly once, in priority order: ${DEFAULT_MOVE_ORDER.join(", ")}.`,
+		`preferredMoves must be an array containing each of these action IDs exactly once, in priority order: ${DEFAULT_MOVE_ORDER.join(", ")}.`,
 	].join("\n\n");
 }
 
@@ -474,7 +487,7 @@ function buildRecentDecisionSummary(history: Game2048DecisionHistoryEntry[]): st
 	}
 
 	return history.slice(0, 5).map((entry, index) => {
-		const selectedMove = entry.selectedMove ?? "none";
+		const selectedMove = entry.selectedMove ? formatGame2048Action(entry.selectedMove) : "none";
 		const outcome = entry.boardChanged ? "board changed as expected" : "no verified board change";
 		return `Turn ${index + 1}: ${entry.summary}; selectedMove=${selectedMove}; outcome=${outcome}; reflection=${entry.reflection}`;
 	});
@@ -483,7 +496,7 @@ function buildRecentDecisionSummary(history: Game2048DecisionHistoryEntry[]): st
 function buildRunSummary(run: Game2048RunRecord): string {
 	if (run.boardChanged && run.selectedMove) {
 		const successAttempt = run.attempts.find((attempt) => attempt.move === run.selectedMove);
-		return `2048 step verified with ${run.selectedMove} (${formatPercent(successAttempt?.changeRatio ?? 0)}) via ${run.analysis.source}`;
+		return `2048 step verified with ${formatGame2048Action(run.selectedMove)} (${formatPercent(successAttempt?.changeRatio ?? 0)}) via ${run.analysis.source}`;
 	}
 
 	return `2048 step found no board-changing move after ${run.attempts.length} attempt(s)`;
@@ -491,7 +504,7 @@ function buildRunSummary(run: Game2048RunRecord): string {
 
 function buildCompanionText(run: Game2048RunRecord): string {
 	if (run.boardChanged && run.selectedMove) {
-		return `我先根据${run.analysis.source === "vision-llm" ? "截图分析" : "保守启发式"}判断应该尝试 ${run.selectedMove}，然后我已经确认棋盘真的变化了。`;
+		return `我先根据${run.analysis.source === "vision-llm" ? "截图分析" : "保守启发式"}判断应该尝试 ${formatGame2048Action(run.selectedMove)}，然后我已经确认棋盘真的变化了。`;
 	}
 
 	return "我已经试过这轮候选方向，但截图前后没有看到足够明显的棋盘变化。可能当前画面不是 2048 对局，或者游戏窗口还没真正获得焦点。";

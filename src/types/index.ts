@@ -27,6 +27,7 @@ export type {
 } from "./unified";
 export type {
 	Game2048Analysis,
+	Game2048ActionId,
 	Game2048AnalysisSource,
 	Game2048DecisionHistoryEntry,
 	Game2048Move,
@@ -51,6 +52,12 @@ export type {
 	HostWindowCapture,
 	HostWindowInfo,
 } from "./system";
+export type {
+	SemanticActionExecutionResult,
+	SemanticGameActionDefinition,
+	SemanticGamePluginDefinition,
+	SemanticHostStep,
+} from "./semantic-game";
 export type {
 	KnowledgeDocument,
 	KnowledgeChunk,
