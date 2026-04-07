@@ -2,6 +2,7 @@ import type { EventBus } from "@/services/event-bus";
 import type { PerceptionService } from "@/services/perception";
 import { getConfig, proxyRequest, SECRET_KEYS, updateConfig } from "@/services/config";
 import { createLogger } from "@/services/logger";
+import { findSemanticGameByTargetTitle } from "@/services/games/semantic-game-registry";
 import type {
 	CompanionFrameDescriptionRecord,
 	CompanionRuntimeState,
@@ -79,6 +80,17 @@ function buildFallbackSummary(frames: readonly CompanionFrameDescriptionRecord[]
 
 function formatTime(timestamp: number): string {
 	return new Date(timestamp).toLocaleTimeString();
+}
+
+function buildObservationOverlay(targetTitle: string): string {
+	const game = findSemanticGameByTargetTitle(targetTitle);
+	if (!game || !game.observationFocus.length) {
+		return "";
+	}
+	return [
+		`Special focus for ${game.displayName}:`,
+		...game.observationFocus.map((line) => `- ${line}`),
+	].join("\n");
 }
 
 export class CompanionRuntimeService {
@@ -346,6 +358,7 @@ export class CompanionRuntimeService {
 
 	private async describeSnapshot(snapshot: PerceptionSnapshot): Promise<string> {
 		const baseUrl = normalizeCompatibleOpenAIBaseUrl(this.state.localVisionBaseUrl);
+		const observationOverlay = buildObservationOverlay(snapshot.targetTitle);
 		const response = await proxyRequest({
 			url: `${baseUrl}/chat/completions`,
 			method: "POST",
@@ -357,7 +370,14 @@ export class CompanionRuntimeService {
 				messages: [
 					{
 						role: "system",
-						content: "You are a low-latency screen observer. Describe only what is directly visible on the screen in 1-2 short sentences. Mention people, objects, setting, text, motion, interface state, and obvious changes. Do not assume this is a game unless the screen clearly shows game UI or gameplay elements. Avoid speculation.",
+						content: [
+							"You are a low-latency screen observer.",
+							"Describe only what is directly visible on the screen in 1-2 short sentences.",
+							"Mention people, objects, setting, text, motion, interface state, and obvious changes.",
+							"Do not assume this is a game unless the screen clearly shows game UI or gameplay elements.",
+							"Avoid speculation.",
+							observationOverlay,
+						].filter(Boolean).join("\n"),
 					},
 					{
 						role: "user",
@@ -418,6 +438,7 @@ export class CompanionRuntimeService {
 		const frameText = windowFrames
 			.map((frame) => `- [${new Date(frame.capturedAt).toLocaleTimeString()}] ${frame.description}`)
 			.join("\n");
+		const observationOverlay = buildObservationOverlay(this.state.target?.title ?? windowFrames[windowFrames.length - 1]?.targetTitle ?? "");
 
 		const response = await proxyRequest({
 			url: `${normalizeCompatibleOpenAIBaseUrl(baseUrl)}/chat/completions`,
@@ -431,7 +452,13 @@ export class CompanionRuntimeService {
 				messages: [
 					{
 						role: "system",
-						content: "You summarize recent screen observations for a companion agent. Write a concise Chinese summary that captures what visibly happened over time, including people, actions, setting changes, interface changes, and unresolved uncertainty when relevant. Do not assume this is gameplay unless the observations clearly show game elements. Do not invent unseen details.",
+						content: [
+							"You summarize recent screen observations for a companion agent.",
+							"Write a concise Chinese summary that captures what visibly happened over time, including people, actions, setting changes, interface changes, and unresolved uncertainty when relevant.",
+							"Do not assume this is gameplay unless the observations clearly show game elements.",
+							"Do not invent unseen details.",
+							observationOverlay,
+						].filter(Boolean).join("\n"),
 					},
 					{
 						role: "user",

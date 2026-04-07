@@ -27,6 +27,8 @@ export interface SemanticGamePluginDefinition<ActionId extends string> {
 export interface SemanticGameManifest<ActionId extends string> extends SemanticGamePluginDefinition<ActionId> {
 	defaultActionOrder: readonly ActionId[];
 	notes?: readonly string[];
+	windowTitleHints?: readonly string[];
+	observationFocus?: readonly string[];
 }
 
 export interface SemanticActionExecutionResult<ActionId extends string> {

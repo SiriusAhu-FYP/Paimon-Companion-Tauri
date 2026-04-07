@@ -1,6 +1,11 @@
 {
 	"gameId": "sokoban",
 	"displayName": "Sokoban",
+	"windowTitleHints": ["sokoban", "push box", "pushbox"],
+	"observationFocus": [
+		"Focus on the player, boxes, targets, walls, blocked paths, and whether a push creates or avoids deadlocks.",
+		"Describe the puzzle layout and movement consequences instead of generic scene narration."
+	],
 	"defaultActionOrder": ["move_up", "move_left", "move_right", "move_down"],
 	"notes": [
 		"You can only push boxes, never pull them.",
