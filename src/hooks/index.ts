@@ -1,5 +1,6 @@
 export { useRuntime } from "./use-runtime";
 export { useCharacter } from "./use-character";
+export { useCompanionRuntime } from "./use-companion-runtime";
 export { useEvaluation } from "./use-evaluation";
 export { useEventBus } from "./use-event-bus";
 export { useEventLog, EVENT_CATEGORIES } from "./use-event-log";

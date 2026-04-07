@@ -1,5 +1,6 @@
 import { useCallback } from "react";
-import { useEvaluation, useFunctional, useGame2048, useSokoban, useUnifiedRuntime } from "@/hooks";
+import { useCompanionRuntime, useEvaluation, useFunctional, useGame2048, useSokoban, useUnifiedRuntime } from "@/hooks";
+import { CompanionRuntimeSection } from "./CompanionRuntimeSection";
 import { createLogger } from "@/services/logger";
 import { useI18n } from "@/contexts/I18nProvider";
 import { EvaluationSection } from "./EvaluationSection";
@@ -33,6 +34,14 @@ export function FunctionalPanel() {
 		setSpeechEnabled,
 		setVoiceInputEnabled,
 	} = useUnifiedRuntime();
+	const {
+		state: companionRuntimeState,
+		start: startCompanionRuntime,
+		stop: stopCompanionRuntime,
+		clearHistory: clearCompanionRuntimeHistory,
+		runSummaryNow,
+		updateRuntimeConfig,
+	} = useCompanionRuntime();
 
 	const handleDetect2048Target = useCallback(async () => {
 		try {
@@ -82,6 +91,15 @@ export function FunctionalPanel() {
 
 	return (
 		<PanelRoot title={t("功能实验", "Functional Lab")}>
+			<CompanionRuntimeSection
+				functionalState={functionalState}
+				companionRuntimeState={companionRuntimeState}
+				onStart={startCompanionRuntime}
+				onStop={stopCompanionRuntime}
+				onClearHistory={clearCompanionRuntimeHistory}
+				onRunSummaryNow={runSummaryNow}
+				onUpdateConfig={updateRuntimeConfig}
+			/>
 			<UnifiedRunSection
 				unifiedState={unifiedState}
 				onRunUnified2048={runUnified2048Step}

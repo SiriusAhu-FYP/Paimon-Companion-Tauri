@@ -6,6 +6,7 @@ export type {
 	TTSProviderType,
 	ASRProviderConfig,
 	ASRProviderType,
+	CompanionRuntimeConfig,
 	CharacterSettingsConfig,
 	BehaviorConstraintsConfig,
 	LLMProfile,

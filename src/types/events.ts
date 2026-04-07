@@ -8,6 +8,11 @@ import type {
 } from "./evaluation";
 import type { UnifiedRuntimeState } from "./unified";
 import type {
+	CompanionFrameDescriptionRecord,
+	CompanionRuntimeState,
+	CompanionSummaryRecord,
+} from "./companion-runtime";
+import type {
 	FunctionalActionKind,
 	FunctionalLogLevel,
 	FunctionalRuntimeState,
@@ -231,6 +236,18 @@ export interface UnifiedVoiceInputPayload {
 	command: string | null;
 }
 
+export interface CompanionRuntimeStateChangePayload {
+	state: CompanionRuntimeState;
+}
+
+export interface CompanionRuntimeFramePayload {
+	record: CompanionFrameDescriptionRecord;
+}
+
+export interface CompanionRuntimeSummaryPayload {
+	record: CompanionSummaryRecord;
+}
+
 export interface VoiceInputStateChangePayload {
 	state: VoiceInputState;
 }
@@ -280,6 +297,9 @@ export interface EventMap {
 	"unified:run-start": UnifiedRunStartPayload;
 	"unified:run-complete": UnifiedRunCompletePayload;
 	"unified:voice-input": UnifiedVoiceInputPayload;
+	"companion-runtime:state-change": CompanionRuntimeStateChangePayload;
+	"companion-runtime:frame-described": CompanionRuntimeFramePayload;
+	"companion-runtime:summary-complete": CompanionRuntimeSummaryPayload;
 }
 
 export type EventName = keyof EventMap;

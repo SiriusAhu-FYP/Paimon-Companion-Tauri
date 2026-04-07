@@ -73,7 +73,7 @@ Migration checklist:
 
 Current status:
 
-- planned, not yet implemented
+- first frontend-owned slice now exists as `src/services/companion-runtime/companion-runtime-service.ts`
 
 Why it belongs in the backend:
 

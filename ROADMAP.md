@@ -97,8 +97,8 @@ P1 close-out:
     - [x] decide which gameplay semantics belong in core MCP tools and which belong in per-game config/plugins
     - [x] either merge the missing MVP capabilities or explicitly retire them in docs
   - [ ] P2.5 `Video-Understanding-MVP` Completion
-    - [ ] define the local-fast / cloud-summarize companion runtime around `Qwen3-VL-2B-Instruct` style local frame descriptions plus cloud temporal reasoning
-    - [ ] start from `8-10s` rolling local-description windows and preserve at least the latest `1min` of summary context
+    - [x] define the first local-fast / cloud-summarize companion runtime slice around `Qwen3-VL-2B-Instruct` style local frame descriptions plus cloud temporal reasoning
+    - [x] start from `8-10s` rolling local-description windows and preserve at least the latest `1min` of summary context
     - [ ] integrate the missing reusable perception pieces that are still required
     - [ ] carry over the relevant evaluation/benchmark logic where it still serves the product goal
     - [-] add no-progress escalation and selected-frame cloud rescue

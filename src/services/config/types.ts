@@ -114,6 +114,14 @@ export interface CharacterSettingsConfig {
 	behaviorConstraints: BehaviorConstraintsConfig;
 }
 
+export interface CompanionRuntimeConfig {
+	localVisionBaseUrl: string;
+	localVisionModel: string;
+	captureIntervalMs: number;
+	summaryWindowMs: number;
+	historyRetentionMs: number;
+}
+
 // ── Knowledge（知识库配置，独立于 LLM / TTS） ──
 
 export type { KnowledgeConfig, EmbeddingProviderConfig, EmbeddingProfile, KnowledgeSearchMode, RerankProviderConfig, RerankProfile } from "@/types/knowledge";
@@ -126,6 +134,7 @@ export interface AppConfig {
 	tts: TTSProviderConfig;
 	asr: ASRProviderConfig;
 	character: CharacterSettingsConfig;
+	companionRuntime: CompanionRuntimeConfig;
 	llmProfiles: LLMProfile[];
 	ttsProfiles: TTSProfile[];
 	asrProfiles: ASRProfile[];
@@ -189,6 +198,13 @@ export const DEFAULT_CONFIG: AppConfig = {
 			maxReplyLength: 150,
 			customRules: "",
 		},
+	},
+	companionRuntime: {
+		localVisionBaseUrl: "http://localhost:8000/v1",
+		localVisionModel: "Qwen/Qwen3-VL-2B-Instruct",
+		captureIntervalMs: 1000,
+		summaryWindowMs: 10000,
+		historyRetentionMs: 60000,
 	},
 	llmProfiles: [],
 	ttsProfiles: [],

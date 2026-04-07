@@ -52,6 +52,9 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 			"unified:run-start",
 			"unified:run-complete",
 			"unified:voice-input",
+			"companion-runtime:state-change",
+			"companion-runtime:frame-described",
+			"companion-runtime:summary-complete",
 		],
 		color: "#ffb74d",
 	},
@@ -266,6 +269,18 @@ function formatSummary(event: EventName, payload: unknown): string {
 		case "unified:voice-input": {
 			const data = payload as EventMap["unified:voice-input"];
 			return data.command ? `${data.command}: ${truncate(data.text, 80)}` : `voice: ${truncate(data.text, 80)}`;
+		}
+		case "companion-runtime:state-change": {
+			const data = payload as EventMap["companion-runtime:state-change"];
+			return `phase=${data.state.phase}, frames=${data.state.frameQueue.length}, summaries=${data.state.summaryHistory.length}`;
+		}
+		case "companion-runtime:frame-described": {
+			const data = payload as EventMap["companion-runtime:frame-described"];
+			return truncate(data.record.description, 100);
+		}
+		case "companion-runtime:summary-complete": {
+			const data = payload as EventMap["companion-runtime:summary-complete"];
+			return `${data.record.source}: ${truncate(data.record.summary, 100)}`;
 		}
 		default:
 			return serializePayload(payload);
