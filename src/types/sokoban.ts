@@ -40,9 +40,12 @@ export interface SokobanDecisionHistoryEntry {
 	reflection: string;
 	strategy: string;
 	reasoning: string;
+	planSignature: string;
 	plannedMoves: SokobanActionId[];
 	executedMoves: SokobanActionId[];
+	failedMoves: SokobanActionId[];
 	boardChanged: boolean;
+	repeatedFailureCount: number;
 	summary: string;
 }
 

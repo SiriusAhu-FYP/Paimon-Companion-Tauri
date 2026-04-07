@@ -14,6 +14,11 @@ export {
 	SOKOBAN_DEFAULT_ACTION_ORDER,
 	SOKOBAN_PLUGIN,
 } from "./sokoban-plugin";
+export {
+	buildPlanSignature,
+	buildRepeatedFailureHint,
+	countRepeatedFailures,
+} from "./decision-history";
 export { getSemanticGameManifest, listSemanticGames } from "./semantic-game-registry";
 export type { SokobanActionId } from "@/types";
 export {

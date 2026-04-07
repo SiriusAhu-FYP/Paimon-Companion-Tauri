@@ -41,9 +41,13 @@ export interface Game2048DecisionHistoryEntry {
 	reflection: string;
 	strategy: string;
 	reasoning: string;
+	planSignature: string;
 	preferredMoves: Game2048Move[];
+	attemptedMoves: Game2048Move[];
+	successfulMoves: Game2048Move[];
 	selectedMove: Game2048Move | null;
 	boardChanged: boolean;
+	repeatedFailureCount: number;
 	summary: string;
 }
 

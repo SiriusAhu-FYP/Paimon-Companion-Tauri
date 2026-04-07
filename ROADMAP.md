@@ -89,7 +89,7 @@ P1 close-out:
     - [x] define a shared game prompt template (`example.md`) before rewriting per-game prompts
     - [x] lock the first companion MCP contract and game semantic action contract before broad plugin work
     - [x] define the minimum retained `Sokoban` validation scope before implementation
-    - [ ] replace the current weak reflection/history loop with a stronger decision-history design derived from `LLMPlay-MVP`
+    - [x] replace the current weak reflection/history loop with a stronger decision-history design derived from `LLMPlay-MVP`
     - [x] define an MCP-facing semantic action contract so the model can call game actions without relying on rigid visible reply formatting
     - [x] land the first semantic action runtime foundation by migrating `2048` away from raw key assumptions
     - [x] move semantic game action definitions into lightweight per-game config manifests
