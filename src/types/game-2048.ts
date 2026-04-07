@@ -6,6 +6,7 @@ export type Game2048AnalysisSource = "vision-llm" | "heuristic";
 
 export interface Game2048Analysis {
 	source: Game2048AnalysisSource;
+	reflection: string;
 	strategy: string;
 	reasoning: string;
 	preferredMoves: Game2048Move[];
@@ -32,10 +33,24 @@ export interface Game2048RunRecord {
 	error: string | null;
 }
 
+export interface Game2048DecisionHistoryEntry {
+	runId: string;
+	recordedAt: number;
+	status: Game2048RunStatus;
+	reflection: string;
+	strategy: string;
+	reasoning: string;
+	preferredMoves: Game2048Move[];
+	selectedMove: Game2048Move | null;
+	boardChanged: boolean;
+	summary: string;
+}
+
 export interface Game2048State {
 	activeRunId: string | null;
 	lastRun: Game2048RunRecord | null;
 	history: Game2048RunRecord[];
+	decisionHistory: Game2048DecisionHistoryEntry[];
 	detectedTarget: FunctionalTarget | null;
 	detectionSummary: string | null;
 }

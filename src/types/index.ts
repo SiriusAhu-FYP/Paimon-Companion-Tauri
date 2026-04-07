@@ -28,6 +28,7 @@ export type {
 export type {
 	Game2048Analysis,
 	Game2048AnalysisSource,
+	Game2048DecisionHistoryEntry,
 	Game2048Move,
 	Game2048MoveAttempt,
 	Game2048RunRecord,

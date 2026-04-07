@@ -12,6 +12,7 @@ export interface DebugRun {
 	status: string;
 	summary: string;
 	companionText: string;
+	reflection: string;
 	strategy: string;
 	reasoning: string;
 	analysisSource: string;
@@ -49,6 +50,7 @@ export function buildLatestGameRun(game2048State: Game2048State): DebugRun | nul
 		status: gameRun.status,
 		summary: gameRun.summary,
 		companionText: gameRun.companionText,
+		reflection: gameRun.analysis.reflection,
 		strategy: gameRun.analysis.strategy,
 		reasoning: gameRun.analysis.reasoning,
 		analysisSource: gameRun.analysis.source,
