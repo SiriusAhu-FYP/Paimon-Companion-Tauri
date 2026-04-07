@@ -70,6 +70,9 @@ export function PipelineStagesSection(props: PipelineStagesSectionProps) {
 				{latestRun ? (
 					<>
 						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5, fontSize: 10 }}>
+							反思: {latestRun.reflection}
+						</Typography>
+						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5, fontSize: 10 }}>
 							推理: {latestRun.reasoning}
 						</Typography>
 						<Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>

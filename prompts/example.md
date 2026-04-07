@@ -43,6 +43,12 @@ Pay attention to these state cues:
 
 {state_cues}
 
+## Recent Decision History
+
+Use this recent decision history for reflection:
+
+{recent_decisions}
+
 ## Reflection Rule
 
 Before choosing the next action:

@@ -6,6 +6,7 @@ import { listWindows } from "@/services/system";
 import type {
 	FunctionalTarget,
 	Game2048Analysis,
+	Game2048DecisionHistoryEntry,
 	Game2048Move,
 	Game2048MoveAttempt,
 	Game2048RunRecord,
@@ -21,9 +22,11 @@ import {
 	isSnapshotLowConfidence,
 	normalizeCompatibleOpenAIBaseUrl,
 } from "./game-utils";
+import { buildSharedGamePrompt } from "./game-prompt-template";
 
 const log = createLogger("game-2048");
 const MAX_RUN_HISTORY = 10;
+const MAX_DECISION_HISTORY = 8;
 const DEFAULT_MOVE_ORDER: Game2048Move[] = ["Up", "Left", "Right", "Down"];
 const TARGET_KEYWORDS = ["2048", "play 2048", "gabriele cirulli", "threes"];
 
@@ -40,6 +43,7 @@ function makeInitialState(): Game2048State {
 		activeRunId: null,
 		lastRun: null,
 		history: [],
+		decisionHistory: [],
 		detectedTarget: null,
 		detectionSummary: null,
 	};
@@ -63,6 +67,7 @@ export class Game2048Service {
 			...this.state,
 			lastRun: this.state.lastRun ? cloneRun(this.state.lastRun) : null,
 			history: this.state.history.map(cloneRun),
+			decisionHistory: this.state.decisionHistory.map(cloneDecisionHistoryEntry),
 			detectedTarget: this.state.detectedTarget ? { ...this.state.detectedTarget } : null,
 		};
 	}
@@ -195,6 +200,7 @@ export class Game2048Service {
 		this.state.activeRunId = null;
 		this.state.lastRun = cloneRun(run);
 		this.state.history = [cloneRun(run), ...this.state.history].slice(0, MAX_RUN_HISTORY);
+		this.state.decisionHistory = [toDecisionHistoryEntry(run), ...this.state.decisionHistory].slice(0, MAX_DECISION_HISTORY);
 		this.bus.emit("game2048:run-complete", {
 			runId: run.id,
 			success: run.status === "completed" && run.boardChanged,
@@ -213,13 +219,14 @@ export class Game2048Service {
 
 	private async buildAnalysis(target: FunctionalTarget, snapshot: PerceptionSnapshot): Promise<Game2048Analysis> {
 		const previousMove = this.state.lastRun?.boardChanged ? this.state.lastRun.selectedMove : null;
+		const recentDecisionSummary = buildRecentDecisionSummary(this.state.decisionHistory);
 
 		try {
-			const visionAnalysis = await this.requestVisionAnalysis(target, snapshot, previousMove);
+			const visionAnalysis = await this.requestVisionAnalysis(target, snapshot, previousMove, recentDecisionSummary);
 			return visionAnalysis;
 		} catch (err) {
 			log.warn("2048 vision analysis unavailable, falling back to heuristic", err);
-			return buildHeuristicAnalysis(previousMove);
+			return buildHeuristicAnalysis(previousMove, recentDecisionSummary);
 		}
 	}
 
@@ -227,6 +234,7 @@ export class Game2048Service {
 		target: FunctionalTarget,
 		snapshot: PerceptionSnapshot,
 		previousMove: Game2048Move | null,
+		recentDecisionSummary: string[],
 	): Promise<Game2048Analysis> {
 		// The functional loop is latency-bound, so game actions bypass the
 		// general chat/retrieval stack and call the configured model directly.
@@ -259,7 +267,7 @@ export class Game2048Service {
 						content: [
 							{
 								type: "text",
-								text: buildVisionPrompt(target.title, previousMove),
+								text: buildVisionPrompt(target.title, previousMove, recentDecisionSummary),
 							},
 							{
 								type: "image_url",
@@ -288,6 +296,7 @@ export class Game2048Service {
 
 		return {
 			source: "vision-llm",
+			reflection: parsed.reflection,
 			strategy: parsed.strategy,
 			reasoning: parsed.reasoning,
 			preferredMoves: parsed.preferredMoves,
@@ -317,13 +326,19 @@ export class Game2048Service {
 	}
 }
 
-function buildHeuristicAnalysis(previousMove: Game2048Move | null): Game2048Analysis {
+function buildHeuristicAnalysis(previousMove: Game2048Move | null, recentDecisionSummary: string[]): Game2048Analysis {
 	const preferredMoves = previousMove
 		? uniqueMoves([previousMove, ...DEFAULT_MOVE_ORDER])
 		: [...DEFAULT_MOVE_ORDER];
+	const historyHint = recentDecisionSummary.length
+		? "Recent history exists, so avoid repeating the same failed ordering without a new reason."
+		: "No prior decision history is available yet.";
 
 	return {
 		source: "heuristic",
+		reflection: previousMove
+			? `The last verified move was ${previousMove}. ${historyHint}`
+			: `No verified prior move exists yet. ${historyHint}`,
 		strategy: previousMove
 			? `reuse last verified move ${previousMove} first, then bias toward upper-left stability`
 			: "prefer keeping the board stable toward the upper-left corner: Up -> Left -> Right -> Down",
@@ -334,25 +349,50 @@ function buildHeuristicAnalysis(previousMove: Game2048Move | null): Game2048Anal
 	};
 }
 
-function buildVisionPrompt(targetTitle: string, previousMove: Game2048Move | null): string {
+function buildVisionPrompt(
+	targetTitle: string,
+	previousMove: Game2048Move | null,
+	recentDecisionSummary: string[],
+): string {
+	const promptBody = buildSharedGamePrompt({
+		gameName: "2048",
+		taskName: "single-step board improvement",
+		targetWindow: targetTitle,
+		actionList: DEFAULT_MOVE_ORDER.map((move) => `${move}: shift the board once in that direction`),
+		gameRules: [
+			"Merge equal tiles and avoid scattering high-value tiles.",
+			"Prefer keeping the highest tile anchored in one corner.",
+			"Treat this as a one-step decision with verification after execution.",
+		],
+		stateCues: [
+			previousMove
+				? `Last verified successful move: ${previousMove}. Reuse it only if the current board still supports it.`
+				: "No verified successful move is available from the previous turn.",
+			"Look for board stability, merge opportunities, and whether one side is becoming fragmented.",
+			"Avoid recommending a move ordering that merely repeats a failed pattern without a new reason.",
+		],
+		recentDecisions: recentDecisionSummary,
+		goal: "Choose the best next move ordering for one verified 2048 step.",
+	});
+
 	return [
-		"You are analyzing a live screenshot of the 2048 game.",
-		`Window title: ${targetTitle}.`,
-		previousMove ? `The last verified successful move was ${previousMove}.` : "There is no prior verified move.",
-		"Choose the best next action for a single move.",
-		"Return strict JSON with keys: strategy, reasoning, preferredMoves.",
+		promptBody,
+		"Analyze the current screenshot and decide the next single-step priority order.",
+		"Return strict JSON with keys: reflection, strategy, reasoning, preferredMoves.",
+		"reflection should briefly explain what you learned from the recent decision history before acting again.",
 		`preferredMoves must be an array containing each of these move strings exactly once, in priority order: ${DEFAULT_MOVE_ORDER.join(", ")}.`,
-		"Optimize for a stable 2048 board and prefer keeping the largest tile anchored in a corner.",
-	].join(" ");
+	].join("\n\n");
 }
 
 function parseVisionResponse(content: string): {
+	reflection: string;
 	strategy: string;
 	reasoning: string;
 	preferredMoves: Game2048Move[];
 } {
 	const jsonText = extractJsonObject(content);
 	const parsed = JSON.parse(jsonText) as {
+		reflection?: unknown;
 		strategy?: unknown;
 		reasoning?: unknown;
 		preferredMoves?: unknown;
@@ -364,6 +404,9 @@ function parseVisionResponse(content: string): {
 	}
 
 	return {
+		reflection: typeof parsed.reflection === "string"
+			? parsed.reflection
+			: "No explicit reflection was returned. Use the current screenshot and recent history conservatively.",
 		strategy: typeof parsed.strategy === "string" ? parsed.strategy : "vision-guided 2048 move selection",
 		reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "The model selected an action based on the screenshot.",
 		preferredMoves,
@@ -401,6 +444,40 @@ function cloneRun(run: Game2048RunRecord): Game2048RunRecord {
 		},
 		attempts: run.attempts.map((attempt) => ({ ...attempt })),
 	};
+}
+
+function cloneDecisionHistoryEntry(entry: Game2048DecisionHistoryEntry): Game2048DecisionHistoryEntry {
+	return {
+		...entry,
+		preferredMoves: [...entry.preferredMoves],
+	};
+}
+
+function toDecisionHistoryEntry(run: Game2048RunRecord): Game2048DecisionHistoryEntry {
+	return {
+		runId: run.id,
+		recordedAt: run.endedAt ?? run.startedAt,
+		status: run.status,
+		reflection: run.analysis.reflection,
+		strategy: run.analysis.strategy,
+		reasoning: run.analysis.reasoning,
+		preferredMoves: [...run.analysis.preferredMoves],
+		selectedMove: run.selectedMove,
+		boardChanged: run.boardChanged,
+		summary: run.summary,
+	};
+}
+
+function buildRecentDecisionSummary(history: Game2048DecisionHistoryEntry[]): string[] {
+	if (!history.length) {
+		return ["No recent decisions are available yet."];
+	}
+
+	return history.slice(0, 5).map((entry, index) => {
+		const selectedMove = entry.selectedMove ?? "none";
+		const outcome = entry.boardChanged ? "board changed as expected" : "no verified board change";
+		return `Turn ${index + 1}: ${entry.summary}; selectedMove=${selectedMove}; outcome=${outcome}; reflection=${entry.reflection}`;
+	});
 }
 
 function buildRunSummary(run: Game2048RunRecord): string {
