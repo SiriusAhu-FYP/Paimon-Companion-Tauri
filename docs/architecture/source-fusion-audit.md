@@ -66,9 +66,9 @@ These are not yet accepted replacements:
 | Windows window capture utility | `src-tauri/src/commands/window.rs`, `src/services/perception/perception-service.ts` | `partial` | Window capture exists, but not as the broader reusable toolkit module set from the MVP. | Decide which reusable toolkit surface should remain in Tauri. |
 | Frame-diff filtering (`MSE` / `SSIM`) for keyframe selection | `src/services/games/game-utils.ts` | `partial` | The Tauri app has before/after snapshot diff for action verification, but not continuous keyframe filtering over a live stream. | Add only if still needed for product-level perception. |
 | Async VLM client abstraction | `src/services/games/game-2048-service.ts`, `src/services/config/http-proxy.ts` | `partial` | OpenAI-compatible vision requests exist, but not as a reusable general-purpose VLM client like the MVP toolkit. | Decide whether to factor out a reusable Tauri VLM client abstraction. |
-| Full capture -> queue -> describe -> summarize video pipeline | no current equivalent | `missing` | The MVP’s continuous video-understanding pipeline is not present in current Tauri runtime. The intended direction is local fast description first, cloud temporal summarization second. | Bring back the subset needed for a rolling companion-understanding runtime. |
-| Queue manager / backpressure / expiry around frame processing | no current equivalent | `missing` | Current app uses single-step screenshots, not queued video frames. | Keep absent unless continuous understanding becomes a real runtime need. |
-| Summarizer over multi-frame descriptions | no current equivalent | `missing` | No current equivalent of the MVP’s video summarizer pipeline. | Decide whether it belongs to product or stays as research tooling. |
+| Full capture -> queue -> describe -> summarize video pipeline | `src/services/companion-runtime/companion-runtime-service.ts`, `src/features/control-panel/CompanionRuntimeSection.tsx` | `partial` | The Tauri app now has a first experimental rolling companion runtime: selected-target capture, local frame descriptions, periodic summary windows, and retained recent summary context. It is still a thin first slice, not the full MVP-grade pipeline. | Continue merging reusable perception/runtime pieces without overfitting the old Python layout. |
+| Queue manager / backpressure / expiry around frame processing | `src/services/companion-runtime/companion-runtime-service.ts` | `partial` | Basic rolling retention now exists for frame descriptions and summary history, but there is still no stronger backpressure, diff-driven keyframe filtering, or dedicated backend scheduler. | Strengthen only the queue behavior that product runtime actually needs. |
+| Summarizer over multi-frame descriptions | `src/services/companion-runtime/companion-runtime-service.ts` | `partial` | The first periodic temporal summary path now exists and uses recent frame descriptions plus prior summaries. | Keep iterating toward the accepted product runtime rather than cloning the full research pipeline. |
 | Benchmark / quality-evaluation toolkit | `src/services/evaluation/evaluation-service.ts` | `partial` | Current evaluation only measures functional runs, not model quality benchmarking/judge scoring. | Carry over only the evaluation pieces still useful for the product goal. |
 | Judge/scoring/visualization research tooling | no current equivalent | `missing` | The Tauri repo does not currently host the MVP’s research toolkit. | Likely keep out unless explicitly needed. |
 
@@ -83,8 +83,8 @@ Current high-level audit result:
   - accepted core: Live2D + chat + character + microphone + VAD + bundled local sherpa ASR + GPT-SoVITS TTS/lip-sync
   - unresolved: cloud ASR validation and any future quality upgrades such as better mixed-language utterance handling
 - `Video-Understanding-MVP`: `partial`
-  - accepted core: screenshot capture and single-frame model use
-  - unresolved: the rolling local-description queue, cloud temporal summarization, and most reusable evaluation/toolkit pieces
+  - accepted core: screenshot capture, single-frame model use, and the first rolling local-description + periodic-summary runtime slice
+  - unresolved: stronger queueing/filtering/scheduler behavior and most reusable evaluation/toolkit pieces
 
 This means the three-source fusion is not yet complete.
 

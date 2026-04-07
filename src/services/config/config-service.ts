@@ -23,6 +23,7 @@ function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfi
 		llm: { ...defaults.llm, ...overrides.llm },
 		tts: { ...defaults.tts, ...overrides.tts },
 		asr: { ...defaults.asr, ...overrides.asr },
+		companionRuntime: { ...defaults.companionRuntime, ...overrides.companionRuntime },
 		character: {
 			...defaults.character,
 			...overrides.character,
@@ -257,6 +258,7 @@ export async function resetConfig(): Promise<AppConfig> {
 		llm: { ...DEFAULT_CONFIG.llm },
 		tts: { ...DEFAULT_CONFIG.tts },
 		asr: { ...DEFAULT_CONFIG.asr },
+		companionRuntime: { ...DEFAULT_CONFIG.companionRuntime },
 		character: { ...DEFAULT_CONFIG.character },
 		llmProfiles: [],
 		ttsProfiles: [],

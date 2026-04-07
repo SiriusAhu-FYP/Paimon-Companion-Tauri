@@ -26,6 +26,12 @@ export type {
 	UnifiedRuntimeState,
 } from "./unified";
 export type {
+	CompanionFrameDescriptionRecord,
+	CompanionRuntimePhase,
+	CompanionRuntimeState,
+	CompanionSummaryRecord,
+} from "./companion-runtime";
+export type {
 	Game2048Analysis,
 	Game2048ActionId,
 	Game2048AnalysisSource,
