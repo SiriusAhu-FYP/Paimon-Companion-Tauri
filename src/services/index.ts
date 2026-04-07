@@ -87,7 +87,7 @@ export function initServices(): ServiceContainer {
 	});
 
 	const llmProvider = resolveLLMProvider(config);
-	const llm = new LLMService(eventBus, runtime, llmProvider, character, knowledge);
+	const llm = new LLMService(eventBus, runtime, llmProvider, character, knowledge, companionRuntime);
 	const asr = resolveASRProvider(config);
 	const ttsProvider = resolveTTSProvider(config);
 	const player = new AudioPlayer();

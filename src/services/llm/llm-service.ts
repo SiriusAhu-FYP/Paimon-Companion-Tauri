@@ -2,6 +2,7 @@ import type { EventBus } from "@/services/event-bus";
 import type { RuntimeService } from "@/services/runtime";
 import type { CharacterService } from "@/services/character";
 import type { KnowledgeService } from "@/services/knowledge";
+import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import { getConfig } from "@/services/config";
 import type { ILLMService, ChatMessage } from "./types";
 import { buildSystemMessage, summarizePromptContext } from "./prompt-builder";
@@ -20,6 +21,7 @@ export class LLMService {
 	private provider: ILLMService;
 	private character: CharacterService;
 	private knowledge: KnowledgeService;
+	private companionRuntime: CompanionRuntimeService;
 	private history: ChatMessage[] = [];
 	private processing = false;
 
@@ -29,12 +31,14 @@ export class LLMService {
 		provider: ILLMService,
 		character: CharacterService,
 		knowledge: KnowledgeService,
+		companionRuntime: CompanionRuntimeService,
 	) {
 		this.bus = bus;
 		this.runtime = runtime;
 		this.provider = provider;
 		this.character = character;
 		this.knowledge = knowledge;
+		this.companionRuntime = companionRuntime;
 	}
 
 	isProcessing(): boolean {
@@ -62,7 +66,13 @@ export class LLMService {
 
 		this.processing = true;
 		this.history.push({ role: "user", content: userText });
-		this.bus.emit("llm:request-start", { userText });
+		const companionRuntimeContext = this.companionRuntime.getPromptContext();
+		const companionRuntimeTarget = this.companionRuntime.getState().target?.title ?? null;
+		this.bus.emit("llm:request-start", {
+			userText,
+			companionRuntimeContextUsed: companionRuntimeContext.length > 0,
+			companionRuntimeTarget,
+		});
 
 		const appCharacter = getConfig().character;
 
@@ -88,6 +98,7 @@ export class LLMService {
 		const promptCtx = {
 			characterProfile: this.character.getProfile(),
 			knowledgeContext,
+			companionRuntimeContext,
 			customPersona: appCharacter.customPersona,
 			behaviorConstraints: appCharacter.behaviorConstraints,
 		};

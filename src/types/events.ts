@@ -41,6 +41,8 @@ export interface AudioTtsStartPayload {
 
 export interface LlmRequestStartPayload {
 	userText: string;
+	companionRuntimeContextUsed?: boolean;
+	companionRuntimeTarget?: string | null;
 }
 
 export interface LlmStreamChunkPayload {
