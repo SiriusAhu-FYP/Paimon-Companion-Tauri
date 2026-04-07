@@ -185,6 +185,11 @@
 	margin-left: 4px;
 }
 
+.event-log-clear-btn:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+
 .event-log-clear-btn:hover {
 	background: rgba(255, 255, 255, 0.08);
 	color: rgba(255, 255, 255, 0.7);
