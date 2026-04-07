@@ -4,6 +4,7 @@ export { useCompanionRuntime } from "./use-companion-runtime";
 export { useEvaluation } from "./use-evaluation";
 export { useEventBus } from "./use-event-bus";
 export { useEventLog, EVENT_CATEGORIES } from "./use-event-log";
+export type { EventLogEntry } from "./use-event-log";
 export { useFunctional } from "./use-functional";
 export { useGame2048 } from "./use-game-2048";
 export { useLogger } from "./use-logger";

@@ -16,7 +16,7 @@ interface Subscription {
 export class EventBus {
 	private listeners = new Map<EventName, Set<Handler<unknown>>>();
 	private history: EventHistoryEntry[] = [];
-	private historyLimit = 200;
+	private historyLimit = 500;
 	private historyListeners = new Set<() => void>();
 	private historyVersion = 0;
 

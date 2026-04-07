@@ -1,49 +1,156 @@
-import { useMemo, useState, type CSSProperties } from "react";
-import { EVENT_CATEGORIES, useEventLog } from "@/hooks";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { EVENT_CATEGORIES, useEventLog, type EventLogEntry } from "@/hooks";
 import { useI18n } from "@/contexts/I18nProvider";
 
-export function EventLog() {
-	const [activeFilter, setActiveFilter] = useState<string | null>(null);
-	const { entries, clear, latestEntry } = useEventLog();
-	const { t } = useI18n();
+async function copyText(text: string) {
+	if (navigator.clipboard?.writeText) {
+		await navigator.clipboard.writeText(text);
+		return;
+	}
 
-	const filteredEntries = useMemo(() =>
-		activeFilter ? entries.filter((e) => e.category === activeFilter) : entries,
-	[entries, activeFilter]);
+	const textarea = document.createElement("textarea");
+	textarea.value = text;
+	textarea.style.position = "fixed";
+	textarea.style.opacity = "0";
+	document.body.appendChild(textarea);
+	textarea.focus();
+	textarea.select();
+	document.execCommand("copy");
+	document.body.removeChild(textarea);
+}
+
+function buildExportText(entries: readonly EventLogEntry[]) {
+	return entries.map((entry) => (
+		[
+			`${entry.timestampLabel} ${entry.event}`,
+			entry.summary,
+			entry.payloadText,
+		].join("\n")
+	)).join("\n\n");
+}
+
+export function EventLog() {
+	const { t } = useI18n();
+	const { entries, clear, latestEntry } = useEventLog(200);
+	const [activeFilter, setActiveFilter] = useState<string | null>(null);
+	const [eventFilter, setEventFilter] = useState<string>("");
+	const [searchQuery, setSearchQuery] = useState("");
+	const [selectedKey, setSelectedKey] = useState<string | null>(null);
+	const [copyMessage, setCopyMessage] = useState<string | null>(null);
+
+	const eventOptions = useMemo(() => {
+		return Array.from(new Set(entries.map((entry) => entry.event))).sort();
+	}, [entries]);
+
+	const filteredEntries = useMemo(() => {
+		const normalizedQuery = searchQuery.trim().toLowerCase();
+		return entries.filter((entry) => {
+			if (activeFilter && entry.category !== activeFilter) {
+				return false;
+			}
+			if (eventFilter && entry.event !== eventFilter) {
+				return false;
+			}
+			if (!normalizedQuery) {
+				return true;
+			}
+			return [
+				entry.event,
+				entry.category,
+				entry.summary,
+				entry.payloadText,
+			].join(" ").toLowerCase().includes(normalizedQuery);
+		});
+	}, [activeFilter, entries, eventFilter, searchQuery]);
+
+	useEffect(() => {
+		if (!filteredEntries.length) {
+			setSelectedKey(null);
+			return;
+		}
+		if (!selectedKey || !filteredEntries.some((entry) => entry.key === selectedKey)) {
+			setSelectedKey(filteredEntries[0].key);
+		}
+	}, [filteredEntries, selectedKey]);
+
+	useEffect(() => {
+		if (!copyMessage) return;
+		const timer = window.setTimeout(() => setCopyMessage(null), 1800);
+		return () => window.clearTimeout(timer);
+	}, [copyMessage]);
+
+	const selectedEntry = filteredEntries.find((entry) => entry.key === selectedKey) ?? filteredEntries[0] ?? null;
 
 	return (
 		<section className="event-log">
 			<div className="event-log-header">
 				<div className="event-log-title-group">
-					<h3>{t("事件日志", "Event Log")}</h3>
-					<span className="event-log-meta">{filteredEntries.length} {t("条", "items")}</span>
+					<h3>{t("事件控制台", "Event Console")}</h3>
+					<span className="event-log-meta">{filteredEntries.length} / {entries.length} {t("条", "items")}</span>
 					{latestEntry && (
 						<span className="event-log-latest" title={latestEntry.payloadText}>
 							{t("最近", "Latest")}: {latestEntry.summary}
 						</span>
 					)}
 				</div>
+				<div className="event-log-actions">
+					<button
+						className="event-log-clear-btn"
+						onClick={async () => {
+							await copyText(buildExportText(filteredEntries));
+							setCopyMessage(t("已复制筛选结果", "Filtered events copied"));
+						}}
+					>
+						{t("复制筛选结果", "Copy Filtered")}
+					</button>
+					<button className="event-log-clear-btn" onClick={clear}>{t("清空", "Clear")}</button>
+				</div>
+			</div>
+
+			<div className="event-log-toolbar">
+				<input
+					className="event-log-search"
+					value={searchQuery}
+					onChange={(event) => setSearchQuery(event.target.value)}
+					placeholder={t("搜索事件名 / 摘要 / payload", "Search event / summary / payload")}
+				/>
+				<select
+					className="event-log-select"
+					value={eventFilter}
+					onChange={(event) => setEventFilter(event.target.value)}
+				>
+					<option value="">{t("全部事件", "All events")}</option>
+					{eventOptions.map((eventName) => (
+						<option key={eventName} value={eventName}>{eventName}</option>
+					))}
+				</select>
 				<div className="event-log-filters">
 					{Object.entries(EVENT_CATEGORIES).map(([name, { color }]) => (
 						<button
 							key={name}
 							className={`event-log-filter-chip${activeFilter === name ? " active" : ""}`}
-							style={{ "--chip-color": color } as React.CSSProperties}
+							style={{ "--chip-color": color } as CSSProperties}
 							onClick={() => setActiveFilter(activeFilter === name ? null : name)}
 						>
 							{name}
 						</button>
 					))}
-					<button className="event-log-clear-btn" onClick={clear}>{t("清空", "Clear")}</button>
 				</div>
 			</div>
-			<div className="event-log-entries">
-				{filteredEntries.length === 0 ? (
-					<p className="event-log-empty">{t("暂无事件", "No events yet")}</p>
-				) : (
-					filteredEntries.map((entry, i) => {
-						return (
-							<div key={`${entry.timestamp}-${entry.event}-${i}`} className="event-log-entry">
+
+			{copyMessage && <div className="event-log-copy-message">{copyMessage}</div>}
+
+			<div className="event-log-body-layout">
+				<div className="event-log-entries">
+					{filteredEntries.length === 0 ? (
+						<p className="event-log-empty">{t("暂无匹配事件", "No matching events")}</p>
+					) : (
+						filteredEntries.map((entry) => (
+							<button
+								key={entry.key}
+								className={`event-log-entry${selectedEntry?.key === entry.key ? " active" : ""}`}
+								onClick={() => setSelectedKey(entry.key)}
+							>
 								<span className="event-log-time">{entry.timestampLabel}</span>
 								<span className="event-log-category" style={{ "--event-color": entry.color } as CSSProperties}>
 									{entry.category}
@@ -53,12 +160,53 @@ export function EventLog() {
 										<span className="event-log-name" style={{ color: entry.color }}>{entry.event}</span>
 										<span className="event-log-summary">{entry.summary}</span>
 									</div>
-									<div className="event-log-payload" title={entry.payloadText}>{entry.payloadText}</div>
+									<div className="event-log-payload">{entry.payloadPreviewText}</div>
+								</div>
+							</button>
+						))
+					)}
+				</div>
+
+				<div className="event-log-detail">
+					{selectedEntry ? (
+						<>
+							<div className="event-log-detail-header">
+								<div className="event-log-detail-title-group">
+									<div className="event-log-detail-title" style={{ color: selectedEntry.color }}>
+										{selectedEntry.event}
+									</div>
+									<div className="event-log-detail-meta">
+										{selectedEntry.timestampLabel} · {selectedEntry.category}
+									</div>
+								</div>
+								<div className="event-log-actions">
+									<button
+										className="event-log-clear-btn"
+										onClick={async () => {
+											await copyText(selectedEntry.payloadText);
+											setCopyMessage(t("已复制完整 payload", "Full payload copied"));
+										}}
+									>
+										{t("复制 payload", "Copy Payload")}
+									</button>
+									<button
+										className="event-log-clear-btn"
+										onClick={async () => {
+											await copyText(`${selectedEntry.event}\n${selectedEntry.summary}\n\n${selectedEntry.payloadText}`);
+											setCopyMessage(t("已复制事件详情", "Event details copied"));
+										}}
+									>
+										{t("复制详情", "Copy Details")}
+									</button>
 								</div>
 							</div>
-						);
-					})
-				)}
+							<div className="event-log-detail-summary">{selectedEntry.summary}</div>
+							<pre className="event-log-detail-payload">{selectedEntry.payloadText}</pre>
+						</>
+					) : (
+						<div className="event-log-empty">{t("选择一条事件以查看完整详情", "Select an event to inspect full details")}</div>
+					)}
+				</div>
 			</div>
 		</section>
 	);
