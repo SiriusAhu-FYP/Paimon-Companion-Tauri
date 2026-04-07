@@ -357,14 +357,14 @@ export class CompanionRuntimeService {
 				messages: [
 					{
 						role: "system",
-						content: "You are a low-latency game frame describer. Describe only visible on-screen events in 1-2 short sentences. Focus on progress, danger, rewards, menu state, player condition, and obvious changes. Avoid speculation.",
+						content: "You are a low-latency screen observer. Describe only what is directly visible on the screen in 1-2 short sentences. Mention people, objects, setting, text, motion, interface state, and obvious changes. Do not assume this is a game unless the screen clearly shows game UI or gameplay elements. Avoid speculation.",
 					},
 					{
 						role: "user",
 						content: [
 							{
 								type: "text",
-								text: "Describe this frame for a live companion. Mention only what is visible now.",
+								text: "Describe this screen for a live companion. Mention only what is clearly visible right now.",
 							},
 							{
 								type: "image_url",
@@ -431,7 +431,7 @@ export class CompanionRuntimeService {
 				messages: [
 					{
 						role: "system",
-						content: "You summarize recent gameplay observations for a companion agent. Write a concise Chinese summary that captures temporal progress, notable changes, player condition, danger, rewards, and unresolved tension. Do not invent unseen details.",
+						content: "You summarize recent screen observations for a companion agent. Write a concise Chinese summary that captures what visibly happened over time, including people, actions, setting changes, interface changes, and unresolved uncertainty when relevant. Do not assume this is gameplay unless the observations clearly show game elements. Do not invent unseen details.",
 					},
 					{
 						role: "user",
