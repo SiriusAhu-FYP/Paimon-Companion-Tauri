@@ -28,6 +28,11 @@ import {
 	isSnapshotLowConfidence,
 	normalizeCompatibleOpenAIBaseUrl,
 } from "./game-utils";
+import {
+	buildPlanSignature,
+	buildRepeatedFailureHint,
+	countRepeatedFailures,
+} from "./decision-history";
 import { buildSharedGamePrompt } from "./game-prompt-template";
 import { executeSemanticAction } from "./semantic-action-runtime";
 
@@ -224,7 +229,7 @@ export class Game2048Service {
 		this.state.activeRunId = null;
 		this.state.lastRun = cloneRun(run);
 		this.state.history = [cloneRun(run), ...this.state.history].slice(0, MAX_RUN_HISTORY);
-		this.state.decisionHistory = [toDecisionHistoryEntry(run), ...this.state.decisionHistory].slice(0, MAX_DECISION_HISTORY);
+		this.state.decisionHistory = [toDecisionHistoryEntry(run, this.state.decisionHistory), ...this.state.decisionHistory].slice(0, MAX_DECISION_HISTORY);
 		this.bus.emit("game2048:run-complete", {
 			runId: run.id,
 			success: run.status === "completed" && run.boardChanged,
@@ -244,13 +249,14 @@ export class Game2048Service {
 	private async buildAnalysis(target: FunctionalTarget, snapshot: PerceptionSnapshot): Promise<Game2048Analysis> {
 		const previousMove = this.state.lastRun?.boardChanged ? this.state.lastRun.selectedMove : null;
 		const recentDecisionSummary = buildRecentDecisionSummary(this.state.decisionHistory);
+		const repeatedFailureHint = buildRepeatedFailureHint(this.state.decisionHistory[0]);
 
 		try {
-			const visionAnalysis = await this.requestVisionAnalysis(target, snapshot, previousMove, recentDecisionSummary);
+			const visionAnalysis = await this.requestVisionAnalysis(target, snapshot, previousMove, recentDecisionSummary, repeatedFailureHint);
 			return visionAnalysis;
 		} catch (err) {
 			log.warn("2048 vision analysis unavailable, falling back to heuristic", err);
-			return buildHeuristicAnalysis(previousMove, recentDecisionSummary);
+			return buildHeuristicAnalysis(previousMove, recentDecisionSummary, this.state.decisionHistory[0] ?? null);
 		}
 	}
 
@@ -259,6 +265,7 @@ export class Game2048Service {
 		snapshot: PerceptionSnapshot,
 		previousMove: Game2048Move | null,
 		recentDecisionSummary: string[],
+		repeatedFailureHint: string | null,
 	): Promise<Game2048Analysis> {
 		// The functional loop is latency-bound, so game actions bypass the
 		// general chat/retrieval stack and call the configured model directly.
@@ -291,7 +298,7 @@ export class Game2048Service {
 						content: [
 							{
 								type: "text",
-								text: buildVisionPrompt(target.title, previousMove, recentDecisionSummary),
+								text: buildVisionPrompt(target.title, previousMove, recentDecisionSummary, repeatedFailureHint),
 							},
 							{
 								type: "image_url",
@@ -360,10 +367,17 @@ function buildPendingAnalysis(): Game2048Analysis {
 	};
 }
 
-function buildHeuristicAnalysis(previousMove: Game2048Move | null, recentDecisionSummary: string[]): Game2048Analysis {
-	const preferredMoves = previousMove
+function buildHeuristicAnalysis(
+	previousMove: Game2048Move | null,
+	recentDecisionSummary: string[],
+	lastDecision: Game2048DecisionHistoryEntry | null,
+): Game2048Analysis {
+	const baseOrder = previousMove
 		? uniqueMoves([previousMove, ...DEFAULT_MOVE_ORDER])
 		: [...DEFAULT_MOVE_ORDER];
+	const preferredMoves = lastDecision && !lastDecision.boardChanged
+		? rotateOrderAwayFromFailure(baseOrder, lastDecision.planSignature)
+		: baseOrder;
 	const historyHint = recentDecisionSummary.length
 		? "Recent history exists, so avoid repeating the same failed ordering without a new reason."
 		: "No prior decision history is available yet.";
@@ -388,6 +402,7 @@ function buildVisionPrompt(
 	targetTitle: string,
 	previousMove: Game2048Move | null,
 	recentDecisionSummary: string[],
+	repeatedFailureHint: string | null,
 ): string {
 	const promptBody = buildSharedGamePrompt({
 		gameName: "2048",
@@ -405,6 +420,7 @@ function buildVisionPrompt(
 				: "No verified successful move is available from the previous turn.",
 			"Look for board stability, merge opportunities, and whether one side is becoming fragmented.",
 			"Avoid recommending a move ordering that merely repeats a failed pattern without a new reason.",
+			repeatedFailureHint ?? "If the last exact move ordering already failed, choose a materially different ordering unless the board is clearly different now.",
 		],
 		recentDecisions: recentDecisionSummary,
 		goal: "Choose the best next move ordering for one verified 2048 step.",
@@ -481,14 +497,34 @@ function cloneRun(run: Game2048RunRecord): Game2048RunRecord {
 	};
 }
 
+function rotateOrderAwayFromFailure(moves: Game2048Move[], failedSignature: string): Game2048Move[] {
+	for (let offset = 1; offset < moves.length; offset += 1) {
+		const rotated = moves.slice(offset).concat(moves.slice(0, offset));
+		if (buildPlanSignature(rotated) !== failedSignature) {
+			return rotated;
+		}
+	}
+	return moves;
+}
+
 function cloneDecisionHistoryEntry(entry: Game2048DecisionHistoryEntry): Game2048DecisionHistoryEntry {
 	return {
 		...entry,
 		preferredMoves: [...entry.preferredMoves],
+		attemptedMoves: [...entry.attemptedMoves],
+		successfulMoves: [...entry.successfulMoves],
 	};
 }
 
-function toDecisionHistoryEntry(run: Game2048RunRecord): Game2048DecisionHistoryEntry {
+function toDecisionHistoryEntry(
+	run: Game2048RunRecord,
+	existingHistory: Game2048DecisionHistoryEntry[],
+): Game2048DecisionHistoryEntry {
+	const attemptedMoves = run.attempts.map((attempt) => attempt.move);
+	const successfulMoves = run.attempts.filter((attempt) => attempt.changed).map((attempt) => attempt.move);
+	const planSignature = buildPlanSignature(run.analysis.preferredMoves);
+	const repeatedFailureCount = run.boardChanged ? 0 : countRepeatedFailures(existingHistory, planSignature) + 1;
+
 	return {
 		runId: run.id,
 		recordedAt: run.endedAt ?? run.startedAt,
@@ -496,9 +532,13 @@ function toDecisionHistoryEntry(run: Game2048RunRecord): Game2048DecisionHistory
 		reflection: run.analysis.reflection,
 		strategy: run.analysis.strategy,
 		reasoning: run.analysis.reasoning,
+		planSignature,
 		preferredMoves: [...run.analysis.preferredMoves],
+		attemptedMoves,
+		successfulMoves,
 		selectedMove: run.selectedMove,
 		boardChanged: run.boardChanged,
+		repeatedFailureCount,
 		summary: run.summary,
 	};
 }
@@ -509,9 +549,13 @@ function buildRecentDecisionSummary(history: Game2048DecisionHistoryEntry[]): st
 	}
 
 	return history.slice(0, 5).map((entry, index) => {
+		const plannedMoves = entry.preferredMoves.map((move) => formatGame2048Action(move)).join(" -> ");
+		const attemptedMoves = entry.attemptedMoves.map((move) => formatGame2048Action(move)).join(" -> ") || "none";
+		const successfulMoves = entry.successfulMoves.map((move) => formatGame2048Action(move)).join(" -> ") || "none";
 		const selectedMove = entry.selectedMove ? formatGame2048Action(entry.selectedMove) : "none";
 		const outcome = entry.boardChanged ? "board changed as expected" : "no verified board change";
-		return `Turn ${index + 1}: ${entry.summary}; selectedMove=${selectedMove}; outcome=${outcome}; reflection=${entry.reflection}`;
+		const repeatedFailureNote = entry.repeatedFailureCount > 0 ? ` repeatedFailureCount=${entry.repeatedFailureCount};` : "";
+		return `Turn ${index + 1}: planned=${plannedMoves}; attempted=${attemptedMoves}; success=${successfulMoves}; selectedMove=${selectedMove}; outcome=${outcome};${repeatedFailureNote} reflection=${entry.reflection}`;
 	});
 }
 

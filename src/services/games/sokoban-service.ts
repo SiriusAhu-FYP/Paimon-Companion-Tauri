@@ -28,6 +28,11 @@ import {
 	isSnapshotLowConfidence,
 	normalizeCompatibleOpenAIBaseUrl,
 } from "./game-utils";
+import {
+	buildPlanSignature,
+	buildRepeatedFailureHint,
+	countRepeatedFailures,
+} from "./decision-history";
 import { buildSharedGamePrompt } from "./game-prompt-template";
 import { executeSemanticAction } from "./semantic-action-runtime";
 
@@ -223,7 +228,7 @@ export class SokobanService {
 		this.state.activeRunId = null;
 		this.state.lastRun = cloneRun(run);
 		this.state.history = [cloneRun(run), ...this.state.history].slice(0, MAX_RUN_HISTORY);
-		this.state.decisionHistory = [toDecisionHistoryEntry(run), ...this.state.decisionHistory].slice(0, MAX_DECISION_HISTORY);
+		this.state.decisionHistory = [toDecisionHistoryEntry(run, this.state.decisionHistory), ...this.state.decisionHistory].slice(0, MAX_DECISION_HISTORY);
 		this.bus.emit("sokoban:run-complete", {
 			runId: run.id,
 			success: run.status === "completed" && run.boardChanged,
@@ -242,12 +247,13 @@ export class SokobanService {
 
 	private async buildAnalysis(target: FunctionalTarget, snapshot: PerceptionSnapshot): Promise<SokobanAnalysis> {
 		const recentDecisionSummary = buildRecentDecisionSummary(this.state.decisionHistory);
+		const repeatedFailureHint = buildRepeatedFailureHint(this.state.decisionHistory[0]);
 
 		try {
-			return await this.requestVisionAnalysis(target, snapshot, recentDecisionSummary);
+			return await this.requestVisionAnalysis(target, snapshot, recentDecisionSummary, repeatedFailureHint);
 		} catch (err) {
 			log.warn("sokoban vision analysis unavailable, falling back to heuristic", err);
-			return buildHeuristicAnalysis(recentDecisionSummary);
+			return buildHeuristicAnalysis(recentDecisionSummary, this.state.decisionHistory[0] ?? null);
 		}
 	}
 
@@ -255,6 +261,7 @@ export class SokobanService {
 		target: FunctionalTarget,
 		snapshot: PerceptionSnapshot,
 		recentDecisionSummary: string[],
+		repeatedFailureHint: string | null,
 	): Promise<SokobanAnalysis> {
 		const config = getConfig();
 		const activeProfile = config.activeLlmProfileId
@@ -285,7 +292,7 @@ export class SokobanService {
 						content: [
 							{
 								type: "text",
-								text: buildVisionPrompt(target.title, recentDecisionSummary),
+								text: buildVisionPrompt(target.title, recentDecisionSummary, repeatedFailureHint),
 							},
 							{
 								type: "image_url",
@@ -354,21 +361,35 @@ function buildPendingAnalysis(): SokobanAnalysis {
 	};
 }
 
-function buildHeuristicAnalysis(recentDecisionSummary: string[]): SokobanAnalysis {
+function buildHeuristicAnalysis(
+	recentDecisionSummary: string[],
+	lastDecision: SokobanDecisionHistoryEntry | null,
+): SokobanAnalysis {
 	const historyHint = recentDecisionSummary.length
 		? "Recent history exists, so avoid repeating the exact same dead move pattern without a new reason."
 		: "No prior Sokoban history is available yet.";
+	const fallbackCandidates: SokobanActionId[][] = [
+		["move_up", "move_left"],
+		["move_right", "move_up"],
+		["move_left", "move_down"],
+		["move_up", "move_right"],
+	];
+	const plannedMoves = selectFallbackSequence(fallbackCandidates, lastDecision?.planSignature ?? null);
 
 	return {
 		source: "heuristic",
 		reflection: `Fallback to a short exploratory Sokoban sequence. ${historyHint}`,
 		strategy: "probe short movement sequences instead of committing to a long push chain without visual confidence",
 		reasoning: "Without image reasoning, prefer a short conservative sequence that can still prove the runtime loop works.",
-		plannedMoves: ["move_up", "move_left"],
+		plannedMoves,
 	};
 }
 
-function buildVisionPrompt(targetTitle: string, recentDecisionSummary: string[]): string {
+function buildVisionPrompt(
+	targetTitle: string,
+	recentDecisionSummary: string[],
+	repeatedFailureHint: string | null,
+): string {
 	const promptBody = buildSharedGamePrompt({
 		gameName: SOKOBAN_PLUGIN.displayName,
 		taskName: "short push-planning validation round",
@@ -383,6 +404,7 @@ function buildVisionPrompt(targetTitle: string, recentDecisionSummary: string[])
 			"Identify the player, boxes, walls, and targets before proposing a sequence.",
 			"Prefer moves that either reposition the player productively or make visible progress toward a target.",
 			"Avoid repeating the same failed probe pattern without a new justification.",
+			repeatedFailureHint ?? "If the last exact sequence already failed, choose a materially different short plan unless the board is clearly different now.",
 		],
 		recentDecisions: recentDecisionSummary,
 		goal: "Choose a short Sokoban move sequence that is most likely to produce visible progress without obvious deadlock risk.",
@@ -437,6 +459,20 @@ function normalizeMoves(value: unknown): SokobanActionId[] {
 		.slice(0, MAX_PLANNED_MOVES);
 }
 
+function selectFallbackSequence(candidates: SokobanActionId[][], failedSignature: string | null): SokobanActionId[] {
+	if (!failedSignature) {
+		return candidates[0];
+	}
+
+	for (const candidate of candidates) {
+		if (buildPlanSignature(candidate) !== failedSignature) {
+			return candidate;
+		}
+	}
+
+	return candidates[0];
+}
+
 function cloneRun(run: SokobanRunRecord): SokobanRunRecord {
 	return {
 		...run,
@@ -455,10 +491,18 @@ function cloneDecisionHistoryEntry(entry: SokobanDecisionHistoryEntry): SokobanD
 		...entry,
 		plannedMoves: [...entry.plannedMoves],
 		executedMoves: [...entry.executedMoves],
+		failedMoves: [...entry.failedMoves],
 	};
 }
 
-function toDecisionHistoryEntry(run: SokobanRunRecord): SokobanDecisionHistoryEntry {
+function toDecisionHistoryEntry(
+	run: SokobanRunRecord,
+	existingHistory: SokobanDecisionHistoryEntry[],
+): SokobanDecisionHistoryEntry {
+	const failedMoves = run.attempts.filter((attempt) => !attempt.changed).map((attempt) => attempt.move);
+	const planSignature = buildPlanSignature(run.analysis.plannedMoves);
+	const repeatedFailureCount = run.boardChanged ? 0 : countRepeatedFailures(existingHistory, planSignature) + 1;
+
 	return {
 		runId: run.id,
 		recordedAt: run.endedAt ?? run.startedAt,
@@ -466,9 +510,12 @@ function toDecisionHistoryEntry(run: SokobanRunRecord): SokobanDecisionHistoryEn
 		reflection: run.analysis.reflection,
 		strategy: run.analysis.strategy,
 		reasoning: run.analysis.reasoning,
+		planSignature,
 		plannedMoves: [...run.analysis.plannedMoves],
 		executedMoves: [...run.executedMoves],
+		failedMoves,
 		boardChanged: run.boardChanged,
+		repeatedFailureCount,
 		summary: run.summary,
 	};
 }
@@ -481,8 +528,10 @@ function buildRecentDecisionSummary(history: SokobanDecisionHistoryEntry[]): str
 	return history.slice(0, 5).map((entry, index) => {
 		const planned = entry.plannedMoves.map((move) => formatSokobanAction(move)).join(" -> ") || "none";
 		const executed = entry.executedMoves.map((move) => formatSokobanAction(move)).join(" -> ") || "none";
+		const failed = entry.failedMoves.map((move) => formatSokobanAction(move)).join(" -> ") || "none";
 		const outcome = entry.boardChanged ? "board changed during the sequence" : "no verified board change";
-		return `Turn ${index + 1}: ${entry.summary}; planned=${planned}; executed=${executed}; outcome=${outcome}; reflection=${entry.reflection}`;
+		const repeatedFailureNote = entry.repeatedFailureCount > 0 ? ` repeatedFailureCount=${entry.repeatedFailureCount};` : "";
+		return `Turn ${index + 1}: planned=${planned}; executed=${executed}; failed=${failed}; outcome=${outcome};${repeatedFailureNote} reflection=${entry.reflection}`;
 	});
 }
 
