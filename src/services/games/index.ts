@@ -8,6 +8,14 @@ export {
 } from "./game-2048-plugin";
 export type { Game2048ActionId } from "@/types";
 export {
+	formatSokobanAction,
+	getSokobanAction,
+	SOKOBAN_DEFAULT_ACTION_ORDER,
+	SOKOBAN_PLUGIN,
+} from "./sokoban-plugin";
+export { getSemanticGameManifest, listSemanticGames } from "./semantic-game-registry";
+export type { SokobanActionId } from "@/types";
+export {
 	defineFixedActionTaskTemplate,
 	defineVisionActionTaskTemplate,
 	type ActionTaskTemplate,

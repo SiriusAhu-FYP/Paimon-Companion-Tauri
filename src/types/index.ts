@@ -55,9 +55,11 @@ export type {
 export type {
 	SemanticActionExecutionResult,
 	SemanticGameActionDefinition,
+	SemanticGameManifest,
 	SemanticGamePluginDefinition,
 	SemanticHostStep,
 } from "./semantic-game";
+export type { SokobanActionId } from "./sokoban";
 export type {
 	KnowledgeDocument,
 	KnowledgeChunk,
