@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { EVENT_CATEGORIES, useEventLog, type EventLogEntry } from "@/hooks";
 import { useI18n } from "@/contexts/I18nProvider";
 
@@ -32,15 +32,17 @@ function buildExportText(entries: readonly EventLogEntry[]) {
 export function EventLog() {
 	const { t } = useI18n();
 	const { entries, clear, latestEntry } = useEventLog(200);
-	const [activeFilter, setActiveFilter] = useState<string | null>(null);
+	const [activeFilters, setActiveFilters] = useState<string[]>([]);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedKey, setSelectedKey] = useState<string | null>(null);
 	const [copyMessage, setCopyMessage] = useState<string | null>(null);
+	const listRef = useRef<HTMLDivElement | null>(null);
+	const stickToBottomRef = useRef(true);
 
 	const filteredEntries = useMemo(() => {
 		const normalizedQuery = searchQuery.trim().toLowerCase();
 		return entries.filter((entry) => {
-			if (activeFilter && entry.category !== activeFilter) {
+			if (activeFilters.length > 0 && !activeFilters.includes(entry.category)) {
 				return false;
 			}
 			if (!normalizedQuery) {
@@ -53,7 +55,7 @@ export function EventLog() {
 				entry.payloadText,
 			].join(" ").toLowerCase().includes(normalizedQuery);
 		});
-	}, [activeFilter, entries, searchQuery]);
+	}, [activeFilters, entries, searchQuery]);
 
 	useEffect(() => {
 		if (!filteredEntries.length) {
@@ -70,6 +72,13 @@ export function EventLog() {
 		const timer = window.setTimeout(() => setCopyMessage(null), 1800);
 		return () => window.clearTimeout(timer);
 	}, [copyMessage]);
+
+	useEffect(() => {
+		if (!stickToBottomRef.current) return;
+		const list = listRef.current;
+		if (!list) return;
+		list.scrollTop = list.scrollHeight;
+	}, [filteredEntries]);
 
 	const selectedEntry = filteredEntries.find((entry) => entry.key === selectedKey) ?? filteredEntries[filteredEntries.length - 1] ?? null;
 
@@ -110,20 +119,41 @@ export function EventLog() {
 					{Object.entries(EVENT_CATEGORIES).map(([name, { color }]) => (
 						<button
 							key={name}
-							className={`event-log-filter-chip${activeFilter === name ? " active" : ""}`}
+							className={`event-log-filter-chip${activeFilters.includes(name) ? " active" : ""}`}
 							style={{ "--chip-color": color } as CSSProperties}
-							onClick={() => setActiveFilter(activeFilter === name ? null : name)}
+							onClick={() => {
+								setActiveFilters((current) =>
+									current.includes(name)
+										? current.filter((item) => item !== name)
+										: [...current, name],
+								);
+							}}
 						>
 							{name}
 						</button>
 					))}
+					<button
+						className="event-log-clear-btn"
+						onClick={() => setActiveFilters([])}
+						disabled={activeFilters.length === 0}
+					>
+						{t("清空筛选", "Clear Filters")}
+					</button>
 				</div>
 			</div>
 
 			{copyMessage && <div className="event-log-copy-message">{copyMessage}</div>}
 
 			<div className="event-log-body-layout">
-				<div className="event-log-entries">
+				<div
+					ref={listRef}
+					className="event-log-entries"
+					onScroll={(event) => {
+						const element = event.currentTarget;
+						const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+						stickToBottomRef.current = distanceFromBottom < 16;
+					}}
+				>
 					{filteredEntries.length === 0 ? (
 						<p className="event-log-empty">{t("暂无匹配事件", "No matching events")}</p>
 					) : (
