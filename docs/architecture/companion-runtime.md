@@ -45,6 +45,7 @@ For this Tauri product, the practical target is:
 - tune the local description rate from real measurements
 - start from an `8-10s` rolling summary window
 - retain at least the latest `1min` of summarized context for the cloud model
+- keep perception prompting layered as `general observation + game-specific focus overlay` rather than one globally game-biased prompt
 
 ### 2. Rolling Description Queue
 

@@ -40,6 +40,26 @@ export function getSemanticGameManifest<GameId extends KnownGameId>(
 	return GAME_MANIFESTS[gameId];
 }
 
+export function findSemanticGameByTargetTitle(
+	targetTitle: string | null | undefined,
+): { gameId: KnownGameId; displayName: string; observationFocus: readonly string[] } | null {
+	const normalizedTitle = (targetTitle ?? "").trim().toLowerCase();
+	if (!normalizedTitle) return null;
+
+	for (const [gameId, manifest] of Object.entries(GAME_MANIFESTS) as Array<[KnownGameId, KnownManifestMap[KnownGameId]]>) {
+		const hints = manifest.windowTitleHints ?? [];
+		if (hints.some((hint) => normalizedTitle.includes(hint.toLowerCase()))) {
+			return {
+				gameId,
+				displayName: manifest.displayName,
+				observationFocus: manifest.observationFocus ?? [],
+			};
+		}
+	}
+
+	return null;
+}
+
 function validateManifest<ActionId extends string>(value: unknown): SemanticGameManifest<ActionId> {
 	if (!value || typeof value !== "object") {
 		throw new Error("semantic game manifest must be an object");
@@ -50,6 +70,8 @@ function validateManifest<ActionId extends string>(value: unknown): SemanticGame
 		displayName?: unknown;
 		defaultActionOrder?: unknown;
 		notes?: unknown;
+		windowTitleHints?: unknown;
+		observationFocus?: unknown;
 		actions?: unknown;
 	};
 
@@ -83,6 +105,12 @@ function validateManifest<ActionId extends string>(value: unknown): SemanticGame
 		defaultActionOrder: [...defaultActionOrder],
 		notes: Array.isArray(manifest.notes)
 			? manifest.notes.filter((entry): entry is string => typeof entry === "string")
+			: [],
+		windowTitleHints: Array.isArray(manifest.windowTitleHints)
+			? manifest.windowTitleHints.filter((entry): entry is string => typeof entry === "string")
+			: [],
+		observationFocus: Array.isArray(manifest.observationFocus)
+			? manifest.observationFocus.filter((entry): entry is string => typeof entry === "string")
 			: [],
 		actions,
 	};

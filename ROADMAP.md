@@ -100,6 +100,7 @@ P1 close-out:
     - [x] define the first local-fast / cloud-summarize companion runtime slice around `Qwen3-VL-2B-Instruct` style local frame descriptions plus cloud temporal reasoning
     - [x] start from `8-10s` rolling local-description windows and preserve at least the latest `1min` of summary context
     - [x] feed the latest rolling temporal summary into the companion prompt path instead of leaving it as a lab-only side panel
+    - [x] split perception prompting into general observation plus lightweight game-specific focus overlays
     - [ ] integrate the missing reusable perception pieces that are still required
     - [ ] carry over the relevant evaluation/benchmark logic where it still serves the product goal
     - [-] add no-progress escalation and selected-frame cloud rescue
