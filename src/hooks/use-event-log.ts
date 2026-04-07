@@ -40,6 +40,11 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 			"game2048:attempt",
 			"game2048:run-complete",
 			"game2048:state-change",
+			"sokoban:target-detected",
+			"sokoban:run-start",
+			"sokoban:attempt",
+			"sokoban:run-complete",
+			"sokoban:state-change",
 			"evaluation:case-start",
 			"evaluation:case-complete",
 			"evaluation:state-change",
@@ -210,6 +215,27 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "game2048:state-change": {
 			const data = payload as EventMap["game2048:state-change"];
+			const latest = data.state.lastRun;
+			return latest ? `最新运行: ${latest.status}` : "状态刷新";
+		}
+		case "sokoban:target-detected": {
+			const data = payload as EventMap["sokoban:target-detected"];
+			return data.summary;
+		}
+		case "sokoban:run-start": {
+			const data = payload as EventMap["sokoban:run-start"];
+			return `${data.targetTitle}: ${data.plannedMoves.join(" -> ")}`;
+		}
+		case "sokoban:attempt": {
+			const data = payload as EventMap["sokoban:attempt"];
+			return `${data.move}: ${data.changed ? "changed" : "no change"} (${formatPercent(data.changeRatio)})`;
+		}
+		case "sokoban:run-complete": {
+			const data = payload as EventMap["sokoban:run-complete"];
+			return data.summary;
+		}
+		case "sokoban:state-change": {
+			const data = payload as EventMap["sokoban:state-change"];
 			const latest = data.state.lastRun;
 			return latest ? `最新运行: ${latest.status}` : "状态刷新";
 		}

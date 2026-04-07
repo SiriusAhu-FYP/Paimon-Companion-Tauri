@@ -1,4 +1,5 @@
 export { Game2048Service } from "./game-2048-service";
+export { SokobanService } from "./sokoban-service";
 export {
 	GAME_2048_DEFAULT_ACTION_ORDER,
 	GAME_2048_PLUGIN,

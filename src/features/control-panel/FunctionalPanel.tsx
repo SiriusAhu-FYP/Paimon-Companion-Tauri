@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useEvaluation, useFunctional, useGame2048, useUnifiedRuntime } from "@/hooks";
+import { useEvaluation, useFunctional, useGame2048, useSokoban, useUnifiedRuntime } from "@/hooks";
 import { createLogger } from "@/services/logger";
 import { useI18n } from "@/contexts/I18nProvider";
 import { EvaluationSection } from "./EvaluationSection";
@@ -7,6 +7,7 @@ import { FunctionalDebugPanel } from "./FunctionalDebugPanel";
 import { Game2048Section } from "./Game2048Section";
 import { HostToolsSection } from "./HostToolsSection";
 import { PanelRoot } from "./panel-shell";
+import { SokobanSection } from "./SokobanSection";
 import { UnifiedRunSection } from "./UnifiedRunSection";
 
 const log = createLogger("functional-panel");
@@ -23,6 +24,7 @@ export function FunctionalPanel() {
 		runMouse,
 	} = useFunctional();
 	const { state: game2048State, detectTarget, runSingleStep } = useGame2048();
+	const { state: sokobanState, detectTarget: detectSokobanTarget, runValidationRound } = useSokoban();
 	const { state: evaluationState, runCase } = useEvaluation();
 	const {
 		state: unifiedState,
@@ -56,6 +58,28 @@ export function FunctionalPanel() {
 		}
 	}, [functionalState.selectedTarget, runSingleStep]);
 
+	const handleDetectSokobanTarget = useCallback(async () => {
+		try {
+			await detectSokobanTarget();
+		} catch (err) {
+			log.error("failed to detect sokoban target", err);
+		}
+	}, [detectSokobanTarget]);
+
+	const handleRunSokobanValidationRound = useCallback(async () => {
+		try {
+			await runValidationRound(functionalState.selectedTarget ?? undefined);
+		} catch (err) {
+			log.error("failed to run sokoban validation round", err);
+		}
+	}, [functionalState.selectedTarget, runValidationRound]);
+
+	const labBusy = functionalState.activeTaskId !== null
+		|| game2048State.activeRunId !== null
+		|| sokobanState.activeRunId !== null
+		|| evaluationState.activeCaseId !== null
+		|| unifiedState.activeRunId !== null;
+
 	return (
 		<PanelRoot title={t("功能实验", "Functional Lab")}>
 			<UnifiedRunSection
@@ -64,7 +88,7 @@ export function FunctionalPanel() {
 				onSubmitVoiceText={submitVoiceText}
 				onSetSpeechEnabled={setSpeechEnabled}
 				onSetVoiceInputEnabled={setVoiceInputEnabled}
-				busy={functionalState.activeTaskId !== null || game2048State.activeRunId !== null || evaluationState.activeCaseId !== null || unifiedState.activeRunId !== null}
+				busy={labBusy}
 			/>
 			<HostToolsSection
 				functionalState={functionalState}
@@ -77,18 +101,28 @@ export function FunctionalPanel() {
 			<Game2048Section
 				functionalState={functionalState}
 				game2048State={game2048State}
+				busy={labBusy}
 				onDetectTarget={handleDetect2048Target}
 				onRunSingleStep={handleRunSingle2048Step}
+			/>
+			<SokobanSection
+				functionalState={functionalState}
+				sokobanState={sokobanState}
+				busy={labBusy}
+				onDetectTarget={handleDetectSokobanTarget}
+				onRunValidationRound={handleRunSokobanValidationRound}
 			/>
 			<EvaluationSection
 				evaluationState={evaluationState}
 				functionalState={functionalState}
 				game2048State={game2048State}
+				busy={labBusy}
 				onRunCase={handleRunEvaluationCase}
 			/>
 			<FunctionalDebugPanel
 				functionalState={functionalState}
 				game2048State={game2048State}
+				sokobanState={sokobanState}
 				evaluationState={evaluationState}
 				onClearTaskHistory={clearHistory}
 			/>

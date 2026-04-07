@@ -13,6 +13,7 @@ import type {
 	FunctionalRuntimeState,
 } from "./functional";
 import type { Game2048Move, Game2048State } from "./game-2048";
+import type { SokobanActionId, SokobanState } from "./sokoban";
 import type { VoiceInputState } from "./voice";
 
 export interface RuntimeModeChangePayload {
@@ -160,6 +161,38 @@ export interface Game2048RunCompletePayload {
 	summary: string;
 }
 
+export interface SokobanStateChangePayload {
+	state: SokobanState;
+}
+
+export interface SokobanTargetDetectedPayload {
+	handle: string | null;
+	title: string | null;
+	summary: string;
+}
+
+export interface SokobanRunStartPayload {
+	runId: string;
+	targetHandle: string;
+	targetTitle: string;
+	plannedMoves: SokobanActionId[];
+}
+
+export interface SokobanAttemptPayload {
+	runId: string;
+	move: SokobanActionId;
+	changed: boolean;
+	changeRatio: number;
+}
+
+export interface SokobanRunCompletePayload {
+	runId: string;
+	success: boolean;
+	executedMoves: SokobanActionId[];
+	boardChanged: boolean;
+	summary: string;
+}
+
 export interface EvaluationStateChangePayload {
 	state: EvaluationState;
 }
@@ -235,6 +268,11 @@ export interface EventMap {
 	"game2048:run-start": Game2048RunStartPayload;
 	"game2048:attempt": Game2048AttemptPayload;
 	"game2048:run-complete": Game2048RunCompletePayload;
+	"sokoban:state-change": SokobanStateChangePayload;
+	"sokoban:target-detected": SokobanTargetDetectedPayload;
+	"sokoban:run-start": SokobanRunStartPayload;
+	"sokoban:attempt": SokobanAttemptPayload;
+	"sokoban:run-complete": SokobanRunCompletePayload;
 	"evaluation:state-change": EvaluationStateChangePayload;
 	"evaluation:case-start": EvaluationCaseStartPayload;
 	"evaluation:case-complete": EvaluationCaseCompletePayload;

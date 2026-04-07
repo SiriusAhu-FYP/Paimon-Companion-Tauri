@@ -5,7 +5,7 @@ import { KnowledgeService } from "./knowledge";
 import { PerceptionService } from "./perception";
 import { SafetyService } from "./safety";
 import { OrchestratorService } from "./orchestrator";
-import { Game2048Service } from "./games";
+import { Game2048Service, SokobanService } from "./games";
 import { EvaluationService } from "./evaluation";
 import { UnifiedRuntimeService } from "./unified";
 import { LLMService } from "./llm";
@@ -29,6 +29,7 @@ export interface ServiceContainer {
 	safety: SafetyService;
 	orchestrator: OrchestratorService;
 	game2048: Game2048Service;
+	sokoban: SokobanService;
 	evaluation: EvaluationService;
 	unified: UnifiedRuntimeService;
 	llm: LLMService;
@@ -59,6 +60,10 @@ export function initServices(): ServiceContainer {
 		perception,
 	});
 	const game2048 = new Game2048Service({
+		bus: eventBus,
+		orchestrator,
+	});
+	const sokoban = new SokobanService({
 		bus: eventBus,
 		orchestrator,
 	});
@@ -111,6 +116,7 @@ export function initServices(): ServiceContainer {
 		safety,
 		orchestrator,
 		game2048,
+		sokoban,
 		evaluation,
 		unified,
 		llm,

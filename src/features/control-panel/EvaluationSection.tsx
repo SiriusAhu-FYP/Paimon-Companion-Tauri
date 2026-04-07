@@ -7,6 +7,7 @@ export function EvaluationSection(props: {
 	evaluationState: EvaluationState;
 	functionalState: FunctionalRuntimeState;
 	game2048State: Game2048State;
+	busy: boolean;
 	onRunCase: (caseId: string) => Promise<unknown>;
 }) {
 	const { t } = useI18n();
@@ -40,7 +41,7 @@ export function EvaluationSection(props: {
 							size="small"
 							variant="outlined"
 							onClick={() => props.onRunCase(definition.id)}
-							disabled={props.evaluationState.activeCaseId !== null || props.game2048State.activeRunId !== null || props.functionalState.activeTaskId !== null}
+							disabled={props.busy}
 						>
 							{t("运行", "Run")}
 						</Button>
