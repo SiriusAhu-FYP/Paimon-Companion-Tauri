@@ -31,6 +31,10 @@ export function useCompanionRuntime() {
 		return companionRuntime.updateRuntimeConfig(partial);
 	}, [companionRuntime]);
 
+	const testLocalVisionConnection = useCallback(() => {
+		return companionRuntime.testLocalVisionConnection();
+	}, [companionRuntime]);
+
 	return {
 		state,
 		start,
@@ -38,5 +42,6 @@ export function useCompanionRuntime() {
 		clearHistory,
 		runSummaryNow,
 		updateRuntimeConfig,
+		testLocalVisionConnection,
 	};
 }

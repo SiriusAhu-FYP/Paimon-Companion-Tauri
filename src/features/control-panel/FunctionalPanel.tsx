@@ -40,6 +40,7 @@ export function FunctionalPanel() {
 		stop: stopCompanionRuntime,
 		clearHistory: clearCompanionRuntimeHistory,
 		runSummaryNow,
+		testLocalVisionConnection,
 		updateRuntimeConfig,
 	} = useCompanionRuntime();
 	const {
@@ -104,6 +105,7 @@ export function FunctionalPanel() {
 				onStop={stopCompanionRuntime}
 				onClearHistory={clearCompanionRuntimeHistory}
 				onRunSummaryNow={runSummaryNow}
+				onTestConnection={testLocalVisionConnection}
 				onRunBenchmark={runCompanionRuntimeBenchmark}
 				onUpdateConfig={updateRuntimeConfig}
 			/>
