@@ -280,11 +280,11 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "unified:run-start": {
 			const data = payload as EventMap["unified:run-start"];
-			return `${data.trigger}: ${data.requestText ?? "direct 2048 step"}`;
+			return `${data.trigger}: ${data.requestText ?? "direct game step"}`;
 		}
 		case "unified:run-complete": {
 			const data = payload as EventMap["unified:run-complete"];
-			return `${data.success ? "完成" : "失败"}: ${data.summary}`;
+			return `${data.gameId ?? "unknown"} ${data.success ? "完成" : "失败"}: ${data.summary}`;
 		}
 		case "unified:voice-input": {
 			const data = payload as EventMap["unified:voice-input"];

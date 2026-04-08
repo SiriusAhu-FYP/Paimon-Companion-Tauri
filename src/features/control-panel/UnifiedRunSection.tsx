@@ -6,14 +6,14 @@ import { InfoLine, PanelCard, SectionHeader, SectionStatusChip } from "./panel-s
 
 export function UnifiedRunSection(props: {
 	unifiedState: UnifiedRuntimeState;
-	onRunUnified2048: () => Promise<unknown>;
+	onRunUnifiedGame: () => Promise<unknown>;
 	onSubmitVoiceText: (text: string) => Promise<unknown>;
 	onSetSpeechEnabled: (enabled: boolean) => void;
 	onSetVoiceInputEnabled: (enabled: boolean) => void;
 	busy: boolean;
 }) {
 	const { t } = useI18n();
-	const [voiceText, setVoiceText] = useState("帮我看一下 2048 下一步");
+	const [voiceText, setVoiceText] = useState("帮我看一下下一步");
 	const [error, setError] = useState<string | null>(null);
 
 	return (
@@ -36,14 +36,14 @@ export function UnifiedRunSection(props: {
 					onClick={async () => {
 						setError(null);
 						try {
-							await props.onRunUnified2048();
+							await props.onRunUnifiedGame();
 						} catch (err) {
 							setError(err instanceof Error ? err.message : String(err));
 						}
 					}}
 					disabled={props.busy}
 				>
-					{t("运行统一单步", "Run Unified Step")}
+					{t("运行当前游戏一轮", "Run Current Game Round")}
 				</Button>
 			</Stack>
 
@@ -76,7 +76,7 @@ export function UnifiedRunSection(props: {
 					fullWidth
 					value={voiceText}
 					onChange={(event) => setVoiceText(event.target.value)}
-					placeholder={t("模拟语音输入，例如：帮我看一下 2048 下一步", "Simulated voice input, e.g. help me decide the next 2048 move")}
+					placeholder={t("模拟语音输入，例如：帮我看一下下一步", "Simulated voice input, e.g. help me decide the next move")}
 					sx={{ "& .MuiInputBase-input": { fontSize: 12 } }}
 				/>
 				<Button

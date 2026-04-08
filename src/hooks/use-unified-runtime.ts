@@ -10,8 +10,8 @@ export function useUnifiedRuntime() {
 		getNextState: ({ state: nextState }) => nextState,
 	});
 
-	const runUnified2048Step = useCallback(() => {
-		return unified.run2048UnifiedStep();
+	const runUnifiedGameStep = useCallback(() => {
+		return unified.runUnifiedGameStep();
 	}, [unified]);
 
 	const submitVoiceText = useCallback((text: string) => {
@@ -28,7 +28,7 @@ export function useUnifiedRuntime() {
 
 	return {
 		state,
-		runUnified2048Step,
+		runUnifiedGameStep,
 		submitVoiceText,
 		setSpeechEnabled,
 		setVoiceInputEnabled,

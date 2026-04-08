@@ -29,7 +29,7 @@ export function FunctionalPanel() {
 	const { state: evaluationState, runCase } = useEvaluation();
 	const {
 		state: unifiedState,
-		runUnified2048Step,
+		runUnifiedGameStep,
 		submitVoiceText,
 		setSpeechEnabled,
 		setVoiceInputEnabled,
@@ -109,7 +109,7 @@ export function FunctionalPanel() {
 			/>
 			<UnifiedRunSection
 				unifiedState={unifiedState}
-				onRunUnified2048={runUnified2048Step}
+				onRunUnifiedGame={runUnifiedGameStep}
 				onSubmitVoiceText={submitVoiceText}
 				onSetSpeechEnabled={setSpeechEnabled}
 				onSetVoiceInputEnabled={setVoiceInputEnabled}

@@ -1,6 +1,8 @@
 import type { CharacterService } from "@/services/character";
 import type { EventBus } from "@/services/event-bus";
-import type { Game2048Service } from "@/services/games";
+import { findSemanticGameByTargetTitle } from "@/services/games/semantic-game-registry";
+import type { Game2048Service, SokobanService } from "@/services/games";
+import type { OrchestratorService } from "@/services/orchestrator";
 import type { PipelineService } from "@/services/pipeline";
 import type { RuntimeService } from "@/services/runtime";
 import { createLogger } from "@/services/logger";
@@ -8,6 +10,8 @@ import type { UnifiedRunRecord, UnifiedRuntimeState } from "@/types";
 
 const log = createLogger("unified-runtime");
 const MAX_HISTORY = 10;
+
+type SupportedUnifiedGameId = "2048" | "sokoban";
 
 function makeInitialState(): UnifiedRuntimeState {
 	return {
@@ -27,13 +31,15 @@ function cloneRun(run: UnifiedRunRecord): UnifiedRunRecord {
 	return { ...run };
 }
 
-const VOICE_2048_COMMAND_RE = /(2048|下一步|走一步|来一步|帮我看|帮我走|step)/i;
+const VOICE_GAME_STEP_COMMAND_RE = /(下一步|走一步|来一步|帮我看|帮我走|step|move)/i;
 
 export class UnifiedRuntimeService {
 	private bus: EventBus;
 	private runtime: RuntimeService;
 	private character: CharacterService;
+	private orchestrator: OrchestratorService;
 	private game2048: Game2048Service;
+	private sokoban: SokobanService;
 	private pipeline: PipelineService;
 	private state: UnifiedRuntimeState = makeInitialState();
 
@@ -41,13 +47,17 @@ export class UnifiedRuntimeService {
 		bus: EventBus;
 		runtime: RuntimeService;
 		character: CharacterService;
+		orchestrator: OrchestratorService;
 		game2048: Game2048Service;
+		sokoban: SokobanService;
 		pipeline: PipelineService;
 	}) {
 		this.bus = deps.bus;
 		this.runtime = deps.runtime;
 		this.character = deps.character;
+		this.orchestrator = deps.orchestrator;
 		this.game2048 = deps.game2048;
+		this.sokoban = deps.sokoban;
 		this.pipeline = deps.pipeline;
 	}
 
@@ -71,13 +81,18 @@ export class UnifiedRuntimeService {
 		this.emitState();
 	}
 
-	async run2048UnifiedStep(trigger: "manual" | "voice" = "manual", requestText: string | null = null): Promise<UnifiedRunRecord> {
+	async runUnifiedGameStep(trigger: "manual" | "voice" = "manual", requestText: string | null = null): Promise<UnifiedRunRecord> {
 		if (!this.runtime.isAllowed()) {
 			throw new Error(`unified run blocked: runtime mode is ${this.runtime.getMode()}`);
+		}
+		const targetGame = this.resolveTargetGame(requestText);
+		if (!targetGame) {
+			throw new Error("unified run requires a selected 2048 or Sokoban target window");
 		}
 
 		const run: UnifiedRunRecord = {
 			id: `unified-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+			gameId: targetGame,
 			trigger,
 			requestText,
 			startedAt: Date.now(),
@@ -87,14 +102,14 @@ export class UnifiedRuntimeService {
 			summary: "",
 			companionText: "",
 			emotion: "neutral",
-			selectedMove: null,
+			selectedAction: null,
 			spoke: false,
 			error: null,
 		};
 
 		this.state.activeRunId = run.id;
 		this.state.phase = "acting";
-		this.state.lastCommand = "2048-step";
+		this.state.lastCommand = `${targetGame}-step`;
 		this.state.lastRun = cloneRun(run);
 		this.applyEmotion("neutral");
 		this.bus.emit("unified:run-start", {
@@ -105,20 +120,33 @@ export class UnifiedRuntimeService {
 		this.emitState();
 
 		try {
-			const result = await this.game2048.runSingleStep();
-			run.status = "completed";
-			run.phase = this.state.speechEnabled ? "speaking" : "idle";
-			run.summary = result.summary;
-			run.companionText = result.companionText;
-			run.selectedMove = result.selectedMove;
-			run.emotion = result.boardChanged ? "happy" : "dazed";
-			this.state.lastCompanionText = result.companionText;
+			let companionText = "";
+			if (targetGame === "2048") {
+				const result = await this.game2048.runSingleStep();
+				run.status = "completed";
+				run.phase = this.state.speechEnabled ? "speaking" : "idle";
+				run.summary = result.summary;
+				run.companionText = result.companionText;
+				run.selectedAction = result.selectedMove;
+				run.emotion = result.boardChanged ? "happy" : "dazed";
+				companionText = result.companionText;
+			} else {
+				const result = await this.sokoban.runValidationRound();
+				run.status = "completed";
+				run.phase = this.state.speechEnabled ? "speaking" : "idle";
+				run.summary = result.summary;
+				run.companionText = result.companionText;
+				run.selectedAction = result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null;
+				run.emotion = result.boardChanged ? "delighted" : "alarmed";
+				companionText = result.companionText;
+			}
+			this.state.lastCompanionText = companionText;
 			this.applyEmotion(run.emotion);
 
-			if (this.state.speechEnabled && result.companionText) {
+			if (this.state.speechEnabled && companionText) {
 				this.state.phase = "speaking";
 				this.emitState();
-				run.spoke = await this.safeSpeak(result.companionText);
+				run.spoke = await this.safeSpeak(companionText);
 			}
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
@@ -145,6 +173,7 @@ export class UnifiedRuntimeService {
 		this.state.history = [cloneRun(run), ...this.state.history].slice(0, MAX_HISTORY);
 		this.bus.emit("unified:run-complete", {
 			runId: run.id,
+			gameId: run.gameId,
 			success: run.status === "completed",
 			summary: run.summary,
 			emotion: run.emotion,
@@ -166,7 +195,7 @@ export class UnifiedRuntimeService {
 			throw new Error("voice input path is disabled");
 		}
 
-		const command = VOICE_2048_COMMAND_RE.test(trimmed) ? "2048-step" : null;
+		const command = VOICE_GAME_STEP_COMMAND_RE.test(trimmed) ? "game-step" : null;
 		this.state.phase = "listening";
 		this.state.lastVoiceInput = trimmed;
 		this.state.lastCommand = command;
@@ -174,8 +203,8 @@ export class UnifiedRuntimeService {
 		this.bus.emit("unified:voice-input", { text: trimmed, command });
 		this.emitState();
 
-		if (command === "2048-step") {
-			await this.run2048UnifiedStep("voice", trimmed);
+		if (command === "game-step") {
+			await this.runUnifiedGameStep("voice", trimmed);
 			return;
 		}
 
@@ -194,6 +223,19 @@ export class UnifiedRuntimeService {
 		this.character.setEmotion(emotion);
 	}
 
+	private resolveTargetGame(requestText: string | null): SupportedUnifiedGameId | null {
+		const explicit = inferGameFromText(requestText);
+		if (explicit) {
+			return explicit;
+		}
+		const selectedTarget = this.orchestrator.getState().selectedTarget;
+		const inferred = findSemanticGameByTargetTitle(selectedTarget?.title);
+		if (!inferred) {
+			return null;
+		}
+		return inferred.gameId;
+	}
+
 	private async safeSpeak(text: string): Promise<boolean> {
 		try {
 			await this.pipeline.speakText(text);
@@ -207,4 +249,16 @@ export class UnifiedRuntimeService {
 	private emitState() {
 		this.bus.emit("unified:state-change", { state: this.getState() });
 	}
+}
+
+function inferGameFromText(text: string | null): SupportedUnifiedGameId | null {
+	const normalized = (text ?? "").trim().toLowerCase();
+	if (!normalized) return null;
+	if (/(2048|tile|合并|棋盘)/i.test(normalized)) {
+		return "2048";
+	}
+	if (/(sokoban|push box|boxoban|推箱子|仓库番)/i.test(normalized)) {
+		return "sokoban";
+	}
+	return null;
 }

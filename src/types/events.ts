@@ -231,6 +231,7 @@ export interface UnifiedRunStartPayload {
 
 export interface UnifiedRunCompletePayload {
 	runId: string;
+	gameId: string | null;
 	success: boolean;
 	summary: string;
 	emotion: string;
