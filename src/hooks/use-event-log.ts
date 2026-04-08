@@ -12,12 +12,14 @@ export interface EventLogEntry {
 	timestampLabel: string;
 	category: string;
 	color: string;
+	isDebug: boolean;
+	severity: "info" | "warn" | "error";
 	summary: string;
 	payloadPreviewText: string;
 	payloadText: string;
 }
 
-export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: string }> = {
+export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: string; debug?: boolean }> = {
 	"系统": {
 		events: [
 			"runtime:mode-change",
@@ -31,34 +33,40 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 	"功能": {
 		events: [
 			"functional:target-change",
-			"perception:snapshot",
-			"orchestrator:state-change",
-			"orchestrator:task-start",
 			"orchestrator:task-complete",
-			"orchestrator:task-log",
-			"safety:decision",
 			"game2048:target-detected",
 			"game2048:run-start",
-			"game2048:attempt",
 			"game2048:run-complete",
-			"game2048:state-change",
 			"sokoban:target-detected",
 			"sokoban:run-start",
-			"sokoban:attempt",
 			"sokoban:run-complete",
-			"sokoban:state-change",
 			"evaluation:case-start",
 			"evaluation:case-complete",
-			"evaluation:state-change",
-			"unified:state-change",
 			"unified:run-start",
 			"unified:run-complete",
-			"unified:voice-input",
-			"companion-runtime:state-change",
 			"companion-runtime:frame-described",
 			"companion-runtime:summary-complete",
 		],
 		color: "#ffb74d",
+	},
+	"调试": {
+		events: [
+			"perception:snapshot",
+			"orchestrator:state-change",
+			"orchestrator:task-start",
+			"orchestrator:task-log",
+			"safety:decision",
+			"game2048:attempt",
+			"game2048:state-change",
+			"sokoban:attempt",
+			"sokoban:state-change",
+			"evaluation:state-change",
+			"unified:state-change",
+			"unified:voice-input",
+			"companion-runtime:state-change",
+		],
+		color: "#90a4ae",
+		debug: true,
 	},
 	"角色": {
 		events: ["character:expression", "character:motion", "character:state-change", "character:switch"],
@@ -83,6 +91,13 @@ function getCategoryForEvent(event: EventName): { name: string; color: string } 
 		if (events.includes(event)) return { name, color };
 	}
 	return { name: "其他", color: "#90a4ae" };
+}
+
+function isDebugEvent(event: EventName): boolean {
+	for (const { events, debug } of Object.values(EVENT_CATEGORIES)) {
+		if (events.includes(event)) return !!debug;
+	}
+	return false;
 }
 
 function truncate(text: string, limit = PAYLOAD_PREVIEW_LIMIT): string {
@@ -289,6 +304,46 @@ function formatSummary(event: EventName, payload: unknown): string {
 	}
 }
 
+function getSeverity(event: EventName, payload: unknown): "info" | "warn" | "error" {
+	switch (event) {
+		case "system:error":
+		case "llm:error":
+			return "error";
+		case "voice:state-change": {
+			const data = payload as EventMap["voice:state-change"];
+			return data.state.status === "error" ? "error" : "info";
+		}
+		case "orchestrator:task-log": {
+			const data = payload as EventMap["orchestrator:task-log"];
+			if (data.level === "error") return "error";
+			if (data.level === "warn") return "warn";
+			return "info";
+		}
+		case "orchestrator:task-complete": {
+			const data = payload as EventMap["orchestrator:task-complete"];
+			return data.success ? "info" : "error";
+		}
+		case "game2048:run-complete": {
+			const data = payload as EventMap["game2048:run-complete"];
+			return data.success ? "info" : "warn";
+		}
+		case "sokoban:run-complete": {
+			const data = payload as EventMap["sokoban:run-complete"];
+			return data.success ? "info" : "warn";
+		}
+		case "unified:run-complete": {
+			const data = payload as EventMap["unified:run-complete"];
+			return data.success ? "info" : "warn";
+		}
+		case "safety:decision": {
+			const data = payload as EventMap["safety:decision"];
+			return data.allowed ? "info" : "warn";
+		}
+		default:
+			return "info";
+	}
+}
+
 function toEntry(entry: EventHistoryEntry): EventLogEntry | null {
 	if (!TRACKED_EVENTS.includes(entry.event)) return null;
 
@@ -300,13 +355,15 @@ function toEntry(entry: EventHistoryEntry): EventLogEntry | null {
 		timestampLabel: new Date(entry.timestamp).toLocaleTimeString(),
 		category: category.name,
 		color: category.color,
+		isDebug: isDebugEvent(entry.event),
+		severity: getSeverity(entry.event, entry.payload),
 		summary: formatSummary(entry.event, entry.payload),
 		payloadPreviewText: serializePayload(entry.payload),
 		payloadText: serializePayload(entry.payload, true),
 	};
 }
 
-export function useEventLog(limit = DEFAULT_LIMIT) {
+export function useEventLog(limit = DEFAULT_LIMIT, options?: { showDebug?: boolean }) {
 	const { bus } = getServices();
 	const historyVersion = useSyncExternalStore(
 		(onStoreChange) => bus.subscribeHistory(onStoreChange),
@@ -320,15 +377,19 @@ export function useEventLog(limit = DEFAULT_LIMIT) {
 		const startIndex = Math.max(0, history.length - limit);
 		for (let index = startIndex; index < history.length; index += 1) {
 			const normalized = toEntry(history[index]);
-			if (normalized) {
+			if (normalized && (options?.showDebug || !normalized.isDebug)) {
 				next.push(normalized);
 			}
 		}
 		return {
 			entries: next,
-			totalTrackedEntries: history.reduce((count, item) => count + (TRACKED_EVENTS.includes(item.event) ? 1 : 0), 0),
+			totalTrackedEntries: history.reduce((count, item) => {
+				if (!TRACKED_EVENTS.includes(item.event)) return count;
+				if (!options?.showDebug && isDebugEvent(item.event)) return count;
+				return count + 1;
+			}, 0),
 		};
-	}, [history, historyVersion, limit]);
+	}, [history, historyVersion, limit, options?.showDebug]);
 
 	const clear = useCallback(() => {
 		bus.clearHistory();
