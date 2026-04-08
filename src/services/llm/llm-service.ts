@@ -54,6 +54,59 @@ export class LLMService {
 		return this.history;
 	}
 
+	async generateCompanionReply(
+		userText: string,
+		options?: {
+			companionRuntimeContext?: string;
+			knowledgeContext?: string;
+		},
+	): Promise<string> {
+		if (!this.runtime.isAllowed()) {
+			log.warn("LLM companion reply blocked — runtime stopped");
+			return "";
+		}
+
+		const appCharacter = getConfig().character;
+		const promptCtx = {
+			characterProfile: this.character.getProfile(),
+			knowledgeContext: options?.knowledgeContext ?? "",
+			companionRuntimeContext: options?.companionRuntimeContext ?? this.companionRuntime.getPromptContext(),
+			customPersona: appCharacter.customPersona,
+			behaviorConstraints: appCharacter.behaviorConstraints,
+		};
+		const systemMsg = buildSystemMessage(promptCtx);
+		const messages: ChatMessage[] = systemMsg
+			? [systemMsg, { role: "user", content: userText }]
+			: [{ role: "user", content: userText }];
+
+		let fullText = "";
+		for await (const chunk of this.provider.chat(messages)) {
+			if (!this.runtime.isAllowed()) {
+				log.warn("LLM companion reply aborted — runtime stopped");
+				break;
+			}
+			switch (chunk.type) {
+				case "delta":
+					fullText += chunk.text;
+					break;
+				case "done":
+					fullText = chunk.fullText;
+					break;
+				case "tool-call":
+					break;
+			}
+		}
+
+		const normalized = fullText.trim();
+		if (normalized) {
+			log.info("generated transient companion reply", {
+				length: normalized.length,
+				companionRuntimeContextUsed: promptCtx.companionRuntimeContext.length > 0,
+			});
+		}
+		return normalized;
+	}
+
 	async sendMessage(userText: string): Promise<void> {
 		if (!this.runtime.isAllowed()) {
 			log.warn("LLM request blocked — runtime stopped");

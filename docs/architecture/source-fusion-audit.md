@@ -103,3 +103,4 @@ Accepted prerequisite already in place:
 
 - `P2.3` has established the current expression-linkage baseline for companion replies
 - retained / replaced / retired `LLMPlay-MVP` decisions are recorded in `llmplay-retained-scope.md`
+- `P2.6` groundwork now also includes a first organic bridge where unified game results can request grounded companion follow-up text from the active LLM instead of only speaking hardcoded per-game copy

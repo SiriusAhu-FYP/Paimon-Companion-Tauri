@@ -2,6 +2,7 @@ import type { CharacterService } from "@/services/character";
 import type { EventBus } from "@/services/event-bus";
 import { findSemanticGameByTargetTitle } from "@/services/games/semantic-game-registry";
 import type { Game2048Service, SokobanService } from "@/services/games";
+import type { LLMService } from "@/services/llm";
 import type { OrchestratorService } from "@/services/orchestrator";
 import type { PipelineService } from "@/services/pipeline";
 import type { RuntimeService } from "@/services/runtime";
@@ -40,6 +41,7 @@ export class UnifiedRuntimeService {
 	private orchestrator: OrchestratorService;
 	private game2048: Game2048Service;
 	private sokoban: SokobanService;
+	private llm: LLMService;
 	private pipeline: PipelineService;
 	private state: UnifiedRuntimeState = makeInitialState();
 
@@ -50,6 +52,7 @@ export class UnifiedRuntimeService {
 		orchestrator: OrchestratorService;
 		game2048: Game2048Service;
 		sokoban: SokobanService;
+		llm: LLMService;
 		pipeline: PipelineService;
 	}) {
 		this.bus = deps.bus;
@@ -58,6 +61,7 @@ export class UnifiedRuntimeService {
 		this.orchestrator = deps.orchestrator;
 		this.game2048 = deps.game2048;
 		this.sokoban = deps.sokoban;
+		this.llm = deps.llm;
 		this.pipeline = deps.pipeline;
 	}
 
@@ -101,6 +105,7 @@ export class UnifiedRuntimeService {
 			phase: "acting",
 			summary: "",
 			companionText: "",
+			companionTextSource: "none",
 			emotion: "neutral",
 			selectedAction: null,
 			spoke: false,
@@ -126,19 +131,41 @@ export class UnifiedRuntimeService {
 				run.status = "completed";
 				run.phase = this.state.speechEnabled ? "speaking" : "idle";
 				run.summary = result.summary;
-				run.companionText = result.companionText;
 				run.selectedAction = result.selectedMove;
 				run.emotion = result.boardChanged ? "happy" : "dazed";
-				companionText = result.companionText;
+				const generatedReply = await this.generateGroundedCompanionReply({
+					gameId: "2048",
+					requestText,
+					summary: result.summary,
+					analysisReflection: result.analysis.reflection,
+					analysisReasoning: result.analysis.reasoning,
+					primaryAction: result.selectedMove,
+					boardChanged: result.boardChanged,
+					fallbackText: result.companionText,
+				});
+				run.companionText = generatedReply.text;
+				run.companionTextSource = generatedReply.source;
+				companionText = generatedReply.text;
 			} else {
 				const result = await this.sokoban.runValidationRound();
 				run.status = "completed";
 				run.phase = this.state.speechEnabled ? "speaking" : "idle";
 				run.summary = result.summary;
-				run.companionText = result.companionText;
 				run.selectedAction = result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null;
 				run.emotion = result.boardChanged ? "delighted" : "alarmed";
-				companionText = result.companionText;
+				const generatedReply = await this.generateGroundedCompanionReply({
+					gameId: "sokoban",
+					requestText,
+					summary: result.summary,
+					analysisReflection: result.analysis.reflection,
+					analysisReasoning: result.analysis.reasoning,
+					primaryAction: result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null,
+					boardChanged: result.boardChanged,
+					fallbackText: result.companionText,
+				});
+				run.companionText = generatedReply.text;
+				run.companionTextSource = generatedReply.source;
+				companionText = generatedReply.text;
 			}
 			this.state.lastCompanionText = companionText;
 			this.applyEmotion(run.emotion);
@@ -155,6 +182,7 @@ export class UnifiedRuntimeService {
 			run.error = message;
 			run.summary = `unified run failed: ${message}`;
 			run.companionText = "这轮统一运行没成功，我先停下来，等你检查目标窗口或当前画面。";
+			run.companionTextSource = "fallback";
 			run.emotion = "sad";
 			this.state.lastCompanionText = run.companionText;
 			this.applyEmotion(run.emotion);
@@ -248,6 +276,45 @@ export class UnifiedRuntimeService {
 
 	private emitState() {
 		this.bus.emit("unified:state-change", { state: this.getState() });
+	}
+
+	private async generateGroundedCompanionReply(input: {
+		gameId: SupportedUnifiedGameId;
+		requestText: string | null;
+		summary: string;
+		analysisReflection: string;
+		analysisReasoning: string;
+		primaryAction: string | null;
+		boardChanged: boolean;
+		fallbackText: string;
+	}): Promise<{ text: string; source: "llm" | "fallback" }> {
+		try {
+			const reply = await this.llm.generateCompanionReply(
+				[
+					"你刚刚完成了一轮游戏托管动作。请基于提供事实，生成一句到两句简短、口语化、适合 TTS 播报的中文陪伴回复。",
+					"要求：",
+					"1. 严格依据提供事实，不要脑补未给出的 Boss 战、血量、奖励或别的游戏剧情。",
+					"2. 语气保持陪伴感和轻度支持感，但不要夸张。",
+					"3. 不要暴露实现细节，如 API、模型、截图链路。",
+					"4. 如果本轮没有明显进展，就直接说没有明显进展，并给出很短的下一步建议。",
+					`【游戏】${input.gameId}`,
+					input.requestText ? `【触发请求】${input.requestText}` : "",
+					`【本轮结果】${input.summary}`,
+					input.primaryAction ? `【关键动作】${input.primaryAction}` : "",
+					`【是否观察到有效变化】${input.boardChanged ? "是" : "否"}`,
+					`【决策反思】${input.analysisReflection}`,
+					`【决策理由】${input.analysisReasoning}`,
+				].filter(Boolean).join("\n"),
+				{ knowledgeContext: "" },
+			);
+			if (!reply) {
+				return { text: input.fallbackText, source: "fallback" };
+			}
+			return { text: reply, source: "llm" };
+		} catch (err) {
+			log.warn("grounded companion reply generation failed", err);
+			return { text: input.fallbackText, source: "fallback" };
+		}
 	}
 }
 
