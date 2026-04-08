@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { EVENT_CATEGORIES, useEventLog, type EventLogEntry } from "@/hooks";
 import { useI18n } from "@/contexts/I18nProvider";
 
+const DEBUG_VISIBILITY_KEY = "paimon:event-console:show-debug";
+
 async function copyText(text: string) {
 	if (navigator.clipboard?.writeText) {
 		await navigator.clipboard.writeText(text);
@@ -31,7 +33,14 @@ function buildExportText(entries: readonly EventLogEntry[]) {
 
 export function EventLog() {
 	const { t } = useI18n();
-	const { entries, clear, latestEntry } = useEventLog(200);
+	const [showDebug, setShowDebug] = useState(() => {
+		try {
+			return localStorage.getItem(DEBUG_VISIBILITY_KEY) === "1";
+		} catch {
+			return false;
+		}
+	});
+	const { entries, clear, latestEntry } = useEventLog(200, { showDebug });
 	const [activeFilters, setActiveFilters] = useState<string[]>([]);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -72,6 +81,19 @@ export function EventLog() {
 		const timer = window.setTimeout(() => setCopyMessage(null), 1800);
 		return () => window.clearTimeout(timer);
 	}, [copyMessage]);
+
+	useEffect(() => {
+		try {
+			localStorage.setItem(DEBUG_VISIBILITY_KEY, showDebug ? "1" : "0");
+		} catch {
+			// ignore storage failures
+		}
+	}, [showDebug]);
+
+	useEffect(() => {
+		if (showDebug) return;
+		setActiveFilters((current) => current.filter((item) => item !== "调试"));
+	}, [showDebug]);
 
 	useEffect(() => {
 		if (!stickToBottomRef.current) return;
@@ -115,8 +137,16 @@ export function EventLog() {
 					onChange={(event) => setSearchQuery(event.target.value)}
 					placeholder={t("搜索事件名 / 摘要 / payload", "Search event / summary / payload")}
 				/>
+				<button
+					className={`event-log-debug-toggle${showDebug ? " active" : ""}`}
+					onClick={() => setShowDebug((current) => !current)}
+				>
+					{showDebug ? t("隐藏调试", "Hide Debug") : t("显示调试", "Show Debug")}
+				</button>
 				<div className="event-log-filters">
-					{Object.entries(EVENT_CATEGORIES).map(([name, { color }]) => (
+					{Object.entries(EVENT_CATEGORIES)
+						.filter(([, meta]) => showDebug || !meta.debug)
+						.map(([name, { color }]) => (
 						<button
 							key={name}
 							className={`event-log-filter-chip${activeFilters.includes(name) ? " active" : ""}`}
@@ -160,7 +190,7 @@ export function EventLog() {
 						filteredEntries.map((entry) => (
 							<button
 								key={entry.key}
-								className={`event-log-entry${selectedEntry?.key === entry.key ? " active" : ""}`}
+								className={`event-log-entry${selectedEntry?.key === entry.key ? " active" : ""}${entry.severity !== "info" ? ` ${entry.severity}` : ""}`}
 								onClick={() => setSelectedKey(entry.key)}
 							>
 								<span className="event-log-time">{entry.timestampLabel}</span>
@@ -169,6 +199,8 @@ export function EventLog() {
 								</span>
 								<div className="event-log-body">
 									<div className="event-log-main">
+										{entry.severity === "error" && <span className="event-log-severity error">ERROR</span>}
+										{entry.severity === "warn" && <span className="event-log-severity warn">WARN</span>}
 										<span className="event-log-name" style={{ color: entry.color }}>{entry.event}</span>
 										<span className="event-log-summary">{entry.summary}</span>
 									</div>
@@ -212,6 +244,11 @@ export function EventLog() {
 									</button>
 								</div>
 							</div>
+							{selectedEntry.severity !== "info" && (
+								<div className={`event-log-detail-severity ${selectedEntry.severity}`}>
+									{selectedEntry.severity === "error" ? "ERROR" : "WARN"}
+								</div>
+							)}
 							<div className="event-log-detail-summary">{selectedEntry.summary}</div>
 							<pre className="event-log-detail-payload">{selectedEntry.payloadText}</pre>
 						</>

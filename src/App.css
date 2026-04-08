@@ -140,6 +140,27 @@
 	flex: 1 1 220px;
 }
 
+.event-log-debug-toggle {
+	padding: 4px 8px;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	border-radius: 8px;
+	background: transparent;
+	color: rgba(255, 255, 255, 0.58);
+	font-size: 11px;
+	cursor: pointer;
+}
+
+.event-log-debug-toggle:hover {
+	background: rgba(255, 255, 255, 0.08);
+	color: rgba(255, 255, 255, 0.82);
+}
+
+.event-log-debug-toggle.active {
+	border-color: rgba(255, 183, 77, 0.55);
+	color: #ffb74d;
+	background: rgba(255, 183, 77, 0.08);
+}
+
 .event-log-search::placeholder {
 	color: rgba(255, 255, 255, 0.38);
 }
@@ -254,6 +275,15 @@
 	background: rgba(255, 255, 255, 0.08);
 }
 
+.event-log-entry.warn {
+	border-left: 2px solid rgba(255, 183, 77, 0.9);
+}
+
+.event-log-entry.error {
+	border-left: 2px solid rgba(244, 67, 54, 0.95);
+	background: rgba(244, 67, 54, 0.06);
+}
+
 .event-log-time {
 	opacity: 0.4;
 	min-width: 70px;
@@ -283,6 +313,21 @@
 	align-items: baseline;
 	gap: 8px;
 	min-width: 0;
+}
+
+.event-log-severity {
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	flex-shrink: 0;
+}
+
+.event-log-severity.warn {
+	color: #ffb74d;
+}
+
+.event-log-severity.error {
+	color: #ef5350;
 }
 
 .event-log-name {
@@ -345,6 +390,21 @@
 	font-size: 12px;
 	line-height: 1.45;
 	color: rgba(255, 255, 255, 0.86);
+}
+
+.event-log-detail-severity {
+	font-family: "Consolas", "Monaco", monospace;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.6px;
+}
+
+.event-log-detail-severity.warn {
+	color: #ffb74d;
+}
+
+.event-log-detail-severity.error {
+	color: #ef5350;
 }
 
 .event-log-detail-payload {
