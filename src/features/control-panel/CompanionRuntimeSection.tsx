@@ -16,6 +16,17 @@ function normalizePositiveSeconds(value: string, fallbackMs: number, min = 1, ma
 	return Math.min(max, Math.max(min, parsed)) * 1000;
 }
 
+function formatRuntimeDuration(startedAt: number | null): string {
+	if (!startedAt) return "—";
+	const elapsedSeconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+	return `${elapsedSeconds}s`;
+}
+
+function formatRatio(numerator: number, denominator: number): string {
+	if (denominator <= 0) return "0%";
+	return `${Math.round((numerator / denominator) * 100)}%`;
+}
+
 export function CompanionRuntimeSection(props: {
 	functionalState: FunctionalRuntimeState;
 	companionRuntimeState: CompanionRuntimeState;
@@ -84,6 +95,24 @@ export function CompanionRuntimeSection(props: {
 			<InfoLine>{t("帧队列", "Frame Queue")}：{props.companionRuntimeState.frameQueue.length}</InfoLine>
 			<InfoLine>{t("总结历史", "Summary History")}：{props.companionRuntimeState.summaryHistory.length}</InfoLine>
 			<InfoLine>{t("最近总结", "Latest Summary")}：{summaryLabel}</InfoLine>
+			<InfoLine>{t("会话时长", "Session Duration")}：{formatRuntimeDuration(props.companionRuntimeState.metrics.sessionStartedAt)}</InfoLine>
+			<InfoLine>{t("采样次数", "Capture Ticks")}：{props.companionRuntimeState.metrics.captureTicks}</InfoLine>
+			<InfoLine>
+				{t("视觉/静止", "Vision / Unchanged")}：
+				{props.companionRuntimeState.metrics.visionFrames} / {props.companionRuntimeState.metrics.unchangedFrames}
+				{" · "}
+				{t("静止占比", "Unchanged Ratio")} {formatRatio(
+					props.companionRuntimeState.metrics.unchangedFrames,
+					props.companionRuntimeState.metrics.captureTicks,
+				)}
+			</InfoLine>
+			<InfoLine>
+				{t("平均帧耗时", "Avg Frame Latency")}：
+				{props.companionRuntimeState.metrics.averageFrameLatencyMs.toFixed(0)}ms
+				{" · "}
+				{t("平均总结耗时", "Avg Summary Latency")}：
+				{props.companionRuntimeState.metrics.averageSummaryLatencyMs.toFixed(0)}ms
+			</InfoLine>
 
 			<Stack direction="row" spacing={0.5} sx={{ mt: 0.75, mb: 0.75, flexWrap: "wrap" }}>
 				<Button
