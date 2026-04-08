@@ -1,6 +1,6 @@
 import type { FunctionalTarget } from "./functional";
 
-export type CompanionRuntimePhase = "idle" | "capturing" | "describing" | "summarizing" | "error";
+export type CompanionRuntimePhase = "idle" | "connecting" | "capturing" | "describing" | "summarizing" | "error";
 
 export interface CompanionFrameDescriptionRecord {
 	id: string;

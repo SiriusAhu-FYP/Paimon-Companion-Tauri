@@ -13,6 +13,7 @@ Current implementation note:
 - the control surface now exposes lightweight session metrics such as capture count, unchanged-frame ratio, and average summary latency
 - the control surface also provides fixed-duration benchmark runs so throughput and summary cadence can be sampled without hand-timing a session
 - the runtime scheduler now uses self-paced capture/summary loops plus bounded queue pruning instead of naive overlapping fixed intervals
+- the runtime now waits for the local vision node to report ready before the first observation tick, instead of failing immediately during long cold starts
 - this is accepted only as an initial runtime slice, not as the finished `Video-Understanding-MVP` fusion endpoint
 
 ## Goal
@@ -40,6 +41,7 @@ Current intended baseline:
 - local node runs in WSL or another low-latency Linux device
 - model family baseline: `Qwen3-VL-2B-Instruct`
 - target operating mode: fast frame description rather than deep final reasoning
+- the local vLLM node should be started from a local snapshot path in offline mode whenever possible, so cold starts do not depend on remote HuggingFace metadata availability
 
 Reference baseline from `Video-Understanding-MVP`:
 

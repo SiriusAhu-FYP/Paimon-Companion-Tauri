@@ -18,6 +18,8 @@ import { normalizeCompatibleOpenAIBaseUrl } from "@/services/games/game-utils";
 const log = createLogger("companion-runtime");
 const MIN_MEANINGFUL_CHANGE_RATIO = 0.02;
 const UNCHANGED_FRAME_DESCRIPTION = "画面变化很小，当前画面与上一帧基本一致，没有明显新变化。";
+const LOCAL_VISION_READY_TIMEOUT_MS = 120_000;
+const LOCAL_VISION_READY_POLL_MS = 3_000;
 
 interface OpenAIChatCompletionResponse {
 	choices?: Array<{
@@ -137,6 +139,12 @@ function formatRuntimeError(stage: "frame" | "summary", baseUrl: string, error: 
 	return `无法连接用于时序总结的 LLM/视觉地址：${normalizedBaseUrl}。请确认当前地址和模型服务已经对 Tauri 应用可达。原始错误：${rawMessage}`;
 }
 
+function delay(ms: number): Promise<void> {
+	return new Promise((resolve) => {
+		setTimeout(resolve, ms);
+	});
+}
+
 export class CompanionRuntimeService {
 	private bus: EventBus;
 	private perception: PerceptionService;
@@ -231,8 +239,10 @@ export class CompanionRuntimeService {
 			sessionStartedAt: Date.now(),
 		};
 		this.state.lastError = null;
+		this.state.phase = "connecting";
 		this.emitState();
 
+		await this.waitForLocalVisionReady();
 		await this.runCaptureTick();
 		this.scheduleCaptureTick();
 		this.scheduleSummaryTick();
@@ -293,28 +303,60 @@ export class CompanionRuntimeService {
 	}
 
 	async testLocalVisionConnection(): Promise<void> {
+		await this.waitForLocalVisionReady();
+	}
+
+	private async probeLocalVisionConnection(): Promise<void> {
 		const baseUrl = normalizeCompatibleOpenAIBaseUrl(this.state.localVisionBaseUrl);
-		try {
-			const response = await proxyRequest({
-				url: `${baseUrl}/models`,
-				method: "GET",
-				timeoutMs: 8000,
-			});
-			if (response.status < 200 || response.status >= 300) {
-				throw new Error(`HTTP ${response.status}`);
-			}
-			this.state.lastError = null;
-			this.bus.emit("companion-runtime:state-change", { state: this.getState() });
-		} catch (err) {
-			const message = formatRuntimeError("frame", this.state.localVisionBaseUrl, err);
-			this.state.lastError = message;
-			this.bus.emit("system:error", {
-				module: "companion-runtime",
-				error: message,
-			});
-			this.emitState();
-			throw new Error(message);
+		const response = await proxyRequest({
+			url: `${baseUrl}/models`,
+			method: "GET",
+			timeoutMs: 8000,
+		});
+		if (response.status < 200 || response.status >= 300) {
+			throw new Error(`HTTP ${response.status}`);
 		}
+	}
+
+	private async waitForLocalVisionReady(): Promise<void> {
+		const deadline = Date.now() + LOCAL_VISION_READY_TIMEOUT_MS;
+		let lastError: unknown = null;
+		this.state.phase = "connecting";
+		this.state.lastError = null;
+		this.emitState();
+
+		while (Date.now() < deadline) {
+			try {
+				await this.probeLocalVisionConnection();
+				this.state.lastError = null;
+				if (this.state.phase === "connecting") {
+					this.state.phase = "idle";
+				}
+				this.emitState();
+				return;
+			} catch (err) {
+				lastError = err;
+				await delay(LOCAL_VISION_READY_POLL_MS);
+			}
+		}
+
+		const message = [
+			`本地视觉节点在 ${Math.round(LOCAL_VISION_READY_TIMEOUT_MS / 1000)} 秒内未就绪：${normalizeCompatibleOpenAIBaseUrl(this.state.localVisionBaseUrl)}`,
+			"如果服务跑在 WSL 里，请确认：",
+			"1. vLLM 已经完成模型加载和 warmup",
+			"2. 端口已对 Windows 暴露",
+			"3. 优先使用离线本地快照路径启动，避免启动时再访问远端",
+			`原始错误：${formatRuntimeError("frame", this.state.localVisionBaseUrl, lastError)}`,
+		].join("\n");
+
+		this.state.phase = "error";
+		this.state.lastError = message;
+		this.bus.emit("system:error", {
+			module: "companion-runtime",
+			error: message,
+		});
+		this.emitState();
+		throw new Error(message);
 	}
 
 	async runSummaryNow(): Promise<void> {
