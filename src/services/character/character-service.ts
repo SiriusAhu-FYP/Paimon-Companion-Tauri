@@ -36,9 +36,12 @@ export class CharacterService {
 		};
 
 		this.bus.on("llm:tool-call", (payload) => {
-			if (payload.name === "setExpression") {
+			if (payload.name === "setExpression" || payload.name === "companion.set_emotion") {
 				const emotion = payload.args["emotion"] as string;
 				if (emotion) this.setEmotion(emotion);
+			}
+			if (payload.name === "companion.reset_emotion") {
+				this.setEmotion("neutral");
 			}
 		});
 	}

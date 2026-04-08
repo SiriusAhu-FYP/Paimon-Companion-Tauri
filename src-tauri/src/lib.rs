@@ -1,13 +1,20 @@
 mod commands;
 
 use tauri::Manager;
+use commands::mcp::McpBridgeState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
 	tauri::Builder::default()
+		.manage(McpBridgeState::default())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_store::Builder::default().build())
 		.plugin(tauri_plugin_keyring::init())
+		.setup(|app| {
+			let bridge = app.state::<McpBridgeState>().inner().clone();
+			commands::mcp::start_mcp_server(app.handle().clone(), bridge);
+			Ok(())
+		})
 		.invoke_handler(tauri::generate_handler![
 			commands::secret::secret_set,
 			commands::secret::secret_get,
@@ -24,6 +31,8 @@ pub fn run() {
 			commands::window::send_mouse,
 			commands::local_asr::local_sherpa_healthcheck,
 			commands::local_asr::local_sherpa_transcribe,
+			commands::mcp::mcp_bridge_ready,
+			commands::mcp::mcp_bridge_respond,
 		])
 		.on_window_event(|window, event| {
 			if let tauri::WindowEvent::CloseRequested { .. } = event {

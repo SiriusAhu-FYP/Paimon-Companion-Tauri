@@ -8,6 +8,7 @@ import type { ILLMService, ChatMessage } from "./types";
 import { buildSystemMessage, summarizePromptContext } from "./prompt-builder";
 import { formatRetrievalForPrompt, summarizeRetrieval } from "@/services/knowledge/knowledge-formatter";
 import { createLogger } from "@/services/logger";
+import { listLlmTools, resolveMcpToolName } from "@/services/mcp/tool-defs";
 
 const log = createLogger("llm");
 
@@ -78,9 +79,10 @@ export class LLMService {
 		const messages: ChatMessage[] = systemMsg
 			? [systemMsg, { role: "user", content: userText }]
 			: [{ role: "user", content: userText }];
+		const tools = listLlmTools("companion");
 
 		let fullText = "";
-		for await (const chunk of this.provider.chat(messages)) {
+		for await (const chunk of this.provider.chat(messages, tools)) {
 			if (!this.runtime.isAllowed()) {
 				log.warn("LLM companion reply aborted — runtime stopped");
 				break;
@@ -93,6 +95,7 @@ export class LLMService {
 					fullText = chunk.fullText;
 					break;
 				case "tool-call":
+					this.bus.emit("llm:tool-call", { name: resolveMcpToolName(chunk.name), args: chunk.args });
 					break;
 			}
 		}
@@ -162,6 +165,7 @@ export class LLMService {
 		const messages: ChatMessage[] = systemMsg
 			? [systemMsg, ...this.history]
 			: [...this.history];
+		const tools = listLlmTools("companion");
 
 		if (systemMsg) {
 			log.info("LLM system prompt assembled", summarizePromptContext(promptCtx));
@@ -169,7 +173,7 @@ export class LLMService {
 
 		try {
 			let fullText = "";
-			for await (const chunk of this.provider.chat(messages)) {
+			for await (const chunk of this.provider.chat(messages, tools)) {
 				// 在流式处理中也检查 runtime 状态
 				if (!this.runtime.isAllowed()) {
 					log.warn("LLM stream aborted — runtime stopped");
@@ -182,7 +186,7 @@ export class LLMService {
 						this.bus.emit("llm:stream-chunk", { delta: chunk.text });
 						break;
 					case "tool-call":
-						this.bus.emit("llm:tool-call", { name: chunk.name, args: chunk.args });
+						this.bus.emit("llm:tool-call", { name: resolveMcpToolName(chunk.name), args: chunk.args });
 						break;
 					case "done":
 						fullText = chunk.fullText;

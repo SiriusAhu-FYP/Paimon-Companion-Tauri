@@ -68,6 +68,13 @@ export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 			"如果最近观察不足以支持某个判断，就明确说看不清、无法确认，而不是自行脑补成 Boss 战、血量危险或其他游戏场景。",
 		].join("\n"),
 	);
+	sections.push(
+		[
+			"【工具调用约定】",
+			"当你想改变同伴的情绪表现时，不要只在文本里暗示情绪；请调用 companion emotion 工具来同步表情状态。",
+			"除非确实需要执行动作，否则仍应优先给出自然、简洁、可朗读的回复。",
+		].join("\n"),
+	);
 
 	if (ctx.behaviorConstraints) {
 		const bcSection = buildBehaviorConstraintsSection(ctx.behaviorConstraints);
