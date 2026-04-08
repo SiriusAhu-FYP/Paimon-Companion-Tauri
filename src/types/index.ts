@@ -27,6 +27,7 @@ export type {
 } from "./unified";
 export type {
 	CompanionFrameDescriptionRecord,
+	CompanionRuntimeMetrics,
 	CompanionRuntimePhase,
 	CompanionRuntimeState,
 	CompanionSummaryRecord,

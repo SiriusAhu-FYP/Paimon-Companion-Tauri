@@ -23,6 +23,19 @@ export interface CompanionSummaryRecord {
 	source: "cloud" | "fallback";
 }
 
+export interface CompanionRuntimeMetrics {
+	sessionStartedAt: number | null;
+	lastCaptureAt: number | null;
+	captureTicks: number;
+	visionFrames: number;
+	unchangedFrames: number;
+	summariesGenerated: number;
+	averageFrameLatencyMs: number;
+	averageSummaryLatencyMs: number;
+	lastFrameLatencyMs: number | null;
+	lastSummaryLatencyMs: number | null;
+}
+
 export interface CompanionRuntimeState {
 	running: boolean;
 	phase: CompanionRuntimePhase;
@@ -36,5 +49,6 @@ export interface CompanionRuntimeState {
 	lastSummary: CompanionSummaryRecord | null;
 	frameQueue: CompanionFrameDescriptionRecord[];
 	summaryHistory: CompanionSummaryRecord[];
+	metrics: CompanionRuntimeMetrics;
 	lastError: string | null;
 }

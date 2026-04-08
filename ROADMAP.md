@@ -102,6 +102,7 @@ P1 close-out:
     - [x] feed the latest rolling temporal summary into the companion prompt path instead of leaving it as a lab-only side panel
     - [x] split perception prompting into general observation plus lightweight game-specific focus overlays
     - [x] add lightweight change-based frame filtering so the runtime can coalesce visually unchanged captures instead of re-describing every tick
+    - [x] expose lightweight session metrics for runtime throughput, unchanged-frame ratio, and summary latency
     - [ ] integrate the missing reusable perception pieces that are still required
     - [ ] carry over the relevant evaluation/benchmark logic where it still serves the product goal
     - [-] add no-progress escalation and selected-frame cloud rescue

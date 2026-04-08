@@ -6,6 +6,7 @@ import { findSemanticGameByTargetTitle } from "@/services/games/semantic-game-re
 import { estimateSnapshotChange } from "@/services/games/game-utils";
 import type {
 	CompanionFrameDescriptionRecord,
+	CompanionRuntimeMetrics,
 	CompanionRuntimeState,
 	CompanionSummaryRecord,
 	FunctionalTarget,
@@ -25,6 +26,21 @@ interface OpenAIChatCompletionResponse {
 	}>;
 }
 
+function makeInitialMetrics(): CompanionRuntimeMetrics {
+	return {
+		sessionStartedAt: null,
+		lastCaptureAt: null,
+		captureTicks: 0,
+		visionFrames: 0,
+		unchangedFrames: 0,
+		summariesGenerated: 0,
+		averageFrameLatencyMs: 0,
+		averageSummaryLatencyMs: 0,
+		lastFrameLatencyMs: null,
+		lastSummaryLatencyMs: null,
+	};
+}
+
 function makeInitialState(): CompanionRuntimeState {
 	const config = getConfig();
 	return {
@@ -40,6 +56,7 @@ function makeInitialState(): CompanionRuntimeState {
 		lastSummary: null,
 		frameQueue: [],
 		summaryHistory: [],
+		metrics: makeInitialMetrics(),
 		lastError: null,
 	};
 }
@@ -96,6 +113,11 @@ function buildObservationOverlay(targetTitle: string): string {
 	].join("\n");
 }
 
+function updateRollingAverage(previousAverage: number, previousCount: number, nextValue: number): number {
+	if (previousCount <= 0) return nextValue;
+	return ((previousAverage * previousCount) + nextValue) / (previousCount + 1);
+}
+
 export class CompanionRuntimeService {
 	private bus: EventBus;
 	private perception: PerceptionService;
@@ -122,6 +144,7 @@ export class CompanionRuntimeService {
 			lastSummary: this.state.lastSummary ? cloneSummaryRecord(this.state.lastSummary) : null,
 			frameQueue: this.state.frameQueue.map(cloneFrameRecord),
 			summaryHistory: this.state.summaryHistory.map(cloneSummaryRecord),
+			metrics: { ...this.state.metrics },
 		};
 	}
 
@@ -184,6 +207,10 @@ export class CompanionRuntimeService {
 		this.state.running = true;
 		this.state.phase = "idle";
 		this.state.target = { ...target };
+		this.state.metrics = {
+			...makeInitialMetrics(),
+			sessionStartedAt: Date.now(),
+		};
 		this.state.lastError = null;
 		this.emitState();
 
@@ -221,6 +248,7 @@ export class CompanionRuntimeService {
 		this.state.lastSummary = null;
 		this.state.frameQueue = [];
 		this.state.summaryHistory = [];
+		this.state.metrics = makeInitialMetrics();
 		this.state.lastError = null;
 		this.lastSnapshotForDiff = null;
 		this.emitState();
@@ -271,6 +299,7 @@ export class CompanionRuntimeService {
 			return;
 		}
 
+		const tickStartedAt = Date.now();
 		this.captureInFlight = true;
 		this.state.phase = "capturing";
 		this.state.lastError = null;
@@ -298,6 +327,23 @@ export class CompanionRuntimeService {
 			this.state.lastFrame = record;
 			this.state.frameQueue = this.pushFrameRecord(record);
 			this.pruneHistory(record.capturedAt);
+			const frameLatencyMs = Date.now() - tickStartedAt;
+			const captureTicks = this.state.metrics.captureTicks + 1;
+			const visionFrames = this.state.metrics.visionFrames + (record.source === "vision" ? 1 : 0);
+			const unchangedFrames = this.state.metrics.unchangedFrames + (record.source === "unchanged" ? 1 : 0);
+			this.state.metrics = {
+				...this.state.metrics,
+				lastCaptureAt: snapshot.capturedAt,
+				captureTicks,
+				visionFrames,
+				unchangedFrames,
+				lastFrameLatencyMs: frameLatencyMs,
+				averageFrameLatencyMs: updateRollingAverage(
+					this.state.metrics.averageFrameLatencyMs,
+					this.state.metrics.captureTicks,
+					frameLatencyMs,
+				),
+			};
 			this.bus.emit("companion-runtime:frame-described", { record: cloneFrameRecord(record) });
 			this.lastSnapshotForDiff = snapshot;
 			this.state.phase = "idle";
@@ -318,6 +364,7 @@ export class CompanionRuntimeService {
 			return;
 		}
 
+		const summaryStartedAt = Date.now();
 		const now = Date.now();
 		this.pruneHistory(now);
 		const windowStartedAt = now - this.state.summaryWindowMs;
@@ -350,6 +397,17 @@ export class CompanionRuntimeService {
 			this.state.lastSummary = record;
 			this.state.summaryHistory = [...this.state.summaryHistory, record];
 			this.pruneHistory(now);
+			const summaryLatencyMs = Date.now() - summaryStartedAt;
+			this.state.metrics = {
+				...this.state.metrics,
+				summariesGenerated: this.state.metrics.summariesGenerated + 1,
+				lastSummaryLatencyMs: summaryLatencyMs,
+				averageSummaryLatencyMs: updateRollingAverage(
+					this.state.metrics.averageSummaryLatencyMs,
+					this.state.metrics.summariesGenerated,
+					summaryLatencyMs,
+				),
+			};
 			this.bus.emit("companion-runtime:summary-complete", { record: cloneSummaryRecord(record) });
 			this.state.phase = "idle";
 			this.emitState();
