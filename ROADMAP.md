@@ -81,7 +81,7 @@ P1 close-out:
   - [ ] P2.3 Companion Expression Protocol
     - [x] define a first-pass emotion taxonomy and randomized per-model expression candidate mapping
     - [x] extend the same protocol to first-pass motion selection where models expose reusable motions
-    - [x] validate that companion replies can consistently drive visible Live2D expression changes through this protocol
+    - [ ] validate the real LLM path can consistently drive visible Live2D expression changes through MCP tools instead of mock-only/internal-only wiring
     - [ ] migrate the accepted expression-control path toward a formal MCP-facing contract
     - [ ] keep motion as an optional enhancement rather than the current acceptance gate
   - [ ] P2.4 `LLMPlay-MVP` Completion
@@ -115,9 +115,10 @@ P1 close-out:
     - [x] let unified game results ask the active LLM for grounded companion follow-up text instead of relying only on hardcoded per-game copy
     - [x] add a first fusion evaluation case that samples runtime-context usage, LLM follow-up generation, and speech in one pass
     - [x] refresh the active companion observation context after unified game rounds so follow-up replies can speak from fresher runtime state
-    - [ ] verify that all three source lines coexist in one Tauri runtime
+    - [ ] land the first real MCP server boundary for companion control and semantic game control
+    - [ ] verify that all three source lines coexist in one Tauri runtime through that MCP-facing runtime path
     - [ ] verify companion behavior, expression, speech, and functional execution together
-    - [ ] define the accepted post-fusion baseline
+    - [ ] define the accepted post-fusion baseline after MCP-backed fusion is working
 
 Cross-cutting rule during `P2` and later:
 
@@ -151,5 +152,5 @@ P2 note:
 - cloud ASR providers remain configured options, but they are not part of the accepted `P2.2` live-validation baseline
 - `P2.3` is intentionally about companion expression / motion protocol first, not about full game-plugin protocol yet
 - the first pass of `P2.3` should stay semantically small and distinct: `neutral`, `happy`, `angry`, `sad`, `delighted`, `alarmed`, `dazed`
-- current accepted `P2.3` sub-baseline: companion replies can already drive model-aware Live2D expression changes
-- future architecture requirement: this expression-control path should ultimately be exposed through MCP rather than remain an internal-only control contract
+- the current internal expression path and mock-path are useful groundwork, but they do not satisfy the intended `P2` fusion bar on their own
+- MCP externalization is a prerequisite for `P2` close-out, not later optional polish

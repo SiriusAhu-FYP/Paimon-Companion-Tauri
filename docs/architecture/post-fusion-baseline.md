@@ -4,13 +4,17 @@ This document defines the acceptance bar for closing out `P2`.
 
 `P2` is not complete merely because the three source lines exist in one repo.
 
+`P2` is also not complete if the accepted control paths still exist only as internal event wiring.
+
+MCP-backed control is a prerequisite for `P2` close-out.
+
 The accepted post-fusion baseline is:
 
 - `VoiceL2D-MVP`, `LLMPlay-MVP`, and `Video-Understanding-MVP` capabilities coexist in one Tauri runtime
 - the companion can observe current screen activity through the rolling runtime context
 - the companion can speak naturally about that current context without relying on rigid visible reply formatting
-- the companion can drive Live2D expression changes from the same runtime path
-- the runtime can temporarily execute a semantic game action round on a selected target
+- the companion can drive Live2D expression changes from the same runtime path through MCP tools
+- the runtime can temporarily execute a semantic game action round on a selected target through MCP tools
 - the same unified path can produce:
   - game action execution
   - grounded companion follow-up text
@@ -28,6 +32,7 @@ The minimum accepted runtime shape for `P2` is:
 5. `Unified Run` can route through the selected semantic game target instead of a hardcoded single-game path.
 6. after a unified game round, the active LLM can generate a grounded companion follow-up instead of relying only on hardcoded per-game copy.
 7. if the companion runtime is observing the same target, unified follow-up generation should be based on refreshed runtime context instead of stale context only.
+8. the accepted companion-expression path and semantic-game-action path are exposed through the first real MCP server boundary rather than only internal app-local events.
 
 ## Acceptance Checks
 
@@ -40,6 +45,7 @@ The minimum accepted runtime shape for `P2` is:
 - grounded follow-up text is generated after unified execution
 - speech playback still works on that unified path
 - Live2D expression visibly changes on that unified path
+- the expression change and semantic game action are both triggered through MCP-facing tools rather than a mock-only/internal-only shortcut
 - the fusion evaluation case can run and report:
   - runtime-context usage
   - LLM follow-up usage
@@ -50,7 +56,6 @@ The minimum accepted runtime shape for `P2` is:
 
 The following are explicitly not required to close `P2`:
 
-- full MCP externalization of the accepted internal control paths
 - no-progress cloud escalation / selected-frame cloud rescue
 - final pluginized support for future large games such as Minecraft
 - cloud ASR live acceptance
