@@ -1,8 +1,8 @@
 import type { EventBus } from "@/services/event-bus";
 import type { OrchestratorService } from "@/services/orchestrator";
-import { getConfig, proxyRequest, SECRET_KEYS } from "@/services/config";
 import { createLogger } from "@/services/logger";
 import { listWindows } from "@/services/system";
+import { requestOpenAICompatibleVision, resolveActiveOpenAICompatibleVisionClient } from "@/services/vlm";
 import type {
 	FunctionalTarget,
 	Game2048Analysis,
@@ -26,7 +26,6 @@ import {
 	estimateSnapshotChange,
 	extractJsonObject,
 	isSnapshotLowConfidence,
-	normalizeCompatibleOpenAIBaseUrl,
 } from "./game-utils";
 import {
 	buildPlanSignature,
@@ -41,14 +40,6 @@ const MAX_RUN_HISTORY = 10;
 const MAX_DECISION_HISTORY = 8;
 const DEFAULT_MOVE_ORDER: Game2048Move[] = [...GAME_2048_DEFAULT_ACTION_ORDER];
 const TARGET_KEYWORDS = ["2048", "play 2048", "gabriele cirulli", "threes"];
-
-interface VisionCompletionResponse {
-	choices?: Array<{
-		message?: {
-			content?: string | Array<{ type?: string; text?: string }>;
-		};
-	}>;
-}
 
 function makeInitialState(): Game2048State {
 	return {
@@ -269,61 +260,21 @@ export class Game2048Service {
 	): Promise<Game2048Analysis> {
 		// The functional loop is latency-bound, so game actions bypass the
 		// general chat/retrieval stack and call the configured model directly.
-		const config = getConfig();
-		const activeProfile = config.activeLlmProfileId
-			? config.llmProfiles.find((profile) => profile.id === config.activeLlmProfileId)
-			: null;
-
-		const provider = activeProfile?.provider ?? config.llm.provider;
-		const rawBaseUrl = activeProfile?.baseUrl ?? config.llm.baseUrl;
-		const model = activeProfile?.model ?? config.llm.model;
-		const secretKey = activeProfile?.id ? SECRET_KEYS.LLM_API_KEY(activeProfile.id) : undefined;
-
-		if (provider !== "openai-compatible" || !rawBaseUrl || !model) {
+		const client = resolveActiveOpenAICompatibleVisionClient();
+		if (!client) {
 			throw new Error("vision analysis requires an openai-compatible LLM profile");
 		}
 
-		const response = await proxyRequest({
-			url: `${normalizeCompatibleOpenAIBaseUrl(rawBaseUrl)}/chat/completions`,
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				model,
-				temperature: 0.1,
-				max_tokens: 250,
-				response_format: { type: "json_object" },
-				messages: [
-					{
-						role: "user",
-						content: [
-							{
-								type: "text",
-								text: buildVisionPrompt(target.title, previousMove, recentDecisionSummary, repeatedFailureHint),
-							},
-							{
-								type: "image_url",
-								image_url: {
-									url: snapshot.dataUrl,
-								},
-							},
-						],
-					},
-				],
-			}),
-			secretKey,
+		const content = await requestOpenAICompatibleVision({
+			client,
+			userPrompt: buildVisionPrompt(target.title, previousMove, recentDecisionSummary, repeatedFailureHint),
+			imageDataUrl: snapshot.dataUrl,
+			maxTokens: 250,
+			temperature: 0.1,
+			jsonResponse: true,
 			timeoutMs: 30000,
 		});
-
-		if (response.status < 200 || response.status >= 300) {
-			throw new Error(`vision analysis failed with HTTP ${response.status}`);
-		}
-
-		const payload = JSON.parse(response.body) as VisionCompletionResponse;
-		const rawContent = payload.choices?.[0]?.message?.content;
-		const textContent = Array.isArray(rawContent)
-			? rawContent.map((part) => part.text ?? "").join("")
-			: rawContent ?? "";
-		const parsed = parseVisionResponse(textContent);
+		const parsed = parseVisionResponse(content);
 
 		return {
 			source: "vision-llm",

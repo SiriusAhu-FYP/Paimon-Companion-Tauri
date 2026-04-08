@@ -104,6 +104,7 @@ P1 close-out:
       - [x] add lightweight change-based frame filtering so the runtime can coalesce visually unchanged captures instead of re-describing every tick
       - [x] expose lightweight session metrics for runtime throughput, unchanged-frame ratio, and summary latency
       - [x] add a fixed-duration companion runtime benchmark so throughput and summary cadence can be sampled without ad hoc manual timing
+      - [x] factor repeated OpenAI-compatible image reasoning calls into a shared vision client instead of duplicating per-game/per-runtime request code
       - [ ] integrate the missing reusable perception pieces that are still required
       - [x] carry over the relevant evaluation/benchmark logic where it still serves the product goal
       - [-] add no-progress escalation and selected-frame cloud rescue

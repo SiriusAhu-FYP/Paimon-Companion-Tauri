@@ -4,6 +4,7 @@ import { getConfig, proxyRequest, SECRET_KEYS, updateConfig } from "@/services/c
 import { createLogger } from "@/services/logger";
 import { findSemanticGameByTargetTitle } from "@/services/games/semantic-game-registry";
 import { estimateSnapshotChange } from "@/services/games/game-utils";
+import { requestOpenAICompatibleVision } from "@/services/vlm";
 import type {
 	CompanionFrameDescriptionRecord,
 	CompanionRuntimeMetrics,
@@ -459,56 +460,26 @@ export class CompanionRuntimeService {
 	}
 
 	private async describeSnapshot(snapshot: PerceptionSnapshot): Promise<string> {
-		const baseUrl = normalizeCompatibleOpenAIBaseUrl(this.state.localVisionBaseUrl);
 		const observationOverlay = buildObservationOverlay(snapshot.targetTitle);
-		const response = await proxyRequest({
-			url: `${baseUrl}/chat/completions`,
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
+		return requestOpenAICompatibleVision({
+			client: {
+				baseUrl: normalizeCompatibleOpenAIBaseUrl(this.state.localVisionBaseUrl),
 				model: this.state.localVisionModel,
-				max_tokens: 120,
-				temperature: 0.1,
-				messages: [
-					{
-						role: "system",
-						content: [
-							"You are a low-latency screen observer.",
-							"Describe only what is directly visible on the screen in 1-2 short sentences.",
-							"Mention people, objects, setting, text, motion, interface state, and obvious changes.",
-							"Do not assume this is a game unless the screen clearly shows game UI or gameplay elements.",
-							"Avoid speculation.",
-							observationOverlay,
-						].filter(Boolean).join("\n"),
-					},
-					{
-						role: "user",
-						content: [
-							{
-								type: "text",
-								text: "Describe this screen for a live companion. Mention only what is clearly visible right now.",
-							},
-							{
-								type: "image_url",
-								image_url: { url: snapshot.dataUrl },
-							},
-						],
-					},
-				],
-			}),
+			},
+			systemPrompt: [
+				"You are a low-latency screen observer.",
+				"Describe only what is directly visible on the screen in 1-2 short sentences.",
+				"Mention people, objects, setting, text, motion, interface state, and obvious changes.",
+				"Do not assume this is a game unless the screen clearly shows game UI or gameplay elements.",
+				"Avoid speculation.",
+				observationOverlay,
+			].filter(Boolean).join("\n"),
+			userPrompt: "Describe this screen for a live companion. Mention only what is clearly visible right now.",
+			imageDataUrl: snapshot.dataUrl,
+			maxTokens: 120,
+			temperature: 0.1,
 			timeoutMs: Math.max(8000, this.state.captureIntervalMs * 4),
 		});
-
-		if (response.status < 200 || response.status >= 300) {
-			throw new Error(`local vision request failed: HTTP ${response.status}`);
-		}
-
-		const parsed = JSON.parse(response.body) as OpenAIChatCompletionResponse;
-		const text = extractMessageText(parsed);
-		if (!text) {
-			throw new Error("local vision returned empty description");
-		}
-		return text;
 	}
 
 	private async summarizeWindow(
