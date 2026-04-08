@@ -146,6 +146,7 @@ P2 note:
 - retained / replaced / retired `LLMPlay-MVP` decisions are recorded in `docs/architecture/llmplay-retained-scope.md`
 - the ASR restoration strategy is recorded in `docs/architecture/asr-migration-strategy.md`
 - the companion runtime direction is recorded in `docs/architecture/companion-runtime.md`
+- the accepted `P2` close-out bar is recorded in `docs/architecture/post-fusion-baseline.md`
 - accepted `P2.2` baseline: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D response
 - cloud ASR providers remain configured options, but they are not part of the accepted `P2.2` live-validation baseline
 - `P2.3` is intentionally about companion expression / motion protocol first, not about full game-plugin protocol yet

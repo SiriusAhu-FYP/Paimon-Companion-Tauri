@@ -18,6 +18,8 @@ Tracked public project docs live here.
   retained / replaced / retired decisions for the `LLMPlay-MVP` line
 - `architecture/companion-runtime.md`
   target runtime direction for local perception, cloud reasoning, and MCP control
+- `architecture/post-fusion-baseline.md`
+  accepted close-out bar for finishing `P2` source fusion
 - `architecture/companion-mcp-contract.md`
   intended MCP-facing control boundary for companion-side actions
 - `architecture/game-semantic-action-contract.md`
