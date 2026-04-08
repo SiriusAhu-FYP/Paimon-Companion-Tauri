@@ -10,6 +10,7 @@ Current implementation note:
 - the current slice also includes lightweight change-based filtering, so nearly identical consecutive frames can be coalesced instead of always triggering a fresh local-VLM description
 - the control surface now exposes lightweight session metrics such as capture count, unchanged-frame ratio, and average summary latency
 - the control surface also provides fixed-duration benchmark runs so throughput and summary cadence can be sampled without hand-timing a session
+- the runtime scheduler now uses self-paced capture/summary loops plus bounded queue pruning instead of naive overlapping fixed intervals
 - this is accepted only as an initial runtime slice, not as the finished `Video-Understanding-MVP` fusion endpoint
 
 ## Goal

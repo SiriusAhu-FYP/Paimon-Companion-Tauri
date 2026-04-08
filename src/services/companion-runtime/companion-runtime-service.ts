@@ -123,8 +123,8 @@ export class CompanionRuntimeService {
 	private bus: EventBus;
 	private perception: PerceptionService;
 	private state: CompanionRuntimeState = makeInitialState();
-	private captureTimer: ReturnType<typeof setInterval> | null = null;
-	private summaryTimer: ReturnType<typeof setInterval> | null = null;
+	private captureTimer: ReturnType<typeof setTimeout> | null = null;
+	private summaryTimer: ReturnType<typeof setTimeout> | null = null;
 	private captureInFlight = false;
 	private summaryInFlight = false;
 	private lastSnapshotForDiff: PerceptionSnapshot | null = null;
@@ -216,14 +216,8 @@ export class CompanionRuntimeService {
 		this.emitState();
 
 		await this.runCaptureTick();
-
-		this.captureTimer = setInterval(() => {
-			void this.runCaptureTick();
-		}, this.state.captureIntervalMs);
-
-		this.summaryTimer = setInterval(() => {
-			void this.runSummaryTick();
-		}, this.state.summaryWindowMs);
+		this.scheduleCaptureTick();
+		this.scheduleSummaryTick();
 
 		log.info("companion runtime started", {
 			target: target.title,
@@ -286,12 +280,58 @@ export class CompanionRuntimeService {
 
 	private stopTimers() {
 		if (this.captureTimer) {
-			clearInterval(this.captureTimer);
+			clearTimeout(this.captureTimer);
 			this.captureTimer = null;
 		}
 		if (this.summaryTimer) {
-			clearInterval(this.summaryTimer);
+			clearTimeout(this.summaryTimer);
 			this.summaryTimer = null;
+		}
+	}
+
+	private scheduleCaptureTick() {
+		if (!this.state.running) {
+			return;
+		}
+		if (this.captureTimer) {
+			clearTimeout(this.captureTimer);
+		}
+		this.captureTimer = setTimeout(() => {
+			this.captureTimer = null;
+			void this.runCaptureLoop();
+		}, this.state.captureIntervalMs);
+	}
+
+	private async runCaptureLoop(): Promise<void> {
+		if (!this.state.running) {
+			return;
+		}
+		await this.runCaptureTick();
+		if (this.state.running) {
+			this.scheduleCaptureTick();
+		}
+	}
+
+	private scheduleSummaryTick() {
+		if (!this.state.running) {
+			return;
+		}
+		if (this.summaryTimer) {
+			clearTimeout(this.summaryTimer);
+		}
+		this.summaryTimer = setTimeout(() => {
+			this.summaryTimer = null;
+			void this.runSummaryLoop();
+		}, this.state.summaryWindowMs);
+	}
+
+	private async runSummaryLoop(): Promise<void> {
+		if (!this.state.running) {
+			return;
+		}
+		await this.runSummaryTick();
+		if (this.state.running) {
+			this.scheduleSummaryTick();
 		}
 	}
 
@@ -425,8 +465,20 @@ export class CompanionRuntimeService {
 
 	private pruneHistory(now: number) {
 		const cutoff = now - this.state.historyRetentionMs;
-		this.state.frameQueue = this.state.frameQueue.filter((frame) => frame.capturedAt >= cutoff);
-		this.state.summaryHistory = this.state.summaryHistory.filter((summary) => summary.createdAt >= cutoff);
+		const maxFrameEntries = Math.max(
+			12,
+			Math.ceil(this.state.historyRetentionMs / Math.max(250, this.state.captureIntervalMs)) + 4,
+		);
+		const maxSummaryEntries = Math.max(
+			6,
+			Math.ceil(this.state.historyRetentionMs / Math.max(1000, this.state.summaryWindowMs)) + 2,
+		);
+		this.state.frameQueue = this.state.frameQueue
+			.filter((frame) => frame.capturedAt >= cutoff)
+			.slice(-maxFrameEntries);
+		this.state.summaryHistory = this.state.summaryHistory
+			.filter((summary) => summary.createdAt >= cutoff)
+			.slice(-maxSummaryEntries);
 	}
 
 	private pushFrameRecord(record: CompanionFrameDescriptionRecord): CompanionFrameDescriptionRecord[] {
