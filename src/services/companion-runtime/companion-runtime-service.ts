@@ -278,6 +278,16 @@ export class CompanionRuntimeService {
 		await this.runSummaryTick(true);
 	}
 
+	async refreshNow(options?: { summarize?: boolean }): Promise<void> {
+		if (!this.state.running || !this.state.target) {
+			return;
+		}
+		await this.runCaptureTick();
+		if (options?.summarize) {
+			await this.runSummaryTick(true);
+		}
+	}
+
 	private stopTimers() {
 		if (this.captureTimer) {
 			clearTimeout(this.captureTimer);
