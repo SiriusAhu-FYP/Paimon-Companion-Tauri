@@ -117,6 +117,7 @@ export function initServices(): ServiceContainer {
 	});
 	const evaluation = new EvaluationService({
 		bus: eventBus,
+		character,
 		game2048,
 		orchestrator,
 		unified,

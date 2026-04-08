@@ -22,6 +22,7 @@ export interface EvaluationRunEntry {
 	runtimeContextUsed: boolean;
 	llmReplyUsed: boolean;
 	spoke: boolean;
+	emotionApplied: boolean;
 	summary: string;
 	error: string | null;
 }
@@ -35,6 +36,7 @@ export interface EvaluationCaseMetrics {
 	runtimeContextRate: number;
 	llmReplyRate: number;
 	speechRate: number;
+	emotionRate: number;
 	averageLatencyMs: number;
 	medianLatencyMs: number;
 }
