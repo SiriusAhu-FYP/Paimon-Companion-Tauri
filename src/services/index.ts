@@ -70,11 +70,6 @@ export function initServices(): ServiceContainer {
 		bus: eventBus,
 		orchestrator,
 	});
-	const evaluation = new EvaluationService({
-		bus: eventBus,
-		game2048,
-		orchestrator,
-	});
 	const companionRuntime = new CompanionRuntimeService({
 		bus: eventBus,
 		perception,
@@ -119,6 +114,13 @@ export function initServices(): ServiceContainer {
 		sokoban,
 		llm,
 		pipeline,
+	});
+	const evaluation = new EvaluationService({
+		bus: eventBus,
+		game2048,
+		orchestrator,
+		unified,
+		companionRuntime,
 	});
 
 	services = {

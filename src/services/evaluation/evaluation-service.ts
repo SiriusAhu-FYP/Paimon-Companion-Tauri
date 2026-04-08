@@ -1,6 +1,8 @@
 import type { EventBus } from "@/services/event-bus";
+import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { Game2048Service } from "@/services/games";
 import type { OrchestratorService } from "@/services/orchestrator";
+import type { UnifiedRuntimeService } from "@/services/unified";
 import type {
 	EvaluationCaseDefinition,
 	EvaluationCaseMetrics,
@@ -30,6 +32,14 @@ const EVALUATION_CASES: EvaluationCaseDefinition[] = [
 		targetMode: "selected-target",
 		iterations: 5,
 	},
+	{
+		id: "fusion-selected-target-round",
+		game: "fusion",
+		name: "Fusion Selected Target Round",
+		description: "Use the current target with companion runtime context and run one unified game round with speech/expression follow-up.",
+		targetMode: "selected-target",
+		iterations: 3,
+	},
 ];
 
 function makeInitialState(): EvaluationState {
@@ -45,16 +55,22 @@ export class EvaluationService {
 	private bus: EventBus;
 	private game2048: Game2048Service;
 	private orchestrator: OrchestratorService;
+	private unified: UnifiedRuntimeService;
+	private companionRuntime: CompanionRuntimeService;
 	private state: EvaluationState = makeInitialState();
 
 	constructor(deps: {
 		bus: EventBus;
 		game2048: Game2048Service;
 		orchestrator: OrchestratorService;
+		unified: UnifiedRuntimeService;
+		companionRuntime: CompanionRuntimeService;
 	}) {
 		this.bus = deps.bus;
 		this.game2048 = deps.game2048;
 		this.orchestrator = deps.orchestrator;
+		this.unified = deps.unified;
+		this.companionRuntime = deps.companionRuntime;
 	}
 
 	getState(): Readonly<EvaluationState> {
@@ -121,6 +137,9 @@ export class EvaluationService {
 					actionValid,
 					selectedAction: gameRun.selectedAction,
 					analysisSource: gameRun.analysis.source,
+					runtimeContextUsed: gameRun.runtimeContextUsed,
+					llmReplyUsed: gameRun.llmReplyUsed,
+					spoke: gameRun.spoke,
 					summary: gameRun.summary,
 					error: null,
 				});
@@ -134,6 +153,9 @@ export class EvaluationService {
 					actionValid: false,
 					selectedAction: null,
 					analysisSource: null,
+					runtimeContextUsed: false,
+					llmReplyUsed: false,
+					spoke: false,
 					summary: message,
 					error: message,
 				});
@@ -173,6 +195,9 @@ export class EvaluationService {
 		selectedAction: string | null;
 		preferredActions: string[];
 		analysis: { source: string };
+		runtimeContextUsed: boolean;
+		llmReplyUsed: boolean;
+		spoke: boolean;
 		summary: string;
 	}> {
 		if (definition.game === "2048") {
@@ -184,6 +209,9 @@ export class EvaluationService {
 					selectedAction: run.selectedMove,
 					preferredActions: run.analysis.preferredMoves,
 					analysis: { source: run.analysis.source },
+					runtimeContextUsed: false,
+					llmReplyUsed: false,
+					spoke: false,
 					summary: run.summary,
 				};
 			}
@@ -198,6 +226,36 @@ export class EvaluationService {
 				selectedAction: run.selectedMove,
 				preferredActions: run.analysis.preferredMoves,
 				analysis: { source: run.analysis.source },
+				runtimeContextUsed: false,
+				llmReplyUsed: false,
+				spoke: false,
+				summary: run.summary,
+			};
+		}
+		if (definition.game === "fusion") {
+			const selectedTarget = this.orchestrator.getState().selectedTarget;
+			if (!selectedTarget) {
+				throw new Error("fusion evaluation requires a manually selected target");
+			}
+
+			const runtimeState = this.companionRuntime.getState();
+			if (!runtimeState.running || runtimeState.target?.handle !== selectedTarget.handle) {
+				await this.companionRuntime.start(selectedTarget);
+			}
+			if (!this.companionRuntime.getState().lastSummary) {
+				await this.companionRuntime.runSummaryNow();
+			}
+
+			const promptContext = this.companionRuntime.getPromptContext();
+			const run = await this.unified.runUnifiedGameStep("manual", "evaluation fusion round");
+			return {
+				boardChanged: run.status === "completed",
+				selectedAction: run.selectedAction,
+				preferredActions: run.selectedAction ? [run.selectedAction] : [],
+				analysis: { source: run.companionTextSource },
+				runtimeContextUsed: promptContext.length > 0,
+				llmReplyUsed: run.companionTextSource === "llm",
+				spoke: run.spoke,
 				summary: run.summary,
 			};
 		}
@@ -212,6 +270,9 @@ function emptyMetrics(totalRuns: number): EvaluationCaseMetrics {
 		validActions: 0,
 		successRate: 0,
 		actionValidityRate: 0,
+		runtimeContextRate: 0,
+		llmReplyRate: 0,
+		speechRate: 0,
 		averageLatencyMs: 0,
 		medianLatencyMs: 0,
 	};
@@ -221,6 +282,9 @@ function computeMetrics(runs: EvaluationRunEntry[], totalRuns: number): Evaluati
 	const latencies = runs.map((run) => run.latencyMs).sort((left, right) => left - right);
 	const successfulRuns = runs.filter((run) => run.boardChanged).length;
 	const validActions = runs.filter((run) => run.actionValid).length;
+	const runtimeContextRuns = runs.filter((run) => run.runtimeContextUsed).length;
+	const llmReplyRuns = runs.filter((run) => run.llmReplyUsed).length;
+	const spokenRuns = runs.filter((run) => run.spoke).length;
 
 	return {
 		totalRuns,
@@ -228,6 +292,9 @@ function computeMetrics(runs: EvaluationRunEntry[], totalRuns: number): Evaluati
 		validActions,
 		successRate: totalRuns > 0 ? successfulRuns / totalRuns : 0,
 		actionValidityRate: totalRuns > 0 ? validActions / totalRuns : 0,
+		runtimeContextRate: totalRuns > 0 ? runtimeContextRuns / totalRuns : 0,
+		llmReplyRate: totalRuns > 0 ? llmReplyRuns / totalRuns : 0,
+		speechRate: totalRuns > 0 ? spokenRuns / totalRuns : 0,
 		averageLatencyMs: latencies.length > 0 ? latencies.reduce((sum, value) => sum + value, 0) / latencies.length : 0,
 		medianLatencyMs: computeMedian(latencies),
 	};
@@ -241,6 +308,9 @@ function computeMedian(values: number[]): number {
 }
 
 function buildSummary(definition: EvaluationCaseDefinition, metrics: EvaluationCaseMetrics): string {
+	if (definition.game === "fusion") {
+		return `${definition.name}: success ${formatPercent(metrics.successRate)}, runtime ${formatPercent(metrics.runtimeContextRate)}, llm ${formatPercent(metrics.llmReplyRate)}, speech ${formatPercent(metrics.speechRate)}, avg latency ${metrics.averageLatencyMs.toFixed(0)}ms`;
+	}
 	return `${definition.name}: success ${formatPercent(metrics.successRate)}, valid ${formatPercent(metrics.actionValidityRate)}, avg latency ${metrics.averageLatencyMs.toFixed(0)}ms`;
 }
 

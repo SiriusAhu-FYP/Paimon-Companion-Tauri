@@ -61,6 +61,7 @@ export function EvaluationSection(props: {
 				{" · "}
 				{t("平均延迟", "Avg latency")}：{props.evaluationState.latestResult ? `${props.evaluationState.latestResult.metrics.averageLatencyMs.toFixed(0)}ms` : "—"}
 			</InfoLine>
+			<InfoLine>{t("最近摘要", "Latest Summary")}：{props.evaluationState.latestResult?.summary ?? "—"}</InfoLine>
 		</PanelCard>
 	);
 }
