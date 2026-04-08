@@ -114,7 +114,9 @@ export function initServices(): ServiceContainer {
 		bus: eventBus,
 		runtime,
 		character,
+		orchestrator,
 		game2048,
+		sokoban,
 		pipeline,
 	});
 

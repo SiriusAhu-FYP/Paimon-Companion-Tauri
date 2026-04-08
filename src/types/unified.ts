@@ -1,11 +1,10 @@
-import type { Game2048Move } from "./game-2048";
-
 export type UnifiedRunPhase = "idle" | "listening" | "acting" | "speaking" | "failed";
 export type UnifiedRunTrigger = "manual" | "voice";
 export type UnifiedRunStatus = "running" | "completed" | "failed";
 
 export interface UnifiedRunRecord {
 	id: string;
+	gameId: string | null;
 	trigger: UnifiedRunTrigger;
 	requestText: string | null;
 	startedAt: number;
@@ -15,7 +14,7 @@ export interface UnifiedRunRecord {
 	summary: string;
 	companionText: string;
 	emotion: string;
-	selectedMove: Game2048Move | null;
+	selectedAction: string | null;
 	spoke: boolean;
 	error: string | null;
 }

@@ -111,6 +111,7 @@ P1 close-out:
       - [-] add no-progress escalation and selected-frame cloud rescue
         deferred: keep this as a future optimization path, not a current implementation gate
   - [ ] P2.6 Post-Fusion Validation
+    - [x] route the current `Unified Run` entry through the selected semantic game target instead of keeping it 2048-only
     - [ ] verify that all three source lines coexist in one Tauri runtime
     - [ ] verify companion behavior, expression, speech, and functional execution together
     - [ ] define the accepted post-fusion baseline
