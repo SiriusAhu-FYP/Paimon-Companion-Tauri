@@ -293,7 +293,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "companion-runtime:frame-described": {
 			const data = payload as EventMap["companion-runtime:frame-described"];
-			return truncate(data.record.description, 100);
+			return `${data.record.source === "unchanged" ? "静止" : "视觉"}: ${truncate(data.record.description, 96)}`;
 		}
 		case "companion-runtime:summary-complete": {
 			const data = payload as EventMap["companion-runtime:summary-complete"];

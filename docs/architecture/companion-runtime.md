@@ -7,6 +7,7 @@ Current implementation note:
 - the first `P2.5` slice now exists as an experimental companion runtime inside the Tauri app
 - it can capture a selected target, ask a local OpenAI-compatible vision node for short frame descriptions, and periodically summarize the latest rolling window through the active cloud LLM profile
 - the latest retained temporal summary is now also exposed to the companion prompt path, so this runtime is no longer isolated to the lab panel
+- the current slice also includes lightweight change-based filtering, so nearly identical consecutive frames can be coalesced instead of always triggering a fresh local-VLM description
 - this is accepted only as an initial runtime slice, not as the finished `Video-Understanding-MVP` fusion endpoint
 
 ## Goal

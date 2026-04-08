@@ -203,7 +203,11 @@ export function CompanionRuntimeSection(props: {
 
 			{props.companionRuntimeState.lastFrame && (
 				<InfoLine mb={0.5}>
-					{t("最近帧描述", "Latest Frame Description")}：{props.companionRuntimeState.lastFrame.description}
+					{t("最近帧描述", "Latest Frame Description")}：
+					{props.companionRuntimeState.lastFrame.source === "unchanged"
+						? `${t("静止帧", "Unchanged")} · `
+						: `${t("视觉帧", "Vision")} · `}
+					{props.companionRuntimeState.lastFrame.description}
 				</InfoLine>
 			)}
 			{props.companionRuntimeState.lastSummary && (
