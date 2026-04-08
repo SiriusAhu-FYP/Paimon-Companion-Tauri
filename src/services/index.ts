@@ -8,7 +8,7 @@ import { OrchestratorService } from "./orchestrator";
 import { Game2048Service, SokobanService } from "./games";
 import { EvaluationService } from "./evaluation";
 import { UnifiedRuntimeService } from "./unified";
-import { CompanionRuntimeService } from "./companion-runtime";
+import { CompanionRuntimeBenchmarkService, CompanionRuntimeService } from "./companion-runtime";
 import { LLMService } from "./llm";
 import { AudioPlayer } from "./audio";
 import type { IASRService } from "./asr";
@@ -34,6 +34,7 @@ export interface ServiceContainer {
 	evaluation: EvaluationService;
 	unified: UnifiedRuntimeService;
 	companionRuntime: CompanionRuntimeService;
+	companionRuntimeBenchmark: CompanionRuntimeBenchmarkService;
 	llm: LLMService;
 	asr: IASRService;
 	player: AudioPlayer;
@@ -77,6 +78,10 @@ export function initServices(): ServiceContainer {
 	const companionRuntime = new CompanionRuntimeService({
 		bus: eventBus,
 		perception,
+	});
+	const companionRuntimeBenchmark = new CompanionRuntimeBenchmarkService({
+		bus: eventBus,
+		companionRuntime,
 	});
 
 	// Keep knowledge alive for companion/chat workflows, but do not route the
@@ -126,6 +131,7 @@ export function initServices(): ServiceContainer {
 		evaluation,
 		unified,
 		companionRuntime,
+		companionRuntimeBenchmark,
 		llm,
 		asr,
 		player,

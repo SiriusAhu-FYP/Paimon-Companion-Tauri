@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Stack, TextField } from "@mui/material";
-import type { CompanionRuntimeState, FunctionalRuntimeState } from "@/types";
+import type {
+	CompanionRuntimeBenchmarkState,
+	CompanionRuntimeState,
+	FunctionalRuntimeState,
+	FunctionalTarget,
+} from "@/types";
 import { useI18n } from "@/contexts/I18nProvider";
 import { InfoLine, PanelCard, SectionHeader, SectionStatusChip } from "./panel-shell";
 
@@ -30,10 +35,12 @@ function formatRatio(numerator: number, denominator: number): string {
 export function CompanionRuntimeSection(props: {
 	functionalState: FunctionalRuntimeState;
 	companionRuntimeState: CompanionRuntimeState;
+	companionRuntimeBenchmarkState: CompanionRuntimeBenchmarkState;
 	onStart: (target: { handle: string; title: string }) => Promise<unknown>;
 	onStop: () => void;
 	onClearHistory: () => void;
 	onRunSummaryNow: () => Promise<unknown>;
+	onRunBenchmark: (benchmarkId: string, target: FunctionalTarget) => Promise<unknown>;
 	onUpdateConfig: (partial: {
 		localVisionBaseUrl?: string;
 		localVisionModel?: string;
@@ -66,6 +73,7 @@ export function CompanionRuntimeSection(props: {
 	]);
 
 	const currentTarget = props.functionalState.selectedTarget;
+	const benchmarkBusy = props.companionRuntimeBenchmarkState.activeBenchmarkId !== null;
 	const statusColor = props.companionRuntimeState.running
 		? (props.companionRuntimeState.phase === "error" ? "error" : "warning")
 		: "default";
@@ -113,12 +121,25 @@ export function CompanionRuntimeSection(props: {
 				{t("平均总结耗时", "Avg Summary Latency")}：
 				{props.companionRuntimeState.metrics.averageSummaryLatencyMs.toFixed(0)}ms
 			</InfoLine>
+			<InfoLine>{t("最近基准", "Latest Benchmark")}：{props.companionRuntimeBenchmarkState.latestResult?.benchmarkName ?? t("尚未执行", "Not run yet")}</InfoLine>
+			{props.companionRuntimeBenchmarkState.latestResult && (
+				<InfoLine>
+					{t("吞吐", "Throughput")}：{props.companionRuntimeBenchmarkState.latestResult.metrics.framesPerMinute.toFixed(1)}/min
+					{" · "}
+					{t("静止占比", "Unchanged Ratio")}：{formatRatio(
+						props.companionRuntimeBenchmarkState.latestResult.metrics.unchangedFrames,
+						props.companionRuntimeBenchmarkState.latestResult.metrics.captureTicks,
+					)}
+					{" · "}
+					{t("总结次数", "Summaries")}：{props.companionRuntimeBenchmarkState.latestResult.metrics.summariesGenerated}
+				</InfoLine>
+			)}
 
 			<Stack direction="row" spacing={0.5} sx={{ mt: 0.75, mb: 0.75, flexWrap: "wrap" }}>
 				<Button
 					size="small"
 					variant="contained"
-					disabled={!currentTarget || props.companionRuntimeState.running}
+					disabled={!currentTarget || props.companionRuntimeState.running || benchmarkBusy}
 					onClick={async () => {
 						if (!currentTarget) return;
 						setMessage(null);
@@ -134,7 +155,7 @@ export function CompanionRuntimeSection(props: {
 				<Button
 					size="small"
 					variant="outlined"
-					disabled={!props.companionRuntimeState.running}
+					disabled={!props.companionRuntimeState.running || benchmarkBusy}
 					onClick={props.onStop}
 				>
 					{t("停止", "Stop")}
@@ -142,7 +163,7 @@ export function CompanionRuntimeSection(props: {
 				<Button
 					size="small"
 					variant="outlined"
-					disabled={!props.companionRuntimeState.running}
+					disabled={!props.companionRuntimeState.running || benchmarkBusy}
 					onClick={async () => {
 						setMessage(null);
 						try {
@@ -157,10 +178,35 @@ export function CompanionRuntimeSection(props: {
 				<Button
 					size="small"
 					variant="text"
+					disabled={benchmarkBusy}
 					onClick={props.onClearHistory}
 				>
 					{t("清空历史", "Clear History")}
 				</Button>
+			</Stack>
+
+			<Stack direction="row" spacing={0.5} sx={{ mt: -0.25, mb: 0.75, flexWrap: "wrap" }}>
+				{props.companionRuntimeBenchmarkState.availableBenchmarks.map((benchmark) => (
+					<Button
+						key={benchmark.id}
+						size="small"
+						variant="outlined"
+						disabled={!currentTarget || props.companionRuntimeState.running || benchmarkBusy}
+						onClick={async () => {
+							if (!currentTarget) return;
+							setMessage(null);
+							try {
+								await props.onRunBenchmark(benchmark.id, currentTarget);
+							} catch (err) {
+								setMessage({ type: "error", text: err instanceof Error ? err.message : String(err) });
+							}
+						}}
+					>
+						{benchmarkBusy && props.companionRuntimeBenchmarkState.activeBenchmarkId === benchmark.id
+							? t("基准运行中...", "Benchmark Running...")
+							: `${benchmark.name} (${formatSeconds(benchmark.durationMs)})`}
+					</Button>
+				))}
 			</Stack>
 
 			<Stack direction="row" spacing={0.5} sx={{ mb: 0.5 }}>

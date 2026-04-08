@@ -26,6 +26,10 @@ export type {
 	UnifiedRuntimeState,
 } from "./unified";
 export type {
+	CompanionRuntimeBenchmarkDefinition,
+	CompanionRuntimeBenchmarkMetrics,
+	CompanionRuntimeBenchmarkResult,
+	CompanionRuntimeBenchmarkState,
 	CompanionFrameDescriptionRecord,
 	CompanionRuntimeMetrics,
 	CompanionRuntimePhase,

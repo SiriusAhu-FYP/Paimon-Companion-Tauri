@@ -8,6 +8,8 @@ import type {
 } from "./evaluation";
 import type { UnifiedRuntimeState } from "./unified";
 import type {
+	CompanionRuntimeBenchmarkResult,
+	CompanionRuntimeBenchmarkState,
 	CompanionFrameDescriptionRecord,
 	CompanionRuntimeState,
 	CompanionSummaryRecord,
@@ -252,6 +254,21 @@ export interface CompanionRuntimeSummaryPayload {
 	record: CompanionSummaryRecord;
 }
 
+export interface CompanionRuntimeBenchmarkStateChangePayload {
+	state: CompanionRuntimeBenchmarkState;
+}
+
+export interface CompanionRuntimeBenchmarkStartPayload {
+	benchmarkId: string;
+	name: string;
+	durationMs: number;
+	targetTitle: string;
+}
+
+export interface CompanionRuntimeBenchmarkCompletePayload {
+	result: CompanionRuntimeBenchmarkResult;
+}
+
 export interface VoiceInputStateChangePayload {
 	state: VoiceInputState;
 }
@@ -304,6 +321,9 @@ export interface EventMap {
 	"companion-runtime:state-change": CompanionRuntimeStateChangePayload;
 	"companion-runtime:frame-described": CompanionRuntimeFramePayload;
 	"companion-runtime:summary-complete": CompanionRuntimeSummaryPayload;
+	"companion-runtime:benchmark-state-change": CompanionRuntimeBenchmarkStateChangePayload;
+	"companion-runtime:benchmark-start": CompanionRuntimeBenchmarkStartPayload;
+	"companion-runtime:benchmark-complete": CompanionRuntimeBenchmarkCompletePayload;
 }
 
 export type EventName = keyof EventMap;

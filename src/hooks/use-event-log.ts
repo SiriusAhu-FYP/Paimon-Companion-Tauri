@@ -46,6 +46,8 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 			"unified:run-complete",
 			"companion-runtime:frame-described",
 			"companion-runtime:summary-complete",
+			"companion-runtime:benchmark-start",
+			"companion-runtime:benchmark-complete",
 		],
 		color: "#ffb74d",
 	},
@@ -64,6 +66,7 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 			"unified:state-change",
 			"unified:voice-input",
 			"companion-runtime:state-change",
+			"companion-runtime:benchmark-state-change",
 		],
 		color: "#90a4ae",
 		debug: true,
@@ -299,6 +302,18 @@ function formatSummary(event: EventName, payload: unknown): string {
 			const data = payload as EventMap["companion-runtime:summary-complete"];
 			return `${data.record.source}: ${truncate(data.record.summary, 100)}`;
 		}
+		case "companion-runtime:benchmark-start": {
+			const data = payload as EventMap["companion-runtime:benchmark-start"];
+			return `${data.name} @ ${data.targetTitle} (${Math.round(data.durationMs / 1000)}s)`;
+		}
+		case "companion-runtime:benchmark-complete": {
+			const data = payload as EventMap["companion-runtime:benchmark-complete"];
+			return `${data.result.benchmarkName}: ${data.result.metrics.framesPerMinute.toFixed(1)}/min, unchanged ${formatPercent(data.result.metrics.unchangedRatio)}`;
+		}
+		case "companion-runtime:benchmark-state-change": {
+			const data = payload as EventMap["companion-runtime:benchmark-state-change"];
+			return `active=${data.state.activeBenchmarkId ?? "none"}, 历史=${data.state.history.length}`;
+		}
 		default:
 			return serializePayload(payload);
 	}
@@ -334,6 +349,10 @@ function getSeverity(event: EventName, payload: unknown): "info" | "warn" | "err
 		case "unified:run-complete": {
 			const data = payload as EventMap["unified:run-complete"];
 			return data.success ? "info" : "warn";
+		}
+		case "companion-runtime:benchmark-complete": {
+			const data = payload as EventMap["companion-runtime:benchmark-complete"];
+			return data.result.status === "completed" ? "info" : "warn";
 		}
 		case "safety:decision": {
 			const data = payload as EventMap["safety:decision"];

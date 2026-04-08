@@ -100,13 +100,14 @@ P1 close-out:
     - [x] define the first local-fast / cloud-summarize companion runtime slice around `Qwen3-VL-2B-Instruct` style local frame descriptions plus cloud temporal reasoning
     - [x] start from `8-10s` rolling local-description windows and preserve at least the latest `1min` of summary context
     - [x] feed the latest rolling temporal summary into the companion prompt path instead of leaving it as a lab-only side panel
-    - [x] split perception prompting into general observation plus lightweight game-specific focus overlays
-    - [x] add lightweight change-based frame filtering so the runtime can coalesce visually unchanged captures instead of re-describing every tick
-    - [x] expose lightweight session metrics for runtime throughput, unchanged-frame ratio, and summary latency
-    - [ ] integrate the missing reusable perception pieces that are still required
-    - [ ] carry over the relevant evaluation/benchmark logic where it still serves the product goal
-    - [-] add no-progress escalation and selected-frame cloud rescue
-      deferred: keep this as a future optimization path, not a current implementation gate
+      - [x] split perception prompting into general observation plus lightweight game-specific focus overlays
+      - [x] add lightweight change-based frame filtering so the runtime can coalesce visually unchanged captures instead of re-describing every tick
+      - [x] expose lightweight session metrics for runtime throughput, unchanged-frame ratio, and summary latency
+      - [x] add a fixed-duration companion runtime benchmark so throughput and summary cadence can be sampled without ad hoc manual timing
+      - [ ] integrate the missing reusable perception pieces that are still required
+      - [x] carry over the relevant evaluation/benchmark logic where it still serves the product goal
+      - [-] add no-progress escalation and selected-frame cloud rescue
+        deferred: keep this as a future optimization path, not a current implementation gate
   - [ ] P2.6 Post-Fusion Validation
     - [ ] verify that all three source lines coexist in one Tauri runtime
     - [ ] verify companion behavior, expression, speech, and functional execution together
