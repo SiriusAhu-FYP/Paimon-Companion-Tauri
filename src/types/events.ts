@@ -210,7 +210,7 @@ export interface EvaluationStateChangePayload {
 
 export interface EvaluationCaseStartPayload {
 	caseId: string;
-	game: "2048";
+	game: "2048" | "fusion";
 	name: string;
 	iterations: number;
 }
