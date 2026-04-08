@@ -113,12 +113,12 @@ This contract should not expose:
 
 Those belong to runtime internals unless debugging explicitly needs them.
 
-## Current Implementation Gap
+## Current Implementation Status
 
 Current accepted behavior already exists in-app:
 
 - reply/runtime -> emotion -> model-aware expression
 
-But the public boundary is still internal event wiring rather than MCP.
+A first localhost MCP server slice now exists in the Tauri host, with companion tool requests bridged into the current runtime.
 
-This document defines the target boundary for the later migration.
+What is still missing is the accepted end-to-end validation that the real LLM path consistently uses that MCP-facing tool boundary instead of falling back to mock-only or internal-only shortcuts.

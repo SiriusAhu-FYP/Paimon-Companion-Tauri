@@ -153,4 +153,5 @@ P2 note:
 - `P2.3` is intentionally about companion expression / motion protocol first, not about full game-plugin protocol yet
 - the first pass of `P2.3` should stay semantically small and distinct: `neutral`, `happy`, `angry`, `sad`, `delighted`, `alarmed`, `dazed`
 - the current internal expression path and mock-path are useful groundwork, but they do not satisfy the intended `P2` fusion bar on their own
+- the first localhost MCP server slice has landed, but it is not treated as accepted until the real LLM path and semantic game path are both validated through it
 - MCP externalization is a prerequisite for `P2` close-out, not later optional polish

@@ -6,6 +6,7 @@ import { mockCharacterInit, exposeMockTools } from "@/utils/mock";
 import { broadcastState, broadcastControl, onControlCommand } from "@/utils/window-sync";
 import { windowLabel } from "@/utils/window-label";
 import { DEFAULT_MODEL } from "@/features/live2d";
+import { initMcpToolBridge } from "@/services/mcp/tool-bridge-service";
 import { ThemeModeProvider } from "./contexts/JoyThemeProvider";
 import { I18nProvider } from "./contexts/I18nProvider";
 import App from "./App";
@@ -55,6 +56,8 @@ async function bootstrap() {
 				broadcastFullState();
 			}
 		});
+
+		await initMcpToolBridge(services);
 
 		const paimonTools = (window as unknown as Record<string, Record<string, unknown>>).__paimon;
 		if (paimonTools) {
