@@ -69,7 +69,7 @@ These are not yet accepted replacements:
 | Full capture -> queue -> describe -> summarize video pipeline | `src/services/companion-runtime/companion-runtime-service.ts`, `src/features/control-panel/CompanionRuntimeSection.tsx`, `src/services/llm/llm-service.ts` | `partial` | The Tauri app now has a first experimental rolling companion runtime: selected-target capture, local frame descriptions, periodic summary windows, retained recent summary context, and prompt-path exposure of the latest temporal summary for companion replies. It is still a thin first slice, not the full MVP-grade pipeline. | Continue merging reusable perception/runtime pieces without overfitting the old Python layout. |
 | Queue manager / backpressure / expiry around frame processing | `src/services/companion-runtime/companion-runtime-service.ts` | `partial` | Basic rolling retention now exists for frame descriptions and summary history, but there is still no stronger backpressure, diff-driven keyframe filtering, or dedicated backend scheduler. | Strengthen only the queue behavior that product runtime actually needs. |
 | Summarizer over multi-frame descriptions | `src/services/companion-runtime/companion-runtime-service.ts` | `partial` | The first periodic temporal summary path now exists and uses recent frame descriptions plus prior summaries. | Keep iterating toward the accepted product runtime rather than cloning the full research pipeline. |
-| Benchmark / quality-evaluation toolkit | `src/services/evaluation/evaluation-service.ts`, `src/services/companion-runtime/companion-runtime-service.ts`, `src/features/control-panel/CompanionRuntimeSection.tsx` | `partial` | Current evaluation still centers on functional runs, but the companion runtime now exposes lightweight session metrics for throughput, unchanged-frame ratio, and summary latency. It is still far from the full research benchmarking/judge toolkit. | Carry over only the evaluation pieces still useful for the product goal. |
+| Benchmark / quality-evaluation toolkit | `src/services/evaluation/evaluation-service.ts`, `src/services/companion-runtime/companion-runtime-service.ts`, `src/services/companion-runtime/companion-runtime-benchmark-service.ts`, `src/features/control-panel/CompanionRuntimeSection.tsx` | `partial` | Current evaluation now covers functional runs plus a fixed-duration companion runtime benchmark with throughput, unchanged-frame ratio, summary cadence, and latency metrics. It is still intentionally smaller than the research benchmarking/judge toolkit. | Keep only the product-facing benchmark slices; leave judge/scoring research tooling out unless it becomes necessary. |
 | Judge/scoring/visualization research tooling | no current equivalent | `missing` | The Tauri repo does not currently host the MVP’s research toolkit. | Likely keep out unless explicitly needed. |
 
 ## Consolidated Result
@@ -84,7 +84,7 @@ Current high-level audit result:
   - unresolved: cloud ASR validation and any future quality upgrades such as better mixed-language utterance handling
 - `Video-Understanding-MVP`: `partial`
   - accepted core: screenshot capture, single-frame model use, and the first rolling local-description + periodic-summary runtime slice
-  - unresolved: stronger queueing/filtering/scheduler behavior and most reusable evaluation/toolkit pieces
+  - unresolved: stronger queueing/filtering/scheduler behavior and any future benchmark slices beyond the now-accepted lightweight product-facing harness
 
 This means the three-source fusion is not yet complete.
 

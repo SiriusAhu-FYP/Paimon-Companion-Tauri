@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useCompanionRuntime, useEvaluation, useFunctional, useGame2048, useSokoban, useUnifiedRuntime } from "@/hooks";
+import { useCompanionRuntime, useCompanionRuntimeBenchmark, useEvaluation, useFunctional, useGame2048, useSokoban, useUnifiedRuntime } from "@/hooks";
 import { CompanionRuntimeSection } from "./CompanionRuntimeSection";
 import { createLogger } from "@/services/logger";
 import { useI18n } from "@/contexts/I18nProvider";
@@ -42,6 +42,10 @@ export function FunctionalPanel() {
 		runSummaryNow,
 		updateRuntimeConfig,
 	} = useCompanionRuntime();
+	const {
+		state: companionRuntimeBenchmarkState,
+		runBenchmark: runCompanionRuntimeBenchmark,
+	} = useCompanionRuntimeBenchmark();
 
 	const handleDetect2048Target = useCallback(async () => {
 		try {
@@ -87,6 +91,7 @@ export function FunctionalPanel() {
 		|| game2048State.activeRunId !== null
 		|| sokobanState.activeRunId !== null
 		|| evaluationState.activeCaseId !== null
+		|| companionRuntimeBenchmarkState.activeBenchmarkId !== null
 		|| unifiedState.activeRunId !== null;
 
 	return (
@@ -94,10 +99,12 @@ export function FunctionalPanel() {
 			<CompanionRuntimeSection
 				functionalState={functionalState}
 				companionRuntimeState={companionRuntimeState}
+				companionRuntimeBenchmarkState={companionRuntimeBenchmarkState}
 				onStart={startCompanionRuntime}
 				onStop={stopCompanionRuntime}
 				onClearHistory={clearCompanionRuntimeHistory}
 				onRunSummaryNow={runSummaryNow}
+				onRunBenchmark={runCompanionRuntimeBenchmark}
 				onUpdateConfig={updateRuntimeConfig}
 			/>
 			<UnifiedRunSection
