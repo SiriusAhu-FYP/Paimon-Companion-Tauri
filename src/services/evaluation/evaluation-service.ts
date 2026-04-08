@@ -1,3 +1,4 @@
+import type { CharacterService } from "@/services/character";
 import type { EventBus } from "@/services/event-bus";
 import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { Game2048Service } from "@/services/games";
@@ -53,6 +54,7 @@ function makeInitialState(): EvaluationState {
 
 export class EvaluationService {
 	private bus: EventBus;
+	private character: CharacterService;
 	private game2048: Game2048Service;
 	private orchestrator: OrchestratorService;
 	private unified: UnifiedRuntimeService;
@@ -61,12 +63,14 @@ export class EvaluationService {
 
 	constructor(deps: {
 		bus: EventBus;
+		character: CharacterService;
 		game2048: Game2048Service;
 		orchestrator: OrchestratorService;
 		unified: UnifiedRuntimeService;
 		companionRuntime: CompanionRuntimeService;
 	}) {
 		this.bus = deps.bus;
+		this.character = deps.character;
 		this.game2048 = deps.game2048;
 		this.orchestrator = deps.orchestrator;
 		this.unified = deps.unified;
@@ -140,6 +144,7 @@ export class EvaluationService {
 					runtimeContextUsed: gameRun.runtimeContextUsed,
 					llmReplyUsed: gameRun.llmReplyUsed,
 					spoke: gameRun.spoke,
+					emotionApplied: gameRun.emotionApplied,
 					summary: gameRun.summary,
 					error: null,
 				});
@@ -156,6 +161,7 @@ export class EvaluationService {
 					runtimeContextUsed: false,
 					llmReplyUsed: false,
 					spoke: false,
+					emotionApplied: false,
 					summary: message,
 					error: message,
 				});
@@ -198,6 +204,7 @@ export class EvaluationService {
 		runtimeContextUsed: boolean;
 		llmReplyUsed: boolean;
 		spoke: boolean;
+		emotionApplied: boolean;
 		summary: string;
 	}> {
 		if (definition.game === "2048") {
@@ -212,6 +219,7 @@ export class EvaluationService {
 					runtimeContextUsed: false,
 					llmReplyUsed: false,
 					spoke: false,
+					emotionApplied: false,
 					summary: run.summary,
 				};
 			}
@@ -229,6 +237,7 @@ export class EvaluationService {
 				runtimeContextUsed: false,
 				llmReplyUsed: false,
 				spoke: false,
+				emotionApplied: false,
 				summary: run.summary,
 			};
 		}
@@ -248,6 +257,7 @@ export class EvaluationService {
 
 			const promptContext = this.companionRuntime.getPromptContext();
 			const run = await this.unified.runUnifiedGameStep("manual", "evaluation fusion round");
+			const characterState = this.character.getState();
 			return {
 				boardChanged: run.status === "completed",
 				selectedAction: run.selectedAction,
@@ -256,6 +266,7 @@ export class EvaluationService {
 				runtimeContextUsed: promptContext.length > 0,
 				llmReplyUsed: run.companionTextSource === "llm",
 				spoke: run.spoke,
+				emotionApplied: characterState.emotion === run.emotion,
 				summary: run.summary,
 			};
 		}
@@ -273,6 +284,7 @@ function emptyMetrics(totalRuns: number): EvaluationCaseMetrics {
 		runtimeContextRate: 0,
 		llmReplyRate: 0,
 		speechRate: 0,
+		emotionRate: 0,
 		averageLatencyMs: 0,
 		medianLatencyMs: 0,
 	};
@@ -285,6 +297,7 @@ function computeMetrics(runs: EvaluationRunEntry[], totalRuns: number): Evaluati
 	const runtimeContextRuns = runs.filter((run) => run.runtimeContextUsed).length;
 	const llmReplyRuns = runs.filter((run) => run.llmReplyUsed).length;
 	const spokenRuns = runs.filter((run) => run.spoke).length;
+	const emotionRuns = runs.filter((run) => run.emotionApplied).length;
 
 	return {
 		totalRuns,
@@ -295,6 +308,7 @@ function computeMetrics(runs: EvaluationRunEntry[], totalRuns: number): Evaluati
 		runtimeContextRate: totalRuns > 0 ? runtimeContextRuns / totalRuns : 0,
 		llmReplyRate: totalRuns > 0 ? llmReplyRuns / totalRuns : 0,
 		speechRate: totalRuns > 0 ? spokenRuns / totalRuns : 0,
+		emotionRate: totalRuns > 0 ? emotionRuns / totalRuns : 0,
 		averageLatencyMs: latencies.length > 0 ? latencies.reduce((sum, value) => sum + value, 0) / latencies.length : 0,
 		medianLatencyMs: computeMedian(latencies),
 	};
@@ -309,7 +323,7 @@ function computeMedian(values: number[]): number {
 
 function buildSummary(definition: EvaluationCaseDefinition, metrics: EvaluationCaseMetrics): string {
 	if (definition.game === "fusion") {
-		return `${definition.name}: success ${formatPercent(metrics.successRate)}, runtime ${formatPercent(metrics.runtimeContextRate)}, llm ${formatPercent(metrics.llmReplyRate)}, speech ${formatPercent(metrics.speechRate)}, avg latency ${metrics.averageLatencyMs.toFixed(0)}ms`;
+		return `${definition.name}: success ${formatPercent(metrics.successRate)}, runtime ${formatPercent(metrics.runtimeContextRate)}, llm ${formatPercent(metrics.llmReplyRate)}, speech ${formatPercent(metrics.speechRate)}, emotion ${formatPercent(metrics.emotionRate)}, avg latency ${metrics.averageLatencyMs.toFixed(0)}ms`;
 	}
 	return `${definition.name}: success ${formatPercent(metrics.successRate)}, valid ${formatPercent(metrics.actionValidityRate)}, avg latency ${metrics.averageLatencyMs.toFixed(0)}ms`;
 }
