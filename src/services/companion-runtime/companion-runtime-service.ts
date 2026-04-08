@@ -3,6 +3,7 @@ import type { PerceptionService } from "@/services/perception";
 import { getConfig, proxyRequest, SECRET_KEYS, updateConfig } from "@/services/config";
 import { createLogger } from "@/services/logger";
 import { findSemanticGameByTargetTitle } from "@/services/games/semantic-game-registry";
+import { estimateSnapshotChange } from "@/services/games/game-utils";
 import type {
 	CompanionFrameDescriptionRecord,
 	CompanionRuntimeState,
@@ -13,6 +14,8 @@ import type {
 import { normalizeCompatibleOpenAIBaseUrl } from "@/services/games/game-utils";
 
 const log = createLogger("companion-runtime");
+const MIN_MEANINGFUL_CHANGE_RATIO = 0.02;
+const UNCHANGED_FRAME_DESCRIPTION = "画面变化很小，当前画面与上一帧基本一致，没有明显新变化。";
 
 interface OpenAIChatCompletionResponse {
 	choices?: Array<{
@@ -101,6 +104,7 @@ export class CompanionRuntimeService {
 	private summaryTimer: ReturnType<typeof setInterval> | null = null;
 	private captureInFlight = false;
 	private summaryInFlight = false;
+	private lastSnapshotForDiff: PerceptionSnapshot | null = null;
 
 	constructor(deps: {
 		bus: EventBus;
@@ -176,6 +180,7 @@ export class CompanionRuntimeService {
 		}
 
 		this.stopTimers();
+		this.lastSnapshotForDiff = null;
 		this.state.running = true;
 		this.state.phase = "idle";
 		this.state.target = { ...target };
@@ -204,6 +209,7 @@ export class CompanionRuntimeService {
 		this.stopTimers();
 		this.captureInFlight = false;
 		this.summaryInFlight = false;
+		this.lastSnapshotForDiff = null;
 		this.state.running = false;
 		this.state.phase = "idle";
 		this.emitState();
@@ -216,6 +222,7 @@ export class CompanionRuntimeService {
 		this.state.frameQueue = [];
 		this.state.summaryHistory = [];
 		this.state.lastError = null;
+		this.lastSnapshotForDiff = null;
 		this.emitState();
 	}
 
@@ -273,19 +280,26 @@ export class CompanionRuntimeService {
 			const snapshot = await this.perception.captureTarget(this.state.target);
 			this.state.phase = "describing";
 			this.emitState();
-			const description = await this.describeSnapshot(snapshot);
+			const changeRatio = await this.measureChange(snapshot);
+			const description =
+				changeRatio !== null && changeRatio < MIN_MEANINGFUL_CHANGE_RATIO
+					? UNCHANGED_FRAME_DESCRIPTION
+					: await this.describeSnapshot(snapshot);
 			const record: CompanionFrameDescriptionRecord = {
 				id: `frame-${snapshot.capturedAt}`,
 				targetTitle: snapshot.targetTitle,
 				capturedAt: snapshot.capturedAt,
 				description,
+				source: changeRatio !== null && changeRatio < MIN_MEANINGFUL_CHANGE_RATIO ? "unchanged" : "vision",
 				captureMethod: snapshot.captureMethod,
 				qualityScore: snapshot.qualityScore,
+				changeRatio,
 			};
 			this.state.lastFrame = record;
-			this.state.frameQueue = [...this.state.frameQueue, record];
+			this.state.frameQueue = this.pushFrameRecord(record);
 			this.pruneHistory(record.capturedAt);
 			this.bus.emit("companion-runtime:frame-described", { record: cloneFrameRecord(record) });
+			this.lastSnapshotForDiff = snapshot;
 			this.state.phase = "idle";
 			this.emitState();
 		} catch (err) {
@@ -354,6 +368,36 @@ export class CompanionRuntimeService {
 		const cutoff = now - this.state.historyRetentionMs;
 		this.state.frameQueue = this.state.frameQueue.filter((frame) => frame.capturedAt >= cutoff);
 		this.state.summaryHistory = this.state.summaryHistory.filter((summary) => summary.createdAt >= cutoff);
+	}
+
+	private pushFrameRecord(record: CompanionFrameDescriptionRecord): CompanionFrameDescriptionRecord[] {
+		const next = [...this.state.frameQueue];
+		const last = next[next.length - 1];
+		if (
+			record.source === "unchanged"
+			&& last?.source === "unchanged"
+			&& last.targetTitle === record.targetTitle
+		) {
+			next[next.length - 1] = record;
+			return next;
+		}
+		next.push(record);
+		return next;
+	}
+
+	private async measureChange(snapshot: PerceptionSnapshot): Promise<number | null> {
+		if (!this.lastSnapshotForDiff || this.lastSnapshotForDiff.targetHandle !== snapshot.targetHandle) {
+			return null;
+		}
+		try {
+			return await estimateSnapshotChange(this.lastSnapshotForDiff, snapshot, {
+				sampleSize: 40,
+				cropScale: 0.82,
+			});
+		} catch (err) {
+			log.debug("companion runtime change estimate skipped", err);
+			return null;
+		}
 	}
 
 	private async describeSnapshot(snapshot: PerceptionSnapshot): Promise<string> {

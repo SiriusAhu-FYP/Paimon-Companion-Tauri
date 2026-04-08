@@ -7,8 +7,10 @@ export interface CompanionFrameDescriptionRecord {
 	targetTitle: string;
 	capturedAt: number;
 	description: string;
+	source: "vision" | "unchanged";
 	captureMethod: string;
 	qualityScore: number;
+	changeRatio: number | null;
 }
 
 export interface CompanionSummaryRecord {
