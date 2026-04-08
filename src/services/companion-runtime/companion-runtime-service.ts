@@ -119,6 +119,24 @@ function updateRollingAverage(previousAverage: number, previousCount: number, ne
 	return ((previousAverage * previousCount) + nextValue) / (previousCount + 1);
 }
 
+function formatRuntimeError(stage: "frame" | "summary", baseUrl: string, error: unknown): string {
+	const rawMessage = error instanceof Error ? error.message : String(error);
+	const normalizedBaseUrl = normalizeCompatibleOpenAIBaseUrl(baseUrl);
+	const isLocalVisionConnectivityIssue =
+		/(error sending request|connection refused|timed out|os error 10060|os error 10061|failed to connect)/i.test(rawMessage)
+		&& /localhost|127\.0\.0\.1/i.test(normalizedBaseUrl);
+
+	if (!isLocalVisionConnectivityIssue) {
+		return rawMessage;
+	}
+
+	if (stage === "frame") {
+		return `无法连接本地视觉节点：${normalizedBaseUrl}。请确认 Windows 侧可以访问这个 OpenAI-compatible 地址；如果服务跑在 WSL 里，请确认端口已经对 Windows 暴露。原始错误：${rawMessage}`;
+	}
+
+	return `无法连接用于时序总结的 LLM/视觉地址：${normalizedBaseUrl}。请确认当前地址和模型服务已经对 Tauri 应用可达。原始错误：${rawMessage}`;
+}
+
 export class CompanionRuntimeService {
 	private bus: EventBus;
 	private perception: PerceptionService;
@@ -274,6 +292,31 @@ export class CompanionRuntimeService {
 		this.emitState();
 	}
 
+	async testLocalVisionConnection(): Promise<void> {
+		const baseUrl = normalizeCompatibleOpenAIBaseUrl(this.state.localVisionBaseUrl);
+		try {
+			const response = await proxyRequest({
+				url: `${baseUrl}/models`,
+				method: "GET",
+				timeoutMs: 8000,
+			});
+			if (response.status < 200 || response.status >= 300) {
+				throw new Error(`HTTP ${response.status}`);
+			}
+			this.state.lastError = null;
+			this.bus.emit("companion-runtime:state-change", { state: this.getState() });
+		} catch (err) {
+			const message = formatRuntimeError("frame", this.state.localVisionBaseUrl, err);
+			this.state.lastError = message;
+			this.bus.emit("system:error", {
+				module: "companion-runtime",
+				error: message,
+			});
+			this.emitState();
+			throw new Error(message);
+		}
+	}
+
 	async runSummaryNow(): Promise<void> {
 		await this.runSummaryTick(true);
 	}
@@ -400,9 +443,13 @@ export class CompanionRuntimeService {
 			this.state.phase = "idle";
 			this.emitState();
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
+			const message = formatRuntimeError("frame", this.state.localVisionBaseUrl, err);
 			this.state.phase = "error";
 			this.state.lastError = message;
+			this.bus.emit("system:error", {
+				module: "companion-runtime",
+				error: message,
+			});
 			this.emitState();
 			log.error("frame description tick failed", err);
 		} finally {
@@ -463,9 +510,13 @@ export class CompanionRuntimeService {
 			this.state.phase = "idle";
 			this.emitState();
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
+			const message = formatRuntimeError("summary", this.state.localVisionBaseUrl, err);
 			this.state.phase = "error";
 			this.state.lastError = message;
+			this.bus.emit("system:error", {
+				module: "companion-runtime",
+				error: message,
+			});
 			this.emitState();
 			log.error("summary tick failed", err);
 		} finally {

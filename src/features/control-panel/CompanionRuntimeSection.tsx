@@ -40,6 +40,7 @@ export function CompanionRuntimeSection(props: {
 	onStop: () => void;
 	onClearHistory: () => void;
 	onRunSummaryNow: () => Promise<unknown>;
+	onTestConnection: () => Promise<unknown>;
 	onRunBenchmark: (benchmarkId: string, target: FunctionalTarget) => Promise<unknown>;
 	onUpdateConfig: (partial: {
 		localVisionBaseUrl?: string;
@@ -250,12 +251,28 @@ export function CompanionRuntimeSection(props: {
 				/>
 			</Stack>
 
-			<Button
-				size="small"
-				variant="outlined"
-				disabled={saving}
-				onClick={async () => {
-					setSaving(true);
+				<Button
+					size="small"
+					variant="outlined"
+					disabled={saving || benchmarkBusy}
+					onClick={async () => {
+						setMessage(null);
+						try {
+							await props.onTestConnection();
+							setMessage({ type: "success", text: t("本地视觉连接正常。", "Local vision connection is healthy.") });
+						} catch (err) {
+							setMessage({ type: "error", text: err instanceof Error ? err.message : String(err) });
+						}
+					}}
+				>
+					{t("测试连接", "Test Connection")}
+				</Button>
+				<Button
+					size="small"
+					variant="outlined"
+					disabled={saving}
+					onClick={async () => {
+						setSaving(true);
 					setMessage(null);
 					try {
 						await props.onUpdateConfig({
