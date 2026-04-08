@@ -112,6 +112,7 @@ P1 close-out:
         deferred: keep this as a future optimization path, not a current implementation gate
   - [ ] P2.6 Post-Fusion Validation
     - [x] route the current `Unified Run` entry through the selected semantic game target instead of keeping it 2048-only
+    - [x] let unified game results ask the active LLM for grounded companion follow-up text instead of relying only on hardcoded per-game copy
     - [ ] verify that all three source lines coexist in one Tauri runtime
     - [ ] verify companion behavior, expression, speech, and functional execution together
     - [ ] define the accepted post-fusion baseline

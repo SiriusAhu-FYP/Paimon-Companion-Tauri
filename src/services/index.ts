@@ -117,6 +117,7 @@ export function initServices(): ServiceContainer {
 		orchestrator,
 		game2048,
 		sokoban,
+		llm,
 		pipeline,
 	});
 

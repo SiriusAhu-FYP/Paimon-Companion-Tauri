@@ -13,6 +13,7 @@ export interface UnifiedRunRecord {
 	phase: UnifiedRunPhase;
 	summary: string;
 	companionText: string;
+	companionTextSource: "none" | "llm" | "fallback";
 	emotion: string;
 	selectedAction: string | null;
 	spoke: boolean;
