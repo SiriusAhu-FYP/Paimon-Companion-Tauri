@@ -1,4 +1,5 @@
 import type { CharacterService } from "@/services/character";
+import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { EventBus } from "@/services/event-bus";
 import { findSemanticGameByTargetTitle } from "@/services/games/semantic-game-registry";
 import type { Game2048Service, SokobanService } from "@/services/games";
@@ -38,6 +39,7 @@ export class UnifiedRuntimeService {
 	private bus: EventBus;
 	private runtime: RuntimeService;
 	private character: CharacterService;
+	private companionRuntime: CompanionRuntimeService;
 	private orchestrator: OrchestratorService;
 	private game2048: Game2048Service;
 	private sokoban: SokobanService;
@@ -49,6 +51,7 @@ export class UnifiedRuntimeService {
 		bus: EventBus;
 		runtime: RuntimeService;
 		character: CharacterService;
+		companionRuntime: CompanionRuntimeService;
 		orchestrator: OrchestratorService;
 		game2048: Game2048Service;
 		sokoban: SokobanService;
@@ -58,6 +61,7 @@ export class UnifiedRuntimeService {
 		this.bus = deps.bus;
 		this.runtime = deps.runtime;
 		this.character = deps.character;
+		this.companionRuntime = deps.companionRuntime;
 		this.orchestrator = deps.orchestrator;
 		this.game2048 = deps.game2048;
 		this.sokoban = deps.sokoban;
@@ -128,6 +132,7 @@ export class UnifiedRuntimeService {
 			let companionText = "";
 			if (targetGame === "2048") {
 				const result = await this.game2048.runSingleStep();
+				await this.refreshCompanionContextForTarget(result.target);
 				run.status = "completed";
 				run.phase = this.state.speechEnabled ? "speaking" : "idle";
 				run.summary = result.summary;
@@ -148,6 +153,7 @@ export class UnifiedRuntimeService {
 				companionText = generatedReply.text;
 			} else {
 				const result = await this.sokoban.runValidationRound();
+				await this.refreshCompanionContextForTarget(result.target);
 				run.status = "completed";
 				run.phase = this.state.speechEnabled ? "speaking" : "idle";
 				run.summary = result.summary;
@@ -276,6 +282,17 @@ export class UnifiedRuntimeService {
 
 	private emitState() {
 		this.bus.emit("unified:state-change", { state: this.getState() });
+	}
+
+	private async refreshCompanionContextForTarget(target: { handle: string; title: string }): Promise<void> {
+		const runtimeState = this.companionRuntime.getState();
+		if (!runtimeState.running) return;
+		if (runtimeState.target?.handle !== target.handle) return;
+		try {
+			await this.companionRuntime.refreshNow({ summarize: true });
+		} catch (err) {
+			log.warn("companion context refresh after unified run failed", err);
+		}
 	}
 
 	private async generateGroundedCompanionReply(input: {

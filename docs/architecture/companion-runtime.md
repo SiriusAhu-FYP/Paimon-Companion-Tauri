@@ -8,6 +8,7 @@ Current implementation note:
 - it can capture a selected target, ask a local OpenAI-compatible vision node for short frame descriptions, and periodically summarize the latest rolling window through the active cloud LLM profile
 - the latest retained temporal summary is now also exposed to the companion prompt path, so this runtime is no longer isolated to the lab panel
 - the unified game runtime can now also ask the active LLM for a short grounded follow-up after a verified game round, using the same companion/runtime context instead of only speaking hardcoded per-game text
+- when the companion runtime is already observing the same target, unified game rounds now refresh that observation context before generating the follow-up so the reply can speak from fresher state
 - the current slice also includes lightweight change-based filtering, so nearly identical consecutive frames can be coalesced instead of always triggering a fresh local-VLM description
 - the control surface now exposes lightweight session metrics such as capture count, unchanged-frame ratio, and average summary latency
 - the control surface also provides fixed-duration benchmark runs so throughput and summary cadence can be sampled without hand-timing a session

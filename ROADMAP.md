@@ -114,6 +114,7 @@ P1 close-out:
     - [x] route the current `Unified Run` entry through the selected semantic game target instead of keeping it 2048-only
     - [x] let unified game results ask the active LLM for grounded companion follow-up text instead of relying only on hardcoded per-game copy
     - [x] add a first fusion evaluation case that samples runtime-context usage, LLM follow-up generation, and speech in one pass
+    - [x] refresh the active companion observation context after unified game rounds so follow-up replies can speak from fresher runtime state
     - [ ] verify that all three source lines coexist in one Tauri runtime
     - [ ] verify companion behavior, expression, speech, and functional execution together
     - [ ] define the accepted post-fusion baseline
