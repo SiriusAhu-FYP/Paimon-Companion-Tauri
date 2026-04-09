@@ -13,6 +13,7 @@ import {
 const log = createLogger("character");
 const DEFAULT_EXPRESSION_IDLE_TIMEOUT_MS = 60_000;
 const SPEECH_START_GRACE_MS = 2_000;
+const TTS_PENDING_HOLD_MS = 30_000;
 
 /**
  * 角色状态真源：当前档案、表情/说话状态、可用角色卡列表。
@@ -37,6 +38,20 @@ export class CharacterService {
 			isSpeaking: false,
 			activeModel: null,
 		};
+
+		this.bus.on("audio:tts-pending", () => {
+			if (this.state.emotion === "neutral") return;
+			this.clearExpressionResetTimer();
+			this.clearSpeechStartGraceTimer();
+			this.holdExpressionUntilSpeechEnds = true;
+			this.speechStartGraceTimer = setTimeout(() => {
+				this.speechStartGraceTimer = null;
+				if (!this.state.isSpeaking && this.state.emotion !== "neutral" && this.holdExpressionUntilSpeechEnds) {
+					this.holdExpressionUntilSpeechEnds = false;
+					this.scheduleExpressionReset(this.state.emotion);
+				}
+			}, TTS_PENDING_HOLD_MS);
+		});
 	}
 
 	getState(): Readonly<CharacterState> {
