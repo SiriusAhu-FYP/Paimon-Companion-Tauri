@@ -423,7 +423,8 @@ impl Drop for CaptureContext {
 fn focus_window_windows(handle: &str) -> Result<(), String> {
 	use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
 	use windows::Win32::UI::WindowsAndMessaging::{
-		BringWindowToTop, IsWindow, SW_RESTORE, SetForegroundWindow, ShowWindow,
+		BringWindowToTop, GetForegroundWindow, IsWindow, SetForegroundWindow, SetWindowPos,
+		ShowWindow, HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, SW_RESTORE,
 	};
 
 	let hwnd = parse_hwnd(handle)?;
@@ -438,8 +439,32 @@ fn focus_window_windows(handle: &str) -> Result<(), String> {
 		let _ = SetFocus(Some(hwnd));
 	}
 
-	if !unsafe { SetForegroundWindow(hwnd) }.as_bool() {
-		return Err("SetForegroundWindow failed".to_string());
+	if unsafe { SetForegroundWindow(hwnd) }.as_bool() {
+		std::thread::sleep(std::time::Duration::from_millis(50));
+		return Ok(());
+	}
+
+	let foreground = unsafe { GetForegroundWindow() };
+	if foreground == hwnd {
+		std::thread::sleep(std::time::Duration::from_millis(50));
+		return Ok(());
+	}
+
+	let foreground_after_promote = unsafe {
+		let _ = ShowWindow(hwnd, SW_RESTORE);
+		let _ = BringWindowToTop(hwnd);
+		let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+		let _ = SetWindowPos(hwnd, Some(HWND_NOTOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+		let _ = SetActiveWindow(hwnd);
+		let _ = SetFocus(Some(hwnd));
+		SetForegroundWindow(hwnd).as_bool()
+	};
+
+	if !foreground_after_promote {
+		let final_foreground = unsafe { GetForegroundWindow() };
+		if final_foreground != hwnd {
+			return Err("SetForegroundWindow failed".to_string());
+		}
 	}
 
 	std::thread::sleep(std::time::Duration::from_millis(50));
