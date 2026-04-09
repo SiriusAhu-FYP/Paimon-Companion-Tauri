@@ -104,7 +104,7 @@ export function StatusBar({
 				/>
 			)}
 
-			<Tooltip title={latestEntry?.payloadText ?? t("暂无事件", "No events yet")}>
+			<Tooltip title={latestEntry?.payloadPreviewText ?? t("暂无事件", "No events yet")}>
 				<Typography
 					variant="caption"
 					color="text.secondary"

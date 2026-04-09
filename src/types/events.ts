@@ -268,7 +268,16 @@ export interface UnifiedVoiceInputPayload {
 }
 
 export interface CompanionRuntimeStateChangePayload {
-	state: CompanionRuntimeState;
+	running: boolean;
+	phase: CompanionRuntimeState["phase"];
+	targetTitle: string | null;
+	frameQueueLength: number;
+	summaryHistoryLength: number;
+	lastFrameId: string | null;
+	lastSummaryId: string | null;
+	captureTicks: number;
+	summariesGenerated: number;
+	lastError: string | null;
 }
 
 export interface CompanionRuntimeFramePayload {

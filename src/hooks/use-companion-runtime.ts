@@ -8,7 +8,7 @@ export function useCompanionRuntime() {
 	const state = useServiceState({
 		getInitialState: () => companionRuntime.getState(),
 		event: "companion-runtime:state-change",
-		getNextState: ({ state: nextState }) => nextState,
+		getNextState: () => companionRuntime.getState(),
 	});
 
 	const start = useCallback((target: FunctionalTarget) => {
