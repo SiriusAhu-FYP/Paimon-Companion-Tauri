@@ -15,6 +15,7 @@ export interface EvaluationCaseDefinition {
 
 export interface EvaluationRunEntry {
 	index: number;
+	traceId: string;
 	status: "completed" | "failed";
 	latencyMs: number;
 	boardChanged: boolean;
@@ -30,6 +31,8 @@ export interface EvaluationRunEntry {
 	summary: string;
 	error: string | null;
 	timings?: UnifiedRunTimings | null;
+	uiStallCount?: number;
+	uiStallMaxMs?: number;
 }
 
 export interface EvaluationCaseMetrics {
@@ -50,6 +53,10 @@ export interface EvaluationCaseMetrics {
 	averageRuntimeRefreshMs: number;
 	averageLlmReplyMs: number;
 	averageSpeechMs: number;
+	averageTotalBlockingMs: number;
+	averageTotalNonBlockingMs: number;
+	averageUiStallCount: number;
+	maxUiStallMs: number;
 }
 
 export interface EvaluationCaseResult {

@@ -103,7 +103,10 @@ export class SokobanService {
 		return this.state.detectedTarget ? { ...this.state.detectedTarget } : null;
 	}
 
-	async runValidationRound(targetOverride?: FunctionalTarget): Promise<SokobanRunRecord> {
+	async runValidationRound(
+		targetOverride?: FunctionalTarget,
+		options?: { traceId?: string },
+	): Promise<SokobanRunRecord> {
 		if (this.state.activeRunId) {
 			throw new Error(`sokoban run already in progress: ${this.state.activeRunId}`);
 		}
@@ -161,6 +164,7 @@ export class SokobanService {
 				targetHandle: target.handle,
 				targetTitle: target.title,
 				plannedMoves: [...analysis.plannedMoves],
+				traceId: options?.traceId ?? run.id,
 			});
 			await this.orchestrator.runFocusTask(target);
 
@@ -172,6 +176,9 @@ export class SokobanService {
 					actionId: move,
 					targetHandle: target.handle,
 					targetTitle: target.title,
+				}, {
+					traceId: options?.traceId ?? run.id,
+					timeoutMs: 60_000,
 				});
 				const latestTask = this.orchestrator.getState().latestTask;
 				const beforeSnapshot = latestTask?.beforeSnapshot ?? referenceSnapshot;
@@ -192,6 +199,7 @@ export class SokobanService {
 					move: attempt.move,
 					changed: attempt.changed,
 					changeRatio: attempt.changeRatio,
+					traceId: options?.traceId ?? run.id,
 				});
 
 				referenceSnapshot = afterSnapshot;
@@ -227,6 +235,7 @@ export class SokobanService {
 			executedMoves: [...run.executedMoves],
 			boardChanged: run.boardChanged,
 			summary: run.summary,
+			traceId: options?.traceId ?? run.id,
 		});
 		this.emitState();
 

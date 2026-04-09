@@ -125,10 +125,18 @@ export class EvaluationService {
 		try {
 			for (let index = 0; index < definition.iterations; index += 1) {
 				const runStartedAt = Date.now();
+				const traceId = `eval-${definition.id}-${runStartedAt}-${index + 1}`;
+				let uiStallCount = 0;
+				let uiStallMaxMs = 0;
+				const offUiStall = this.bus.on("system:ui-stall", ({ durationMs }) => {
+					uiStallCount += 1;
+					if (durationMs > uiStallMaxMs) {
+						uiStallMaxMs = durationMs;
+					}
+				});
 
 				try {
-					const gameRun = await this.runGameCase(definition);
-
+					const gameRun = await this.runGameCase(definition, traceId);
 					const latencyMs = Date.now() - runStartedAt;
 					const actionValid = Boolean(
 						gameRun.boardChanged
@@ -138,6 +146,7 @@ export class EvaluationService {
 
 					result.runs.push({
 						index: index + 1,
+						traceId,
 						status: "completed",
 						latencyMs,
 						boardChanged: gameRun.boardChanged,
@@ -153,11 +162,14 @@ export class EvaluationService {
 						summary: gameRun.summary,
 						error: null,
 						timings: gameRun.timings,
+						uiStallCount,
+						uiStallMaxMs,
 					});
 				} catch (err) {
 					const message = err instanceof Error ? err.message : String(err);
 					result.runs.push({
 						index: index + 1,
+						traceId,
 						status: "failed",
 						latencyMs: Date.now() - runStartedAt,
 						boardChanged: false,
@@ -173,7 +185,11 @@ export class EvaluationService {
 						summary: message,
 						error: message,
 						timings: null,
+						uiStallCount,
+						uiStallMaxMs,
 					});
+				} finally {
+					offUiStall();
 				}
 
 				result.metrics = computeMetrics(result.runs, definition.iterations);
@@ -231,7 +247,7 @@ export class EvaluationService {
 		this.bus.emit("evaluation:state-change", { state: this.getState() });
 	}
 
-	private async runGameCase(definition: EvaluationCaseDefinition): Promise<{
+	private async runGameCase(definition: EvaluationCaseDefinition, traceId: string): Promise<{
 		boardChanged: boolean;
 		selectedAction: string | null;
 		preferredActions: string[];
@@ -249,12 +265,14 @@ export class EvaluationService {
 			llmReplyMs: number;
 			speechMs: number;
 			totalMs: number;
+			totalBlockingMs: number;
+			totalNonBlockingMs: number;
 		} | null;
 	}> {
-		if (definition.game === "2048") {
-			if (definition.targetMode === "auto-detect") {
-				await this.game2048.detectTargetWindow();
-				const run = await this.game2048.runSingleStep();
+			if (definition.game === "2048") {
+				if (definition.targetMode === "auto-detect") {
+					await this.game2048.detectTargetWindow();
+					const run = await this.game2048.runSingleStep(undefined, { traceId });
 				return {
 					boardChanged: run.boardChanged,
 					selectedAction: run.selectedMove,
@@ -275,7 +293,7 @@ export class EvaluationService {
 			if (!selectedTarget) {
 				throw new Error("selected-target evaluation requires a manually selected target");
 			}
-			const run = await this.game2048.runSingleStep(selectedTarget);
+			const run = await this.game2048.runSingleStep(selectedTarget, { traceId });
 			return {
 				boardChanged: run.boardChanged,
 				selectedAction: run.selectedMove,
@@ -301,7 +319,8 @@ export class EvaluationService {
 			if (!runtimeState.running || runtimeState.target?.handle !== selectedTarget.handle) {
 				await this.companionRuntime.start(selectedTarget);
 			}
-			if (!this.companionRuntime.getState().lastSummary) {
+			const runtimeAfterStart = this.companionRuntime.getState();
+			if (!runtimeAfterStart.lastSummary && !runtimeAfterStart.lastFrame) {
 				await this.companionRuntime.runSummaryNow();
 			}
 
@@ -322,7 +341,7 @@ export class EvaluationService {
 			});
 			let run;
 			try {
-				run = await this.unified.runUnifiedGameStep("manual", "evaluation fusion round");
+				run = await this.unified.runUnifiedGameStep("manual", "evaluation fusion round", { traceId });
 			} finally {
 				offStart();
 			}
@@ -364,6 +383,10 @@ function emptyMetrics(totalRuns: number): EvaluationCaseMetrics {
 		averageRuntimeRefreshMs: 0,
 		averageLlmReplyMs: 0,
 		averageSpeechMs: 0,
+		averageTotalBlockingMs: 0,
+		averageTotalNonBlockingMs: 0,
+		averageUiStallCount: 0,
+		maxUiStallMs: 0,
 	};
 }
 
@@ -378,6 +401,8 @@ function computeMetrics(runs: EvaluationRunEntry[], totalRuns: number): Evaluati
 	const emotionRuns = runs.filter((run) => run.emotionApplied).length;
 	const mcpCompanionRuns = runs.filter((run) => run.mcpCompanionUsed).length;
 	const mcpGameRuns = runs.filter((run) => run.mcpGameUsed).length;
+	const totalUiStallCount = runs.reduce((sum, run) => sum + (run.uiStallCount ?? 0), 0);
+	const maxUiStallMs = runs.reduce((max, run) => Math.max(max, run.uiStallMaxMs ?? 0), 0);
 	const averageTiming = (selector: (run: EvaluationRunEntry) => number) => (
 		timingRuns.length > 0
 			? timingRuns.reduce((sum, run) => sum + selector(run), 0) / timingRuns.length
@@ -402,6 +427,10 @@ function computeMetrics(runs: EvaluationRunEntry[], totalRuns: number): Evaluati
 		averageRuntimeRefreshMs: averageTiming((run) => run.timings?.runtimeRefreshMs ?? 0),
 		averageLlmReplyMs: averageTiming((run) => run.timings?.llmReplyMs ?? 0),
 		averageSpeechMs: averageTiming((run) => run.timings?.speechMs ?? 0),
+		averageTotalBlockingMs: averageTiming((run) => run.timings?.totalBlockingMs ?? run.timings?.totalMs ?? 0),
+		averageTotalNonBlockingMs: averageTiming((run) => run.timings?.totalNonBlockingMs ?? run.timings?.totalMs ?? 0),
+		averageUiStallCount: totalRuns > 0 ? totalUiStallCount / totalRuns : 0,
+		maxUiStallMs,
 	};
 }
 
@@ -414,7 +443,7 @@ function computeMedian(values: number[]): number {
 
 function buildSummary(definition: EvaluationCaseDefinition, metrics: EvaluationCaseMetrics): string {
 	if (definition.game === "fusion") {
-		return `${definition.name}: success ${formatPercent(metrics.successRate)}, runtime ${formatPercent(metrics.runtimeContextRate)}, llm ${formatPercent(metrics.llmReplyRate)}, speech ${formatPercent(metrics.speechRate)}, emotion ${formatPercent(metrics.emotionRate)}, mcp-companion ${formatPercent(metrics.mcpCompanionRate)}, mcp-game ${formatPercent(metrics.mcpGameRate)}, avg total ${metrics.averageLatencyMs.toFixed(0)}ms`;
+		return `${definition.name}: success ${formatPercent(metrics.successRate)}, runtime ${formatPercent(metrics.runtimeContextRate)}, llm ${formatPercent(metrics.llmReplyRate)}, speech ${formatPercent(metrics.speechRate)}, emotion ${formatPercent(metrics.emotionRate)}, mcp-companion ${formatPercent(metrics.mcpCompanionRate)}, mcp-game ${formatPercent(metrics.mcpGameRate)}, action ${metrics.averageActionMs.toFixed(0)}ms, runtime-refresh ${metrics.averageRuntimeRefreshMs.toFixed(0)}ms, llm-reply ${metrics.averageLlmReplyMs.toFixed(0)}ms, speech ${metrics.averageSpeechMs.toFixed(0)}ms, total-blocking ${metrics.averageTotalBlockingMs.toFixed(0)}ms, total-nonblocking ${metrics.averageTotalNonBlockingMs.toFixed(0)}ms, ui-stall avg ${metrics.averageUiStallCount.toFixed(1)}/run max ${metrics.maxUiStallMs.toFixed(0)}ms`;
 	}
 	return `${definition.name}: success ${formatPercent(metrics.successRate)}, valid ${formatPercent(metrics.actionValidityRate)}, avg total ${metrics.averageLatencyMs.toFixed(0)}ms`;
 }

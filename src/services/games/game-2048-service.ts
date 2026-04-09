@@ -102,7 +102,10 @@ export class Game2048Service {
 		return this.state.detectedTarget ? { ...this.state.detectedTarget } : null;
 	}
 
-	async runSingleStep(targetOverride?: FunctionalTarget): Promise<Game2048RunRecord> {
+	async runSingleStep(
+		targetOverride?: FunctionalTarget,
+		options?: { traceId?: string },
+	): Promise<Game2048RunRecord> {
 		if (this.state.activeRunId) {
 			throw new Error(`2048 run already in progress: ${this.state.activeRunId}`);
 		}
@@ -159,6 +162,7 @@ export class Game2048Service {
 				targetHandle: target.handle,
 				targetTitle: target.title,
 				preferredMoves: [...analysis.preferredMoves],
+				traceId: options?.traceId ?? run.id,
 			});
 			await this.orchestrator.runFocusTask(target);
 
@@ -170,6 +174,9 @@ export class Game2048Service {
 					actionId: move,
 					targetHandle: target.handle,
 					targetTitle: target.title,
+				}, {
+					traceId: options?.traceId ?? run.id,
+					timeoutMs: 60_000,
 				});
 				const latestTask = this.orchestrator.getState().latestTask;
 				const beforeSnapshot = latestTask?.beforeSnapshot ?? referenceSnapshot;
@@ -186,6 +193,7 @@ export class Game2048Service {
 					move: attempt.move,
 					changed: attempt.changed,
 					changeRatio: attempt.changeRatio,
+					traceId: options?.traceId ?? run.id,
 				});
 
 				if (attempt.changed) {
@@ -228,6 +236,7 @@ export class Game2048Service {
 			selectedMove: run.selectedMove,
 			boardChanged: run.boardChanged,
 			summary: run.summary,
+			traceId: options?.traceId ?? run.id,
 		});
 		this.emitState();
 

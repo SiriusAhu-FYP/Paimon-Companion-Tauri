@@ -62,6 +62,7 @@ export class LLMService {
 			tools?: ReturnType<typeof listLlmTools>;
 			emitStream?: boolean;
 			emitToolCalls?: boolean;
+			traceId?: string;
 		},
 	): Promise<{
 		fullText: string;
@@ -101,7 +102,7 @@ export class LLMService {
 						rawArguments: chunk.rawArguments,
 					});
 					if (options?.emitToolCalls) {
-						this.bus.emit("llm:tool-call", { name: resolvedName, args: chunk.args });
+						this.bus.emit("llm:tool-call", { name: resolvedName, args: chunk.args, traceId: options.traceId });
 					}
 					break;
 				}
@@ -121,12 +122,17 @@ export class LLMService {
 			args: Record<string, unknown>;
 			rawArguments: string;
 		}>,
+		options?: {
+			traceId?: string;
+		},
 	): Promise<Array<Extract<ChatMessage, { role: "tool" }>>> {
 		const toolMessages: Array<Extract<ChatMessage, { role: "tool" }>> = [];
 
 		for (const call of toolCalls) {
 			try {
-				const result = await callLocalMcpTool(call.name, call.args);
+				const result = await callLocalMcpTool(call.name, call.args, {
+					traceId: options?.traceId,
+				});
 				toolMessages.push({
 					role: "tool",
 					toolCallId: call.id,
@@ -149,12 +155,13 @@ export class LLMService {
 	private async runToolLoop(
 		messages: ChatMessage[],
 		tools: ReturnType<typeof listLlmTools>,
-		options?: { emitFinalStream?: boolean },
+		options?: { emitFinalStream?: boolean; traceId?: string },
 	): Promise<{ fullText: string; historyAppend: ChatMessage[] }> {
 		const firstPass = await this.collectResponse(messages, {
 			tools,
 			emitStream: false,
 			emitToolCalls: true,
+			traceId: options?.traceId,
 		});
 
 		if (!firstPass.toolCalls.length) {
@@ -176,7 +183,9 @@ export class LLMService {
 				arguments: call.rawArguments || JSON.stringify(call.args),
 			})),
 		};
-		const toolMessages = await this.executeToolCalls(firstPass.toolCalls);
+		const toolMessages = await this.executeToolCalls(firstPass.toolCalls, {
+			traceId: options?.traceId,
+		});
 		const secondPassMessages: ChatMessage[] = [
 			...messages,
 			assistantToolMessage,
@@ -186,6 +195,7 @@ export class LLMService {
 			tools,
 			emitStream: options?.emitFinalStream ?? false,
 			emitToolCalls: false,
+			traceId: options?.traceId,
 		});
 
 		return {
@@ -203,6 +213,7 @@ export class LLMService {
 		options?: {
 			companionRuntimeContext?: string;
 			knowledgeContext?: string;
+			traceId?: string;
 		},
 	): Promise<string> {
 		if (!this.runtime.isAllowed()) {
@@ -226,6 +237,7 @@ export class LLMService {
 		this.bus.emit("llm:request-start", {
 			userText,
 			source: "companion-reply",
+			traceId: options?.traceId,
 			companionRuntimeContextUsed: promptCtx.companionRuntimeContext.length > 0,
 			companionRuntimeContextLength: promptCtx.companionRuntimeContext.length,
 			knowledgeContextLength: promptCtx.knowledgeContext.length,
@@ -233,9 +245,10 @@ export class LLMService {
 
 		const response = await this.runToolLoop(messages, tools, {
 			emitFinalStream: false,
+			traceId: options?.traceId,
 		});
 		const normalized = response.fullText;
-		this.bus.emit("llm:response-end", { fullText: normalized });
+		this.bus.emit("llm:response-end", { fullText: normalized, traceId: options?.traceId });
 		if (normalized) {
 			log.info("generated transient companion reply", {
 				length: normalized.length,
@@ -283,6 +296,7 @@ export class LLMService {
 
 		this.bus.emit("llm:request-start", {
 			userText,
+			traceId: undefined,
 			companionRuntimeContextUsed: companionRuntimeContext.length > 0,
 			companionRuntimeTarget,
 			companionRuntimeContextLength: companionRuntimeContext.length,
@@ -309,11 +323,12 @@ export class LLMService {
 		try {
 			const response = await this.runToolLoop(messages, tools, {
 				emitFinalStream: true,
+				traceId: undefined,
 			});
 			const fullText = response.fullText;
 
 			this.history.push(...response.historyAppend);
-			this.bus.emit("llm:response-end", { fullText });
+			this.bus.emit("llm:response-end", { fullText, traceId: undefined });
 			log.info(`response complete (${fullText.length} chars)`);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);

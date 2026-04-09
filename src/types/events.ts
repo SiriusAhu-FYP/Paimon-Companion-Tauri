@@ -49,6 +49,7 @@ export interface AudioTtsPendingPayload {
 export interface LlmRequestStartPayload {
 	userText: string;
 	source?: "chat" | "companion-reply";
+	traceId?: string;
 	companionRuntimeContextUsed?: boolean;
 	companionRuntimeTarget?: string | null;
 	companionRuntimeContextLength?: number;
@@ -62,11 +63,13 @@ export interface LlmStreamChunkPayload {
 export interface LlmToolCallPayload {
 	name: string;
 	args: Record<string, unknown>;
+	traceId?: string;
 }
 
 export interface McpToolStartPayload {
 	name: string;
 	args: Record<string, unknown>;
+	traceId?: string;
 }
 
 export interface McpToolCompletePayload {
@@ -74,10 +77,12 @@ export interface McpToolCompletePayload {
 	ok: boolean;
 	resultPreview: string;
 	error?: string | null;
+	traceId?: string;
 }
 
 export interface LlmResponseEndPayload {
 	fullText: string;
+	traceId?: string;
 }
 
 export interface LlmErrorPayload {
@@ -178,6 +183,7 @@ export interface Game2048RunStartPayload {
 	targetHandle: string;
 	targetTitle: string;
 	preferredMoves: Game2048Move[];
+	traceId?: string;
 }
 
 export interface Game2048AttemptPayload {
@@ -185,6 +191,7 @@ export interface Game2048AttemptPayload {
 	move: Game2048Move;
 	changed: boolean;
 	changeRatio: number;
+	traceId?: string;
 }
 
 export interface Game2048RunCompletePayload {
@@ -193,6 +200,7 @@ export interface Game2048RunCompletePayload {
 	selectedMove: Game2048Move | null;
 	boardChanged: boolean;
 	summary: string;
+	traceId?: string;
 }
 
 export interface SokobanStateChangePayload {
@@ -210,6 +218,7 @@ export interface SokobanRunStartPayload {
 	targetHandle: string;
 	targetTitle: string;
 	plannedMoves: SokobanActionId[];
+	traceId?: string;
 }
 
 export interface SokobanAttemptPayload {
@@ -217,6 +226,7 @@ export interface SokobanAttemptPayload {
 	move: SokobanActionId;
 	changed: boolean;
 	changeRatio: number;
+	traceId?: string;
 }
 
 export interface SokobanRunCompletePayload {
@@ -225,6 +235,7 @@ export interface SokobanRunCompletePayload {
 	executedMoves: SokobanActionId[];
 	boardChanged: boolean;
 	summary: string;
+	traceId?: string;
 }
 
 export interface EvaluationStateChangePayload {
@@ -250,6 +261,7 @@ export interface UnifiedRunStartPayload {
 	runId: string;
 	trigger: "manual" | "voice";
 	requestText: string | null;
+	traceId?: string;
 }
 
 export interface UnifiedRunCompletePayload {
@@ -260,6 +272,7 @@ export interface UnifiedRunCompletePayload {
 	emotion: string;
 	spoke: boolean;
 	timings: UnifiedRunTimings;
+	traceId?: string;
 }
 
 export interface UnifiedVoiceInputPayload {

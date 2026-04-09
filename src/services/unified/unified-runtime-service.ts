@@ -96,7 +96,11 @@ export class UnifiedRuntimeService {
 		this.emitState();
 	}
 
-	async runUnifiedGameStep(trigger: "manual" | "voice" = "manual", requestText: string | null = null): Promise<UnifiedRunRecord> {
+	async runUnifiedGameStep(
+		trigger: "manual" | "voice" = "manual",
+		requestText: string | null = null,
+		options?: { traceId?: string },
+	): Promise<UnifiedRunRecord> {
 		if (!this.runtime.isAllowed()) {
 			throw new Error(`unified run blocked: runtime mode is ${this.runtime.getMode()}`);
 		}
@@ -106,7 +110,7 @@ export class UnifiedRuntimeService {
 		}
 
 		const run: UnifiedRunRecord = {
-			id: `unified-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+			id: options?.traceId ?? `unified-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 			gameId: targetGame,
 			trigger,
 			requestText,
@@ -127,6 +131,8 @@ export class UnifiedRuntimeService {
 				llmReplyMs: 0,
 				speechMs: 0,
 				totalMs: 0,
+				totalBlockingMs: 0,
+				totalNonBlockingMs: 0,
 			},
 		};
 
@@ -134,11 +140,12 @@ export class UnifiedRuntimeService {
 		this.state.phase = "acting";
 		this.state.lastCommand = `${targetGame}-step`;
 		this.state.lastRun = cloneRun(run);
-		await this.applyEmotion("neutral");
+		await this.applyEmotion("neutral", run.id);
 		this.bus.emit("unified:run-start", {
 			runId: run.id,
 			trigger,
 			requestText,
+			traceId: run.id,
 		});
 		this.emitState();
 
@@ -146,7 +153,7 @@ export class UnifiedRuntimeService {
 			let companionText = "";
 			if (targetGame === "2048") {
 				const actionStartedAt = Date.now();
-				const result = await this.game2048.runSingleStep();
+				const result = await this.game2048.runSingleStep(undefined, { traceId: run.id });
 				run.timings.actionMs = Date.now() - actionStartedAt;
 				run.timings.runtimeRefreshMs = await this.refreshCompanionContextForTarget(result.target);
 				run.status = "completed";
@@ -156,6 +163,7 @@ export class UnifiedRuntimeService {
 				run.emotion = result.boardChanged ? "happy" : "dazed";
 				const llmReplyStartedAt = Date.now();
 				const generatedReply = await this.generateGroundedCompanionReply({
+					traceId: run.id,
 					gameId: "2048",
 					requestText,
 					summary: result.summary,
@@ -171,7 +179,7 @@ export class UnifiedRuntimeService {
 				companionText = generatedReply.text;
 			} else {
 				const actionStartedAt = Date.now();
-				const result = await this.sokoban.runValidationRound();
+				const result = await this.sokoban.runValidationRound(undefined, { traceId: run.id });
 				run.timings.actionMs = Date.now() - actionStartedAt;
 				run.timings.runtimeRefreshMs = await this.refreshCompanionContextForTarget(result.target);
 				run.status = "completed";
@@ -181,6 +189,7 @@ export class UnifiedRuntimeService {
 				run.emotion = result.boardChanged ? "delighted" : "alarmed";
 				const llmReplyStartedAt = Date.now();
 				const generatedReply = await this.generateGroundedCompanionReply({
+					traceId: run.id,
 					gameId: "sokoban",
 					requestText,
 					summary: result.summary,
@@ -196,7 +205,9 @@ export class UnifiedRuntimeService {
 				companionText = generatedReply.text;
 			}
 			this.state.lastCompanionText = companionText;
-			await this.applyEmotion(run.emotion);
+			await this.applyEmotion(run.emotion, run.id);
+			const beforeSpeechAt = Date.now();
+			run.timings.totalNonBlockingMs = Math.max(0, beforeSpeechAt - run.startedAt);
 
 			if (this.state.speechEnabled && companionText) {
 				this.state.phase = "speaking";
@@ -215,7 +226,9 @@ export class UnifiedRuntimeService {
 			run.companionTextSource = "fallback";
 			run.emotion = "sad";
 			this.state.lastCompanionText = run.companionText;
-			await this.applyEmotion(run.emotion);
+			await this.applyEmotion(run.emotion, run.id);
+			const beforeSpeechAt = Date.now();
+			run.timings.totalNonBlockingMs = Math.max(0, beforeSpeechAt - run.startedAt);
 
 			if (this.state.speechEnabled) {
 				this.state.phase = "speaking";
@@ -227,7 +240,11 @@ export class UnifiedRuntimeService {
 		}
 
 		run.endedAt = Date.now();
-		run.timings.totalMs = Math.max(0, run.endedAt - run.startedAt);
+		run.timings.totalBlockingMs = Math.max(0, run.endedAt - run.startedAt);
+		run.timings.totalMs = run.timings.totalBlockingMs;
+		if (run.timings.totalNonBlockingMs <= 0) {
+			run.timings.totalNonBlockingMs = run.timings.totalBlockingMs;
+		}
 		this.state.activeRunId = null;
 		this.state.phase = run.status === "failed" ? "failed" : "idle";
 		this.state.lastRun = cloneRun(run);
@@ -240,6 +257,7 @@ export class UnifiedRuntimeService {
 			emotion: run.emotion,
 			spoke: run.spoke,
 			timings: { ...run.timings },
+			traceId: run.id,
 		});
 		this.emitState();
 
@@ -285,13 +303,13 @@ export class UnifiedRuntimeService {
 		}
 	}
 
-	private async applyEmotion(emotion: string) {
+	private async applyEmotion(emotion: string, traceId?: string) {
 		try {
 			if (emotion === "neutral") {
-				await callLocalMcpTool("companion.reset_emotion", {});
+				await callLocalMcpTool("companion.reset_emotion", {}, { timeoutMs: 45_000, traceId });
 				return;
 			}
-			await callLocalMcpTool("companion.set_emotion", { emotion });
+			await callLocalMcpTool("companion.set_emotion", { emotion }, { timeoutMs: 45_000, traceId });
 		} catch (err) {
 			log.warn("unified emotion application via MCP failed", err);
 			this.character.setEmotion(emotion);
@@ -366,9 +384,20 @@ export class UnifiedRuntimeService {
 		const runtimeState = this.companionRuntime.getState();
 		if (!runtimeState.running) return 0;
 		if (runtimeState.target?.handle !== target.handle) return 0;
+		const hasSummary = Boolean(runtimeState.lastSummary);
+		const summaryStale = hasSummary
+			? (Date.now() - (runtimeState.lastSummary?.createdAt ?? 0)) > runtimeState.summaryWindowMs
+			: false;
 		const startedAt = Date.now();
 		try {
-			await this.companionRuntime.refreshNow({ summarize: true });
+			// Keep per-round refresh latency stable: only block for summary generation when there is
+			// no summary at all yet; stale-summary refresh is done in background.
+			await this.companionRuntime.refreshNow({ summarize: !hasSummary });
+			if (summaryStale) {
+				void this.companionRuntime.runSummaryNow().catch((err) => {
+					log.warn("background companion summary refresh failed", err);
+				});
+			}
 		} catch (err) {
 			log.warn("companion context refresh after unified run failed", err);
 		}
@@ -376,6 +405,7 @@ export class UnifiedRuntimeService {
 	}
 
 	private async generateGroundedCompanionReply(input: {
+		traceId: string;
 		gameId: SupportedUnifiedGameId;
 		requestText: string | null;
 		summary: string;
@@ -402,7 +432,7 @@ export class UnifiedRuntimeService {
 					`【决策反思】${input.analysisReflection}`,
 					`【决策理由】${input.analysisReasoning}`,
 				].filter(Boolean).join("\n"),
-				{ knowledgeContext: "" },
+				{ knowledgeContext: "", traceId: input.traceId },
 			);
 			if (!reply) {
 				return { text: input.fallbackText, source: "fallback" };

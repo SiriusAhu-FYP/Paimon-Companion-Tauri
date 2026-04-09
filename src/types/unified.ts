@@ -8,6 +8,8 @@ export interface UnifiedRunTimings {
 	llmReplyMs: number;
 	speechMs: number;
 	totalMs: number;
+	totalBlockingMs: number;
+	totalNonBlockingMs: number;
 }
 
 export interface UnifiedRunRecord {

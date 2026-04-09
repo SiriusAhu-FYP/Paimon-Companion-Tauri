@@ -18,8 +18,15 @@ export function setLocalMcpEventBus(bus: EventBus) {
 	eventBus = bus;
 }
 
-export async function callLocalMcpTool(name: string, args: Record<string, unknown>) {
-	eventBus?.emit("mcp:tool-start", { name, args });
+export async function callLocalMcpTool(
+	name: string,
+	args: Record<string, unknown>,
+	options?: {
+		traceId?: string;
+		timeoutMs?: number;
+	},
+) {
+	eventBus?.emit("mcp:tool-start", { name, args, traceId: options?.traceId });
 	const response = await proxyRequest({
 		url: LOCAL_MCP_URL,
 		method: "POST",
@@ -35,7 +42,7 @@ export async function callLocalMcpTool(name: string, args: Record<string, unknow
 				arguments: args,
 			},
 		}),
-		timeoutMs: 30_000,
+		timeoutMs: options?.timeoutMs ?? 30_000,
 	});
 
 	if (response.status < 200 || response.status >= 300) {
@@ -44,6 +51,7 @@ export async function callLocalMcpTool(name: string, args: Record<string, unknow
 			ok: false,
 			resultPreview: "",
 			error: `HTTP ${response.status}: ${response.body}`,
+			traceId: options?.traceId,
 		});
 		throw new Error(`MCP HTTP ${response.status}: ${response.body}`);
 	}
@@ -61,6 +69,7 @@ export async function callLocalMcpTool(name: string, args: Record<string, unknow
 			ok: false,
 			resultPreview: "",
 			error: payload.error.message,
+			traceId: options?.traceId,
 		});
 		throw new Error(payload.error.message);
 	}
@@ -73,6 +82,7 @@ export async function callLocalMcpTool(name: string, args: Record<string, unknow
 			ok: false,
 			resultPreview: text.slice(0, 200),
 			error: text || `MCP tool failed: ${name}`,
+			traceId: options?.traceId,
 		});
 		throw new Error(text || `MCP tool failed: ${name}`);
 	}
@@ -82,12 +92,20 @@ export async function callLocalMcpTool(name: string, args: Record<string, unknow
 		ok: true,
 		resultPreview: text.slice(0, 200),
 		error: null,
+		traceId: options?.traceId,
 	});
 	return text;
 }
 
-export async function callLocalMcpToolJson<T>(name: string, args: Record<string, unknown>): Promise<T> {
-	const text = await callLocalMcpTool(name, args);
+export async function callLocalMcpToolJson<T>(
+	name: string,
+	args: Record<string, unknown>,
+	options?: {
+		traceId?: string;
+		timeoutMs?: number;
+	},
+): Promise<T> {
+	const text = await callLocalMcpTool(name, args, options);
 	if (!text) {
 		throw new Error(`empty MCP tool response for ${name}`);
 	}
