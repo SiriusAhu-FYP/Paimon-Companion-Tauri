@@ -42,6 +42,7 @@ export function EventLog() {
 	});
 	const { entries, clear, latestEntry } = useEventLog(200, { showDebug });
 	const [activeFilters, setActiveFilters] = useState<string[]>([]);
+	const [activeSeverities, setActiveSeverities] = useState<Array<"info" | "warn" | "error">>([]);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedKey, setSelectedKey] = useState<string | null>(null);
 	const [copyMessage, setCopyMessage] = useState<string | null>(null);
@@ -54,6 +55,9 @@ export function EventLog() {
 			if (activeFilters.length > 0 && !activeFilters.includes(entry.category)) {
 				return false;
 			}
+			if (activeSeverities.length > 0 && !activeSeverities.includes(entry.severity)) {
+				return false;
+			}
 			if (!normalizedQuery) {
 				return true;
 			}
@@ -64,7 +68,7 @@ export function EventLog() {
 				entry.payloadText,
 			].join(" ").toLowerCase().includes(normalizedQuery);
 		});
-	}, [activeFilters, entries, searchQuery]);
+	}, [activeFilters, activeSeverities, entries, searchQuery]);
 
 	useEffect(() => {
 		if (!filteredEntries.length) {
@@ -143,6 +147,34 @@ export function EventLog() {
 				>
 					{showDebug ? t("隐藏调试", "Hide Debug") : t("显示调试", "Show Debug")}
 				</button>
+				<div className="event-log-filters">
+					{(["info", "warn", "error"] as const).map((severity) => (
+						<button
+							key={severity}
+							className={`event-log-filter-chip${activeSeverities.includes(severity) ? " active" : ""}`}
+							onClick={() => {
+								setActiveSeverities((current) =>
+									current.includes(severity)
+										? current.filter((item) => item !== severity)
+										: [...current, severity],
+								);
+							}}
+						>
+							{severity === "info"
+								? t("信息", "Info")
+								: severity === "warn"
+									? "WARN"
+									: "ERROR"}
+						</button>
+					))}
+					<button
+						className="event-log-clear-btn"
+						onClick={() => setActiveSeverities([])}
+						disabled={activeSeverities.length === 0}
+					>
+						{t("清空级别", "Clear Levels")}
+					</button>
+				</div>
 				<div className="event-log-filters">
 					{Object.entries(EVENT_CATEGORIES)
 						.filter(([, meta]) => showDebug || !meta.debug)
