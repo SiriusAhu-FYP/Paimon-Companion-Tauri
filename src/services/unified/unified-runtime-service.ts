@@ -9,6 +9,7 @@ import type { PipelineService } from "@/services/pipeline";
 import type { RuntimeService } from "@/services/runtime";
 import { createLogger } from "@/services/logger";
 import type { UnifiedRunRecord, UnifiedRuntimeState } from "@/types";
+import { callLocalMcpTool } from "@/services/mcp/local-mcp-client";
 
 const log = createLogger("unified-runtime");
 const MAX_HISTORY = 10;
@@ -120,7 +121,7 @@ export class UnifiedRuntimeService {
 		this.state.phase = "acting";
 		this.state.lastCommand = `${targetGame}-step`;
 		this.state.lastRun = cloneRun(run);
-		this.applyEmotion("neutral");
+		await this.applyEmotion("neutral");
 		this.bus.emit("unified:run-start", {
 			runId: run.id,
 			trigger,
@@ -174,7 +175,7 @@ export class UnifiedRuntimeService {
 				companionText = generatedReply.text;
 			}
 			this.state.lastCompanionText = companionText;
-			this.applyEmotion(run.emotion);
+			await this.applyEmotion(run.emotion);
 
 			if (this.state.speechEnabled && companionText) {
 				this.state.phase = "speaking";
@@ -191,7 +192,7 @@ export class UnifiedRuntimeService {
 			run.companionTextSource = "fallback";
 			run.emotion = "sad";
 			this.state.lastCompanionText = run.companionText;
-			this.applyEmotion(run.emotion);
+			await this.applyEmotion(run.emotion);
 
 			if (this.state.speechEnabled) {
 				this.state.phase = "speaking";
@@ -253,8 +254,17 @@ export class UnifiedRuntimeService {
 		}
 	}
 
-	private applyEmotion(emotion: string) {
-		this.character.setEmotion(emotion);
+	private async applyEmotion(emotion: string) {
+		try {
+			if (emotion === "neutral") {
+				await callLocalMcpTool("companion.reset_emotion", {});
+				return;
+			}
+			await callLocalMcpTool("companion.set_emotion", { emotion });
+		} catch (err) {
+			log.warn("unified emotion application via MCP failed", err);
+			this.character.setEmotion(emotion);
+		}
 	}
 
 	private resolveTargetGame(requestText: string | null): SupportedUnifiedGameId | null {
