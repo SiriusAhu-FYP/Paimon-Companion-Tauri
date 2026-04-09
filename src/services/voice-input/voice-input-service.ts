@@ -71,6 +71,16 @@ function getVadThreshold(aggressiveness: number): number {
 	}
 }
 
+function sameVoiceState(left: VoiceInputState, right: VoiceInputState): boolean {
+	return left.enabled === right.enabled
+		&& left.status === right.status
+		&& left.permission === right.permission
+		&& left.providerLabel === right.providerLabel
+		&& left.playbackLocked === right.playbackLocked
+		&& left.lastTranscript === right.lastTranscript
+		&& left.lastError === right.lastError;
+}
+
 export class VoiceInputService {
 	private bus: EventBus;
 	private pipeline: PipelineService;
@@ -200,10 +210,14 @@ export class VoiceInputService {
 	}
 
 	private updateState(partial: Partial<VoiceInputState>) {
-		this.state = {
+		const nextState = {
 			...this.state,
 			...partial,
 		};
+		if (sameVoiceState(this.state, nextState)) {
+			return;
+		}
+		this.state = nextState;
 		this.bus.emit("voice:state-change", { state: this.getState() });
 	}
 

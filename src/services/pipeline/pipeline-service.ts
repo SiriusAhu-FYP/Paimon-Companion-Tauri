@@ -123,6 +123,7 @@ export class PipelineService {
 		}
 
 		this.pendingSpeechText = displayText;
+		this.bus.emit("audio:tts-pending", { text: displayText });
 		log.info(`[split] ${segments.length} segments: ${segments.map((s) => `[${s.lang}]"${s.text.slice(0, 20)}"`).join(", ")}`);
 
 		try {

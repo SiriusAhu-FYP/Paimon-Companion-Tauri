@@ -42,6 +42,10 @@ export interface AudioTtsStartPayload {
 	text: string;
 }
 
+export interface AudioTtsPendingPayload {
+	text: string;
+}
+
 export interface LlmRequestStartPayload {
 	userText: string;
 	source?: "chat" | "companion-reply";
@@ -299,6 +303,7 @@ export interface EventMap {
 	"audio:vad-start": void;
 	"audio:vad-end": AudioVadEndPayload;
 	"audio:asr-result": AudioAsrResultPayload;
+	"audio:tts-pending": AudioTtsPendingPayload;
 	"audio:tts-start": AudioTtsStartPayload;
 	"audio:tts-end": void;
 	"voice:state-change": VoiceInputStateChangePayload;

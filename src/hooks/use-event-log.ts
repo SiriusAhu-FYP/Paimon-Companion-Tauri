@@ -73,6 +73,7 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 			"unified:voice-input",
 			"companion-runtime:state-change",
 			"companion-runtime:benchmark-state-change",
+			"voice:state-change",
 		],
 		color: "#90a4ae",
 		debug: true,
@@ -82,7 +83,7 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 		color: "#81c784",
 	},
 	"语音": {
-		events: ["audio:vad-start", "audio:vad-end", "audio:asr-result", "audio:tts-start", "audio:tts-end", "voice:state-change"],
+		events: ["audio:vad-start", "audio:vad-end", "audio:asr-result", "audio:tts-pending", "audio:tts-start", "audio:tts-end"],
 		color: "#64b5f6",
 	},
 	"LLM": {
@@ -157,6 +158,10 @@ function formatSummary(event: EventName, payload: unknown): string {
 		case "audio:asr-result": {
 			const data = payload as EventMap["audio:asr-result"];
 			return `${data.source}: ${truncate(data.text, 80)}`;
+		}
+		case "audio:tts-pending": {
+			const data = payload as EventMap["audio:tts-pending"];
+			return `TTS 准备: ${truncate(data.text, 80)}`;
 		}
 		case "audio:vad-start":
 			return "VAD 开始录音";
