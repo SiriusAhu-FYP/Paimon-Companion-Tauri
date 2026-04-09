@@ -21,6 +21,7 @@ const MIN_MEANINGFUL_CHANGE_RATIO = 0.02;
 const UNCHANGED_FRAME_DESCRIPTION = "画面变化很小，当前画面与上一帧基本一致，没有明显新变化。";
 const LOCAL_VISION_READY_TIMEOUT_MS = 120_000;
 const LOCAL_VISION_READY_POLL_MS = 3_000;
+const STATE_CHANGE_MIN_INTERVAL_MS = 250;
 
 interface OpenAIChatCompletionResponse {
 	choices?: Array<{
@@ -156,6 +157,10 @@ export class CompanionRuntimeService {
 	private summaryInFlight = false;
 	private lastSnapshotForDiff: PerceptionSnapshot | null = null;
 	private lastStateChangePayloadKey: string | null = null;
+	private lastStateEmitAt = 0;
+	private pendingStateChangeTimer: ReturnType<typeof setTimeout> | null = null;
+	private pendingStatePayload: CompanionRuntimeStateChangePayload | null = null;
+	private pendingStatePayloadKey: string | null = null;
 
 	constructor(deps: {
 		bus: EventBus;
@@ -384,6 +389,12 @@ export class CompanionRuntimeService {
 			clearTimeout(this.summaryTimer);
 			this.summaryTimer = null;
 		}
+		if (this.pendingStateChangeTimer) {
+			clearTimeout(this.pendingStateChangeTimer);
+			this.pendingStateChangeTimer = null;
+		}
+		this.pendingStatePayload = null;
+		this.pendingStatePayloadKey = null;
 	}
 
 	private scheduleCaptureTick() {
@@ -727,7 +738,7 @@ export class CompanionRuntimeService {
 		};
 	}
 
-	private emitState() {
+	private emitState(force = false) {
 		const payload: CompanionRuntimeStateChangePayload = {
 			running: this.state.running,
 			phase: this.state.phase,
@@ -740,11 +751,51 @@ export class CompanionRuntimeService {
 			summariesGenerated: this.state.metrics.summariesGenerated,
 			lastError: this.state.lastError,
 		};
-		const payloadKey = JSON.stringify(payload);
+		const payloadKey = [
+			payload.running ? "1" : "0",
+			payload.phase,
+			payload.targetTitle ?? "",
+			String(payload.frameQueueLength),
+			String(payload.summaryHistoryLength),
+			payload.lastFrameId ?? "",
+			payload.lastSummaryId ?? "",
+			String(payload.captureTicks),
+			String(payload.summariesGenerated),
+			payload.lastError ?? "",
+		].join("|");
 		if (payloadKey === this.lastStateChangePayloadKey) {
 			return;
 		}
-		this.lastStateChangePayloadKey = payloadKey;
-		this.bus.emit("companion-runtime:state-change", payload);
+		const emitNow = () => {
+			if (!this.pendingStatePayload || !this.pendingStatePayloadKey) {
+				return;
+			}
+			this.lastStateChangePayloadKey = this.pendingStatePayloadKey;
+			this.lastStateEmitAt = Date.now();
+			this.bus.emit("companion-runtime:state-change", this.pendingStatePayload);
+			this.pendingStatePayload = null;
+			this.pendingStatePayloadKey = null;
+			if (this.pendingStateChangeTimer) {
+				clearTimeout(this.pendingStateChangeTimer);
+				this.pendingStateChangeTimer = null;
+			}
+		};
+
+		this.pendingStatePayload = payload;
+		this.pendingStatePayloadKey = payloadKey;
+		const now = Date.now();
+		const elapsed = now - this.lastStateEmitAt;
+		if (force || elapsed >= STATE_CHANGE_MIN_INTERVAL_MS) {
+			emitNow();
+			return;
+		}
+		if (this.pendingStateChangeTimer) {
+			return;
+		}
+		const waitMs = Math.max(0, STATE_CHANGE_MIN_INTERVAL_MS - elapsed);
+		this.pendingStateChangeTimer = setTimeout(() => {
+			this.pendingStateChangeTimer = null;
+			emitNow();
+		}, waitMs);
 	}
 }

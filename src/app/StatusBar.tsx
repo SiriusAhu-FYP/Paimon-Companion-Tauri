@@ -22,7 +22,11 @@ export function StatusBar({
 	const { mode } = useRuntime();
 	const { emotion, isSpeaking } = useCharacter();
 	const { state: functionalState } = useFunctional();
-	const { latestEntry, totalTrackedEntries } = useEventLog(1, { showDebug: false });
+	const { latestEntry } = useEventLog(1, {
+		showDebug: false,
+		mode: "latest",
+		includeTotalTrackedEntries: false,
+	});
 	const { t } = useI18n();
 
 	return (
@@ -134,7 +138,7 @@ export function StatusBar({
 				</IconButton>
 			</Tooltip>
 			<Chip
-				label={`${t("日志", "Logs")} ${totalTrackedEntries}`}
+				label={t("日志", "Logs")}
 				size="small"
 				variant={eventLogOpen ? "filled" : "outlined"}
 				sx={{ height: 18, fontSize: 10, "& .MuiChip-label": { px: 0.75 } }}

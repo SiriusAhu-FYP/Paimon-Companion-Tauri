@@ -19,6 +19,12 @@ export interface EventLogEntry {
 	rawPayload: unknown;
 }
 
+export interface UseEventLogOptions {
+	showDebug?: boolean;
+	mode?: "full" | "latest";
+	includeTotalTrackedEntries?: boolean;
+}
+
 export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: string; debug?: boolean }> = {
 	"系统": {
 		events: [
@@ -99,6 +105,11 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 const TRACKED_EVENTS = Array.from(new Set(Object.values(EVENT_CATEGORIES).flatMap((group) => group.events)));
 const DEFAULT_LIMIT = 100;
 const PAYLOAD_PREVIEW_LIMIT = 240;
+
+function formatTraceTag(traceId?: string): string {
+	if (!traceId) return "";
+	return ` [${traceId.slice(-8)}]`;
+}
 
 function getCategoryForEvent(event: EventName): { name: string; color: string } {
 	for (const [name, { events, color }] of Object.entries(EVENT_CATEGORIES)) {
@@ -181,15 +192,15 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "llm:request-start": {
 			const data = payload as EventMap["llm:request-start"];
-			return `${data.source === "companion-reply" ? "跟进" : "请求"}: ${truncate(data.userText, 80)}${data.companionRuntimeContextUsed ? " / runtime context" : ""}`;
+			return `${data.source === "companion-reply" ? "跟进" : "请求"}${formatTraceTag(data.traceId)}: ${truncate(data.userText, 80)}${data.companionRuntimeContextUsed ? " / runtime context" : ""}`;
 		}
 		case "llm:tool-call": {
 			const data = payload as EventMap["llm:tool-call"];
-			return `工具调用: ${data.name}`;
+			return `工具调用${formatTraceTag(data.traceId)}: ${data.name}`;
 		}
 		case "llm:response-end": {
 			const data = payload as EventMap["llm:response-end"];
-			return `响应: ${truncate(data.fullText, 80)}`;
+			return `响应${formatTraceTag(data.traceId)}: ${truncate(data.fullText, 80)}`;
 		}
 		case "llm:error": {
 			const data = payload as EventMap["llm:error"];
@@ -197,11 +208,11 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "mcp:tool-start": {
 			const data = payload as EventMap["mcp:tool-start"];
-			return `MCP 调用: ${data.name}`;
+			return `MCP 调用${formatTraceTag(data.traceId)}: ${data.name}`;
 		}
 		case "mcp:tool-complete": {
 			const data = payload as EventMap["mcp:tool-complete"];
-			return `${data.ok ? "MCP 完成" : "MCP 失败"}: ${data.name}${data.error ? ` / ${truncate(data.error, 80)}` : ""}`;
+			return `${data.ok ? "MCP 完成" : "MCP 失败"}${formatTraceTag(data.traceId)}: ${data.name}${data.error ? ` / ${truncate(data.error, 80)}` : ""}`;
 		}
 		case "character:expression": {
 			const data = payload as EventMap["character:expression"];
@@ -253,15 +264,15 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "game2048:run-start": {
 			const data = payload as EventMap["game2048:run-start"];
-			return `${data.targetTitle}: ${data.preferredMoves.join(" -> ")}`;
+			return `${data.targetTitle}${formatTraceTag(data.traceId)}: ${data.preferredMoves.join(" -> ")}`;
 		}
 		case "game2048:attempt": {
 			const data = payload as EventMap["game2048:attempt"];
-			return `${data.move}: ${data.changed ? "changed" : "no change"} (${formatPercent(data.changeRatio)})`;
+			return `${data.move}${formatTraceTag(data.traceId)}: ${data.changed ? "changed" : "no change"} (${formatPercent(data.changeRatio)})`;
 		}
 		case "game2048:run-complete": {
 			const data = payload as EventMap["game2048:run-complete"];
-			return data.summary;
+			return `${data.summary}${formatTraceTag(data.traceId)}`;
 		}
 		case "game2048:state-change": {
 			const data = payload as EventMap["game2048:state-change"];
@@ -274,15 +285,15 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "sokoban:run-start": {
 			const data = payload as EventMap["sokoban:run-start"];
-			return `${data.targetTitle}: ${data.plannedMoves.join(" -> ")}`;
+			return `${data.targetTitle}${formatTraceTag(data.traceId)}: ${data.plannedMoves.join(" -> ")}`;
 		}
 		case "sokoban:attempt": {
 			const data = payload as EventMap["sokoban:attempt"];
-			return `${data.move}: ${data.changed ? "changed" : "no change"} (${formatPercent(data.changeRatio)})`;
+			return `${data.move}${formatTraceTag(data.traceId)}: ${data.changed ? "changed" : "no change"} (${formatPercent(data.changeRatio)})`;
 		}
 		case "sokoban:run-complete": {
 			const data = payload as EventMap["sokoban:run-complete"];
-			return data.summary;
+			return `${data.summary}${formatTraceTag(data.traceId)}`;
 		}
 		case "sokoban:state-change": {
 			const data = payload as EventMap["sokoban:state-change"];
@@ -307,11 +318,11 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "unified:run-start": {
 			const data = payload as EventMap["unified:run-start"];
-			return `${data.trigger}: ${data.requestText ?? "direct game step"}`;
+			return `${data.trigger}${formatTraceTag(data.traceId)}: ${data.requestText ?? "direct game step"}`;
 		}
 		case "unified:run-complete": {
 			const data = payload as EventMap["unified:run-complete"];
-			return `${data.gameId ?? "unknown"} ${data.success ? "完成" : "失败"}: ${data.summary} / total ${data.timings.totalMs.toFixed(0)}ms`;
+			return `${data.gameId ?? "unknown"} ${data.success ? "完成" : "失败"}${formatTraceTag(data.traceId)}: ${data.summary} / total-blocking ${data.timings.totalBlockingMs.toFixed(0)}ms / nonblocking ${data.timings.totalNonBlockingMs.toFixed(0)}ms`;
 		}
 		case "unified:voice-input": {
 			const data = payload as EventMap["unified:voice-input"];
@@ -430,7 +441,7 @@ function toEntry(entry: EventHistoryEntry): EventLogEntry | null {
 	};
 }
 
-export function useEventLog(limit = DEFAULT_LIMIT, options?: { showDebug?: boolean }) {
+export function useEventLog(limit = DEFAULT_LIMIT, options?: UseEventLogOptions) {
 	const { bus } = getServices();
 	const historyVersion = useSyncExternalStore(
 		(onStoreChange) => bus.subscribeHistory(onStoreChange),
@@ -440,6 +451,26 @@ export function useEventLog(limit = DEFAULT_LIMIT, options?: { showDebug?: boole
 	const history = bus.getHistory();
 
 	const entries = useMemo(() => {
+		const includeTotalTrackedEntries = options?.includeTotalTrackedEntries ?? true;
+		const mode = options?.mode ?? "full";
+		if (mode === "latest") {
+			let latest: EventLogEntry | null = null;
+			for (let index = history.length - 1; index >= 0; index -= 1) {
+				if (!options?.showDebug && isDebugEvent(history[index].event)) {
+					continue;
+				}
+				const normalized = toEntry(history[index]);
+				if (normalized) {
+					latest = normalized;
+					break;
+				}
+			}
+			return {
+				entries: latest ? [latest] : [],
+				totalTrackedEntries: includeTotalTrackedEntries ? history.length : (latest ? 1 : 0),
+			};
+		}
+
 		const next: EventLogEntry[] = [];
 		const startIndex = Math.max(0, history.length - limit);
 		for (let index = startIndex; index < history.length; index += 1) {
@@ -453,13 +484,15 @@ export function useEventLog(limit = DEFAULT_LIMIT, options?: { showDebug?: boole
 		}
 		return {
 			entries: next,
-			totalTrackedEntries: history.reduce((count, item) => {
-				if (!TRACKED_EVENTS.includes(item.event)) return count;
-				if (!options?.showDebug && isDebugEvent(item.event)) return count;
-				return count + 1;
-			}, 0),
+			totalTrackedEntries: includeTotalTrackedEntries
+				? history.reduce((count, item) => {
+					if (!TRACKED_EVENTS.includes(item.event)) return count;
+					if (!options?.showDebug && isDebugEvent(item.event)) return count;
+					return count + 1;
+				}, 0)
+				: next.length,
 		};
-	}, [history, historyVersion, limit, options?.showDebug]);
+	}, [history, historyVersion, limit, options?.includeTotalTrackedEntries, options?.mode, options?.showDebug]);
 
 	const clear = useCallback(() => {
 		bus.clearHistory();

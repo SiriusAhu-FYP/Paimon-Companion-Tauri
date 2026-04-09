@@ -159,6 +159,6 @@ P2 note:
 - MCP externalization is a prerequisite for `P2` close-out, not later optional polish
 - accepted close-out status on `2026-04-09`: the MCP-backed fusion baseline is working end to end, including voice input, rolling runtime context, grounded follow-up text, speech, Live2D expression changes, and semantic game actions through the same local MCP boundary
 - accepted known issues at close-out:
-  - the current fusion timing headline is an end-to-end round duration and includes downstream stages such as speech playback; it is not yet a fine-grained delay breakdown
-  - active fusion runs can still make the Tauri UI feel sluggish while local vision, logging, and speech are all active
-  - immediate post-`P2` work should therefore focus on duration breakdown by stage and UI responsiveness profiling before new product scope
+  - fusion evaluation now exposes stage timing (`action/runtime refresh/llm/speech`) plus `totalBlocking` and `totalNonBlocking`, but these are still workload wall-clock numbers rather than isolated model-only delay
+  - UI stall telemetry (`averageUiStallCount`, `maxUiStallMs`) is now present, and event-log rendering pressure has been reduced, but heavy local vision + speech runs can still cause occasional responsiveness drops depending on host load
+  - immediate post-`P2` work remains focused on reducing slow-round outliers and keeping MCP fusion behavior stable while performance tuning continues

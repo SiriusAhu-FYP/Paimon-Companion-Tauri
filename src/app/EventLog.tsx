@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { EVENT_CATEGORIES, useEventLog, type EventLogEntry } from "@/hooks";
 import { useI18n } from "@/contexts/I18nProvider";
 
 const DEBUG_VISIBILITY_KEY = "paimon:event-console:show-debug";
+const ENTRY_ROW_HEIGHT = 70;
+const ENTRY_OVERSCAN = 10;
 
 async function copyText(text: string) {
 	if (navigator.clipboard?.writeText) {
@@ -42,6 +44,36 @@ function serializePayload(payload: unknown, pretty = false): string {
 	}
 }
 
+const EventListItem = memo(function EventListItem(props: {
+	entry: EventLogEntry;
+	selected: boolean;
+	style: CSSProperties;
+	onSelect: (key: string) => void;
+}) {
+	const { entry, selected, style, onSelect } = props;
+	return (
+		<button
+			className={`event-log-entry${selected ? " active" : ""}${entry.severity !== "info" ? ` ${entry.severity}` : ""}`}
+			style={style}
+			onClick={() => onSelect(entry.key)}
+		>
+			<span className="event-log-time">{entry.timestampLabel}</span>
+			<span className="event-log-category" style={{ "--event-color": entry.color } as CSSProperties}>
+				{entry.category}
+			</span>
+			<div className="event-log-body">
+				<div className="event-log-main">
+					{entry.severity === "error" && <span className="event-log-severity error">ERROR</span>}
+					{entry.severity === "warn" && <span className="event-log-severity warn">WARN</span>}
+					<span className="event-log-name" style={{ color: entry.color }}>{entry.event}</span>
+					<span className="event-log-summary">{entry.summary}</span>
+				</div>
+				<div className="event-log-payload">{entry.payloadPreviewText}</div>
+			</div>
+		</button>
+	);
+});
+
 export function EventLog() {
 	const { t } = useI18n();
 	const [showDebug, setShowDebug] = useState(() => {
@@ -51,17 +83,20 @@ export function EventLog() {
 			return false;
 		}
 	});
-	const { entries, clear, latestEntry } = useEventLog(200, { showDebug });
+	const { entries, clear, latestEntry, totalTrackedEntries } = useEventLog(500, { showDebug });
 	const [activeFilters, setActiveFilters] = useState<string[]>([]);
 	const [activeSeverities, setActiveSeverities] = useState<Array<"info" | "warn" | "error">>([]);
 	const [searchQuery, setSearchQuery] = useState("");
+	const deferredSearchQuery = useDeferredValue(searchQuery);
 	const [selectedKey, setSelectedKey] = useState<string | null>(null);
 	const [copyMessage, setCopyMessage] = useState<string | null>(null);
 	const listRef = useRef<HTMLDivElement | null>(null);
 	const stickToBottomRef = useRef(true);
+	const [scrollTop, setScrollTop] = useState(0);
+	const [viewportHeight, setViewportHeight] = useState(0);
 
 	const filteredEntries = useMemo(() => {
-		const normalizedQuery = searchQuery.trim().toLowerCase();
+		const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
 		return entries.filter((entry) => {
 			if (activeFilters.length > 0 && !activeFilters.includes(entry.category)) {
 				return false;
@@ -79,7 +114,7 @@ export function EventLog() {
 				entry.payloadPreviewText,
 			].join(" ").toLowerCase().includes(normalizedQuery);
 		});
-	}, [activeFilters, activeSeverities, entries, searchQuery]);
+	}, [activeFilters, activeSeverities, deferredSearchQuery, entries]);
 
 	useEffect(() => {
 		if (!filteredEntries.length) {
@@ -110,11 +145,21 @@ export function EventLog() {
 		setActiveFilters((current) => current.filter((item) => item !== "调试"));
 	}, [showDebug]);
 
+	useLayoutEffect(() => {
+		const list = listRef.current;
+		if (!list) return;
+		const measure = () => setViewportHeight(list.clientHeight);
+		measure();
+		window.addEventListener("resize", measure);
+		return () => window.removeEventListener("resize", measure);
+	}, []);
+
 	useEffect(() => {
 		if (!stickToBottomRef.current) return;
 		const list = listRef.current;
 		if (!list) return;
 		list.scrollTop = list.scrollHeight;
+		setScrollTop(list.scrollTop);
 	}, [filteredEntries]);
 
 	const selectedEntry = filteredEntries.find((entry) => entry.key === selectedKey) ?? filteredEntries[filteredEntries.length - 1] ?? null;
@@ -123,12 +168,18 @@ export function EventLog() {
 		[selectedEntry],
 	);
 
+	const totalHeight = filteredEntries.length * ENTRY_ROW_HEIGHT;
+	const maxVisibleRows = Math.max(1, Math.ceil(viewportHeight / ENTRY_ROW_HEIGHT));
+	const visibleStart = Math.max(0, Math.floor(scrollTop / ENTRY_ROW_HEIGHT) - ENTRY_OVERSCAN);
+	const visibleEnd = Math.min(filteredEntries.length, visibleStart + maxVisibleRows + ENTRY_OVERSCAN * 2);
+	const visibleEntries = filteredEntries.slice(visibleStart, visibleEnd);
+
 	return (
 		<section className="event-log">
 			<div className="event-log-header">
 				<div className="event-log-title-group">
 					<h3>{t("事件控制台", "Event Console")}</h3>
-					<span className="event-log-meta">{filteredEntries.length} / {entries.length} {t("条", "items")}</span>
+					<span className="event-log-meta">{filteredEntries.length} / {totalTrackedEntries} {t("条", "items")}</span>
 					{latestEntry && (
 						<span className="event-log-latest" title={latestEntry.payloadPreviewText}>
 							{t("最近", "Latest")}: {latestEntry.summary}
@@ -194,21 +245,21 @@ export function EventLog() {
 					{Object.entries(EVENT_CATEGORIES)
 						.filter(([, meta]) => showDebug || !meta.debug)
 						.map(([name, { color }]) => (
-						<button
-							key={name}
-							className={`event-log-filter-chip${activeFilters.includes(name) ? " active" : ""}`}
-							style={{ "--chip-color": color } as CSSProperties}
-							onClick={() => {
-								setActiveFilters((current) =>
-									current.includes(name)
-										? current.filter((item) => item !== name)
-										: [...current, name],
-								);
-							}}
-						>
-							{name}
-						</button>
-					))}
+							<button
+								key={name}
+								className={`event-log-filter-chip${activeFilters.includes(name) ? " active" : ""}`}
+								style={{ "--chip-color": color } as CSSProperties}
+								onClick={() => {
+									setActiveFilters((current) =>
+										current.includes(name)
+											? current.filter((item) => item !== name)
+											: [...current, name],
+									);
+								}}
+							>
+								{name}
+							</button>
+						))}
 					<button
 						className="event-log-clear-btn"
 						onClick={() => setActiveFilters([])}
@@ -227,6 +278,7 @@ export function EventLog() {
 					className="event-log-entries"
 					onScroll={(event) => {
 						const element = event.currentTarget;
+						setScrollTop(element.scrollTop);
 						const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
 						stickToBottomRef.current = distanceFromBottom < 16;
 					}}
@@ -234,27 +286,23 @@ export function EventLog() {
 					{filteredEntries.length === 0 ? (
 						<p className="event-log-empty">{t("暂无匹配事件", "No matching events")}</p>
 					) : (
-						filteredEntries.map((entry) => (
-							<button
-								key={entry.key}
-								className={`event-log-entry${selectedEntry?.key === entry.key ? " active" : ""}${entry.severity !== "info" ? ` ${entry.severity}` : ""}`}
-								onClick={() => setSelectedKey(entry.key)}
-							>
-								<span className="event-log-time">{entry.timestampLabel}</span>
-								<span className="event-log-category" style={{ "--event-color": entry.color } as CSSProperties}>
-									{entry.category}
-								</span>
-								<div className="event-log-body">
-								<div className="event-log-main">
-										{entry.severity === "error" && <span className="event-log-severity error">ERROR</span>}
-										{entry.severity === "warn" && <span className="event-log-severity warn">WARN</span>}
-										<span className="event-log-name" style={{ color: entry.color }}>{entry.event}</span>
-										<span className="event-log-summary">{entry.summary}</span>
-								</div>
-								<div className="event-log-payload">{entry.payloadPreviewText}</div>
-							</div>
-						</button>
-					))
+						<div className="event-log-virtual-list" style={{ height: totalHeight }}>
+							{visibleEntries.map((entry, index) => (
+								<EventListItem
+									key={entry.key}
+									entry={entry}
+									selected={selectedEntry?.key === entry.key}
+									onSelect={setSelectedKey}
+									style={{
+										position: "absolute",
+										top: (visibleStart + index) * ENTRY_ROW_HEIGHT,
+										left: 0,
+										right: 0,
+										height: ENTRY_ROW_HEIGHT - 2,
+									}}
+								/>
+							))}
+						</div>
 					)}
 				</div>
 
