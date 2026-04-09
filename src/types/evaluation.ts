@@ -23,6 +23,8 @@ export interface EvaluationRunEntry {
 	llmReplyUsed: boolean;
 	spoke: boolean;
 	emotionApplied: boolean;
+	mcpCompanionUsed: boolean;
+	mcpGameUsed: boolean;
 	summary: string;
 	error: string | null;
 }
@@ -37,6 +39,8 @@ export interface EvaluationCaseMetrics {
 	llmReplyRate: number;
 	speechRate: number;
 	emotionRate: number;
+	mcpCompanionRate: number;
+	mcpGameRate: number;
 	averageLatencyMs: number;
 	medianLatencyMs: number;
 }

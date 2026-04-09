@@ -51,6 +51,8 @@ The minimum accepted runtime shape for `P2` is:
   - LLM follow-up usage
   - speech usage
   - emotion application
+  - MCP companion-tool usage
+  - MCP game-tool usage
 
 ## Out Of Scope For `P2` Close-Out
 
