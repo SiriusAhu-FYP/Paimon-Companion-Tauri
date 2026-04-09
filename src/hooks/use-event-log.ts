@@ -280,7 +280,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "evaluation:case-complete": {
 			const data = payload as EventMap["evaluation:case-complete"];
-			return `${data.result.caseId}: ${formatPercent(data.result.metrics.successRate)} success`;
+			return data.result.summary || `${data.result.caseId}: ${formatPercent(data.result.metrics.successRate)} success`;
 		}
 		case "evaluation:state-change": {
 			const data = payload as EventMap["evaluation:state-change"];

@@ -120,61 +120,69 @@ export class EvaluationService {
 		});
 		this.emitState();
 
-		for (let index = 0; index < definition.iterations; index += 1) {
-			const runStartedAt = Date.now();
+		const previousCompanionRuntime = definition.game === "fusion"
+			? this.companionRuntime.getState()
+			: null;
 
-			try {
-				const gameRun = await this.runGameCase(definition);
+		try {
+			for (let index = 0; index < definition.iterations; index += 1) {
+				const runStartedAt = Date.now();
 
-				const latencyMs = Date.now() - runStartedAt;
-				const actionValid = Boolean(
-					gameRun.boardChanged
-					&& gameRun.selectedAction
-					&& gameRun.preferredActions.includes(gameRun.selectedAction),
-				);
+				try {
+					const gameRun = await this.runGameCase(definition);
 
-				result.runs.push({
-					index: index + 1,
-					status: "completed",
-					latencyMs,
-					boardChanged: gameRun.boardChanged,
-					actionValid,
-					selectedAction: gameRun.selectedAction,
-					analysisSource: gameRun.analysis.source,
-					runtimeContextUsed: gameRun.runtimeContextUsed,
-					llmReplyUsed: gameRun.llmReplyUsed,
-					spoke: gameRun.spoke,
-					emotionApplied: gameRun.emotionApplied,
-					mcpCompanionUsed: gameRun.mcpCompanionUsed,
-					mcpGameUsed: gameRun.mcpGameUsed,
-					summary: gameRun.summary,
-					error: null,
-				});
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				result.runs.push({
-					index: index + 1,
-					status: "failed",
-					latencyMs: Date.now() - runStartedAt,
-					boardChanged: false,
-					actionValid: false,
-					selectedAction: null,
-					analysisSource: null,
-					runtimeContextUsed: false,
-					llmReplyUsed: false,
-					spoke: false,
-					emotionApplied: false,
-					mcpCompanionUsed: false,
-					mcpGameUsed: false,
-					summary: message,
-					error: message,
-				});
+					const latencyMs = Date.now() - runStartedAt;
+					const actionValid = Boolean(
+						gameRun.boardChanged
+						&& gameRun.selectedAction
+						&& gameRun.preferredActions.includes(gameRun.selectedAction),
+					);
+
+					result.runs.push({
+						index: index + 1,
+						status: "completed",
+						latencyMs,
+						boardChanged: gameRun.boardChanged,
+						actionValid,
+						selectedAction: gameRun.selectedAction,
+						analysisSource: gameRun.analysis.source,
+						runtimeContextUsed: gameRun.runtimeContextUsed,
+						llmReplyUsed: gameRun.llmReplyUsed,
+						spoke: gameRun.spoke,
+						emotionApplied: gameRun.emotionApplied,
+						mcpCompanionUsed: gameRun.mcpCompanionUsed,
+						mcpGameUsed: gameRun.mcpGameUsed,
+						summary: gameRun.summary,
+						error: null,
+					});
+				} catch (err) {
+					const message = err instanceof Error ? err.message : String(err);
+					result.runs.push({
+						index: index + 1,
+						status: "failed",
+						latencyMs: Date.now() - runStartedAt,
+						boardChanged: false,
+						actionValid: false,
+						selectedAction: null,
+						analysisSource: null,
+						runtimeContextUsed: false,
+						llmReplyUsed: false,
+						spoke: false,
+						emotionApplied: false,
+						mcpCompanionUsed: false,
+						mcpGameUsed: false,
+						summary: message,
+						error: message,
+					});
+				}
+
+				result.metrics = computeMetrics(result.runs, definition.iterations);
+				result.summary = buildSummary(definition, result.metrics);
+				this.state.latestResult = cloneResult(result);
+				this.emitState();
 			}
-
-			result.metrics = computeMetrics(result.runs, definition.iterations);
-			result.summary = buildSummary(definition, result.metrics);
-			this.state.latestResult = cloneResult(result);
-			this.emitState();
+		} finally {
+			await this.restoreCompanionRuntimeAfterFusion(previousCompanionRuntime);
 		}
 
 		result.status = result.metrics.successfulRuns > 0 ? "completed" : "failed";
@@ -194,6 +202,29 @@ export class EvaluationService {
 		});
 
 		return cloneResult(result);
+	}
+
+	private async restoreCompanionRuntimeAfterFusion(previousState: ReturnType<CompanionRuntimeService["getState"]> | null): Promise<void> {
+		if (!previousState) {
+			return;
+		}
+		const currentState = this.companionRuntime.getState();
+		if (!previousState.running) {
+			if (currentState.running) {
+				this.companionRuntime.stop();
+			}
+			return;
+		}
+		if (!previousState.target) {
+			return;
+		}
+		if (!currentState.running || currentState.target?.handle !== previousState.target.handle) {
+			try {
+				await this.companionRuntime.start(previousState.target);
+			} catch (err) {
+				log.warn("failed to restore companion runtime after fusion evaluation", err);
+			}
+		}
 	}
 
 	private emitState() {
