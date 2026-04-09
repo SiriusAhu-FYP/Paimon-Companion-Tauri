@@ -19,7 +19,7 @@ Tracked public project docs live here.
 - `architecture/companion-runtime.md`
   target runtime direction for local perception, cloud reasoning, and MCP control
 - `architecture/post-fusion-baseline.md`
-  accepted close-out bar for finishing `P2` source fusion
+  accepted close-out bar for finishing `P2` source fusion, plus the known residual issues carried out of `P2`
 - `architecture/companion-mcp-contract.md`
   intended MCP-facing control boundary for companion-side actions
 - `architecture/game-semantic-action-contract.md`

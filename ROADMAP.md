@@ -58,7 +58,7 @@ P1 close-out:
 - accepted baseline: validated `2048` path on `2026-04-03`
 - `P2` should start from a fresh branch
 
-- [ ] P2: Core Repository Fusion
+- [x] P2: Core Repository Fusion
   - [x] groundwork: a thin unified runtime layer already exists for `2048` validation
   - [x] P2.1 Source Audit And Gap Mapping
     - [x] map `LLMPlay-MVP` features to the current Tauri codebase
@@ -78,13 +78,14 @@ P1 close-out:
     - [x] validate voice -> LLM -> TTS -> Live2D end-to-end in the Tauri host
     - [-] improve mixed-language recognition inside a single utterance
       deferred: the current bilingual local ASR baseline is acceptable for Chinese or English utterances, but intra-sentence code-switching is not yet treated as a solved requirement
-  - [ ] P2.3 Companion Expression Protocol
+  - [x] P2.3 Companion Expression Protocol
     - [x] define a first-pass emotion taxonomy and randomized per-model expression candidate mapping
     - [x] extend the same protocol to first-pass motion selection where models expose reusable motions
     - [x] validate the real LLM path can consistently drive visible Live2D expression changes through MCP tools instead of mock-only/internal-only wiring
     - [x] migrate the accepted expression-control path toward a formal MCP-facing contract
-    - [ ] keep motion as an optional enhancement rather than the current acceptance gate
-  - [ ] P2.4 `LLMPlay-MVP` Completion
+    - [-] keep motion as an optional enhancement rather than the current acceptance gate
+      deferred: expression linkage is accepted for `P2`; motion remains an optional follow-up enhancement
+  - [x] P2.4 `LLMPlay-MVP` Completion
     - [x] keep `Sokoban` in scope as the second reasoning-oriented validation game
     - [x] define a shared game prompt template (`example.md`) before rewriting per-game prompts
     - [x] lock the first companion MCP contract and game semantic action contract before broad plugin work
@@ -96,7 +97,7 @@ P1 close-out:
     - [x] restore a first minimal `Sokoban` validation skeleton on the same semantic action foundation
     - [x] decide which gameplay semantics belong in core MCP tools and which belong in per-game config/plugins
     - [x] either merge the missing MVP capabilities or explicitly retire them in docs
-  - [ ] P2.5 `Video-Understanding-MVP` Completion
+  - [x] P2.5 `Video-Understanding-MVP` Completion
     - [x] define the first local-fast / cloud-summarize companion runtime slice around `Qwen3-VL-2B-Instruct` style local frame descriptions plus cloud temporal reasoning
     - [x] start from `8-10s` rolling local-description windows and preserve at least the latest `1min` of summary context
     - [x] feed the latest rolling temporal summary into the companion prompt path instead of leaving it as a lab-only side panel
@@ -106,19 +107,20 @@ P1 close-out:
       - [x] add a fixed-duration companion runtime benchmark so throughput and summary cadence can be sampled without ad hoc manual timing
       - [x] factor repeated OpenAI-compatible image reasoning calls into a shared vision client instead of duplicating per-game/per-runtime request code
       - [x] replace interval overlap with self-paced runtime scheduling and bounded queue pruning so long-running observation sessions stay stable
-      - [ ] integrate the missing reusable perception pieces that are still required
+      - [-] integrate the missing reusable perception pieces that are still required
+        deferred: the accepted `P2` runtime slice is in place; broader toolkit carry-over is future work, not a close-out gate
       - [x] carry over the relevant evaluation/benchmark logic where it still serves the product goal
       - [-] add no-progress escalation and selected-frame cloud rescue
         deferred: keep this as a future optimization path, not a current implementation gate
-  - [ ] P2.6 Post-Fusion Validation
+  - [x] P2.6 Post-Fusion Validation
     - [x] route the current `Unified Run` entry through the selected semantic game target instead of keeping it 2048-only
     - [x] let unified game results ask the active LLM for grounded companion follow-up text instead of relying only on hardcoded per-game copy
     - [x] add a first fusion evaluation case that samples runtime-context usage, LLM follow-up generation, and speech in one pass
     - [x] refresh the active companion observation context after unified game rounds so follow-up replies can speak from fresher runtime state
     - [x] land the first real MCP server boundary for companion control and semantic game control
-    - [ ] verify that all three source lines coexist in one Tauri runtime through that MCP-facing runtime path
-    - [ ] verify companion behavior, expression, speech, and functional execution together
-    - [ ] define the accepted post-fusion baseline after MCP-backed fusion is working
+    - [x] verify that all three source lines coexist in one Tauri runtime through that MCP-facing runtime path
+    - [x] verify companion behavior, expression, speech, and functional execution together
+    - [x] define the accepted post-fusion baseline after MCP-backed fusion is working
 
 Cross-cutting rule during `P2` and later:
 
@@ -155,3 +157,8 @@ P2 note:
 - the current internal expression path and mock-path are useful groundwork, but they do not satisfy the intended `P2` fusion bar on their own
 - the first localhost MCP server slice has landed, but it is not treated as accepted until the real LLM path and semantic game path are both validated through it
 - MCP externalization is a prerequisite for `P2` close-out, not later optional polish
+- accepted close-out status on `2026-04-09`: the MCP-backed fusion baseline is working end to end, including voice input, rolling runtime context, grounded follow-up text, speech, Live2D expression changes, and semantic game actions through the same local MCP boundary
+- accepted known issues at close-out:
+  - the current fusion `latency` metric is an end-to-end round duration and includes downstream stages such as speech playback; it is not yet a fine-grained delay breakdown
+  - active fusion runs can still make the Tauri UI feel sluggish while local vision, logging, and speech are all active
+  - detailed performance profiling and responsiveness work should start immediately after `P2` close-out
