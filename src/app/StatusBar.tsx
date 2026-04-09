@@ -22,7 +22,7 @@ export function StatusBar({
 	const { mode } = useRuntime();
 	const { emotion, isSpeaking } = useCharacter();
 	const { state: functionalState } = useFunctional();
-	const { latestEntry, totalTrackedEntries } = useEventLog(40);
+	const { latestEntry, totalTrackedEntries } = useEventLog(1, { showDebug: false });
 	const { t } = useI18n();
 
 	return (
