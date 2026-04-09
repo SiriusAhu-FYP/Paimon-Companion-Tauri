@@ -28,7 +28,7 @@ pub const MCP_SERVER_PORT: u16 = 31430;
 const MCP_PROTOCOL_VERSION: &str = "2025-03-26";
 const MCP_SERVER_NAME: &str = "paimon-companion-mcp";
 const TOOL_REQUEST_EVENT: &str = "mcp://tool-request";
-const TOOL_TIMEOUT_SECS: u64 = 20;
+const TOOL_TIMEOUT_SECS: u64 = 60;
 
 #[derive(Clone, Default)]
 pub struct McpBridgeState {
