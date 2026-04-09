@@ -34,7 +34,10 @@ function cloneRun(run: UnifiedRunRecord): UnifiedRunRecord {
 	return { ...run };
 }
 
-const VOICE_GAME_STEP_COMMAND_RE = /(下一步|走一步|来一步|帮我看|帮我走|step|move)/i;
+type UnifiedVoiceCommand = "game-step" | "game-analyze" | null;
+
+const VOICE_GAME_STEP_COMMAND_RE = /(走一步|来一步|帮我走|替我走|执行下一步|执行一步|step|move)/i;
+const VOICE_GAME_ANALYZE_COMMAND_RE = /(帮我看|看一下|看看|分析一下|分析|建议|下一步)/i;
 
 export class UnifiedRuntimeService {
 	private bus: EventBus;
@@ -230,7 +233,7 @@ export class UnifiedRuntimeService {
 			throw new Error("voice input path is disabled");
 		}
 
-		const command = VOICE_GAME_STEP_COMMAND_RE.test(trimmed) ? "game-step" : null;
+		const command = inferVoiceCommand(trimmed);
 		this.state.phase = "listening";
 		this.state.lastVoiceInput = trimmed;
 		this.state.lastCommand = command;
@@ -240,6 +243,10 @@ export class UnifiedRuntimeService {
 
 		if (command === "game-step") {
 			await this.runUnifiedGameStep("voice", trimmed);
+			return;
+		}
+		if (command === "game-analyze") {
+			await this.runUnifiedGameAnalysis(trimmed);
 			return;
 		}
 
@@ -294,6 +301,43 @@ export class UnifiedRuntimeService {
 		this.bus.emit("unified:state-change", { state: this.getState() });
 	}
 
+	private async runUnifiedGameAnalysis(requestText: string): Promise<void> {
+		const targetGame = this.resolveTargetGame(requestText);
+		if (!targetGame) {
+			throw new Error("unified analysis requires a selected 2048 or Sokoban target window");
+		}
+
+		this.state.phase = "thinking";
+		this.emitState();
+
+		try {
+			const reply = await this.llm.generateCompanionReply([
+				"用户希望你只分析当前局面，不要替他执行动作。",
+				"请根据当前观察到的画面，给出一句到两句简短建议。",
+				"要求：",
+				"1. 明确说明这是建议，不是已经执行的动作。",
+				"2. 不要假装自己已经移动了棋盘或推了箱子。",
+				`【目标游戏】${targetGame}`,
+				`【用户请求】${requestText}`,
+			].join("\n"), { knowledgeContext: "" });
+
+			const finalReply = reply || "我先帮你看了一下，但这轮还没拿到足够明确的建议。";
+			this.state.lastCompanionText = finalReply;
+			await this.applyEmotion("neutral");
+			if (this.state.speechEnabled) {
+				this.state.phase = "speaking";
+				this.emitState();
+				await this.safeSpeak(finalReply);
+			}
+			this.state.phase = "idle";
+		} catch (err) {
+			this.state.phase = "failed";
+			throw err;
+		} finally {
+			this.emitState();
+		}
+	}
+
 	private async refreshCompanionContextForTarget(target: { handle: string; title: string }): Promise<void> {
 		const runtimeState = this.companionRuntime.getState();
 		if (!runtimeState.running) return;
@@ -343,6 +387,18 @@ export class UnifiedRuntimeService {
 			return { text: input.fallbackText, source: "fallback" };
 		}
 	}
+}
+
+function inferVoiceCommand(text: string): UnifiedVoiceCommand {
+	const normalized = text.trim();
+	if (!normalized) return null;
+	if (VOICE_GAME_STEP_COMMAND_RE.test(normalized)) {
+		return "game-step";
+	}
+	if (VOICE_GAME_ANALYZE_COMMAND_RE.test(normalized)) {
+		return "game-analyze";
+	}
+	return null;
 }
 
 function inferGameFromText(text: string | null): SupportedUnifiedGameId | null {

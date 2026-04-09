@@ -7,6 +7,7 @@ import { broadcastState, broadcastControl, onControlCommand } from "@/utils/wind
 import { windowLabel } from "@/utils/window-label";
 import { DEFAULT_MODEL } from "@/features/live2d";
 import { initMcpToolBridge } from "@/services/mcp/tool-bridge-service";
+import { setLocalMcpEventBus } from "@/services/mcp/local-mcp-client";
 import { ThemeModeProvider } from "./contexts/JoyThemeProvider";
 import { I18nProvider } from "./contexts/I18nProvider";
 import App from "./App";
@@ -16,6 +17,7 @@ async function bootstrap() {
 	await loadConfig();
 
 	const services = initServices();
+	setLocalMcpEventBus(services.bus);
 
 	if (windowLabel === "main") {
 		await services.character.refreshCatalogFromPublic();

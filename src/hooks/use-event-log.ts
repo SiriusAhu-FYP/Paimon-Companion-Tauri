@@ -83,6 +83,10 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 		events: ["llm:request-start", "llm:tool-call", "llm:response-end", "llm:error"],
 		color: "#ba68c8",
 	},
+	"MCP": {
+		events: ["mcp:tool-start", "mcp:tool-complete"],
+		color: "#4db6ac",
+	},
 };
 
 const TRACKED_EVENTS = Array.from(new Set(Object.values(EVENT_CATEGORIES).flatMap((group) => group.events)));
@@ -162,7 +166,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "llm:request-start": {
 			const data = payload as EventMap["llm:request-start"];
-			return `请求: ${truncate(data.userText, 80)}${data.companionRuntimeContextUsed ? " / runtime context" : ""}`;
+			return `${data.source === "companion-reply" ? "跟进" : "请求"}: ${truncate(data.userText, 80)}${data.companionRuntimeContextUsed ? " / runtime context" : ""}`;
 		}
 		case "llm:tool-call": {
 			const data = payload as EventMap["llm:tool-call"];
@@ -175,6 +179,14 @@ function formatSummary(event: EventName, payload: unknown): string {
 		case "llm:error": {
 			const data = payload as EventMap["llm:error"];
 			return `LLM 错误: ${data.error}`;
+		}
+		case "mcp:tool-start": {
+			const data = payload as EventMap["mcp:tool-start"];
+			return `MCP 调用: ${data.name}`;
+		}
+		case "mcp:tool-complete": {
+			const data = payload as EventMap["mcp:tool-complete"];
+			return `${data.ok ? "MCP 完成" : "MCP 失败"}: ${data.name}${data.error ? ` / ${truncate(data.error, 80)}` : ""}`;
 		}
 		case "character:expression": {
 			const data = payload as EventMap["character:expression"];
@@ -323,7 +335,13 @@ function getSeverity(event: EventName, payload: unknown): "info" | "warn" | "err
 	switch (event) {
 		case "system:error":
 		case "llm:error":
+		case "mcp:tool-complete": {
+			if (event === "mcp:tool-complete") {
+				const data = payload as EventMap["mcp:tool-complete"];
+				return data.ok ? "info" : "error";
+			}
 			return "error";
+		}
 		case "voice:state-change": {
 			const data = payload as EventMap["voice:state-change"];
 			return data.state.status === "error" ? "error" : "info";

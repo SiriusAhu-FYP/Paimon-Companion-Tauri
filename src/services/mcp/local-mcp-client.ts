@@ -1,6 +1,8 @@
 import { proxyRequest } from "@/services/config/http-proxy";
+import type { EventBus } from "@/services/event-bus";
 
 const LOCAL_MCP_URL = "http://127.0.0.1:31430/mcp";
+let eventBus: EventBus | null = null;
 
 interface McpJsonRpcResponse {
 	result?: {
@@ -12,7 +14,12 @@ interface McpJsonRpcResponse {
 	};
 }
 
+export function setLocalMcpEventBus(bus: EventBus) {
+	eventBus = bus;
+}
+
 export async function callLocalMcpTool(name: string, args: Record<string, unknown>) {
+	eventBus?.emit("mcp:tool-start", { name, args });
 	const response = await proxyRequest({
 		url: LOCAL_MCP_URL,
 		method: "POST",
@@ -32,6 +39,12 @@ export async function callLocalMcpTool(name: string, args: Record<string, unknow
 	});
 
 	if (response.status < 200 || response.status >= 300) {
+		eventBus?.emit("mcp:tool-complete", {
+			name,
+			ok: false,
+			resultPreview: "",
+			error: `HTTP ${response.status}: ${response.body}`,
+		});
 		throw new Error(`MCP HTTP ${response.status}: ${response.body}`);
 	}
 
@@ -43,15 +56,33 @@ export async function callLocalMcpTool(name: string, args: Record<string, unknow
 	}
 
 	if (payload.error?.message) {
+		eventBus?.emit("mcp:tool-complete", {
+			name,
+			ok: false,
+			resultPreview: "",
+			error: payload.error.message,
+		});
 		throw new Error(payload.error.message);
 	}
 
 	const text = payload.result?.content?.map((item) => item.text ?? "").join("\n").trim() ?? "";
 	const isError = payload.result?.isError ?? false;
 	if (isError) {
+		eventBus?.emit("mcp:tool-complete", {
+			name,
+			ok: false,
+			resultPreview: text.slice(0, 200),
+			error: text || `MCP tool failed: ${name}`,
+		});
 		throw new Error(text || `MCP tool failed: ${name}`);
 	}
 
+	eventBus?.emit("mcp:tool-complete", {
+		name,
+		ok: true,
+		resultPreview: text.slice(0, 200),
+		error: null,
+	});
 	return text;
 }
 
