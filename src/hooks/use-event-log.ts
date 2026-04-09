@@ -30,6 +30,12 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 		],
 		color: "#e57373",
 	},
+	"性能": {
+		events: [
+			"system:ui-stall",
+		],
+		color: "#ffd54f",
+	},
 	"功能": {
 		events: [
 			"functional:target-change",
@@ -137,6 +143,10 @@ function formatSummary(event: EventName, payload: unknown): string {
 		case "system:error": {
 			const data = payload as EventMap["system:error"];
 			return `${data.module}: ${data.error}`;
+		}
+		case "system:ui-stall": {
+			const data = payload as EventMap["system:ui-stall"];
+			return `UI stall: ${data.durationMs.toFixed(0)}ms (>${data.thresholdMs}ms)`;
 		}
 		case "system:emergency-stop":
 			return "紧急停止";
@@ -296,7 +306,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "unified:run-complete": {
 			const data = payload as EventMap["unified:run-complete"];
-			return `${data.gameId ?? "unknown"} ${data.success ? "完成" : "失败"}: ${data.summary}`;
+			return `${data.gameId ?? "unknown"} ${data.success ? "完成" : "失败"}: ${data.summary} / total ${data.timings.totalMs.toFixed(0)}ms`;
 		}
 		case "unified:voice-input": {
 			const data = payload as EventMap["unified:voice-input"];
@@ -335,10 +345,15 @@ function getSeverity(event: EventName, payload: unknown): "info" | "warn" | "err
 	switch (event) {
 		case "system:error":
 		case "llm:error":
+		case "system:ui-stall":
 		case "mcp:tool-complete": {
 			if (event === "mcp:tool-complete") {
 				const data = payload as EventMap["mcp:tool-complete"];
 				return data.ok ? "info" : "error";
+			}
+			if (event === "system:ui-stall") {
+				const data = payload as EventMap["system:ui-stall"];
+				return data.durationMs >= 1000 ? "error" : "warn";
 			}
 			return "error";
 		}

@@ -17,6 +17,7 @@ import { StatusBar } from "@/app/StatusBar";
 import { ResizablePane } from "@/components";
 import { broadcastControl, type StageDisplayMode, isTauriEnvironment } from "@/utils/window-sync";
 import { createLogger } from "@/services/logger";
+import { getServices } from "@/services";
 import { useThemeMode } from "@/contexts/JoyThemeProvider";
 import { useI18n } from "@/contexts/I18nProvider";
 
@@ -25,6 +26,8 @@ const FunctionalPanel = lazy(async () => import("@/features/control-panel/Functi
 const SettingsPanel = lazy(async () => import("@/features/settings/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
 const KnowledgePanel = lazy(async () => import("@/features/knowledge/KnowledgePanel").then((module) => ({ default: module.KnowledgePanel })));
 const EventLog = lazy(async () => import("@/app/EventLog").then((module) => ({ default: module.EventLog })));
+const UI_STALL_THRESHOLD_MS = 200;
+const UI_STALL_THROTTLE_MS = 3000;
 
 function PanelLoadingState() {
 	const { t } = useI18n();
@@ -194,6 +197,36 @@ export function MainWindow() {
 		if (!isTauriEnvironment()) return;
 		handleShowStage();
 	}, [handleShowStage]);
+
+	useEffect(() => {
+		const { bus } = getServices();
+		let rafId = 0;
+		let previousTs = performance.now();
+		let lastEmittedAt = 0;
+		let active = true;
+
+		const tick = (timestamp: number) => {
+			if (!active) return;
+			const delta = timestamp - previousTs;
+			previousTs = timestamp;
+
+			if (delta >= UI_STALL_THRESHOLD_MS && timestamp - lastEmittedAt >= UI_STALL_THROTTLE_MS) {
+				lastEmittedAt = timestamp;
+				bus.emit("system:ui-stall", {
+					durationMs: delta,
+					thresholdMs: UI_STALL_THRESHOLD_MS,
+				});
+			}
+
+			rafId = requestAnimationFrame(tick);
+		};
+
+		rafId = requestAnimationFrame(tick);
+		return () => {
+			active = false;
+			if (rafId) cancelAnimationFrame(rafId);
+		};
+	}, []);
 
 	const handleModeChange = useCallback(async (mode: "docked" | "floating") => {
 		setStageMode(mode);

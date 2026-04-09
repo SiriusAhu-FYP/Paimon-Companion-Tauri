@@ -7,6 +7,7 @@ import type {
 	EvaluationState,
 } from "./evaluation";
 import type { UnifiedRuntimeState } from "./unified";
+import type { UnifiedRunTimings } from "./unified";
 import type {
 	CompanionRuntimeBenchmarkResult,
 	CompanionRuntimeBenchmarkState,
@@ -102,6 +103,11 @@ export interface CharacterSwitchPayload {
 export interface SystemErrorPayload {
 	module: string;
 	error: string;
+}
+
+export interface UiStallPayload {
+	durationMs: number;
+	thresholdMs: number;
 }
 
 export interface FunctionalTargetChangePayload {
@@ -249,6 +255,7 @@ export interface UnifiedRunCompletePayload {
 	summary: string;
 	emotion: string;
 	spoke: boolean;
+	timings: UnifiedRunTimings;
 }
 
 export interface UnifiedVoiceInputPayload {
@@ -310,6 +317,7 @@ export interface EventMap {
 	"system:manual-takeover": void;
 	"system:resume": void;
 	"system:error": SystemErrorPayload;
+	"system:ui-stall": UiStallPayload;
 	"functional:target-change": FunctionalTargetChangePayload;
 	"perception:snapshot": PerceptionSnapshotPayload;
 	"orchestrator:state-change": OrchestratorStateChangePayload;

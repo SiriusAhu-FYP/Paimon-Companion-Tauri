@@ -31,7 +31,10 @@ function makeInitialState(): UnifiedRuntimeState {
 }
 
 function cloneRun(run: UnifiedRunRecord): UnifiedRunRecord {
-	return { ...run };
+	return {
+		...run,
+		timings: { ...run.timings },
+	};
 }
 
 type UnifiedVoiceCommand = "game-step" | "game-analyze" | null;
@@ -118,6 +121,13 @@ export class UnifiedRuntimeService {
 			selectedAction: null,
 			spoke: false,
 			error: null,
+			timings: {
+				actionMs: 0,
+				runtimeRefreshMs: 0,
+				llmReplyMs: 0,
+				speechMs: 0,
+				totalMs: 0,
+			},
 		};
 
 		this.state.activeRunId = run.id;
@@ -135,13 +145,16 @@ export class UnifiedRuntimeService {
 		try {
 			let companionText = "";
 			if (targetGame === "2048") {
+				const actionStartedAt = Date.now();
 				const result = await this.game2048.runSingleStep();
-				await this.refreshCompanionContextForTarget(result.target);
+				run.timings.actionMs = Date.now() - actionStartedAt;
+				run.timings.runtimeRefreshMs = await this.refreshCompanionContextForTarget(result.target);
 				run.status = "completed";
 				run.phase = this.state.speechEnabled ? "speaking" : "idle";
 				run.summary = result.summary;
 				run.selectedAction = result.selectedMove;
 				run.emotion = result.boardChanged ? "happy" : "dazed";
+				const llmReplyStartedAt = Date.now();
 				const generatedReply = await this.generateGroundedCompanionReply({
 					gameId: "2048",
 					requestText,
@@ -152,17 +165,21 @@ export class UnifiedRuntimeService {
 					boardChanged: result.boardChanged,
 					fallbackText: result.companionText,
 				});
+				run.timings.llmReplyMs = Date.now() - llmReplyStartedAt;
 				run.companionText = generatedReply.text;
 				run.companionTextSource = generatedReply.source;
 				companionText = generatedReply.text;
 			} else {
+				const actionStartedAt = Date.now();
 				const result = await this.sokoban.runValidationRound();
-				await this.refreshCompanionContextForTarget(result.target);
+				run.timings.actionMs = Date.now() - actionStartedAt;
+				run.timings.runtimeRefreshMs = await this.refreshCompanionContextForTarget(result.target);
 				run.status = "completed";
 				run.phase = this.state.speechEnabled ? "speaking" : "idle";
 				run.summary = result.summary;
 				run.selectedAction = result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null;
 				run.emotion = result.boardChanged ? "delighted" : "alarmed";
+				const llmReplyStartedAt = Date.now();
 				const generatedReply = await this.generateGroundedCompanionReply({
 					gameId: "sokoban",
 					requestText,
@@ -173,6 +190,7 @@ export class UnifiedRuntimeService {
 					boardChanged: result.boardChanged,
 					fallbackText: result.companionText,
 				});
+				run.timings.llmReplyMs = Date.now() - llmReplyStartedAt;
 				run.companionText = generatedReply.text;
 				run.companionTextSource = generatedReply.source;
 				companionText = generatedReply.text;
@@ -183,7 +201,9 @@ export class UnifiedRuntimeService {
 			if (this.state.speechEnabled && companionText) {
 				this.state.phase = "speaking";
 				this.emitState();
+				const speechStartedAt = Date.now();
 				run.spoke = await this.safeSpeak(companionText);
+				run.timings.speechMs = Date.now() - speechStartedAt;
 			}
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
@@ -200,11 +220,14 @@ export class UnifiedRuntimeService {
 			if (this.state.speechEnabled) {
 				this.state.phase = "speaking";
 				this.emitState();
+				const speechStartedAt = Date.now();
 				run.spoke = await this.safeSpeak(run.companionText);
+				run.timings.speechMs = Date.now() - speechStartedAt;
 			}
 		}
 
 		run.endedAt = Date.now();
+		run.timings.totalMs = Math.max(0, run.endedAt - run.startedAt);
 		this.state.activeRunId = null;
 		this.state.phase = run.status === "failed" ? "failed" : "idle";
 		this.state.lastRun = cloneRun(run);
@@ -216,6 +239,7 @@ export class UnifiedRuntimeService {
 			summary: run.summary,
 			emotion: run.emotion,
 			spoke: run.spoke,
+			timings: { ...run.timings },
 		});
 		this.emitState();
 
@@ -338,15 +362,17 @@ export class UnifiedRuntimeService {
 		}
 	}
 
-	private async refreshCompanionContextForTarget(target: { handle: string; title: string }): Promise<void> {
+	private async refreshCompanionContextForTarget(target: { handle: string; title: string }): Promise<number> {
 		const runtimeState = this.companionRuntime.getState();
-		if (!runtimeState.running) return;
-		if (runtimeState.target?.handle !== target.handle) return;
+		if (!runtimeState.running) return 0;
+		if (runtimeState.target?.handle !== target.handle) return 0;
+		const startedAt = Date.now();
 		try {
 			await this.companionRuntime.refreshNow({ summarize: true });
 		} catch (err) {
 			log.warn("companion context refresh after unified run failed", err);
 		}
+		return Date.now() - startedAt;
 	}
 
 	private async generateGroundedCompanionReply(input: {

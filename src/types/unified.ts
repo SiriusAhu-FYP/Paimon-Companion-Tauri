@@ -2,6 +2,14 @@ export type UnifiedRunPhase = "idle" | "listening" | "thinking" | "acting" | "sp
 export type UnifiedRunTrigger = "manual" | "voice";
 export type UnifiedRunStatus = "running" | "completed" | "failed";
 
+export interface UnifiedRunTimings {
+	actionMs: number;
+	runtimeRefreshMs: number;
+	llmReplyMs: number;
+	speechMs: number;
+	totalMs: number;
+}
+
 export interface UnifiedRunRecord {
 	id: string;
 	gameId: string | null;
@@ -18,6 +26,7 @@ export interface UnifiedRunRecord {
 	selectedAction: string | null;
 	spoke: boolean;
 	error: string | null;
+	timings: UnifiedRunTimings;
 }
 
 export interface UnifiedRuntimeState {
