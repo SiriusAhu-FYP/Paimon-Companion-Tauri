@@ -446,7 +446,6 @@ export class CompanionRuntimeService {
 		try {
 			const snapshot = await this.perception.captureTarget(this.state.target);
 			this.state.phase = "describing";
-			this.emitState();
 			const changeRatio = await this.measureChange(snapshot);
 			const description =
 				changeRatio !== null && changeRatio < MIN_MEANINGFUL_CHANGE_RATIO

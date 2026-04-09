@@ -130,7 +130,7 @@ export function EventLog() {
 					<h3>{t("事件控制台", "Event Console")}</h3>
 					<span className="event-log-meta">{filteredEntries.length} / {entries.length} {t("条", "items")}</span>
 					{latestEntry && (
-						<span className="event-log-latest" title={serializePayload(latestEntry.rawPayload, true)}>
+						<span className="event-log-latest" title={latestEntry.payloadPreviewText}>
 							{t("最近", "Latest")}: {latestEntry.summary}
 						</span>
 					)}
