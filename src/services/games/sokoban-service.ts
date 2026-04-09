@@ -15,7 +15,6 @@ import type {
 } from "@/types";
 import {
 	formatSokobanAction,
-	getSokobanAction,
 	SOKOBAN_DEFAULT_ACTION_ORDER,
 	SOKOBAN_PLUGIN,
 } from "./sokoban-plugin";
@@ -33,7 +32,8 @@ import {
 	countRepeatedFailures,
 } from "./decision-history";
 import { buildSharedGamePrompt } from "./game-prompt-template";
-import { executeSemanticAction } from "./semantic-action-runtime";
+import { callLocalMcpToolJson } from "@/services/mcp/local-mcp-client";
+import type { SemanticActionExecutionResult } from "@/types";
 
 const log = createLogger("sokoban");
 const MAX_RUN_HISTORY = 10;
@@ -167,11 +167,12 @@ export class SokobanService {
 			let referenceSnapshot = baselineSnapshot;
 
 			for (const move of analysis.plannedMoves) {
-				await executeSemanticAction(
-					this.orchestrator,
-					target,
-					getSokobanAction(move),
-				);
+				await callLocalMcpToolJson<SemanticActionExecutionResult<SokobanActionId>>("game.perform_action", {
+					gameId: "sokoban",
+					actionId: move,
+					targetHandle: target.handle,
+					targetTitle: target.title,
+				});
 				const latestTask = this.orchestrator.getState().latestTask;
 				const beforeSnapshot = latestTask?.beforeSnapshot ?? referenceSnapshot;
 				const afterSnapshot = latestTask?.afterSnapshot;

@@ -144,3 +144,14 @@ Keep these in per-game config/plugins:
 - prompt fragments
 
 This is the basis for later “small config package” game onboarding.
+
+## Current Status
+
+The first localhost MCP server slice is now live in the Tauri host.
+
+At this stage:
+
+- `game.list_actions` and `game.perform_action` are exposed by the local MCP server
+- `2048` and `Sokoban` runtime loops now execute their semantic actions through that MCP-facing boundary rather than calling the action runtime only through internal shortcuts
+
+What is still missing is the full end-to-end acceptance pass where this same MCP-facing game path is validated together with companion observation, follow-up generation, speech, and expression response.

@@ -16,7 +16,6 @@ import type {
 import {
 	formatGame2048Action,
 	GAME_2048_DEFAULT_ACTION_ORDER,
-	getGame2048Action,
 	listGame2048ActionDescriptions,
 } from "./game-2048-plugin";
 import {
@@ -33,7 +32,8 @@ import {
 	countRepeatedFailures,
 } from "./decision-history";
 import { buildSharedGamePrompt } from "./game-prompt-template";
-import { executeSemanticAction } from "./semantic-action-runtime";
+import { callLocalMcpToolJson } from "@/services/mcp/local-mcp-client";
+import type { SemanticActionExecutionResult } from "@/types";
 
 const log = createLogger("game-2048");
 const MAX_RUN_HISTORY = 10;
@@ -165,11 +165,12 @@ export class Game2048Service {
 			let referenceSnapshot = baselineSnapshot;
 
 			for (const move of analysis.preferredMoves) {
-				await executeSemanticAction(
-					this.orchestrator,
-					target,
-					getGame2048Action(move),
-				);
+				await callLocalMcpToolJson<SemanticActionExecutionResult<Game2048Move>>("game.perform_action", {
+					gameId: "2048",
+					actionId: move,
+					targetHandle: target.handle,
+					targetTitle: target.title,
+				});
 				const latestTask = this.orchestrator.getState().latestTask;
 				const beforeSnapshot = latestTask?.beforeSnapshot ?? referenceSnapshot;
 				const afterSnapshot = latestTask?.afterSnapshot;
