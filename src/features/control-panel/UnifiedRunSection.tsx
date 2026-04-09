@@ -76,7 +76,7 @@ export function UnifiedRunSection(props: {
 					fullWidth
 					value={voiceText}
 					onChange={(event) => setVoiceText(event.target.value)}
-					placeholder={t("模拟语音输入，例如：帮我看一下下一步", "Simulated voice input, e.g. help me decide the next move")}
+					placeholder={t("模拟语音输入，例如：帮我看一下下一步（只分析）", "Simulated voice input, e.g. help me review the next move (analysis only)")}
 					sx={{ "& .MuiInputBase-input": { fontSize: 12 } }}
 				/>
 				<Button

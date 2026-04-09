@@ -43,6 +43,7 @@ export interface AudioTtsStartPayload {
 
 export interface LlmRequestStartPayload {
 	userText: string;
+	source?: "chat" | "companion-reply";
 	companionRuntimeContextUsed?: boolean;
 	companionRuntimeTarget?: string | null;
 	companionRuntimeContextLength?: number;
@@ -56,6 +57,18 @@ export interface LlmStreamChunkPayload {
 export interface LlmToolCallPayload {
 	name: string;
 	args: Record<string, unknown>;
+}
+
+export interface McpToolStartPayload {
+	name: string;
+	args: Record<string, unknown>;
+}
+
+export interface McpToolCompletePayload {
+	name: string;
+	ok: boolean;
+	resultPreview: string;
+	error?: string | null;
 }
 
 export interface LlmResponseEndPayload {
@@ -287,6 +300,8 @@ export interface EventMap {
 	"llm:tool-call": LlmToolCallPayload;
 	"llm:response-end": LlmResponseEndPayload;
 	"llm:error": LlmErrorPayload;
+	"mcp:tool-start": McpToolStartPayload;
+	"mcp:tool-complete": McpToolCompletePayload;
 	"character:expression": CharacterExpressionPayload;
 	"character:motion": CharacterMotionPayload;
 	"character:state-change": CharacterStateChangePayload;

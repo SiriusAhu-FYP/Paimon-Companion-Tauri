@@ -223,11 +223,19 @@ export class LLMService {
 			? [systemMsg, { role: "user", content: userText }]
 			: [{ role: "user", content: userText }];
 		const tools = listLlmTools("companion");
+		this.bus.emit("llm:request-start", {
+			userText,
+			source: "companion-reply",
+			companionRuntimeContextUsed: promptCtx.companionRuntimeContext.length > 0,
+			companionRuntimeContextLength: promptCtx.companionRuntimeContext.length,
+			knowledgeContextLength: promptCtx.knowledgeContext.length,
+		});
 
 		const response = await this.runToolLoop(messages, tools, {
 			emitFinalStream: false,
 		});
 		const normalized = response.fullText;
+		this.bus.emit("llm:response-end", { fullText: normalized });
 		if (normalized) {
 			log.info("generated transient companion reply", {
 				length: normalized.length,
