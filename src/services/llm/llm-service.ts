@@ -55,6 +55,77 @@ export class LLMService {
 		return this.history;
 	}
 
+	private async collectResponse(
+		messages: ChatMessage[],
+		options?: {
+			tools?: ReturnType<typeof listLlmTools>;
+			emitStream?: boolean;
+			emitToolCalls?: boolean;
+		},
+	): Promise<{ fullText: string; toolCalls: Array<{ name: string; args: Record<string, unknown> }> }> {
+		const toolCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
+		let fullText = "";
+
+		for await (const chunk of this.provider.chat(messages, options?.tools)) {
+			if (!this.runtime.isAllowed()) {
+				log.warn("LLM stream aborted — runtime stopped");
+				break;
+			}
+			switch (chunk.type) {
+				case "delta":
+					fullText += chunk.text;
+					if (options?.emitStream) {
+						this.bus.emit("llm:stream-chunk", { delta: chunk.text });
+					}
+					break;
+				case "tool-call": {
+					const resolvedName = resolveMcpToolName(chunk.name);
+					toolCalls.push({ name: resolvedName, args: chunk.args });
+					if (options?.emitToolCalls) {
+						this.bus.emit("llm:tool-call", { name: resolvedName, args: chunk.args });
+					}
+					break;
+				}
+				case "done":
+					fullText = chunk.fullText || fullText;
+					break;
+			}
+		}
+
+		return { fullText: fullText.trim(), toolCalls };
+	}
+
+	private async recoverTextAfterToolCalls(
+		messages: ChatMessage[],
+		toolCalls: Array<{ name: string; args: Record<string, unknown> }>,
+	): Promise<string> {
+		if (!toolCalls.length) return "";
+
+		const toolSummary = toolCalls
+			.map((call) => `${call.name}: ${JSON.stringify(call.args)}`)
+			.join("\n");
+
+		const recoveryMessages: ChatMessage[] = [
+			...messages,
+			{
+				role: "system",
+				content: [
+					"你刚才已经完成了工具调用。",
+					"现在不要再次调用工具。",
+					"请直接用自然、简洁、可朗读的话回复用户。",
+					"不要解释工具机制。",
+					`已执行的工具：\n${toolSummary}`,
+				].join("\n"),
+			},
+		];
+
+		const recovery = await this.collectResponse(recoveryMessages, {
+			emitStream: true,
+			emitToolCalls: false,
+		});
+		return recovery.fullText.trim();
+	}
+
 	async generateCompanionReply(
 		userText: string,
 		options?: {
@@ -81,26 +152,12 @@ export class LLMService {
 			: [{ role: "user", content: userText }];
 		const tools = listLlmTools("companion");
 
-		let fullText = "";
-		for await (const chunk of this.provider.chat(messages, tools)) {
-			if (!this.runtime.isAllowed()) {
-				log.warn("LLM companion reply aborted — runtime stopped");
-				break;
-			}
-			switch (chunk.type) {
-				case "delta":
-					fullText += chunk.text;
-					break;
-				case "done":
-					fullText = chunk.fullText;
-					break;
-				case "tool-call":
-					this.bus.emit("llm:tool-call", { name: resolveMcpToolName(chunk.name), args: chunk.args });
-					break;
-			}
-		}
-
-		const normalized = fullText.trim();
+		const firstPass = await this.collectResponse(messages, {
+			tools,
+			emitToolCalls: true,
+		});
+		const normalized = firstPass.fullText
+			|| await this.recoverTextAfterToolCalls(messages, firstPass.toolCalls);
 		if (normalized) {
 			log.info("generated transient companion reply", {
 				length: normalized.length,
@@ -172,26 +229,17 @@ export class LLMService {
 		}
 
 		try {
-			let fullText = "";
-			for await (const chunk of this.provider.chat(messages, tools)) {
-				// 在流式处理中也检查 runtime 状态
-				if (!this.runtime.isAllowed()) {
-					log.warn("LLM stream aborted — runtime stopped");
-					break;
-				}
-
-				switch (chunk.type) {
-					case "delta":
-						fullText += chunk.text;
-						this.bus.emit("llm:stream-chunk", { delta: chunk.text });
-						break;
-					case "tool-call":
-						this.bus.emit("llm:tool-call", { name: resolveMcpToolName(chunk.name), args: chunk.args });
-						break;
-					case "done":
-						fullText = chunk.fullText;
-						break;
-				}
+			const firstPass = await this.collectResponse(messages, {
+				tools,
+				emitStream: true,
+				emitToolCalls: true,
+			});
+			let fullText = firstPass.fullText;
+			if (!fullText && firstPass.toolCalls.length) {
+				log.info("LLM returned tool calls without visible text; starting recovery pass", {
+					toolCallCount: firstPass.toolCalls.length,
+				});
+				fullText = await this.recoverTextAfterToolCalls(messages, firstPass.toolCalls);
 			}
 
 			this.history.push({ role: "assistant", content: fullText });
