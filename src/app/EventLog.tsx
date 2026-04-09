@@ -26,9 +26,20 @@ function buildExportText(entries: readonly EventLogEntry[]) {
 		[
 			`${entry.timestampLabel} ${entry.event}`,
 			entry.summary,
-			entry.payloadText,
+			serializePayload(entry.rawPayload, true),
 		].join("\n")
 	)).join("\n\n");
+}
+
+function serializePayload(payload: unknown, pretty = false): string {
+	if (payload == null) return "—";
+	if (typeof payload === "string") return payload;
+	if (typeof payload === "number" || typeof payload === "boolean") return String(payload);
+	try {
+		return pretty ? JSON.stringify(payload, null, 2) : JSON.stringify(payload);
+	} catch {
+		return "[unserializable payload]";
+	}
 }
 
 export function EventLog() {
@@ -65,7 +76,7 @@ export function EventLog() {
 				entry.event,
 				entry.category,
 				entry.summary,
-				entry.payloadText,
+				entry.payloadPreviewText,
 			].join(" ").toLowerCase().includes(normalizedQuery);
 		});
 	}, [activeFilters, activeSeverities, entries, searchQuery]);
@@ -107,6 +118,10 @@ export function EventLog() {
 	}, [filteredEntries]);
 
 	const selectedEntry = filteredEntries.find((entry) => entry.key === selectedKey) ?? filteredEntries[filteredEntries.length - 1] ?? null;
+	const selectedPayloadText = useMemo(
+		() => (selectedEntry ? serializePayload(selectedEntry.rawPayload, true) : ""),
+		[selectedEntry],
+	);
 
 	return (
 		<section className="event-log">
@@ -115,7 +130,7 @@ export function EventLog() {
 					<h3>{t("事件控制台", "Event Console")}</h3>
 					<span className="event-log-meta">{filteredEntries.length} / {entries.length} {t("条", "items")}</span>
 					{latestEntry && (
-						<span className="event-log-latest" title={latestEntry.payloadText}>
+						<span className="event-log-latest" title={serializePayload(latestEntry.rawPayload, true)}>
 							{t("最近", "Latest")}: {latestEntry.summary}
 						</span>
 					)}
@@ -230,16 +245,16 @@ export function EventLog() {
 									{entry.category}
 								</span>
 								<div className="event-log-body">
-									<div className="event-log-main">
+								<div className="event-log-main">
 										{entry.severity === "error" && <span className="event-log-severity error">ERROR</span>}
 										{entry.severity === "warn" && <span className="event-log-severity warn">WARN</span>}
 										<span className="event-log-name" style={{ color: entry.color }}>{entry.event}</span>
 										<span className="event-log-summary">{entry.summary}</span>
-									</div>
-									<div className="event-log-payload">{entry.payloadPreviewText}</div>
 								</div>
-							</button>
-						))
+								<div className="event-log-payload">{entry.payloadPreviewText}</div>
+							</div>
+						</button>
+					))
 					)}
 				</div>
 
@@ -259,7 +274,7 @@ export function EventLog() {
 									<button
 										className="event-log-clear-btn"
 										onClick={async () => {
-											await copyText(selectedEntry.payloadText);
+											await copyText(selectedPayloadText);
 											setCopyMessage(t("已复制完整 payload", "Full payload copied"));
 										}}
 									>
@@ -268,7 +283,7 @@ export function EventLog() {
 									<button
 										className="event-log-clear-btn"
 										onClick={async () => {
-											await copyText(`${selectedEntry.event}\n${selectedEntry.summary}\n\n${selectedEntry.payloadText}`);
+											await copyText(`${selectedEntry.event}\n${selectedEntry.summary}\n\n${selectedPayloadText}`);
 											setCopyMessage(t("已复制事件详情", "Event details copied"));
 										}}
 									>
@@ -282,7 +297,7 @@ export function EventLog() {
 								</div>
 							)}
 							<div className="event-log-detail-summary">{selectedEntry.summary}</div>
-							<pre className="event-log-detail-payload">{selectedEntry.payloadText}</pre>
+							<pre className="event-log-detail-payload">{selectedPayloadText}</pre>
 						</>
 					) : (
 						<div className="event-log-empty">{t("选择一条事件以查看完整详情", "Select an event to inspect full details")}</div>

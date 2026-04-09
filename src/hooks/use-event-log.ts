@@ -16,7 +16,7 @@ export interface EventLogEntry {
 	severity: "info" | "warn" | "error";
 	summary: string;
 	payloadPreviewText: string;
-	payloadText: string;
+	rawPayload: unknown;
 }
 
 export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: string; debug?: boolean }> = {
@@ -319,7 +319,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "companion-runtime:state-change": {
 			const data = payload as EventMap["companion-runtime:state-change"];
-			return `phase=${data.state.phase}, frames=${data.state.frameQueue.length}, summaries=${data.state.summaryHistory.length}`;
+			return `phase=${data.phase}, frames=${data.frameQueueLength}, summaries=${data.summaryHistoryLength}`;
 		}
 		case "companion-runtime:frame-described": {
 			const data = payload as EventMap["companion-runtime:frame-described"];
@@ -426,7 +426,7 @@ function toEntry(entry: EventHistoryEntry): EventLogEntry | null {
 		severity: getSeverity(entry.event, entry.payload),
 		summary: formatSummary(entry.event, entry.payload),
 		payloadPreviewText: serializePayload(entry.payload),
-		payloadText: serializePayload(entry.payload, true),
+		rawPayload: entry.payload,
 	};
 }
 
@@ -443,8 +443,11 @@ export function useEventLog(limit = DEFAULT_LIMIT, options?: { showDebug?: boole
 		const next: EventLogEntry[] = [];
 		const startIndex = Math.max(0, history.length - limit);
 		for (let index = startIndex; index < history.length; index += 1) {
+			if (!options?.showDebug && isDebugEvent(history[index].event)) {
+				continue;
+			}
 			const normalized = toEntry(history[index]);
-			if (normalized && (options?.showDebug || !normalized.isDebug)) {
+			if (normalized) {
 				next.push(normalized);
 			}
 		}

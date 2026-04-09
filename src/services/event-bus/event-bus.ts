@@ -110,7 +110,7 @@ export class EventBus {
 			timestamp: Date.now(),
 		});
 		if (this.history.length > this.historyLimit) {
-			this.history = this.history.slice(-this.historyLimit);
+			this.history.splice(0, this.history.length - this.historyLimit);
 		}
 		this.notifyHistoryListeners();
 	}

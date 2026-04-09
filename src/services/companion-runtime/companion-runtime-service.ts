@@ -13,6 +13,7 @@ import type {
 	FunctionalTarget,
 	PerceptionSnapshot,
 } from "@/types";
+import type { CompanionRuntimeStateChangePayload } from "@/types/events";
 import { normalizeCompatibleOpenAIBaseUrl } from "@/services/games/game-utils";
 
 const log = createLogger("companion-runtime");
@@ -154,6 +155,7 @@ export class CompanionRuntimeService {
 	private captureInFlight = false;
 	private summaryInFlight = false;
 	private lastSnapshotForDiff: PerceptionSnapshot | null = null;
+	private lastStateChangePayloadKey: string | null = null;
 
 	constructor(deps: {
 		bus: EventBus;
@@ -727,6 +729,23 @@ export class CompanionRuntimeService {
 	}
 
 	private emitState() {
-		this.bus.emit("companion-runtime:state-change", { state: this.getState() });
+		const payload: CompanionRuntimeStateChangePayload = {
+			running: this.state.running,
+			phase: this.state.phase,
+			targetTitle: this.state.target?.title ?? null,
+			frameQueueLength: this.state.frameQueue.length,
+			summaryHistoryLength: this.state.summaryHistory.length,
+			lastFrameId: this.state.lastFrame?.id ?? null,
+			lastSummaryId: this.state.lastSummary?.id ?? null,
+			captureTicks: this.state.metrics.captureTicks,
+			summariesGenerated: this.state.metrics.summariesGenerated,
+			lastError: this.state.lastError,
+		};
+		const payloadKey = JSON.stringify(payload);
+		if (payloadKey === this.lastStateChangePayloadKey) {
+			return;
+		}
+		this.lastStateChangePayloadKey = payloadKey;
+		this.bus.emit("companion-runtime:state-change", payload);
 	}
 }
