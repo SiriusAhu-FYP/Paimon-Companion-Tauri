@@ -1,17 +1,12 @@
 import { createLogger } from "@/services/logger";
 import type { CharacterProfile } from "@/types";
 import { parseSillyTavernV2ToProfile } from "./card-parser";
+import { DEFAULT_PROTOCOL_EXPRESSION_MAP } from "./expression-protocol";
 
 const log = createLogger("character-cards");
 
-/** 与 mock 角色一致的表情映射占位，导入卡暂无 L2D 映射时使用 */
-export const DEFAULT_CARD_EXPRESSION_MAP: Record<string, string> = {
-	neutral: "exp_neutral",
-	happy: "exp_happy",
-	sad: "exp_sad",
-	angry: "exp_angry",
-	surprised: "exp_surprised",
-};
+/** 导入角色卡没有提供 L2D 细节时，先沿用当前 companion 表情协议默认映射。 */
+export const DEFAULT_CARD_EXPRESSION_MAP = DEFAULT_PROTOCOL_EXPRESSION_MAP;
 
 const MANIFEST_URL = "/cards/cards-manifest.json";
 

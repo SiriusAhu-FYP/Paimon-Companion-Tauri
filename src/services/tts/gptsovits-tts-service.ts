@@ -5,24 +5,14 @@ import { createLogger } from "@/services/logger";
 
 const log = createLogger("gptsovits-tts");
 
-/**
- * GPT-SoVITS 语言路由表。
- * 正式支持 zh / en / ja，其余语言视为 unsupported。
- * auto 保守回退到 zh（GPT-SoVITS 部分版本不支持 auto）。
- */
 const LANG_ROUTE: Record<string, string> = {
 	zh: "zh",
 	en: "en",
 	ja: "ja",
-	jp: "ja", // 兼容 jp 标签
+	jp: "ja",
 	auto: "zh",
 };
 
-/**
- * GPT-SoVITS TTS 实现。
- * 三步流程：加载 GPT 权重 -> 加载 SoVITS 权重 -> 调用 /tts 合成。
- * 权重路径有变化时才重新加载，避免重复加载开销。
- */
 export class GptSovitsTTSService implements ITTSService {
 	private config: TTSProviderConfig;
 	private loadedWeights: { gpt: string; sovits: string } | null = null;
@@ -33,7 +23,6 @@ export class GptSovitsTTSService implements ITTSService {
 
 	async synthesize(text: string, config?: VoiceConfig): Promise<ArrayBuffer> {
 		const baseUrl = this.config.baseUrl.replace(/\/+$/, "");
-
 		const rawLang = config?.lang || this.config.textLang || "zh";
 		const textLang = LANG_ROUTE[rawLang.toLowerCase()];
 
@@ -41,8 +30,6 @@ export class GptSovitsTTSService implements ITTSService {
 			log.warn(`[lang] unsupported lang="${rawLang}" for text="${text.slice(0, 30)}..." — skipping synthesis`);
 			return new ArrayBuffer(0);
 		}
-
-		log.debug(`[lang] synthesize: rawLang=${rawLang}, textLang=${textLang}, text="${text.slice(0, 40)}..."`);
 
 		await this.ensureWeightsLoaded(baseUrl);
 
@@ -55,15 +42,13 @@ export class GptSovitsTTSService implements ITTSService {
 		});
 
 		const url = `${baseUrl}/tts?${params.toString()}`;
-		log.info(`[synth] ${text.length} chars, lang=${textLang}`);
-
 		const audioData = await proxyBinaryRequest({
 			url,
 			method: "GET",
 			timeoutMs: 60000,
 		});
 
-		log.info(`[synth] done: ${audioData.byteLength} bytes`);
+		log.info(`[synth] ${text.length} chars -> ${audioData.byteLength} bytes`);
 		return audioData;
 	}
 
@@ -76,14 +61,13 @@ export class GptSovitsTTSService implements ITTSService {
 		}
 
 		if (
-			this.loadedWeights &&
-			this.loadedWeights.gpt === gptPath &&
-			this.loadedWeights.sovits === sovitsPath
+			this.loadedWeights
+			&& this.loadedWeights.gpt === gptPath
+			&& this.loadedWeights.sovits === sovitsPath
 		) {
 			return;
 		}
 
-		log.info(`loading GPT weights: ${gptPath}`);
 		const gptResp = await proxyRequest({
 			url: `${baseUrl}/set_gpt_weights?weights_path=${gptPath}`,
 			method: "GET",
@@ -92,9 +76,7 @@ export class GptSovitsTTSService implements ITTSService {
 		if (gptResp.status >= 400) {
 			throw new Error(`GPT 权重加载失败 (HTTP ${gptResp.status}): ${gptResp.body}`);
 		}
-		log.info("GPT weights loaded");
 
-		log.info(`loading SoVITS weights: ${sovitsPath}`);
 		const sovitsResp = await proxyRequest({
 			url: `${baseUrl}/set_sovits_weights?weights_path=${sovitsPath}`,
 			method: "GET",
@@ -103,7 +85,6 @@ export class GptSovitsTTSService implements ITTSService {
 		if (sovitsResp.status >= 400) {
 			throw new Error(`SoVITS 权重加载失败 (HTTP ${sovitsResp.status}): ${sovitsResp.body}`);
 		}
-		log.info("SoVITS weights loaded");
 
 		this.loadedWeights = { gpt: gptPath, sovits: sovitsPath };
 	}

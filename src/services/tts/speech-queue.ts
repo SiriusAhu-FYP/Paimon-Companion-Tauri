@@ -157,19 +157,16 @@ export class SpeechQueue {
 				this.onSpeakingChange(true);
 			}
 
-			// trim 可选
-			let audioToPlay = current.audio;
-			if (this._trimEnabled) {
-				try {
-					audioToPlay = trimSilence(current.audio);
-				} catch (err) {
-					log.warn(`[trim][${i + 1}/${segments.length}] trim failed, using original: ${err}`);
-				}
-			}
-
-			// 播放
 			const playStartMs = performance.now();
 			try {
+				let audioToPlay = current.audio;
+				if (this._trimEnabled) {
+					try {
+						audioToPlay = trimSilence(current.audio);
+					} catch (err) {
+						log.warn(`[trim][${i + 1}/${segments.length}] trim failed, using original: ${err}`);
+					}
+				}
 				await this.player.play(audioToPlay);
 			} catch (err) {
 				log.warn(`[queue][${i + 1}/${segments.length}] playback failed: ${err}`);

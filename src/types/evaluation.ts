@@ -1,4 +1,4 @@
-export type EvaluationGame = "2048" | "stardew";
+export type EvaluationGame = "2048" | "fusion";
 export type EvaluationCaseTargetMode = "auto-detect" | "selected-target";
 export type EvaluationCaseStatus = "running" | "completed" | "failed";
 
@@ -19,6 +19,12 @@ export interface EvaluationRunEntry {
 	actionValid: boolean;
 	selectedAction: string | null;
 	analysisSource: string | null;
+	runtimeContextUsed: boolean;
+	llmReplyUsed: boolean;
+	spoke: boolean;
+	emotionApplied: boolean;
+	mcpCompanionUsed: boolean;
+	mcpGameUsed: boolean;
 	summary: string;
 	error: string | null;
 }
@@ -29,6 +35,12 @@ export interface EvaluationCaseMetrics {
 	validActions: number;
 	successRate: number;
 	actionValidityRate: number;
+	runtimeContextRate: number;
+	llmReplyRate: number;
+	speechRate: number;
+	emotionRate: number;
+	mcpCompanionRate: number;
+	mcpGameRate: number;
 	averageLatencyMs: number;
 	medianLatencyMs: number;
 }

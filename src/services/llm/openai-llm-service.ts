@@ -33,6 +33,38 @@ interface OpenAISSEPayload {
 	error?: { message: string };
 }
 
+function mapChatMessages(messages: ChatMessage[]) {
+	return messages.map((message) => {
+		switch (message.role) {
+			case "assistant":
+				return {
+					role: message.role,
+					content: message.content || null,
+					...(message.toolCalls?.length
+						? {
+							tool_calls: message.toolCalls.map((call) => ({
+								id: call.id,
+								type: "function",
+								function: {
+									name: call.name,
+									arguments: call.arguments,
+								},
+							})),
+						}
+						: {}),
+				};
+			case "tool":
+				return {
+					role: message.role,
+					content: message.content,
+					tool_call_id: message.toolCallId,
+				};
+			default:
+				return message;
+		}
+	});
+}
+
 export class OpenAILLMService implements ILLMService {
 	private config: LLMProviderConfig;
 	private profileId: string | null;
@@ -69,11 +101,11 @@ export class OpenAILLMService implements ILLMService {
 
 		const requestBody = JSON.stringify({
 			model: this.config.model,
-			messages,
+			messages: mapChatMessages(messages),
 			temperature: this.config.temperature,
 			max_tokens: this.config.maxTokens,
 			stream: true,
-			...(openaiTools ? { tools: openaiTools } : {}),
+			...(openaiTools ? { tools: openaiTools, tool_choice: "auto" } : {}),
 		});
 
 		log.info(`request: ${this.config.model}, ${messages.length} messages`);
@@ -103,7 +135,7 @@ export class OpenAILLMService implements ILLMService {
 		let fullText = "";
 		let sseBuffer = "";
 		// 跟踪累积的 tool call 参数片段
-		const pendingToolCalls: Map<number, { name: string; argsBuffer: string }> = new Map();
+		const pendingToolCalls: Map<number, { id: string; name: string; argsBuffer: string }> = new Map();
 
 		const processSSELine = (line: string) => {
 			if (!line.startsWith("data: ")) return;
@@ -134,8 +166,15 @@ export class OpenAILLMService implements ILLMService {
 					for (const tc of delta.tool_calls) {
 						let pending = pendingToolCalls.get(tc.index);
 						if (!pending) {
-							pending = { name: "", argsBuffer: "" };
+							pending = {
+								id: tc.id ?? `tool-${tc.index}`,
+								name: "",
+								argsBuffer: "",
+							};
 							pendingToolCalls.set(tc.index, pending);
+						}
+						if (tc.id) {
+							pending.id = tc.id;
 						}
 						if (tc.function?.name) {
 							pending.name = tc.function.name;
@@ -152,7 +191,13 @@ export class OpenAILLMService implements ILLMService {
 						if (tc.name) {
 							let args: Record<string, unknown> = {};
 							try { args = JSON.parse(tc.argsBuffer); } catch { /* malformed args */ }
-							chunks.push({ type: "tool-call", name: tc.name, args });
+							chunks.push({
+								type: "tool-call",
+								id: tc.id,
+								name: tc.name,
+								args,
+								rawArguments: tc.argsBuffer,
+							});
 							wake();
 						}
 					}

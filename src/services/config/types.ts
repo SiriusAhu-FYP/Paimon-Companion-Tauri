@@ -24,13 +24,28 @@ export interface TTSProviderConfig {
 	baseUrl: string;
 	speakerId: string;
 	speed: number;
-	// GPT-SoVITS 专属字段（服务端路径）
 	gptWeightsPath: string;
 	sovitsWeightsPath: string;
 	refAudioPath: string;
 	promptText: string;
 	promptLang: string;
 	textLang: string;
+}
+
+// ── ASR Provider ──
+
+export type ASRProviderType = "mock" | "local-sherpa" | "volcengine" | "aliyun";
+
+export interface ASRProviderConfig {
+	provider: ASRProviderType;
+	baseUrl: string;
+	model: string;
+	language: string;
+	autoDetectLanguage: boolean;
+	vadEnabled: boolean;
+	vadAggressiveness: number;
+	silenceThresholdMs: number;
+	minSpeechMs: number;
 }
 
 // ── LLM Profile（可复用的配置档案）──
@@ -46,7 +61,7 @@ export interface LLMProfile {
 	maxTokens: number;
 }
 
-// ── TTS Profile（可复用的配置档案，TTS 不等于 GPT-SoVITS）──
+// ── TTS Profile（可复用的配置档案）──
 
 export interface TTSProfile {
 	id: string;
@@ -63,6 +78,23 @@ export interface TTSProfile {
 	textLang: string;
 }
 
+// ── ASR Profile（可复用的语音识别配置档案） ──
+
+export interface ASRProfile {
+	id: string;
+	name: string;
+	provider: ASRProviderType;
+	apiKey: string;
+	baseUrl: string;
+	model: string;
+	language: string;
+	autoDetectLanguage: boolean;
+	vadEnabled: boolean;
+	vadAggressiveness: number;
+	silenceThresholdMs: number;
+	minSpeechMs: number;
+}
+
 // ── Character（应用设置：当前卡 ID、用户附加人设）──
 
 export interface BehaviorConstraintsConfig {
@@ -77,7 +109,17 @@ export interface CharacterSettingsConfig {
 	activeProfileId: string;
 	/** 用户自定义附加人设，拼入 system prompt（优先级低于卡内 system_prompt / persona） */
 	customPersona: string;
+	/** 非 neutral 表情在没有新的情绪更新时自动回归 neutral 的等待秒数 */
+	expressionIdleTimeoutSeconds: number;
 	behaviorConstraints: BehaviorConstraintsConfig;
+}
+
+export interface CompanionRuntimeConfig {
+	localVisionBaseUrl: string;
+	localVisionModel: string;
+	captureIntervalMs: number;
+	summaryWindowMs: number;
+	historyRetentionMs: number;
 }
 
 // ── Knowledge（知识库配置，独立于 LLM / TTS） ──
@@ -87,13 +129,18 @@ export type { KnowledgeConfig, EmbeddingProviderConfig, EmbeddingProfile, Knowle
 // ── 顶层 AppConfig ──
 
 export interface AppConfig {
+	locale: "zh" | "en";
 	llm: LLMProviderConfig;
 	tts: TTSProviderConfig;
+	asr: ASRProviderConfig;
 	character: CharacterSettingsConfig;
+	companionRuntime: CompanionRuntimeConfig;
 	llmProfiles: LLMProfile[];
 	ttsProfiles: TTSProfile[];
+	asrProfiles: ASRProfile[];
 	activeLlmProfileId: string;
 	activeTtsProfileId: string;
+	activeAsrProfileId: string;
 	knowledge: import("@/types/knowledge").KnowledgeConfig;
 }
 
@@ -103,6 +150,7 @@ export interface AppConfig {
 export const SECRET_KEYS = {
 	LLM_API_KEY: (profileId: string) => `llm-api-key:${profileId}`,
 	TTS_API_KEY: "tts-api-key",
+	ASR_API_KEY: (profileId: string) => `asr-api-key:${profileId}`,
 	EMBEDDING_API_KEY: (profileId: string) => `embedding-api-key:${profileId}`,
 	RERANK_API_KEY: (profileId: string) => `rerank-api-key:${profileId}`,
 } as const;
@@ -110,6 +158,7 @@ export const SECRET_KEYS = {
 // ── 默认值 ──
 
 export const DEFAULT_CONFIG: AppConfig = {
+	locale: "zh",
 	llm: {
 		provider: "mock",
 		baseUrl: "",
@@ -129,19 +178,40 @@ export const DEFAULT_CONFIG: AppConfig = {
 		promptLang: "zh",
 		textLang: "zh",
 	},
+	asr: {
+		provider: "local-sherpa",
+		baseUrl: "",
+		model: "sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16",
+		language: "zh-en",
+		autoDetectLanguage: true,
+		vadEnabled: true,
+		vadAggressiveness: 2,
+		silenceThresholdMs: 800,
+		minSpeechMs: 1000,
+	},
 	character: {
 		activeProfileId: "",
 		customPersona: "你是旅行者的好伙伴派蒙，说话活泼可爱，喜欢吃东西。",
+		expressionIdleTimeoutSeconds: 60,
 		behaviorConstraints: {
 			enabled: true,
 			maxReplyLength: 150,
 			customRules: "",
 		},
 	},
+	companionRuntime: {
+		localVisionBaseUrl: "http://localhost:8000/v1",
+		localVisionModel: "Qwen/Qwen3-VL-2B-Instruct",
+		captureIntervalMs: 1000,
+		summaryWindowMs: 10000,
+		historyRetentionMs: 60000,
+	},
 	llmProfiles: [],
 	ttsProfiles: [],
+	asrProfiles: [],
 	activeLlmProfileId: "",
 	activeTtsProfileId: "",
+	activeAsrProfileId: "",
 	knowledge: {
 		embedding: {
 			baseUrl: "",

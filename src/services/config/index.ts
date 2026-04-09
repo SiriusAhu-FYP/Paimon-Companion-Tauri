@@ -4,10 +4,14 @@ export type {
 	LLMProviderType,
 	TTSProviderConfig,
 	TTSProviderType,
+	ASRProviderConfig,
+	ASRProviderType,
+	CompanionRuntimeConfig,
 	CharacterSettingsConfig,
 	BehaviorConstraintsConfig,
 	LLMProfile,
 	TTSProfile,
+	ASRProfile,
 	KnowledgeConfig,
 	EmbeddingProviderConfig,
 	RerankProviderConfig,
@@ -16,5 +20,5 @@ export type {
 export { DEFAULT_CONFIG, SECRET_KEYS } from "./types";
 export { loadConfig, getConfig, updateConfig, resetConfig } from "./config-service";
 export { setSecret, getSecret, hasSecret, deleteSecret } from "./secret-store";
-export { proxyRequest, proxySSERequest } from "./http-proxy";
-export type { ProxyRequestOptions, ProxyResponse } from "./http-proxy";
+export { proxyBinaryRequest, proxyMultipartRequest, proxyRequest, proxySSERequest } from "./http-proxy";
+export type { ProxyMultipartRequestOptions, ProxyRequestOptions, ProxyResponse } from "./http-proxy";

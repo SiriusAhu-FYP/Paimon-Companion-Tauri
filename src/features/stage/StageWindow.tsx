@@ -1,18 +1,41 @@
 import { useRef, useEffect, useState, useCallback } from "react";
+import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
 	onMouthSync, onControlCommand,
 	broadcastControl, isTauriEnvironment,
 	type ControlCommand, type StageDisplayMode,
 } from "@/utils/window-sync";
 import CloseIcon from "@mui/icons-material/Close";
-import { Live2DRenderer, DEFAULT_MODEL } from "@/features/live2d";
+import { Live2DRenderer, DEFAULT_MODEL, MODEL_REGISTRY } from "@/features/live2d";
 import type { EyeMode } from "@/features/live2d";
 import { createLogger } from "@/services/logger";
-import { saveZoom, loadZoom } from "@/utils/stage-storage";
+import { useI18n } from "@/contexts/I18nProvider";
+import {
+	saveZoom, loadZoom,
+	loadModelExpression, saveModelExpression, clearModelExpression,
+} from "@/utils/stage-storage";
 
 const log = createLogger("stage-window");
+const BLOCKED_EXPRESSIONS = new Set(["watermark", "水印"]);
+
+function isBlockedExpression(name: string | null | undefined): boolean {
+	return !!name && BLOCKED_EXPRESSIONS.has(name);
+}
+
+function resolveExpressionNames(modelPath: string, renderer: Live2DRenderer): string[] {
+	const reported = renderer.getExpressionNames();
+	if (reported.length > 0) return reported.filter((name) => !isBlockedExpression(name));
+	return (MODEL_REGISTRY.find((model) => model.path === modelPath)?.expressionNames ?? [])
+		.filter((name) => !isBlockedExpression(name));
+}
+
+function getForcedParameters(modelPath: string): Array<{ id: string; value: number }> {
+	return MODEL_REGISTRY.find((model) => model.path === modelPath)?.forcedParameters ?? [];
+}
 
 export function StageWindow() {
+	const { t } = useI18n();
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const rendererRef = useRef<Live2DRenderer | null>(null);
 	const [loadStatus, setLoadStatus] = useState<"loading" | "ok" | "error">("loading");
@@ -54,7 +77,6 @@ export function StageWindow() {
 
 		async function applyAlwaysOnTop() {
 			try {
-				const { getCurrentWindow } = await import("@tauri-apps/api/window");
 				const win = getCurrentWindow();
 				if (stageMode === "docked") {
 					await win.setAlwaysOnTop(false);
@@ -75,7 +97,6 @@ export function StageWindow() {
 
 		async function applyCursorEvents() {
 			try {
-				const { getCurrentWindow } = await import("@tauri-apps/api/window");
 				const win = getCurrentWindow();
 				const shouldIgnore = displayMode === "clean" && stageMode === "docked";
 				await win.setIgnoreCursorEvents(shouldIgnore);
@@ -104,13 +125,21 @@ export function StageWindow() {
 				modelPath,
 				autoFit: true,
 			});
+			renderer.setForcedParameters(getForcedParameters(modelPath));
+			renderer.resetExpression();
 			renderer.setEyeMode(eyeModeRef.current);
 			const savedZoom = loadZoom();
 			if (savedZoom !== 1) renderer.setZoom(savedZoom);
+			const rememberedExpression = loadModelExpression(modelPath);
+			if (rememberedExpression && !isBlockedExpression(rememberedExpression)) {
+				await renderer.setExpression(rememberedExpression);
+			} else if (rememberedExpression) {
+				clearModelExpression(modelPath);
+			}
 			setLoadStatus("ok");
 			log.info(`model loaded: ${modelPath}`);
 
-			const expressions = renderer.getExpressionNames();
+			const expressions = resolveExpressionNames(modelPath, renderer);
 			broadcastControl({ type: "report-expressions", expressions });
 		} catch (err) {
 			setLoadStatus("error");
@@ -135,13 +164,21 @@ export function StageWindow() {
 
 		try {
 			await renderer.switchModel(modelPath);
+			renderer.setForcedParameters(getForcedParameters(modelPath));
+			renderer.resetExpression();
 			renderer.setEyeMode(eyeModeRef.current);
 			const savedZoom = loadZoom();
 			if (savedZoom !== 1) renderer.setZoom(savedZoom);
+			const rememberedExpression = loadModelExpression(modelPath);
+			if (rememberedExpression && !isBlockedExpression(rememberedExpression)) {
+				await renderer.setExpression(rememberedExpression);
+			} else if (rememberedExpression) {
+				clearModelExpression(modelPath);
+			}
 			setLoadStatus("ok");
 			log.info(`model switched: ${modelPath}`);
 
-			const expressions = renderer.getExpressionNames();
+			const expressions = resolveExpressionNames(modelPath, renderer);
 			broadcastControl({ type: "report-expressions", expressions });
 		} catch (err) {
 			setLoadStatus("error");
@@ -152,10 +189,16 @@ export function StageWindow() {
 
 	const handleControlCommand = useCallback(async (cmd: ControlCommand) => {
 		try {
-			const { getCurrentWindow } = await import("@tauri-apps/api/window");
 			const win = getCurrentWindow();
 
 			switch (cmd.type) {
+			case "request-expressions": {
+				const renderer = rendererRef.current;
+				if (!renderer) break;
+				const expressions = resolveExpressionNames(currentModelPath.current, renderer);
+				broadcastControl({ type: "report-expressions", expressions });
+				break;
+			}
 			case "hide-stage":
 				rendererRef.current?.destroy();
 				rendererRef.current = null;
@@ -184,53 +227,68 @@ export function StageWindow() {
 				await win.show();
 				await win.setFocus();
 				break;
-				case "reset-position":
-					try {
-						const { LogicalPosition } = await import("@tauri-apps/api/dpi");
-						await win.setPosition(new LogicalPosition(100, 100));
-					} catch { /* */ }
+			case "reset-position":
+				try {
+					await win.setPosition(new LogicalPosition(100, 100));
+				} catch { /* */ }
+				break;
+			case "set-mode":
+				setStageMode(cmd.mode);
+				break;
+			case "set-always-on-top":
+				setAlwaysOnTop(cmd.value);
+				break;
+			case "restore-always-on-top":
+				break;
+			case "set-display-mode":
+				setDisplayMode(cmd.displayMode);
+				break;
+			case "set-model":
+				if (cmd.modelPath !== currentModelPath.current) {
+					await switchModel(cmd.modelPath);
+				}
+				break;
+			case "set-expression":
+				if (isBlockedExpression(cmd.expressionName)) {
+					rendererRef.current?.resetExpression();
+					clearModelExpression(currentModelPath.current);
 					break;
-				case "set-mode":
-					setStageMode(cmd.mode);
-					break;
-				case "set-always-on-top":
-					setAlwaysOnTop(cmd.value);
-					break;
-				case "restore-always-on-top":
-					break;
-				case "set-display-mode":
-					setDisplayMode(cmd.displayMode);
-					break;
-				case "set-model":
-					if (cmd.modelPath !== currentModelPath.current) {
-						await switchModel(cmd.modelPath);
+				}
+				if (rendererRef.current) {
+					rendererRef.current.resetExpression();
+					const ok = await rendererRef.current.setExpression(cmd.expressionName);
+					if (ok) {
+						saveModelExpression(currentModelPath.current, cmd.expressionName);
 					}
-					break;
-				case "set-expression":
-					rendererRef.current?.setExpression(cmd.expressionName);
-					break;
-				case "set-scale-lock":
-					setScaleLocked(cmd.locked);
-					break;
-				case "set-eye-mode":
-					setEyeMode(cmd.mode);
-					break;
-				case "set-size":
-					try {
-						const { LogicalSize } = await import("@tauri-apps/api/dpi");
-						await win.setSize(new LogicalSize(cmd.width, cmd.height));
-					} catch { /* */ }
-					break;
-				case "reset-zoom":
-					rendererRef.current?.resetZoom();
-					saveZoom(1);
-					break;
-				case "set-passthrough":
-					await win.setIgnoreCursorEvents(cmd.enabled);
-					if (canvasRef.current) {
-						canvasRef.current.style.opacity = cmd.enabled ? "0" : "1";
-					}
-					break;
+				}
+				break;
+			case "set-motion":
+				rendererRef.current?.playMotion(cmd.motionGroup, cmd.index);
+				break;
+			case "set-scale-lock":
+				setScaleLocked(cmd.locked);
+				break;
+			case "set-eye-mode":
+				setEyeMode(cmd.mode);
+				break;
+			case "set-pointer":
+				rendererRef.current?.focusMouse(cmd.x, cmd.y);
+				break;
+			case "set-size":
+				try {
+					await win.setSize(new LogicalSize(cmd.width, cmd.height));
+				} catch { /* */ }
+				break;
+			case "reset-zoom":
+				rendererRef.current?.resetZoom();
+				saveZoom(1);
+				break;
+			case "set-passthrough":
+				await win.setIgnoreCursorEvents(cmd.enabled);
+				if (canvasRef.current) {
+					canvasRef.current.style.opacity = cmd.enabled ? "0" : "1";
+				}
+				break;
 			}
 		} catch {
 			if (cmd.type === "hide-stage") {
@@ -314,7 +372,6 @@ export function StageWindow() {
 			rendererRef.current = null;
 
 			syncStateToHost({ visible: false });
-			const { getCurrentWindow } = await import("@tauri-apps/api/window");
 			await getCurrentWindow().hide();
 		} catch {
 			rendererRef.current?.destroy();
@@ -355,16 +412,16 @@ export function StageWindow() {
 						className="stage-toolbar-label"
 						{...(isFloating ? { "data-tauri-drag-region": true } : {})}
 					>
-						{isFloating ? "⋮⋮ 浮动" : "贴靠"}
+						{isFloating ? `⋮⋮ ${t("浮动", "Floating")}` : t("贴靠", "Docked")}
 					</span>
 					<div className="stage-toolbar-actions">
-						<button className="stage-tb-btn" onClick={toggleMode} title="切换模式">
-							{isFloating ? "⊞ 贴靠" : "⇱ 浮动"}
+						<button className="stage-tb-btn" onClick={toggleMode} title={t("切换模式", "Switch mode")}>
+							{isFloating ? `⊞ ${t("贴靠", "Docked")}` : `⇱ ${t("浮动", "Floating")}`}
 						</button>
-						<button className="stage-tb-btn" onClick={toggleDisplayMode} title="切换为 clean 模式">
+						<button className="stage-tb-btn" onClick={toggleDisplayMode} title={t("切换显示模式", "Switch display mode")}>
 							clean
 						</button>
-						<button className="stage-tb-btn stage-tb-close" onClick={handleClose} title="关闭">
+						<button className="stage-tb-btn stage-tb-close" onClick={handleClose} title={t("关闭", "Close")}>
 							<CloseIcon sx={{ fontSize: 16 }} />
 						</button>
 					</div>
@@ -373,8 +430,8 @@ export function StageWindow() {
 
 			{loadStatus === "error" ? (
 				<div style={{ color: "#F87171", textAlign: "center", marginTop: 40, padding: "0 16px" }}>
-					<p style={{ marginBottom: 8 }}>Live2D 加载失败</p>
-					<p style={{ fontSize: 12, opacity: 0.85 }}>{loadErrorMessage ?? "未知错误"}</p>
+					<p style={{ marginBottom: 8 }}>{t("Live2D 加载失败", "Live2D failed to load")}</p>
+					<p style={{ fontSize: 12, opacity: 0.85 }}>{loadErrorMessage ?? t("未知错误", "Unknown error")}</p>
 				</div>
 			) : (
 				<canvas

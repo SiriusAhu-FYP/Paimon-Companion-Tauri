@@ -1,7 +1,9 @@
+import type { CharacterService } from "@/services/character";
 import type { EventBus } from "@/services/event-bus";
+import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { Game2048Service } from "@/services/games";
 import type { OrchestratorService } from "@/services/orchestrator";
-import type { StardewService } from "@/services/games";
+import type { UnifiedRuntimeService } from "@/services/unified";
 import type {
 	EvaluationCaseDefinition,
 	EvaluationCaseMetrics,
@@ -32,20 +34,12 @@ const EVALUATION_CASES: EvaluationCaseDefinition[] = [
 		iterations: 5,
 	},
 	{
-		id: "stardew-auto-detect-reposition",
-		game: "stardew",
-		name: "Stardew Auto-Detect Reposition",
-		description: "Auto-detect a Stardew Valley window and run a one-step reposition task.",
-		targetMode: "auto-detect",
-		iterations: 3,
-	},
-	{
-		id: "stardew-selected-inventory-toggle",
-		game: "stardew",
-		name: "Stardew Selected Target Inventory",
-		description: "Reuse the selected Stardew target and measure inventory toggle stability.",
+		id: "fusion-selected-target-round",
+		game: "fusion",
+		name: "Fusion Selected Target Round",
+		description: "Use the current target with companion runtime context and run one unified game round with speech/expression follow-up.",
 		targetMode: "selected-target",
-		iterations: 4,
+		iterations: 3,
 	},
 ];
 
@@ -61,20 +55,24 @@ function makeInitialState(): EvaluationState {
 export class EvaluationService {
 	private bus: EventBus;
 	private game2048: Game2048Service;
-	private stardew: StardewService;
 	private orchestrator: OrchestratorService;
+	private unified: UnifiedRuntimeService;
+	private companionRuntime: CompanionRuntimeService;
 	private state: EvaluationState = makeInitialState();
 
 	constructor(deps: {
 		bus: EventBus;
+		character: CharacterService;
 		game2048: Game2048Service;
-		stardew: StardewService;
 		orchestrator: OrchestratorService;
+		unified: UnifiedRuntimeService;
+		companionRuntime: CompanionRuntimeService;
 	}) {
 		this.bus = deps.bus;
 		this.game2048 = deps.game2048;
-		this.stardew = deps.stardew;
 		this.orchestrator = deps.orchestrator;
+		this.unified = deps.unified;
+		this.companionRuntime = deps.companionRuntime;
 	}
 
 	getState(): Readonly<EvaluationState> {
@@ -120,49 +118,69 @@ export class EvaluationService {
 		});
 		this.emitState();
 
-		for (let index = 0; index < definition.iterations; index += 1) {
-			const runStartedAt = Date.now();
+		const previousCompanionRuntime = definition.game === "fusion"
+			? this.companionRuntime.getState()
+			: null;
 
-			try {
-				const gameRun = await this.runGameCase(definition);
+		try {
+			for (let index = 0; index < definition.iterations; index += 1) {
+				const runStartedAt = Date.now();
 
-				const latencyMs = Date.now() - runStartedAt;
-				const actionValid = Boolean(
-					gameRun.boardChanged
-					&& gameRun.selectedAction
-					&& gameRun.preferredActions.includes(gameRun.selectedAction),
-				);
+				try {
+					const gameRun = await this.runGameCase(definition);
 
-				result.runs.push({
-					index: index + 1,
-					status: "completed",
-					latencyMs,
-					boardChanged: gameRun.boardChanged,
-					actionValid,
-					selectedAction: gameRun.selectedAction,
-					analysisSource: gameRun.analysis.source,
-					summary: gameRun.summary,
-					error: null,
-				});
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				result.runs.push({
-					index: index + 1,
-					status: "failed",
-					latencyMs: Date.now() - runStartedAt,
-					boardChanged: false,
-					actionValid: false,
-					selectedAction: null,
-					analysisSource: null,
-					summary: message,
-					error: message,
-				});
+					const latencyMs = Date.now() - runStartedAt;
+					const actionValid = Boolean(
+						gameRun.boardChanged
+						&& gameRun.selectedAction
+						&& gameRun.preferredActions.includes(gameRun.selectedAction),
+					);
+
+					result.runs.push({
+						index: index + 1,
+						status: "completed",
+						latencyMs,
+						boardChanged: gameRun.boardChanged,
+						actionValid,
+						selectedAction: gameRun.selectedAction,
+						analysisSource: gameRun.analysis.source,
+						runtimeContextUsed: gameRun.runtimeContextUsed,
+						llmReplyUsed: gameRun.llmReplyUsed,
+						spoke: gameRun.spoke,
+						emotionApplied: gameRun.emotionApplied,
+						mcpCompanionUsed: gameRun.mcpCompanionUsed,
+						mcpGameUsed: gameRun.mcpGameUsed,
+						summary: gameRun.summary,
+						error: null,
+					});
+				} catch (err) {
+					const message = err instanceof Error ? err.message : String(err);
+					result.runs.push({
+						index: index + 1,
+						status: "failed",
+						latencyMs: Date.now() - runStartedAt,
+						boardChanged: false,
+						actionValid: false,
+						selectedAction: null,
+						analysisSource: null,
+						runtimeContextUsed: false,
+						llmReplyUsed: false,
+						spoke: false,
+						emotionApplied: false,
+						mcpCompanionUsed: false,
+						mcpGameUsed: false,
+						summary: message,
+						error: message,
+					});
+				}
+
+				result.metrics = computeMetrics(result.runs, definition.iterations);
+				result.summary = buildSummary(definition, result.metrics);
+				this.state.latestResult = cloneResult(result);
+				this.emitState();
 			}
-
-			result.metrics = computeMetrics(result.runs, definition.iterations);
-			result.summary = buildSummary(definition, result.metrics);
-			this.state.latestResult = cloneResult(result);
-			this.emitState();
+		} finally {
+			await this.restoreCompanionRuntimeAfterFusion(previousCompanionRuntime);
 		}
 
 		result.status = result.metrics.successfulRuns > 0 ? "completed" : "failed";
@@ -184,6 +202,29 @@ export class EvaluationService {
 		return cloneResult(result);
 	}
 
+	private async restoreCompanionRuntimeAfterFusion(previousState: ReturnType<CompanionRuntimeService["getState"]> | null): Promise<void> {
+		if (!previousState) {
+			return;
+		}
+		const currentState = this.companionRuntime.getState();
+		if (!previousState.running) {
+			if (currentState.running) {
+				this.companionRuntime.stop();
+			}
+			return;
+		}
+		if (!previousState.target) {
+			return;
+		}
+		if (!currentState.running || currentState.target?.handle !== previousState.target.handle) {
+			try {
+				await this.companionRuntime.start(previousState.target);
+			} catch (err) {
+				log.warn("failed to restore companion runtime after fusion evaluation", err);
+			}
+		}
+	}
+
 	private emitState() {
 		this.bus.emit("evaluation:state-change", { state: this.getState() });
 	}
@@ -193,6 +234,12 @@ export class EvaluationService {
 		selectedAction: string | null;
 		preferredActions: string[];
 		analysis: { source: string };
+		runtimeContextUsed: boolean;
+		llmReplyUsed: boolean;
+		spoke: boolean;
+		emotionApplied: boolean;
+		mcpCompanionUsed: boolean;
+		mcpGameUsed: boolean;
 		summary: string;
 	}> {
 		if (definition.game === "2048") {
@@ -204,6 +251,12 @@ export class EvaluationService {
 					selectedAction: run.selectedMove,
 					preferredActions: run.analysis.preferredMoves,
 					analysis: { source: run.analysis.source },
+					runtimeContextUsed: false,
+					llmReplyUsed: false,
+					spoke: false,
+					emotionApplied: false,
+					mcpCompanionUsed: false,
+					mcpGameUsed: true,
 					summary: run.summary,
 				};
 			}
@@ -218,34 +271,65 @@ export class EvaluationService {
 				selectedAction: run.selectedMove,
 				preferredActions: run.analysis.preferredMoves,
 				analysis: { source: run.analysis.source },
+				runtimeContextUsed: false,
+				llmReplyUsed: false,
+				spoke: false,
+				emotionApplied: false,
+				mcpCompanionUsed: false,
+				mcpGameUsed: true,
 				summary: run.summary,
 			};
 		}
+		if (definition.game === "fusion") {
+			const selectedTarget = this.orchestrator.getState().selectedTarget;
+			if (!selectedTarget) {
+				throw new Error("fusion evaluation requires a manually selected target");
+			}
 
-		if (definition.targetMode === "auto-detect") {
-			await this.stardew.detectTargetWindow();
-			const run = await this.stardew.runTask("reposition");
+			const runtimeState = this.companionRuntime.getState();
+			if (!runtimeState.running || runtimeState.target?.handle !== selectedTarget.handle) {
+				await this.companionRuntime.start(selectedTarget);
+			}
+			if (!this.companionRuntime.getState().lastSummary) {
+				await this.companionRuntime.runSummaryNow();
+			}
+
+			const promptContext = this.companionRuntime.getPromptContext();
+			let mcpCompanionUsed = false;
+			let mcpGameUsed = false;
+			let emotionApplied = false;
+			const offStart = this.bus.on("mcp:tool-start", (payload) => {
+				if (payload.name.startsWith("companion.")) {
+					mcpCompanionUsed = true;
+					if (payload.name === "companion.set_emotion") {
+						emotionApplied = true;
+					}
+				}
+				if (payload.name.startsWith("game.")) {
+					mcpGameUsed = true;
+				}
+			});
+			let run;
+			try {
+				run = await this.unified.runUnifiedGameStep("manual", "evaluation fusion round");
+			} finally {
+				offStart();
+			}
 			return {
-				boardChanged: run.boardChanged,
+				boardChanged: run.status === "completed",
 				selectedAction: run.selectedAction,
-				preferredActions: run.analysis.preferredActions,
-				analysis: { source: run.analysis.source },
+				preferredActions: run.selectedAction ? [run.selectedAction] : [],
+				analysis: { source: run.companionTextSource },
+				runtimeContextUsed: promptContext.length > 0,
+				llmReplyUsed: run.companionTextSource === "llm",
+				spoke: run.spoke,
+				emotionApplied,
+				mcpCompanionUsed,
+				mcpGameUsed,
 				summary: run.summary,
 			};
 		}
-
-		const selectedTarget = this.orchestrator.getState().selectedTarget;
-		if (!selectedTarget) {
-			throw new Error("selected-target evaluation requires a manually selected target");
-		}
-		const run = await this.stardew.runTask("open-inventory", selectedTarget);
-		return {
-			boardChanged: run.boardChanged,
-			selectedAction: run.selectedAction,
-			preferredActions: run.analysis.preferredActions,
-			analysis: { source: run.analysis.source },
-			summary: run.summary,
-		};
+		throw new Error(`unsupported evaluation game: ${definition.game}`);
 	}
 }
 
@@ -256,6 +340,12 @@ function emptyMetrics(totalRuns: number): EvaluationCaseMetrics {
 		validActions: 0,
 		successRate: 0,
 		actionValidityRate: 0,
+		runtimeContextRate: 0,
+		llmReplyRate: 0,
+		speechRate: 0,
+		emotionRate: 0,
+		mcpCompanionRate: 0,
+		mcpGameRate: 0,
 		averageLatencyMs: 0,
 		medianLatencyMs: 0,
 	};
@@ -265,6 +355,12 @@ function computeMetrics(runs: EvaluationRunEntry[], totalRuns: number): Evaluati
 	const latencies = runs.map((run) => run.latencyMs).sort((left, right) => left - right);
 	const successfulRuns = runs.filter((run) => run.boardChanged).length;
 	const validActions = runs.filter((run) => run.actionValid).length;
+	const runtimeContextRuns = runs.filter((run) => run.runtimeContextUsed).length;
+	const llmReplyRuns = runs.filter((run) => run.llmReplyUsed).length;
+	const spokenRuns = runs.filter((run) => run.spoke).length;
+	const emotionRuns = runs.filter((run) => run.emotionApplied).length;
+	const mcpCompanionRuns = runs.filter((run) => run.mcpCompanionUsed).length;
+	const mcpGameRuns = runs.filter((run) => run.mcpGameUsed).length;
 
 	return {
 		totalRuns,
@@ -272,6 +368,12 @@ function computeMetrics(runs: EvaluationRunEntry[], totalRuns: number): Evaluati
 		validActions,
 		successRate: totalRuns > 0 ? successfulRuns / totalRuns : 0,
 		actionValidityRate: totalRuns > 0 ? validActions / totalRuns : 0,
+		runtimeContextRate: totalRuns > 0 ? runtimeContextRuns / totalRuns : 0,
+		llmReplyRate: totalRuns > 0 ? llmReplyRuns / totalRuns : 0,
+		speechRate: totalRuns > 0 ? spokenRuns / totalRuns : 0,
+		emotionRate: totalRuns > 0 ? emotionRuns / totalRuns : 0,
+		mcpCompanionRate: totalRuns > 0 ? mcpCompanionRuns / totalRuns : 0,
+		mcpGameRate: totalRuns > 0 ? mcpGameRuns / totalRuns : 0,
 		averageLatencyMs: latencies.length > 0 ? latencies.reduce((sum, value) => sum + value, 0) / latencies.length : 0,
 		medianLatencyMs: computeMedian(latencies),
 	};
@@ -285,6 +387,9 @@ function computeMedian(values: number[]): number {
 }
 
 function buildSummary(definition: EvaluationCaseDefinition, metrics: EvaluationCaseMetrics): string {
+	if (definition.game === "fusion") {
+		return `${definition.name}: success ${formatPercent(metrics.successRate)}, runtime ${formatPercent(metrics.runtimeContextRate)}, llm ${formatPercent(metrics.llmReplyRate)}, speech ${formatPercent(metrics.speechRate)}, emotion ${formatPercent(metrics.emotionRate)}, mcp-companion ${formatPercent(metrics.mcpCompanionRate)}, mcp-game ${formatPercent(metrics.mcpGameRate)}, avg latency ${metrics.averageLatencyMs.toFixed(0)}ms`;
+	}
 	return `${definition.name}: success ${formatPercent(metrics.successRate)}, valid ${formatPercent(metrics.actionValidityRate)}, avg latency ${metrics.averageLatencyMs.toFixed(0)}ms`;
 }
 

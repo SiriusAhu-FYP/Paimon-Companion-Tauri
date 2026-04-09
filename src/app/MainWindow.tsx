@@ -1,26 +1,43 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { Box, IconButton, Tooltip } from "@mui/material";
+import { Suspense, lazy, useState, useCallback, useEffect, useRef } from "react";
+import { Box, Button, IconButton, Tooltip } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import ScienceIcon from "@mui/icons-material/Science";
 import TuneIcon from "@mui/icons-material/Tune";
+import TranslateIcon from "@mui/icons-material/Translate";
+import { listen } from "@tauri-apps/api/event";
+import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
+import { getCurrentWindow, Window } from "@tauri-apps/api/window";
 import { StageHost, StageSlot } from "@/features/stage";
-import { ControlPanel, FunctionalPanel } from "@/features/control-panel";
-import { SettingsPanel } from "@/features/settings";
-import { KnowledgePanel } from "@/features/knowledge";
+import { ControlPanel } from "@/features/control-panel/ControlPanel";
 import { ChatPanel } from "@/features/chat";
-import { EventLog } from "@/app/EventLog";
 import { StatusBar } from "@/app/StatusBar";
-import { type StageDisplayMode, isTauriEnvironment } from "@/utils/window-sync";
+import { ResizablePane } from "@/components";
+import { broadcastControl, type StageDisplayMode, isTauriEnvironment } from "@/utils/window-sync";
 import { createLogger } from "@/services/logger";
 import { useThemeMode } from "@/contexts/JoyThemeProvider";
+import { useI18n } from "@/contexts/I18nProvider";
 
 const log = createLogger("main-window");
+const FunctionalPanel = lazy(async () => import("@/features/control-panel/FunctionalPanel").then((module) => ({ default: module.FunctionalPanel })));
+const SettingsPanel = lazy(async () => import("@/features/settings/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
+const KnowledgePanel = lazy(async () => import("@/features/knowledge/KnowledgePanel").then((module) => ({ default: module.KnowledgePanel })));
+const EventLog = lazy(async () => import("@/app/EventLog").then((module) => ({ default: module.EventLog })));
+
+function PanelLoadingState() {
+	const { t } = useI18n();
+	return (
+		<Box sx={{ p: 1.5, color: "text.secondary", fontSize: 12 }}>
+			{t("加载中...", "Loading...")}
+		</Box>
+	);
+}
 
 export function MainWindow() {
 	const { mode, setMode } = useThemeMode();
+	const { locale, setLocale, t } = useI18n();
 	const [stageVisible, setStageVisible] = useState(true);
 	const [stageMode, setStageMode] = useState<"docked" | "floating">("docked");
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
@@ -32,6 +49,7 @@ export function MainWindow() {
 	const unlistenMoveRef = useRef<(() => void) | null>(null);
 	const unlistenResizeRef = useRef<(() => void) | null>(null);
 	const syncDebounceRef = useRef(0);
+	const suspendDockedSyncRef = useRef(false);
 	const stageModeRef = useRef(stageMode);
 	const stageVisibleRef = useRef(stageVisible);
 
@@ -43,8 +61,6 @@ export function MainWindow() {
 		if (!rect) return;
 
 		try {
-			const { Window } = await import("@tauri-apps/api/window");
-			const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
 			const mainWin = await Window.getByLabel("main");
 			const stageWin = await Window.getByLabel("stage");
 			if (!mainWin || !stageWin) return;
@@ -74,7 +90,7 @@ export function MainWindow() {
 		if (syncDebounceRef.current) cancelAnimationFrame(syncDebounceRef.current);
 		syncDebounceRef.current = requestAnimationFrame(() => {
 			syncDebounceRef.current = 0;
-			if (stageModeRef.current === "docked" && stageVisibleRef.current) {
+			if (!suspendDockedSyncRef.current && stageModeRef.current === "docked" && stageVisibleRef.current) {
 				syncStagePosition();
 			}
 		});
@@ -84,6 +100,24 @@ export function MainWindow() {
 		slotRectRef.current = rect;
 		debouncedSync();
 	}, [debouncedSync]);
+
+	useEffect(() => {
+		if (stageMode !== "docked" || !stageVisible) return;
+
+		const handleMouseMove = (event: MouseEvent) => {
+			const rect = slotRectRef.current;
+			if (!rect) return;
+
+			const localX = event.clientX - rect.left;
+			const localY = event.clientY - rect.top;
+			if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) return;
+
+			broadcastControl({ type: "set-pointer", x: localX, y: localY });
+		};
+
+		window.addEventListener("mousemove", handleMouseMove);
+		return () => window.removeEventListener("mousemove", handleMouseMove);
+	}, [stageMode, stageVisible]);
 
 	// docked 跟随主窗口 move/resize
 	useEffect(() => {
@@ -101,9 +135,7 @@ export function MainWindow() {
 			if (!isTauriEnvironment()) return;
 
 			try {
-				const { getCurrentWindow } = await import("@tauri-apps/api/window");
 				const mainWin = getCurrentWindow();
-				const { listen } = await import("@tauri-apps/api/event");
 
 				if (cancelled) return;
 
@@ -142,8 +174,6 @@ export function MainWindow() {
 
 	const handleShowStage = useCallback(async () => {
 		try {
-			const { Window } = await import("@tauri-apps/api/window");
-			const { broadcastControl } = await import("@/utils/window-sync");
 			const stageWin = await Window.getByLabel("stage");
 			if (stageWin) {
 				broadcastControl({ type: "show-stage" });
@@ -170,6 +200,13 @@ export function MainWindow() {
 	}, []);
 
 	const showSlot = stageVisible && stageMode === "docked";
+	const rightPanelContent = rightPanel === "settings"
+		? <SettingsPanel onClose={() => setRightPanel("control")} />
+		: rightPanel === "knowledge"
+			? <KnowledgePanel onClose={() => setRightPanel("control")} />
+			: rightPanel === "functional"
+				? <FunctionalPanel />
+				: <ControlPanel />;
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
@@ -188,7 +225,25 @@ export function MainWindow() {
 					Paimon Companion Tauri
 				</Box>
 				<Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-					<Tooltip title={mode === "dark" ? "切换亮色" : "切换暗色"}>
+					<Tooltip title={t("切换语言", "Switch language")}>
+						<Button
+							size="small"
+							variant="outlined"
+							startIcon={<TranslateIcon sx={{ fontSize: 14 }} />}
+							onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
+							sx={{
+								minWidth: 0,
+								px: 1,
+								py: 0.35,
+								fontSize: 11,
+								lineHeight: 1,
+								mr: 0.5,
+							}}
+						>
+							{locale === "zh" ? "EN" : "中文"}
+						</Button>
+					</Tooltip>
+					<Tooltip title={mode === "dark" ? t("切换亮色", "Switch to light mode") : t("切换暗色", "Switch to dark mode")}>
 						<IconButton
 							size="small"
 							onClick={() => setMode(mode === "dark" ? "light" : "dark")}
@@ -197,7 +252,7 @@ export function MainWindow() {
 							{mode === "dark" ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
 						</IconButton>
 					</Tooltip>
-					<Tooltip title="控制面板">
+					<Tooltip title={t("控制面板", "Control Panel")}>
 						<IconButton
 							size="small"
 							onClick={() => setRightPanel("control")}
@@ -206,7 +261,7 @@ export function MainWindow() {
 							<TuneIcon fontSize="small" />
 						</IconButton>
 					</Tooltip>
-					<Tooltip title="知识库">
+					<Tooltip title={t("知识库", "Knowledge")}>
 						<IconButton
 							size="small"
 							onClick={() => setRightPanel("knowledge")}
@@ -215,7 +270,7 @@ export function MainWindow() {
 							<AutoStoriesIcon fontSize="small" />
 						</IconButton>
 					</Tooltip>
-					<Tooltip title="功能实验">
+					<Tooltip title={t("功能实验", "Functional Lab")}>
 						<IconButton
 							size="small"
 							onClick={() => setRightPanel("functional")}
@@ -224,7 +279,7 @@ export function MainWindow() {
 							<ScienceIcon fontSize="small" />
 						</IconButton>
 					</Tooltip>
-					<Tooltip title="设置">
+					<Tooltip title={t("设置", "Settings")}>
 						<IconButton
 							size="small"
 							onClick={() => setRightPanel("settings")}
@@ -283,28 +338,41 @@ export function MainWindow() {
 
 				{/* 右栏: 控制面板 / 设置 / 知识库 */}
 				<Box sx={{ width: 280, minWidth: 220, flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-					{rightPanel === "settings" ? (
-						<SettingsPanel onClose={() => setRightPanel("control")} />
-					) : rightPanel === "knowledge" ? (
-						<KnowledgePanel onClose={() => setRightPanel("control")} />
-					) : rightPanel === "functional" ? (
-						<FunctionalPanel />
-					) : (
-						<ControlPanel />
-					)}
+					<Suspense fallback={<PanelLoadingState />}>
+						{rightPanelContent}
+					</Suspense>
 				</Box>
 			</Box>
 
 			{/* 可折叠事件日志（在状态栏上方） */}
 			{eventLogOpen && (
-				<Box sx={{
-					height: 180, flexShrink: 0,
-					borderTop: "1px solid", borderColor: "secondary.main",
-					overflowY: "auto",
-					bgcolor: "background.default",
-				}}>
-					<EventLog />
-				</Box>
+				<ResizablePane
+					axis="y"
+					storageKey="event-log-height"
+					initialSize={260}
+					minSize={180}
+					maxSize={520}
+					handlePlacement="start"
+					className="resizable-pane resizable-pane-vertical"
+					handleClassName="resizable-pane-handle resizable-pane-handle-vertical"
+					style={{
+						flexShrink: 0,
+						borderTop: "1px solid var(--mui-palette-secondary-main, rgba(255,255,255,0.12))",
+						background: "var(--mui-palette-background-default, transparent)",
+						overflow: "hidden",
+					}}
+					onResizeStart={() => {
+						suspendDockedSyncRef.current = true;
+					}}
+					onResizeEnd={() => {
+						suspendDockedSyncRef.current = false;
+						debouncedSync();
+					}}
+				>
+					<Suspense fallback={<PanelLoadingState />}>
+						<EventLog />
+					</Suspense>
+				</ResizablePane>
 			)}
 
 			{/* 底部状态栏——始终在最底部 */}

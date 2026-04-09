@@ -6,6 +6,7 @@
 const ZOOM_KEY = "paimon-companion-tauri:stage-zoom";
 const CUSTOM_PRESETS_KEY = "paimon-companion-tauri:custom-size-presets";
 const SCALE_LOCK_KEY = "paimon-companion-tauri:stage-scale-lock";
+const MODEL_EXPRESSION_STATE_KEY = "paimon-companion-tauri:stage-model-expression-state";
 
 // ── 缩放比例 ──
 
@@ -56,4 +57,41 @@ export function loadCustomPresets(): SizePreset[] {
 
 export function saveCustomPresets(presets: SizePreset[]): void {
 	localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(presets));
+}
+
+// ── 每个模型的最近表情状态 ──
+
+type ModelExpressionState = Record<string, string>;
+
+function loadModelExpressionStateMap(): ModelExpressionState {
+	try {
+		const raw = localStorage.getItem(MODEL_EXPRESSION_STATE_KEY);
+		if (!raw) return {};
+		return JSON.parse(raw) as ModelExpressionState;
+	} catch {
+		return {};
+	}
+}
+
+function saveModelExpressionStateMap(state: ModelExpressionState): void {
+	try {
+		localStorage.setItem(MODEL_EXPRESSION_STATE_KEY, JSON.stringify(state));
+	} catch { /* */ }
+}
+
+export function loadModelExpression(modelPath: string): string | null {
+	const state = loadModelExpressionStateMap();
+	return state[modelPath] ?? null;
+}
+
+export function saveModelExpression(modelPath: string, expressionName: string): void {
+	const state = loadModelExpressionStateMap();
+	state[modelPath] = expressionName;
+	saveModelExpressionStateMap(state);
+}
+
+export function clearModelExpression(modelPath: string): void {
+	const state = loadModelExpressionStateMap();
+	delete state[modelPath];
+	saveModelExpressionStateMap(state);
 }

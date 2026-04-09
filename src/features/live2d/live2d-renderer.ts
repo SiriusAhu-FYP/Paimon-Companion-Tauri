@@ -28,6 +28,10 @@ export interface ModelInfo {
 	name: string;
 	/** model3.json 的路径（相对于 public） */
 	path: string;
+	/** 可选：当模型文件本身未声明 Expressions 时，使用这里的回退列表 */
+	expressionNames?: string[];
+	/** 可选：持续强制写入的参数，用于修正模型默认状态 */
+	forcedParameters?: Array<{ id: string; value: number }>;
 }
 
 /**
@@ -57,6 +61,7 @@ export class Live2DRenderer {
 	private mouthTarget = 0;
 	private mouthCurrent = 0;
 	private lipSyncHandler: (() => void) | null = null;
+	private forcedParameters = new Map<string, number>();
 
 	// 眼神模式——默认 fixed，由外部通过 setEyeMode() 激活
 	private eyeMode: EyeMode = "fixed";
@@ -239,6 +244,10 @@ export class Live2DRenderer {
 		} catch { /* */ }
 	}
 
+	setForcedParameters(parameters: Array<{ id: string; value: number }> = []) {
+		this.forcedParameters = new Map(parameters.map(({ id, value }) => [id, value]));
+	}
+
 	/**
 	 * 设置口型目标值（0-1），由 beforeModelUpdate 钩子平滑应用
 	 */
@@ -400,6 +409,9 @@ export class Live2DRenderer {
 				const coreModel = this.model.internalModel?.coreModel;
 				if (coreModel?.setParameterValueById) {
 					coreModel.setParameterValueById(LIP_SYNC_CONFIG.mouthParam, this.mouthCurrent, 1.0);
+					this.forcedParameters.forEach((value, id) => {
+						coreModel.setParameterValueById(id, value, 1.0);
+					});
 				}
 			} catch { /* */ }
 		};

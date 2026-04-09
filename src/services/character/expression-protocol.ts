@@ -1,0 +1,114 @@
+import type { CharacterExpressionMap, CompanionEmotion } from "@/types";
+
+export interface CharacterMotionCandidate {
+	motionGroup: string;
+	index: number;
+}
+
+export const COMPANION_EMOTIONS: CompanionEmotion[] = [
+	"neutral",
+	"happy",
+	"angry",
+	"sad",
+	"delighted",
+	"alarmed",
+	"dazed",
+];
+
+const PAIMENG_VTS_MODEL = "/Resources/Commercial_models/paimengVts/3paimeng Vts.model3.json";
+const BUNNY_MODEL = "/Resources/Commercial_models/英伦兔兔/英伦兔兔.model3.json";
+
+export const DEFAULT_PROTOCOL_EXPRESSION_MAP: CharacterExpressionMap = {
+	neutral: ["表情1"],
+	happy: ["表情7"],
+	angry: ["表情2", "表情6"],
+	sad: ["表情5"],
+	delighted: ["表情7", "表情6"],
+	alarmed: ["表情4", "表情8"],
+	dazed: ["表情3", "表情9"],
+};
+
+export const MODEL_EXPRESSION_PROTOCOLS: Record<string, CharacterExpressionMap> = {
+	[PAIMENG_VTS_MODEL]: DEFAULT_PROTOCOL_EXPRESSION_MAP,
+	[BUNNY_MODEL]: {
+		neutral: ["123"],
+		happy: ["Cat face", "Love"],
+		angry: ["angry", "Black"],
+		sad: ["Sluggish"],
+		delighted: ["star", "Love"],
+		alarmed: ["Crazy", "perspire"],
+		dazed: ["Silly", "perspire", "Sluggish"],
+	},
+};
+
+export const MODEL_MOTION_PROTOCOLS: Record<string, Partial<Record<CompanionEmotion, CharacterMotionCandidate[]>>> = {
+	[BUNNY_MODEL]: {
+		happy: [{ motionGroup: "Custom", index: 0 }],
+		delighted: [{ motionGroup: "Custom", index: 0 }],
+		angry: [{ motionGroup: "Custom", index: 1 }],
+		alarmed: [{ motionGroup: "Custom", index: 1 }],
+		dazed: [{ motionGroup: "Custom", index: 1 }],
+	},
+};
+
+export function isCompanionEmotion(value: string): value is CompanionEmotion {
+	return COMPANION_EMOTIONS.includes(value as CompanionEmotion);
+}
+
+export function resolveEmotionCandidates(
+	activeModel: string | null,
+	profileMap: CharacterExpressionMap | null | undefined,
+	emotion: string,
+): string[] {
+	if (!isCompanionEmotion(emotion)) {
+		return [emotion];
+	}
+
+	const modelCandidates = activeModel
+		? MODEL_EXPRESSION_PROTOCOLS[activeModel]?.[emotion]
+		: undefined;
+	if (modelCandidates && modelCandidates.length > 0) {
+		return [...modelCandidates];
+	}
+
+	const profileCandidates = profileMap?.[emotion];
+	if (profileCandidates && profileCandidates.length > 0) {
+		return [...profileCandidates];
+	}
+
+	return [emotion];
+}
+
+export function pickExpressionCandidate(candidates: string[], exclude?: string | null): string | null {
+	if (candidates.length === 0) return null;
+
+	const eligible = exclude
+		? candidates.filter((candidate) => candidate !== exclude)
+		: candidates;
+	const pool = eligible.length > 0 ? eligible : candidates;
+	const index = Math.floor(Math.random() * pool.length);
+	return pool[index] ?? null;
+}
+
+export function resolveMotionCandidates(
+	activeModel: string | null,
+	emotion: string,
+): CharacterMotionCandidate[] {
+	if (!activeModel || !isCompanionEmotion(emotion)) return [];
+	return [...(MODEL_MOTION_PROTOCOLS[activeModel]?.[emotion] ?? [])];
+}
+
+export function pickMotionCandidate(
+	candidates: CharacterMotionCandidate[],
+	exclude?: CharacterMotionCandidate | null,
+): CharacterMotionCandidate | null {
+	if (candidates.length === 0) return null;
+
+	const eligible = exclude
+		? candidates.filter((candidate) =>
+			candidate.motionGroup !== exclude.motionGroup || candidate.index !== exclude.index)
+		: candidates;
+	const pool = eligible.length > 0 ? eligible : candidates;
+	const index = Math.floor(Math.random() * pool.length);
+	return pool[index] ?? null;
+}

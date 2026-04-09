@@ -3,6 +3,7 @@ import type { EventMap, EventName } from "@/types";
 type Handler<T> = (payload: T) => void;
 
 export interface EventHistoryEntry {
+	sequence: number;
 	event: EventName;
 	payload: unknown;
 	timestamp: number;
@@ -16,9 +17,10 @@ interface Subscription {
 export class EventBus {
 	private listeners = new Map<EventName, Set<Handler<unknown>>>();
 	private history: EventHistoryEntry[] = [];
-	private historyLimit = 200;
+	private historyLimit = 500;
 	private historyListeners = new Set<() => void>();
 	private historyVersion = 0;
+	private sequenceCounter = 0;
 
 	on<E extends EventName>(event: E, handler: Handler<EventMap[E]>): () => void {
 		if (!this.listeners.has(event)) {
@@ -101,7 +103,12 @@ export class EventBus {
 	}
 
 	private recordHistory(event: EventName, payload: unknown) {
-		this.history.push({ event, payload, timestamp: Date.now() });
+		this.history.push({
+			sequence: this.sequenceCounter++,
+			event,
+			payload,
+			timestamp: Date.now(),
+		});
 		if (this.history.length > this.historyLimit) {
 			this.history = this.history.slice(-this.historyLimit);
 		}

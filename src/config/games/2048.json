@@ -1,0 +1,40 @@
+{
+	"gameId": "2048",
+	"displayName": "2048",
+	"windowTitleHints": ["2048"],
+	"observationFocus": [
+		"Focus on the board state, tile positions, empty spaces, merges, and whether a move changed the board.",
+		"Ignore cinematic interpretation and describe the puzzle state directly."
+	],
+	"defaultActionOrder": ["move_up", "move_left", "move_right", "move_down"],
+	"notes": [
+		"Keep the highest tile anchored in one corner when possible.",
+		"Treat each semantic action as a single board shift."
+	],
+	"actions": [
+		{
+			"id": "move_up",
+			"label": "Up",
+			"description": "Shift the board upward once.",
+			"steps": [{ "kind": "send-key", "key": "Up" }]
+		},
+		{
+			"id": "move_left",
+			"label": "Left",
+			"description": "Shift the board left once.",
+			"steps": [{ "kind": "send-key", "key": "Left" }]
+		},
+		{
+			"id": "move_right",
+			"label": "Right",
+			"description": "Shift the board right once.",
+			"steps": [{ "kind": "send-key", "key": "Right" }]
+		},
+		{
+			"id": "move_down",
+			"label": "Down",
+			"description": "Shift the board downward once.",
+			"steps": [{ "kind": "send-key", "key": "Down" }]
+		}
+	]
+}
