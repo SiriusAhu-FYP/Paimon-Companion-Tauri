@@ -86,18 +86,30 @@ Current high-level audit result:
   - accepted core: screenshot capture, single-frame model use, and the first rolling local-description + periodic-summary runtime slice
   - unresolved: stronger queueing/filtering/scheduler behavior and any future benchmark slices beyond the now-accepted lightweight product-facing harness
 
-This means the three-source fusion is not yet complete.
+This means the three-source fusion is accepted for `P2` close-out, but not because every source repository was copied 1:1.
 
-## Immediate Implementation Priority
+The accepted interpretation is:
+
+- the source capabilities required by the product-facing `P2` baseline now coexist in one Tauri runtime
+- several source shapes are intentionally replaced rather than cloned literally
+- some broader research/toolkit scope remains outside the accepted `P2` bar and should not be mistaken for a regression
+
+## Close-Out Notes
+
+Accepted close-out on `2026-04-09` is based on the MCP-backed post-fusion baseline, not on literal parity with every historical Python module.
+
+Known accepted residual issues:
+
+- fusion end-to-end timing is currently coarse and includes downstream stages such as speech playback
+- active fusion runs can still make the Tauri UI feel sluggish under combined local vision + logging + speech load
+
+## Immediate Post-`P2` Priority
 
 The next implementation order should be:
 
-1. `P2.4 LLMPlay-MVP Completion`
-   - settle retained scope, retirement decisions, and later game-plugin boundaries
-2. `P2.5 Video-Understanding-MVP Completion`
-   - merge only the toolkit pieces that still serve the Tauri product
-3. `P2.6 Post-Fusion Validation`
-   - validate the combined runtime after the three-source gaps are closed
+1. performance breakdown and responsiveness profiling for the accepted fusion path
+2. deeper MCP/runtime consolidation and backend migration where already planned
+3. new scope only after the post-`P2` performance picture is clear
 
 Accepted prerequisite already in place:
 

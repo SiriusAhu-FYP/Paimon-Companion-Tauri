@@ -21,6 +21,8 @@ The accepted post-fusion baseline is:
   - speech playback
   - visible expression response
 
+The baseline is now accepted as achieved for `P2` on `2026-04-09`.
+
 ## Minimum Accepted Runtime Shape
 
 The minimum accepted runtime shape for `P2` is:
@@ -54,6 +56,16 @@ The minimum accepted runtime shape for `P2` is:
   - MCP companion-tool usage
   - MCP game-tool usage
 
+The accepted focused validation pass has now been observed with a `Fusion Selected Target Round` result showing:
+
+- `success 100%`
+- `runtime 100%`
+- `llm 100%`
+- `speech 100%`
+- `emotion 100%`
+- `mcp-companion 100%`
+- `mcp-game 100%`
+
 ## Out Of Scope For `P2` Close-Out
 
 The following are explicitly not required to close `P2`:
@@ -62,5 +74,15 @@ The following are explicitly not required to close `P2`:
 - final pluginized support for future large games such as Minecraft
 - cloud ASR live acceptance
 - motion as a mandatory acceptance gate
+
+## Accepted Known Issues At Close-Out
+
+The following issues remain real, but do not block `P2` close-out:
+
+- the current fusion `latency` metric is an end-to-end round duration, not a fine-grained delay metric
+- that end-to-end duration currently includes downstream stages such as speech playback, so it should not be interpreted as a pure model/tool delay number
+- under active fusion load, the Tauri UI can still feel sluggish while local vision, logging, and speech are all active
+
+These issues should be treated as the first follow-up work after `P2`, with latency breakdown and UI responsiveness profiling taking priority over new product scope.
 
 Those remain later work after source fusion is accepted.
