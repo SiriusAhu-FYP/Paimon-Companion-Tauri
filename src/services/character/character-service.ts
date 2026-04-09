@@ -12,6 +12,7 @@ import {
 
 const log = createLogger("character");
 const DEFAULT_EXPRESSION_IDLE_TIMEOUT_MS = 60_000;
+const SPEECH_START_GRACE_MS = 2_000;
 
 /**
  * 角色状态真源：当前档案、表情/说话状态、可用角色卡列表。
@@ -24,7 +25,9 @@ export class CharacterService {
 	private lastExpressionName: string | null = null;
 	private lastMotion: CharacterMotionCandidate | null = null;
 	private expressionResetTimer: ReturnType<typeof setTimeout> | null = null;
+	private speechStartGraceTimer: ReturnType<typeof setTimeout> | null = null;
 	private expressionIdleTimeoutMs = DEFAULT_EXPRESSION_IDLE_TIMEOUT_MS;
+	private holdExpressionUntilSpeechEnds = false;
 
 	constructor(bus: EventBus) {
 		this.bus = bus;
@@ -85,7 +88,7 @@ export class CharacterService {
 		this.expressionIdleTimeoutMs = normalizedSeconds * 1000;
 		log.info(`expression idle timeout → ${normalizedSeconds}s`);
 		if (this.state.emotion !== "neutral") {
-			this.scheduleExpressionReset(this.state.emotion);
+			this.planExpressionReset(this.state.emotion);
 		}
 	}
 
@@ -102,7 +105,7 @@ export class CharacterService {
 		const motion = pickMotionCandidate(motionCandidates, !emotionChanged ? this.lastMotion : null);
 
 		if (!emotionChanged && previousExpression && expressionName === previousExpression) {
-			this.scheduleExpressionReset(emotion);
+			this.planExpressionReset(emotion);
 			log.info(`emotion timer refreshed: ${emotion}`, {
 				activeModel: this.state.activeModel,
 				expressionName,
@@ -122,7 +125,7 @@ export class CharacterService {
 		if (emotionChanged) {
 			this.notifyStateChange();
 		}
-		this.scheduleExpressionReset(emotion);
+		this.planExpressionReset(emotion);
 		log.info(`emotion → ${emotion}`, {
 			activeModel: this.state.activeModel,
 			expressionName,
@@ -134,8 +137,22 @@ export class CharacterService {
 
 	setSpeaking(isSpeaking: boolean) {
 		if (isSpeaking === this.state.isSpeaking) return;
+		const wasSpeaking = this.state.isSpeaking;
 		this.state.isSpeaking = isSpeaking;
 		this.notifyStateChange();
+		if (isSpeaking) {
+			this.clearExpressionResetTimer();
+			this.clearSpeechStartGraceTimer();
+			if (this.state.emotion !== "neutral") {
+				this.holdExpressionUntilSpeechEnds = true;
+			}
+			return;
+		}
+
+		if (wasSpeaking && this.state.emotion !== "neutral" && this.holdExpressionUntilSpeechEnds) {
+			this.holdExpressionUntilSpeechEnds = false;
+			this.scheduleExpressionReset(this.state.emotion);
+		}
 	}
 
 	private notifyStateChange() {
@@ -146,8 +163,31 @@ export class CharacterService {
 		});
 	}
 
+	private planExpressionReset(emotion: string) {
+		this.clearExpressionResetTimer();
+		this.clearSpeechStartGraceTimer();
+		this.holdExpressionUntilSpeechEnds = false;
+		if (emotion === "neutral") return;
+
+		if (this.state.isSpeaking) {
+			this.holdExpressionUntilSpeechEnds = true;
+			return;
+		}
+
+		// 给即将开始的 TTS 一个很短的接管窗口，避免表情从文本出现时就提前倒计时。
+		this.speechStartGraceTimer = setTimeout(() => {
+			this.speechStartGraceTimer = null;
+			if (this.state.emotion !== emotion || this.state.isSpeaking) {
+				return;
+			}
+			this.scheduleExpressionReset(emotion);
+		}, SPEECH_START_GRACE_MS);
+	}
+
 	private scheduleExpressionReset(emotion: string) {
 		this.clearExpressionResetTimer();
+		this.clearSpeechStartGraceTimer();
+		this.holdExpressionUntilSpeechEnds = false;
 		if (emotion === "neutral") return;
 
 		this.expressionResetTimer = setTimeout(() => {
@@ -162,6 +202,13 @@ export class CharacterService {
 		if (this.expressionResetTimer) {
 			clearTimeout(this.expressionResetTimer);
 			this.expressionResetTimer = null;
+		}
+	}
+
+	private clearSpeechStartGraceTimer() {
+		if (this.speechStartGraceTimer) {
+			clearTimeout(this.speechStartGraceTimer);
+			this.speechStartGraceTimer = null;
 		}
 	}
 }
