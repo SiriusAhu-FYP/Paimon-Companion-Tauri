@@ -1,5 +1,6 @@
 import type { CharacterState } from "@/types/character";
 import type { RuntimeMode } from "@/types/runtime";
+import { emit as tauriEmitImpl, listen as tauriListenImpl } from "@tauri-apps/api/event";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("window-sync");
@@ -24,6 +25,7 @@ export type EyeMode = "fixed" | "follow-mouse" | "random-path";
 
 export type ControlCommand =
 	| { type: "request-state" }
+	| { type: "request-expressions" }
 	| { type: "hide-stage" }
 	| { type: "show-stage" }
 	| { type: "reset-position" }
@@ -34,9 +36,11 @@ export type ControlCommand =
 	| { type: "sync-state"; state: StageState }
 	| { type: "set-model"; modelPath: string }
 	| { type: "set-expression"; expressionName: string }
+	| { type: "set-motion"; motionGroup: string; index: number }
 	| { type: "report-expressions"; expressions: string[] }
 	| { type: "set-scale-lock"; locked: boolean }
 	| { type: "set-eye-mode"; mode: EyeMode }
+	| { type: "set-pointer"; x: number; y: number }
 	| { type: "set-size"; width: number; height: number }
 	| { type: "reset-zoom" }
 	| { type: "set-passthrough"; enabled: boolean };
@@ -61,9 +65,8 @@ async function initTauriEvents() {
 	}
 
 	try {
-		const mod = await import("@tauri-apps/api/event");
-		tauriEmit = mod.emit;
-		tauriListen = mod.listen;
+		tauriEmit = tauriEmitImpl;
+		tauriListen = tauriListenImpl;
 		isTauri = true;
 		log.info("using Tauri IPC for cross-window sync");
 	} catch {

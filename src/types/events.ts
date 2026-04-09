@@ -6,22 +6,27 @@ import type {
 	EvaluationCaseResult,
 	EvaluationState,
 } from "./evaluation";
+import type { UnifiedRuntimeState } from "./unified";
+import type {
+	CompanionRuntimeBenchmarkResult,
+	CompanionRuntimeBenchmarkState,
+	CompanionFrameDescriptionRecord,
+	CompanionRuntimeState,
+	CompanionSummaryRecord,
+} from "./companion-runtime";
 import type {
 	FunctionalActionKind,
 	FunctionalLogLevel,
 	FunctionalRuntimeState,
 } from "./functional";
 import type { Game2048Move, Game2048State } from "./game-2048";
-import type { StardewActionKey, StardewState, StardewTaskId } from "./stardew";
-
-// ── 运行时事件 ──
+import type { SokobanActionId, SokobanState } from "./sokoban";
+import type { VoiceInputState } from "./voice";
 
 export interface RuntimeModeChangePayload {
 	mode: RuntimeMode;
 	previous: RuntimeMode;
 }
-
-// ── 音频事件 ──
 
 export interface AudioVadEndPayload {
 	audioData: ArrayBuffer;
@@ -36,10 +41,13 @@ export interface AudioTtsStartPayload {
 	text: string;
 }
 
-// ── LLM 事件 ──
-
 export interface LlmRequestStartPayload {
 	userText: string;
+	source?: "chat" | "companion-reply";
+	companionRuntimeContextUsed?: boolean;
+	companionRuntimeTarget?: string | null;
+	companionRuntimeContextLength?: number;
+	knowledgeContextLength?: number;
 }
 
 export interface LlmStreamChunkPayload {
@@ -51,6 +59,18 @@ export interface LlmToolCallPayload {
 	args: Record<string, unknown>;
 }
 
+export interface McpToolStartPayload {
+	name: string;
+	args: Record<string, unknown>;
+}
+
+export interface McpToolCompletePayload {
+	name: string;
+	ok: boolean;
+	resultPreview: string;
+	error?: string | null;
+}
+
 export interface LlmResponseEndPayload {
 	fullText: string;
 }
@@ -58,8 +78,6 @@ export interface LlmResponseEndPayload {
 export interface LlmErrorPayload {
 	error: string;
 }
-
-// ── 角色事件 ──
 
 export interface CharacterExpressionPayload {
 	emotion: string;
@@ -81,14 +99,10 @@ export interface CharacterSwitchPayload {
 	characterId: string;
 }
 
-// ── 系统事件 ──
-
 export interface SystemErrorPayload {
 	module: string;
 	error: string;
 }
-
-// ── 功能执行事件 ──
 
 export interface FunctionalTargetChangePayload {
 	handle: string | null;
@@ -171,13 +185,45 @@ export interface Game2048RunCompletePayload {
 	summary: string;
 }
 
+export interface SokobanStateChangePayload {
+	state: SokobanState;
+}
+
+export interface SokobanTargetDetectedPayload {
+	handle: string | null;
+	title: string | null;
+	summary: string;
+}
+
+export interface SokobanRunStartPayload {
+	runId: string;
+	targetHandle: string;
+	targetTitle: string;
+	plannedMoves: SokobanActionId[];
+}
+
+export interface SokobanAttemptPayload {
+	runId: string;
+	move: SokobanActionId;
+	changed: boolean;
+	changeRatio: number;
+}
+
+export interface SokobanRunCompletePayload {
+	runId: string;
+	success: boolean;
+	executedMoves: SokobanActionId[];
+	boardChanged: boolean;
+	summary: string;
+}
+
 export interface EvaluationStateChangePayload {
 	state: EvaluationState;
 }
 
 export interface EvaluationCaseStartPayload {
 	caseId: string;
-	game: "2048" | "stardew";
+	game: "2048" | "fusion";
 	name: string;
 	iterations: number;
 }
@@ -186,73 +232,84 @@ export interface EvaluationCaseCompletePayload {
 	result: EvaluationCaseResult;
 }
 
-export interface StardewStateChangePayload {
-	state: StardewState;
+export interface UnifiedStateChangePayload {
+	state: UnifiedRuntimeState;
 }
 
-export interface StardewTargetDetectedPayload {
-	handle: string | null;
-	title: string | null;
-	summary: string;
-}
-
-export interface StardewRunStartPayload {
+export interface UnifiedRunStartPayload {
 	runId: string;
-	taskId: StardewTaskId;
-	targetHandle: string;
-	targetTitle: string;
-	preferredActions: StardewActionKey[];
+	trigger: "manual" | "voice";
+	requestText: string | null;
 }
 
-export interface StardewAttemptPayload {
+export interface UnifiedRunCompletePayload {
 	runId: string;
-	action: StardewActionKey;
-	changed: boolean;
-	changeRatio: number;
-}
-
-export interface StardewRunCompletePayload {
-	runId: string;
-	taskId: StardewTaskId;
+	gameId: string | null;
 	success: boolean;
-	selectedAction: StardewActionKey | null;
-	boardChanged: boolean;
 	summary: string;
+	emotion: string;
+	spoke: boolean;
 }
 
-// ── 事件名 → 载荷类型的统一映射 ──
+export interface UnifiedVoiceInputPayload {
+	text: string;
+	command: string | null;
+}
+
+export interface CompanionRuntimeStateChangePayload {
+	state: CompanionRuntimeState;
+}
+
+export interface CompanionRuntimeFramePayload {
+	record: CompanionFrameDescriptionRecord;
+}
+
+export interface CompanionRuntimeSummaryPayload {
+	record: CompanionSummaryRecord;
+}
+
+export interface CompanionRuntimeBenchmarkStateChangePayload {
+	state: CompanionRuntimeBenchmarkState;
+}
+
+export interface CompanionRuntimeBenchmarkStartPayload {
+	benchmarkId: string;
+	name: string;
+	durationMs: number;
+	targetTitle: string;
+}
+
+export interface CompanionRuntimeBenchmarkCompletePayload {
+	result: CompanionRuntimeBenchmarkResult;
+}
+
+export interface VoiceInputStateChangePayload {
+	state: VoiceInputState;
+}
 
 export interface EventMap {
-	// 运行时
 	"runtime:mode-change": RuntimeModeChangePayload;
-
-	// 音频
 	"audio:vad-start": void;
 	"audio:vad-end": AudioVadEndPayload;
 	"audio:asr-result": AudioAsrResultPayload;
 	"audio:tts-start": AudioTtsStartPayload;
 	"audio:tts-end": void;
-
-	// LLM
+	"voice:state-change": VoiceInputStateChangePayload;
 	"llm:request-start": LlmRequestStartPayload;
 	"llm:stream-chunk": LlmStreamChunkPayload;
 	"llm:tool-call": LlmToolCallPayload;
 	"llm:response-end": LlmResponseEndPayload;
 	"llm:error": LlmErrorPayload;
-
-	// 角色
+	"mcp:tool-start": McpToolStartPayload;
+	"mcp:tool-complete": McpToolCompletePayload;
 	"character:expression": CharacterExpressionPayload;
 	"character:motion": CharacterMotionPayload;
 	"character:state-change": CharacterStateChangePayload;
 	"character:switch": CharacterSwitchPayload;
-
-	// 系统
 	"system:emergency-stop": void;
 	"system:manual-takeover": void;
 	"system:resume": void;
 	"system:error": SystemErrorPayload;
-
-	// 功能执行
 	"functional:target-change": FunctionalTargetChangePayload;
 	"perception:snapshot": PerceptionSnapshotPayload;
 	"orchestrator:state-change": OrchestratorStateChangePayload;
@@ -265,14 +322,24 @@ export interface EventMap {
 	"game2048:run-start": Game2048RunStartPayload;
 	"game2048:attempt": Game2048AttemptPayload;
 	"game2048:run-complete": Game2048RunCompletePayload;
-	"stardew:state-change": StardewStateChangePayload;
-	"stardew:target-detected": StardewTargetDetectedPayload;
-	"stardew:run-start": StardewRunStartPayload;
-	"stardew:attempt": StardewAttemptPayload;
-	"stardew:run-complete": StardewRunCompletePayload;
+	"sokoban:state-change": SokobanStateChangePayload;
+	"sokoban:target-detected": SokobanTargetDetectedPayload;
+	"sokoban:run-start": SokobanRunStartPayload;
+	"sokoban:attempt": SokobanAttemptPayload;
+	"sokoban:run-complete": SokobanRunCompletePayload;
 	"evaluation:state-change": EvaluationStateChangePayload;
 	"evaluation:case-start": EvaluationCaseStartPayload;
 	"evaluation:case-complete": EvaluationCaseCompletePayload;
+	"unified:state-change": UnifiedStateChangePayload;
+	"unified:run-start": UnifiedRunStartPayload;
+	"unified:run-complete": UnifiedRunCompletePayload;
+	"unified:voice-input": UnifiedVoiceInputPayload;
+	"companion-runtime:state-change": CompanionRuntimeStateChangePayload;
+	"companion-runtime:frame-described": CompanionRuntimeFramePayload;
+	"companion-runtime:summary-complete": CompanionRuntimeSummaryPayload;
+	"companion-runtime:benchmark-state-change": CompanionRuntimeBenchmarkStateChangePayload;
+	"companion-runtime:benchmark-start": CompanionRuntimeBenchmarkStartPayload;
+	"companion-runtime:benchmark-complete": CompanionRuntimeBenchmarkCompletePayload;
 }
 
 export type EventName = keyof EventMap;

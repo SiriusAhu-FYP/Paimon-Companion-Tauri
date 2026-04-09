@@ -6,8 +6,10 @@ const log = createLogger("mock-llm");
 const MOCK_REPLIES: Array<{ text: string; emotion?: string }> = [
 	{ text: "嘿嘿，当然有啦！今天推荐蒙德的甜甜花酿鸡，超级好吃的！", emotion: "happy" },
 	{ text: "哼，旅行者你是不是又忘了带派蒙出去玩！", emotion: "angry" },
-	{ text: "哇！是新的冒险任务吗？快告诉派蒙！", emotion: "surprised" },
+	{ text: "哇！是新的冒险任务吗？快告诉派蒙！", emotion: "delighted" },
 	{ text: "呜…派蒙有点想念蒙德的苹果酿了…", emotion: "sad" },
+	{ text: "等等，这情况有点不妙，派蒙先紧张起来了！", emotion: "alarmed" },
+	{ text: "欸？欸欸？派蒙脑袋一时有点转不过来了……", emotion: "dazed" },
 	{ text: "没问题！派蒙作为最好的向导，肯定能帮到你！", emotion: "happy" },
 ];
 
@@ -28,7 +30,13 @@ export class MockLLMService implements ILLMService {
 
 		// 先发工具调用（表情切换）
 		if (pick.emotion) {
-			yield { type: "tool-call", name: "setExpression", args: { emotion: pick.emotion } };
+			yield {
+				type: "tool-call",
+				id: `mock-emotion-${Date.now()}`,
+				name: "companion_set_emotion",
+				args: { emotion: pick.emotion },
+				rawArguments: JSON.stringify({ emotion: pick.emotion }),
+			};
 			await delay(100);
 		}
 

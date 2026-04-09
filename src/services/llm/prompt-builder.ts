@@ -5,17 +5,25 @@ import type { ChatMessage } from "./types";
 export interface PromptContext {
 	characterProfile: CharacterProfile | null;
 	knowledgeContext: string;
+	companionRuntimeContext: string;
 	customPersona: string;
 	behaviorConstraints?: BehaviorConstraintsConfig;
 }
 
 /** 知识块过长时截断（Phase 3.5：精选检索结果，阈值调低） */
 const MAX_KNOWLEDGE_CHARS = 4000;
+const MAX_COMPANION_RUNTIME_CHARS = 2000;
 
 function truncateKnowledge(text: string): string {
 	const t = text.trim();
 	if (t.length <= MAX_KNOWLEDGE_CHARS) return t;
 	return `${t.slice(0, MAX_KNOWLEDGE_CHARS)}\n\n[…知识上下文已截断…]`;
+}
+
+function truncateCompanionRuntime(text: string): string {
+	const t = text.trim();
+	if (t.length <= MAX_COMPANION_RUNTIME_CHARS) return t;
+	return `${t.slice(0, MAX_COMPANION_RUNTIME_CHARS)}\n\n[…时序观察上下文已截断…]`;
 }
 
 /** 构建行为约束段落，位于 system prompt 最前面以获得最高遵从度 */
@@ -52,6 +60,22 @@ function buildBehaviorConstraintsSection(bc: BehaviorConstraintsConfig): string 
 export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 	const sections: string[] = [];
 
+	sections.push(
+		[
+			"【当前屏幕理解优先级】",
+			"如果用户在询问“现在看到了什么”“当前发生了什么”或类似问题，并且提供了最近游戏时序观察，那么你必须优先依据这些最近观察回答。",
+			"不要把角色 lore、知识库内容、世界观设定、过往游戏经验当成当前屏幕事实。",
+			"如果最近观察不足以支持某个判断，就明确说看不清、无法确认，而不是自行脑补成 Boss 战、血量危险或其他游戏场景。",
+		].join("\n"),
+	);
+	sections.push(
+		[
+			"【工具调用约定】",
+			"当你想改变同伴的情绪表现时，不要只在文本里暗示情绪；请调用 companion emotion 工具来同步表情状态。",
+			"除非确实需要执行动作，否则仍应优先给出自然、简洁、可朗读的回复。",
+		].join("\n"),
+	);
+
 	if (ctx.behaviorConstraints) {
 		const bcSection = buildBehaviorConstraintsSection(ctx.behaviorConstraints);
 		if (bcSection) {
@@ -78,6 +102,11 @@ export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 	const custom = (ctx.customPersona ?? "").trim();
 	if (custom && !hasCardPersona) {
 		sections.push(`【附加人设】\n${custom}`);
+	}
+
+	const companionRuntime = truncateCompanionRuntime(ctx.companionRuntimeContext ?? "");
+	if (companionRuntime) {
+		sections.push(`【最近游戏时序观察】\n${companionRuntime}`);
 	}
 
 	const knowledge = truncateKnowledge(ctx.knowledgeContext ?? "");
@@ -108,6 +137,7 @@ export function summarizePromptContext(ctx: PromptContext): Record<string, unkno
 		personaLen: (ctx.characterProfile?.persona ?? "").length,
 		scenarioLen: (ctx.characterProfile?.scenario ?? "").length,
 		customPersonaLen: (ctx.customPersona ?? "").length,
+		companionRuntimeLen: (ctx.companionRuntimeContext ?? "").length,
 		knowledgeLen: (ctx.knowledgeContext ?? "").length,
 		behaviorConstraintsEnabled: ctx.behaviorConstraints?.enabled ?? false,
 	};

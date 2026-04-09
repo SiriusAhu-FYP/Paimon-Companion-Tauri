@@ -6,8 +6,34 @@ import type { ModelInfo } from "./live2d-renderer";
  */
 export const MODEL_REGISTRY: ModelInfo[] = [
 	{
+		name: "paimengVts",
+		path: "/Resources/Commercial_models/paimengVts/3paimeng Vts.model3.json",
+		forcedParameters: [
+			{ id: "Param19", value: -1 },
+		],
+		expressionNames: [
+			"按键1",
+			"按键2",
+			"按键3",
+			"表情1",
+			"表情2",
+			"表情3",
+			"表情4",
+			"表情5",
+			"表情6",
+			"表情7",
+			"表情8",
+			"表情9",
+			"鼠标L",
+			"鼠标R",
+		],
+	},
+	{
 		name: "英伦兔兔",
 		path: "/Resources/Commercial_models/英伦兔兔/英伦兔兔.model3.json",
+		forcedParameters: [
+			{ id: "Param31", value: 0 },
+		],
 	},
 	{
 		name: "Hiyori",
@@ -39,4 +65,4 @@ export const MODEL_REGISTRY: ModelInfo[] = [
 	},
 ];
 
-export const DEFAULT_MODEL = MODEL_REGISTRY[0]; // 英伦兔兔
+export const DEFAULT_MODEL = MODEL_REGISTRY[0]; // paimengVts

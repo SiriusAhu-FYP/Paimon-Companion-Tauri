@@ -1,6 +1,16 @@
 // 角色状态与运行时档案（与 SillyTavern 等外部格式解耦）
 
 export type CharacterProfileSource = "sillytavern-v2" | "manual" | "custom";
+export type CompanionEmotion =
+	| "neutral"
+	| "happy"
+	| "angry"
+	| "sad"
+	| "delighted"
+	| "alarmed"
+	| "dazed";
+
+export type CharacterExpressionMap = Partial<Record<CompanionEmotion, string[]>>;
 
 /** 内部归一化角色档案，供 LLM system prompt 与 CharacterService 使用 */
 export interface CharacterProfile {
@@ -11,8 +21,8 @@ export interface CharacterProfile {
 	firstMessage: string;
 	messageExamples: string;
 	systemPrompt: string;
-	defaultEmotion: string;
-	expressionMap: Record<string, string>;
+	defaultEmotion: CompanionEmotion;
+	expressionMap: CharacterExpressionMap;
 	source: CharacterProfileSource;
 	sourceFile?: string;
 }

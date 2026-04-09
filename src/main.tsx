@@ -5,7 +5,11 @@ import { initServices } from "@/services";
 import { mockCharacterInit, exposeMockTools } from "@/utils/mock";
 import { broadcastState, broadcastControl, onControlCommand } from "@/utils/window-sync";
 import { windowLabel } from "@/utils/window-label";
+import { DEFAULT_MODEL } from "@/features/live2d";
+import { initMcpToolBridge } from "@/services/mcp/tool-bridge-service";
+import { setLocalMcpEventBus } from "@/services/mcp/local-mcp-client";
 import { ThemeModeProvider } from "./contexts/JoyThemeProvider";
+import { I18nProvider } from "./contexts/I18nProvider";
 import App from "./App";
 import "./App.css";
 
@@ -13,6 +17,7 @@ async function bootstrap() {
 	await loadConfig();
 
 	const services = initServices();
+	setLocalMcpEventBus(services.bus);
 
 	if (windowLabel === "main") {
 		await services.character.refreshCatalogFromPublic();
@@ -24,6 +29,8 @@ async function bootstrap() {
 		} else {
 			mockCharacterInit(services.character);
 		}
+		services.character.setExpressionIdleTimeoutSeconds(charCfg.expressionIdleTimeoutSeconds);
+		services.character.setActiveModel(DEFAULT_MODEL.path);
 		exposeMockTools(services.bus, services.character, services.runtime);
 
 		const broadcastFullState = (expressionEmotion?: string) => {
@@ -42,12 +49,17 @@ async function bootstrap() {
 			broadcastFullState(payload.emotion);
 			broadcastControl({ type: "set-expression", expressionName: payload.expressionName });
 		});
+		services.bus.on("character:motion", (payload) => {
+			broadcastControl({ type: "set-motion", motionGroup: payload.motionGroup, index: payload.index });
+		});
 
 		onControlCommand((cmd) => {
 			if (cmd.type === "request-state") {
 				broadcastFullState();
 			}
 		});
+
+		await initMcpToolBridge(services);
 
 		const paimonTools = (window as unknown as Record<string, Record<string, unknown>>).__paimon;
 		if (paimonTools) {
@@ -58,7 +70,9 @@ async function bootstrap() {
 	ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 		<React.StrictMode>
 			<ThemeModeProvider>
-				<App />
+				<I18nProvider>
+					<App />
+				</I18nProvider>
 			</ThemeModeProvider>
 		</React.StrictMode>,
 	);

@@ -6,16 +6,20 @@ import type {
 import type { EventMap, EventName } from "@/types";
 
 export interface EventLogEntry {
+	key: string;
 	event: EventName;
 	timestamp: number;
 	timestampLabel: string;
 	category: string;
 	color: string;
+	isDebug: boolean;
+	severity: "info" | "warn" | "error";
 	summary: string;
+	payloadPreviewText: string;
 	payloadText: string;
 }
 
-export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: string }> = {
+export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: string; debug?: boolean }> = {
 	"系统": {
 		events: [
 			"runtime:mode-change",
@@ -29,39 +33,59 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 	"功能": {
 		events: [
 			"functional:target-change",
+			"orchestrator:task-complete",
+			"game2048:target-detected",
+			"game2048:run-start",
+			"game2048:run-complete",
+			"sokoban:target-detected",
+			"sokoban:run-start",
+			"sokoban:run-complete",
+			"evaluation:case-start",
+			"evaluation:case-complete",
+			"unified:run-start",
+			"unified:run-complete",
+			"companion-runtime:frame-described",
+			"companion-runtime:summary-complete",
+			"companion-runtime:benchmark-start",
+			"companion-runtime:benchmark-complete",
+		],
+		color: "#ffb74d",
+	},
+	"调试": {
+		events: [
 			"perception:snapshot",
 			"orchestrator:state-change",
 			"orchestrator:task-start",
-			"orchestrator:task-complete",
 			"orchestrator:task-log",
 			"safety:decision",
-			"game2048:target-detected",
-			"game2048:run-start",
 			"game2048:attempt",
-			"game2048:run-complete",
 			"game2048:state-change",
-			"stardew:target-detected",
-			"stardew:run-start",
-			"stardew:attempt",
-			"stardew:run-complete",
-			"stardew:state-change",
-			"evaluation:case-start",
-			"evaluation:case-complete",
+			"sokoban:attempt",
+			"sokoban:state-change",
 			"evaluation:state-change",
+			"unified:state-change",
+			"unified:voice-input",
+			"companion-runtime:state-change",
+			"companion-runtime:benchmark-state-change",
 		],
-		color: "#ffb74d",
+		color: "#90a4ae",
+		debug: true,
 	},
 	"角色": {
 		events: ["character:expression", "character:motion", "character:state-change", "character:switch"],
 		color: "#81c784",
 	},
 	"语音": {
-		events: ["audio:asr-result", "audio:tts-start", "audio:tts-end"],
+		events: ["audio:vad-start", "audio:vad-end", "audio:asr-result", "audio:tts-start", "audio:tts-end", "voice:state-change"],
 		color: "#64b5f6",
 	},
 	"LLM": {
 		events: ["llm:request-start", "llm:tool-call", "llm:response-end", "llm:error"],
 		color: "#ba68c8",
+	},
+	"MCP": {
+		events: ["mcp:tool-start", "mcp:tool-complete"],
+		color: "#4db6ac",
 	},
 };
 
@@ -76,18 +100,25 @@ function getCategoryForEvent(event: EventName): { name: string; color: string } 
 	return { name: "其他", color: "#90a4ae" };
 }
 
+function isDebugEvent(event: EventName): boolean {
+	for (const { events, debug } of Object.values(EVENT_CATEGORIES)) {
+		if (events.includes(event)) return !!debug;
+	}
+	return false;
+}
+
 function truncate(text: string, limit = PAYLOAD_PREVIEW_LIMIT): string {
 	if (text.length <= limit) return text;
 	return `${text.slice(0, Math.max(0, limit - 1))}…`;
 }
 
-function serializePayload(payload: unknown): string {
+function serializePayload(payload: unknown, pretty = false): string {
 	if (payload == null) return "—";
-	if (typeof payload === "string") return truncate(payload);
+	if (typeof payload === "string") return pretty ? payload : truncate(payload);
 	if (typeof payload === "number" || typeof payload === "boolean") return String(payload);
 
 	try {
-		return truncate(JSON.stringify(payload));
+		return pretty ? JSON.stringify(payload, null, 2) : truncate(JSON.stringify(payload));
 	} catch {
 		return "[unserializable payload]";
 	}
@@ -117,15 +148,25 @@ function formatSummary(event: EventName, payload: unknown): string {
 			const data = payload as EventMap["audio:asr-result"];
 			return `${data.source}: ${truncate(data.text, 80)}`;
 		}
+		case "audio:vad-start":
+			return "VAD 开始录音";
+		case "audio:vad-end": {
+			const data = payload as EventMap["audio:vad-end"];
+			return `VAD 结束 (${Math.round(data.audioData.byteLength / 1024)} KB)`;
+		}
 		case "audio:tts-start": {
 			const data = payload as EventMap["audio:tts-start"];
 			return `TTS: ${truncate(data.text, 80)}`;
 		}
 		case "audio:tts-end":
 			return "TTS 完成";
+		case "voice:state-change": {
+			const data = payload as EventMap["voice:state-change"];
+			return `${data.state.status}${data.state.playbackLocked ? " / playback-lock" : ""}`;
+		}
 		case "llm:request-start": {
 			const data = payload as EventMap["llm:request-start"];
-			return `请求: ${truncate(data.userText, 80)}`;
+			return `${data.source === "companion-reply" ? "跟进" : "请求"}: ${truncate(data.userText, 80)}${data.companionRuntimeContextUsed ? " / runtime context" : ""}`;
 		}
 		case "llm:tool-call": {
 			const data = payload as EventMap["llm:tool-call"];
@@ -138,6 +179,14 @@ function formatSummary(event: EventName, payload: unknown): string {
 		case "llm:error": {
 			const data = payload as EventMap["llm:error"];
 			return `LLM 错误: ${data.error}`;
+		}
+		case "mcp:tool-start": {
+			const data = payload as EventMap["mcp:tool-start"];
+			return `MCP 调用: ${data.name}`;
+		}
+		case "mcp:tool-complete": {
+			const data = payload as EventMap["mcp:tool-complete"];
+			return `${data.ok ? "MCP 完成" : "MCP 失败"}: ${data.name}${data.error ? ` / ${truncate(data.error, 80)}` : ""}`;
 		}
 		case "character:expression": {
 			const data = payload as EventMap["character:expression"];
@@ -204,24 +253,24 @@ function formatSummary(event: EventName, payload: unknown): string {
 			const latest = data.state.lastRun;
 			return latest ? `最新运行: ${latest.status}` : "状态刷新";
 		}
-		case "stardew:target-detected": {
-			const data = payload as EventMap["stardew:target-detected"];
+		case "sokoban:target-detected": {
+			const data = payload as EventMap["sokoban:target-detected"];
 			return data.summary;
 		}
-		case "stardew:run-start": {
-			const data = payload as EventMap["stardew:run-start"];
-			return `${data.taskId}: ${data.preferredActions.join(" -> ")}`;
+		case "sokoban:run-start": {
+			const data = payload as EventMap["sokoban:run-start"];
+			return `${data.targetTitle}: ${data.plannedMoves.join(" -> ")}`;
 		}
-		case "stardew:attempt": {
-			const data = payload as EventMap["stardew:attempt"];
-			return `${data.action}: ${data.changed ? "changed" : "no change"} (${formatPercent(data.changeRatio)})`;
+		case "sokoban:attempt": {
+			const data = payload as EventMap["sokoban:attempt"];
+			return `${data.move}: ${data.changed ? "changed" : "no change"} (${formatPercent(data.changeRatio)})`;
 		}
-		case "stardew:run-complete": {
-			const data = payload as EventMap["stardew:run-complete"];
+		case "sokoban:run-complete": {
+			const data = payload as EventMap["sokoban:run-complete"];
 			return data.summary;
 		}
-		case "stardew:state-change": {
-			const data = payload as EventMap["stardew:state-change"];
+		case "sokoban:state-change": {
+			const data = payload as EventMap["sokoban:state-change"];
 			const latest = data.state.lastRun;
 			return latest ? `最新运行: ${latest.status}` : "状态刷新";
 		}
@@ -231,14 +280,114 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "evaluation:case-complete": {
 			const data = payload as EventMap["evaluation:case-complete"];
-			return `${data.result.caseId}: ${formatPercent(data.result.metrics.successRate)} success`;
+			return data.result.summary || `${data.result.caseId}: ${formatPercent(data.result.metrics.successRate)} success`;
 		}
 		case "evaluation:state-change": {
 			const data = payload as EventMap["evaluation:state-change"];
 			return `active=${data.state.activeCaseId ?? "none"}, 历史=${data.state.history.length}`;
 		}
+		case "unified:state-change": {
+			const data = payload as EventMap["unified:state-change"];
+			return `phase=${data.state.phase}, active=${data.state.activeRunId ?? "none"}`;
+		}
+		case "unified:run-start": {
+			const data = payload as EventMap["unified:run-start"];
+			return `${data.trigger}: ${data.requestText ?? "direct game step"}`;
+		}
+		case "unified:run-complete": {
+			const data = payload as EventMap["unified:run-complete"];
+			return `${data.gameId ?? "unknown"} ${data.success ? "完成" : "失败"}: ${data.summary}`;
+		}
+		case "unified:voice-input": {
+			const data = payload as EventMap["unified:voice-input"];
+			return data.command ? `${data.command}: ${truncate(data.text, 80)}` : `voice: ${truncate(data.text, 80)}`;
+		}
+		case "companion-runtime:state-change": {
+			const data = payload as EventMap["companion-runtime:state-change"];
+			return `phase=${data.state.phase}, frames=${data.state.frameQueue.length}, summaries=${data.state.summaryHistory.length}`;
+		}
+		case "companion-runtime:frame-described": {
+			const data = payload as EventMap["companion-runtime:frame-described"];
+			return `${data.record.source === "unchanged" ? "静止" : "视觉"}: ${truncate(data.record.description, 96)}`;
+		}
+		case "companion-runtime:summary-complete": {
+			const data = payload as EventMap["companion-runtime:summary-complete"];
+			return `${data.record.source}: ${truncate(data.record.summary, 100)}`;
+		}
+		case "companion-runtime:benchmark-start": {
+			const data = payload as EventMap["companion-runtime:benchmark-start"];
+			return `${data.name} @ ${data.targetTitle} (${Math.round(data.durationMs / 1000)}s)`;
+		}
+		case "companion-runtime:benchmark-complete": {
+			const data = payload as EventMap["companion-runtime:benchmark-complete"];
+			return `${data.result.benchmarkName}: ${data.result.metrics.framesPerMinute.toFixed(1)}/min, unchanged ${formatPercent(data.result.metrics.unchangedRatio)}`;
+		}
+		case "companion-runtime:benchmark-state-change": {
+			const data = payload as EventMap["companion-runtime:benchmark-state-change"];
+			return `active=${data.state.activeBenchmarkId ?? "none"}, 历史=${data.state.history.length}`;
+		}
 		default:
 			return serializePayload(payload);
+	}
+}
+
+function getSeverity(event: EventName, payload: unknown): "info" | "warn" | "error" {
+	switch (event) {
+		case "system:error":
+		case "llm:error":
+		case "mcp:tool-complete": {
+			if (event === "mcp:tool-complete") {
+				const data = payload as EventMap["mcp:tool-complete"];
+				return data.ok ? "info" : "error";
+			}
+			return "error";
+		}
+		case "voice:state-change": {
+			const data = payload as EventMap["voice:state-change"];
+			return data.state.status === "error" ? "error" : "info";
+		}
+		case "orchestrator:task-log": {
+			const data = payload as EventMap["orchestrator:task-log"];
+			if (data.level === "error") return "error";
+			if (data.level === "warn") return "warn";
+			return "info";
+		}
+		case "orchestrator:task-complete": {
+			const data = payload as EventMap["orchestrator:task-complete"];
+			return data.success ? "info" : "error";
+		}
+		case "game2048:run-complete": {
+			const data = payload as EventMap["game2048:run-complete"];
+			return data.success ? "info" : "warn";
+		}
+		case "sokoban:run-complete": {
+			const data = payload as EventMap["sokoban:run-complete"];
+			return data.success ? "info" : "warn";
+		}
+		case "unified:run-complete": {
+			const data = payload as EventMap["unified:run-complete"];
+			return data.success ? "info" : "warn";
+		}
+		case "companion-runtime:benchmark-complete": {
+			const data = payload as EventMap["companion-runtime:benchmark-complete"];
+			return data.result.status === "completed" ? "info" : "warn";
+		}
+		case "evaluation:case-complete": {
+			const data = payload as EventMap["evaluation:case-complete"];
+			if (data.result.status !== "completed") {
+				return "error";
+			}
+			if (data.result.metrics.successRate < 1) {
+				return "warn";
+			}
+			return "info";
+		}
+		case "safety:decision": {
+			const data = payload as EventMap["safety:decision"];
+			return data.allowed ? "info" : "warn";
+		}
+		default:
+			return "info";
 	}
 }
 
@@ -247,17 +396,21 @@ function toEntry(entry: EventHistoryEntry): EventLogEntry | null {
 
 	const category = getCategoryForEvent(entry.event);
 	return {
+		key: String(entry.sequence),
 		event: entry.event,
 		timestamp: entry.timestamp,
 		timestampLabel: new Date(entry.timestamp).toLocaleTimeString(),
 		category: category.name,
 		color: category.color,
+		isDebug: isDebugEvent(entry.event),
+		severity: getSeverity(entry.event, entry.payload),
 		summary: formatSummary(entry.event, entry.payload),
-		payloadText: serializePayload(entry.payload),
+		payloadPreviewText: serializePayload(entry.payload),
+		payloadText: serializePayload(entry.payload, true),
 	};
 }
 
-export function useEventLog(limit = DEFAULT_LIMIT) {
+export function useEventLog(limit = DEFAULT_LIMIT, options?: { showDebug?: boolean }) {
 	const { bus } = getServices();
 	const historyVersion = useSyncExternalStore(
 		(onStoreChange) => bus.subscribeHistory(onStoreChange),
@@ -268,20 +421,22 @@ export function useEventLog(limit = DEFAULT_LIMIT) {
 
 	const entries = useMemo(() => {
 		const next: EventLogEntry[] = [];
-		for (let index = history.length - 1; index >= 0; index -= 1) {
+		const startIndex = Math.max(0, history.length - limit);
+		for (let index = startIndex; index < history.length; index += 1) {
 			const normalized = toEntry(history[index]);
-			if (normalized) {
+			if (normalized && (options?.showDebug || !normalized.isDebug)) {
 				next.push(normalized);
-			}
-			if (next.length >= limit) {
-				break;
 			}
 		}
 		return {
 			entries: next,
-			totalTrackedEntries: history.reduce((count, item) => count + (TRACKED_EVENTS.includes(item.event) ? 1 : 0), 0),
+			totalTrackedEntries: history.reduce((count, item) => {
+				if (!TRACKED_EVENTS.includes(item.event)) return count;
+				if (!options?.showDebug && isDebugEvent(item.event)) return count;
+				return count + 1;
+			}, 0),
 		};
-	}, [history, historyVersion, limit]);
+	}, [history, historyVersion, limit, options?.showDebug]);
 
 	const clear = useCallback(() => {
 		bus.clearHistory();
@@ -290,7 +445,7 @@ export function useEventLog(limit = DEFAULT_LIMIT) {
 	return {
 		entries: entries.entries,
 		clear,
-		latestEntry: entries.entries[0] ?? null,
+		latestEntry: entries.entries[entries.entries.length - 1] ?? null,
 		totalTrackedEntries: entries.totalTrackedEntries,
 	};
 }

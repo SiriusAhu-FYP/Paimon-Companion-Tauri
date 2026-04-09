@@ -43,11 +43,8 @@ Public progress tracker for `paimon-companion-tauri`.
     - [x] track latency
     - [x] track action validity
     - [x] document baseline results
-  - [x] P1.5 Stardew Valley Extension
-    - [x] define first small task set
-    - [x] adapt perception prompts/context
-    - [x] adapt control and verification logic
-    - [x] run the same evaluation flow used in `2048`
+  - [-] P1.5 Stardew Valley Extension
+    deferred from the active codebase during pre-`P2` cleanup to reduce maintenance surface; task templates remain available for future reintroduction
 
 - [x] P1.5+: Support Systems
   - [-] connect knowledge retrieval to functional tasks where useful
@@ -61,25 +58,107 @@ P1 close-out:
 - accepted baseline: validated `2048` path on `2026-04-03`
 - `P2` should start from a fresh branch
 
-- [ ] P2: Unified System Validation
-  - [ ] P2.1 Relational Core Integration
-    - [ ] integrate proactive companion behavior into the functional loop
-    - [ ] expression mapping aligned with task/game state
-    - [ ] speech output path for unified runs
-    - [ ] voice input path where needed for interaction testing
-  - [ ] P2.2 Minecraft Transfer
-    - [ ] define initial Minecraft task set
-    - [ ] adapt perception for high-DOF play
-    - [ ] adapt action tools for Minecraft controls
-    - [ ] stabilize long-horizon planning and recovery
-  - [ ] P2.3 User Study
-    - [ ] define Group A functional-only condition
-    - [ ] define Group B full unified-system condition
-    - [ ] prepare small-sample study materials
-    - [ ] collect results
-    - [ ] summarize companionship / proactivity / workload outcomes
+- [x] P2: Core Repository Fusion
+  - [x] groundwork: a thin unified runtime layer already exists for `2048` validation
+  - [x] P2.1 Source Audit And Gap Mapping
+    - [x] map `LLMPlay-MVP` features to the current Tauri codebase
+    - [x] map `VoiceL2D-MVP` features to the current Tauri codebase
+    - [x] map `Video-Understanding-MVP` features to the current Tauri codebase
+    - [x] classify each capability as merged / partial / missing / replaced
+    - [x] document the accepted replacement decisions where implementation shape has changed
+  - [x] P2.2 `VoiceL2D-MVP` Completion
+    - [x] define ASR migration strategy around pluggable providers instead of bundled desktop weights
+    - [x] add ASR provider/profile configuration surface in settings
+    - [x] restore a real voice-input path instead of manual/mock-only ASR
+    - [x] support at least one cloud ASR provider and one local-runtime provider
+    - [x] keep GPT-SoVITS as the accepted local TTS baseline from `VoiceL2D-MVP`
+    - [x] align accepted ASR providers with the current product plan: `local-sherpa`, `volcengine`, `aliyun`
+    - [x] bundle the default local ASR model route around `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16`
+    - [x] restore microphone capture, VAD segmentation, and playback-time mic lock
+    - [x] validate voice -> LLM -> TTS -> Live2D end-to-end in the Tauri host
+    - [-] improve mixed-language recognition inside a single utterance
+      deferred: the current bilingual local ASR baseline is acceptable for Chinese or English utterances, but intra-sentence code-switching is not yet treated as a solved requirement
+  - [x] P2.3 Companion Expression Protocol
+    - [x] define a first-pass emotion taxonomy and randomized per-model expression candidate mapping
+    - [x] extend the same protocol to first-pass motion selection where models expose reusable motions
+    - [x] validate the real LLM path can consistently drive visible Live2D expression changes through MCP tools instead of mock-only/internal-only wiring
+    - [x] migrate the accepted expression-control path toward a formal MCP-facing contract
+    - [-] keep motion as an optional enhancement rather than the current acceptance gate
+      deferred: expression linkage is accepted for `P2`; motion remains an optional follow-up enhancement
+  - [x] P2.4 `LLMPlay-MVP` Completion
+    - [x] keep `Sokoban` in scope as the second reasoning-oriented validation game
+    - [x] define a shared game prompt template (`example.md`) before rewriting per-game prompts
+    - [x] lock the first companion MCP contract and game semantic action contract before broad plugin work
+    - [x] define the minimum retained `Sokoban` validation scope before implementation
+    - [x] replace the current weak reflection/history loop with a stronger decision-history design derived from `LLMPlay-MVP`
+    - [x] define an MCP-facing semantic action contract so the model can call game actions without relying on rigid visible reply formatting
+    - [x] land the first semantic action runtime foundation by migrating `2048` away from raw key assumptions
+    - [x] move semantic game action definitions into lightweight per-game config manifests
+    - [x] restore a first minimal `Sokoban` validation skeleton on the same semantic action foundation
+    - [x] decide which gameplay semantics belong in core MCP tools and which belong in per-game config/plugins
+    - [x] either merge the missing MVP capabilities or explicitly retire them in docs
+  - [x] P2.5 `Video-Understanding-MVP` Completion
+    - [x] define the first local-fast / cloud-summarize companion runtime slice around `Qwen3-VL-2B-Instruct` style local frame descriptions plus cloud temporal reasoning
+    - [x] start from `8-10s` rolling local-description windows and preserve at least the latest `1min` of summary context
+    - [x] feed the latest rolling temporal summary into the companion prompt path instead of leaving it as a lab-only side panel
+      - [x] split perception prompting into general observation plus lightweight game-specific focus overlays
+      - [x] add lightweight change-based frame filtering so the runtime can coalesce visually unchanged captures instead of re-describing every tick
+      - [x] expose lightweight session metrics for runtime throughput, unchanged-frame ratio, and summary latency
+      - [x] add a fixed-duration companion runtime benchmark so throughput and summary cadence can be sampled without ad hoc manual timing
+      - [x] factor repeated OpenAI-compatible image reasoning calls into a shared vision client instead of duplicating per-game/per-runtime request code
+      - [x] replace interval overlap with self-paced runtime scheduling and bounded queue pruning so long-running observation sessions stay stable
+      - [-] integrate the missing reusable perception pieces that are still required
+        deferred: the accepted `P2` runtime slice is in place; broader toolkit carry-over is future work, not a close-out gate
+      - [x] carry over the relevant evaluation/benchmark logic where it still serves the product goal
+      - [-] add no-progress escalation and selected-frame cloud rescue
+        deferred: keep this as a future optimization path, not a current implementation gate
+  - [x] P2.6 Post-Fusion Validation
+    - [x] route the current `Unified Run` entry through the selected semantic game target instead of keeping it 2048-only
+    - [x] let unified game results ask the active LLM for grounded companion follow-up text instead of relying only on hardcoded per-game copy
+    - [x] add a first fusion evaluation case that samples runtime-context usage, LLM follow-up generation, and speech in one pass
+    - [x] refresh the active companion observation context after unified game rounds so follow-up replies can speak from fresher runtime state
+    - [x] land the first real MCP server boundary for companion control and semantic game control
+    - [x] verify that all three source lines coexist in one Tauri runtime through that MCP-facing runtime path
+    - [x] verify companion behavior, expression, speech, and functional execution together
+    - [x] define the accepted post-fusion baseline after MCP-backed fusion is working
 
-- [ ] Stretch
-  - [ ] Genshin Impact transfer test
-  - [ ] broader pluginized multi-game support
-  - [ ] release packaging polish
+Cross-cutting rule during `P2` and later:
+
+- when work touches runtime-owned frontend modules that are already better suited to the backend, migrate that slice during the same implementation pass where practical
+- current definite migration targets are recorded in `docs/architecture/runtime-backend-migration.md`
+- each migration must be followed by a focused manual regression check before it is treated as accepted
+
+- [-] P3: Expansion After Fusion
+  - [-] Minecraft transfer
+    gated until `P2` source fusion is accepted
+  - [-] Genshin Impact transfer test
+    gated until `P2` source fusion is accepted
+  - [-] broader pluginized multi-game support
+    gated until `P2` source fusion is accepted
+  - [-] user study
+    gated until `P2` source fusion is accepted
+  - [-] release packaging polish
+    gated until `P2` source fusion is accepted
+
+P2 note:
+
+- `paimon-live` is framework heritage only
+- the functional source-of-truth repos for this stage are `LLMPlay-MVP`, `VoiceL2D-MVP`, and `Video-Understanding-MVP`
+- the current `Unified Run` path is useful groundwork, but it is not by itself proof that source-repo fusion is complete
+- the first-pass fusion matrix is recorded in `docs/architecture/source-fusion-audit.md`
+- retained / replaced / retired `LLMPlay-MVP` decisions are recorded in `docs/architecture/llmplay-retained-scope.md`
+- the ASR restoration strategy is recorded in `docs/architecture/asr-migration-strategy.md`
+- the companion runtime direction is recorded in `docs/architecture/companion-runtime.md`
+- the accepted `P2` close-out bar is recorded in `docs/architecture/post-fusion-baseline.md`
+- accepted `P2.2` baseline: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D response
+- cloud ASR providers remain configured options, but they are not part of the accepted `P2.2` live-validation baseline
+- `P2.3` is intentionally about companion expression / motion protocol first, not about full game-plugin protocol yet
+- the first pass of `P2.3` should stay semantically small and distinct: `neutral`, `happy`, `angry`, `sad`, `delighted`, `alarmed`, `dazed`
+- the current internal expression path and mock-path are useful groundwork, but they do not satisfy the intended `P2` fusion bar on their own
+- the first localhost MCP server slice has landed, but it is not treated as accepted until the real LLM path and semantic game path are both validated through it
+- MCP externalization is a prerequisite for `P2` close-out, not later optional polish
+- accepted close-out status on `2026-04-09`: the MCP-backed fusion baseline is working end to end, including voice input, rolling runtime context, grounded follow-up text, speech, Live2D expression changes, and semantic game actions through the same local MCP boundary
+- accepted known issues at close-out:
+  - the current fusion `latency` metric is an end-to-end round duration and includes downstream stages such as speech playback; it is not yet a fine-grained delay breakdown
+  - active fusion runs can still make the Tauri UI feel sluggish while local vision, logging, and speech are all active
+  - detailed performance profiling and responsiveness work should start immediately after `P2` close-out

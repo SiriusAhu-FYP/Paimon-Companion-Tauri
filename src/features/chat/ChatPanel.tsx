@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { Box, Typography, TextField, Button, Paper } from "@mui/material";
+import { Alert, Box, Typography, TextField, Button, Paper, IconButton, Tooltip } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
-import { useEventBus } from "@/hooks";
+import MicIcon from "@mui/icons-material/Mic";
+import MicOffIcon from "@mui/icons-material/MicOff";
+import GraphicEqIcon from "@mui/icons-material/GraphicEq";
+import { useEventBus, useVoiceInput } from "@/hooks";
 import { getServices } from "@/services";
 import { createLogger } from "@/services/logger";
 import { RebuildGate } from "@/features/knowledge";
@@ -21,6 +24,7 @@ export function ChatPanel() {
 	const [status, setStatus] = useState<"idle" | "thinking" | "speaking">("idle");
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const streamBufferRef = useRef("");
+	const { state: voiceState, toggle: toggleVoice } = useVoiceInput();
 
 	useEffect(() => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -130,6 +134,51 @@ export function ChatPanel() {
 		}
 	};
 
+	const voiceLabelMap: Record<typeof voiceState.status, string> = {
+		idle: "语音输入未开启",
+		"requesting-permission": "正在请求麦克风权限...",
+		listening: "麦克风已开启，等待说话",
+		recording: "检测到说话，正在录音",
+		transcribing: "正在识别语音",
+		locked: voiceState.playbackLocked ? "播放 TTS 中，麦克风已锁定" : "当前对话处理中，暂不接收新语音",
+		error: voiceState.lastError ? `语音输入错误: ${voiceState.lastError}` : "语音输入错误",
+	};
+
+	const voiceButtonIcon = (() => {
+		switch (voiceState.status) {
+			case "recording":
+				return <GraphicEqIcon sx={{ fontSize: 18 }} />;
+			case "idle":
+			case "error":
+				return <MicOffIcon sx={{ fontSize: 18 }} />;
+			default:
+				return <MicIcon sx={{ fontSize: 18 }} />;
+		}
+	})();
+
+	const voiceButtonColor =
+		voiceState.status === "recording"
+			? "warning.main"
+			: voiceState.enabled
+				? "primary.main"
+				: "text.secondary";
+
+	const permissionLabelMap: Record<typeof voiceState.permission, string> = {
+		unknown: "未确认",
+		granted: "已授予",
+		denied: "已拒绝",
+	};
+
+	const phaseLabelMap: Record<typeof voiceState.status, string> = {
+		idle: "未开启",
+		"requesting-permission": "请求权限",
+		listening: "待机监听",
+		recording: "正在录音",
+		transcribing: "识别中",
+		locked: "已锁定",
+		error: "错误",
+	};
+
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100%", p: 1.5 }}>
 			<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, mb: 1 }}>
@@ -177,6 +226,54 @@ export function ChatPanel() {
 				</Typography>
 			)}
 
+			{(voiceState.enabled || voiceState.status === "error" || !!voiceState.lastTranscript || !!voiceState.lastError) && (
+				<Box sx={{ py: 0.5 }}>
+					<Paper
+						elevation={0}
+						sx={{
+							p: 0.9,
+							borderRadius: 1,
+							bgcolor: "background.paper",
+							border: "1px solid",
+							borderColor: voiceState.status === "error" ? "error.main" : "divider",
+							display: "flex",
+							flexDirection: "column",
+							gap: 0.5,
+						}}
+					>
+						<Typography
+							variant="caption"
+							sx={{
+								color: voiceState.status === "error" ? "error.main" : "text.secondary",
+								fontWeight: 600,
+							}}
+						>
+							语音诊断
+						</Typography>
+						<Typography variant="caption" sx={{ color: "text.secondary" }}>
+							状态：{phaseLabelMap[voiceState.status]} · Provider：{voiceState.providerLabel} · 权限：{permissionLabelMap[voiceState.permission]}
+						</Typography>
+						<Typography variant="caption" sx={{ color: voiceState.status === "error" ? "error.main" : "text.secondary" }}>
+							{voiceLabelMap[voiceState.status]}
+						</Typography>
+						{voiceState.lastTranscript && (
+							<Alert severity="info" sx={{ py: 0, "& .MuiAlert-message": { py: 0.2 } }}>
+								<Typography variant="caption">
+									最近识别：{voiceState.lastTranscript}
+								</Typography>
+							</Alert>
+						)}
+						{voiceState.lastError && (
+							<Alert severity="error" sx={{ py: 0, "& .MuiAlert-message": { py: 0.2 } }}>
+								<Typography variant="caption">
+									最近错误：{voiceState.lastError}
+								</Typography>
+							</Alert>
+						)}
+					</Paper>
+				</Box>
+			)}
+
 			{showRebuildGate && (
 				<Box sx={{ py: 1 }}>
 					<RebuildGate
@@ -213,6 +310,21 @@ export function ChatPanel() {
 						},
 					}}
 				/>
+				<Tooltip title={voiceState.enabled ? "关闭麦克风" : "开启麦克风"}>
+					<span>
+						<IconButton
+							size="small"
+							onClick={() => { void toggleVoice(); }}
+							sx={{
+								border: "1px solid",
+								borderColor: voiceState.enabled ? "primary.main" : "divider",
+								color: voiceButtonColor,
+							}}
+						>
+							{voiceButtonIcon}
+						</IconButton>
+					</span>
+				</Tooltip>
 				<Button
 					variant="contained"
 					size="small"

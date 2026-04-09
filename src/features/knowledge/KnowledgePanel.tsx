@@ -19,6 +19,7 @@ import {
 	proxyRequest,
 } from "@/services/config";
 import { HelpTooltip } from "@/components";
+import { useI18n } from "@/contexts/I18nProvider";
 import { getServices, refreshEmbeddingService } from "@/services";
 import type { KnowledgeDocument, RetrievalResult, EmbeddingProfile, RerankProfile } from "@/types/knowledge";
 import type { IndexStatus } from "@/services/knowledge";
@@ -35,6 +36,7 @@ const SectionTitle = ({ children }: { children: React.ReactNode }) => (
 );
 
 export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
+	const { t } = useI18n();
 	const [message, setMessage] = useState<{ type: "success" | "error" | "info" | "warning"; text: string } | null>(null);
 
 	// Embedding profiles
@@ -697,9 +699,9 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1, height: "100%", overflowY: "auto" }}>
 			{/* Header */}
 			<Stack direction="row" alignItems="center" spacing={1}>
-				<Tooltip title="返回控制面板"><IconButton size="small" onClick={onClose}><ArrowBackIcon fontSize="small" /></IconButton></Tooltip>
+				<Tooltip title={t("返回控制面板", "Back to control panel")}><IconButton size="small" onClick={onClose}><ArrowBackIcon fontSize="small" /></IconButton></Tooltip>
 				<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
-					知识库
+					{t("知识库", "Knowledge")}
 				</Typography>
 			</Stack>
 

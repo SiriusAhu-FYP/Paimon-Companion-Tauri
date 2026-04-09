@@ -4,7 +4,7 @@
  * 敏感配置（API Key）走 SecretStore（见 secret-store.ts）。
  */
 
-import type { AppConfig, CharacterSettingsConfig } from "./types";
+import type { AppConfig, ASRProfile, ASRProviderConfig, CharacterSettingsConfig, TTSProfile, TTSProviderConfig } from "./types";
 import { DEFAULT_CONFIG } from "./types";
 import { createLogger } from "@/services/logger";
 import { isTauriEnvironment } from "@/utils/window-sync";
@@ -19,8 +19,11 @@ let cachedConfig: AppConfig | null = null;
 
 function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfig {
 	return {
+		locale: overrides.locale ?? defaults.locale,
 		llm: { ...defaults.llm, ...overrides.llm },
 		tts: { ...defaults.tts, ...overrides.tts },
+		asr: { ...defaults.asr, ...overrides.asr },
+		companionRuntime: { ...defaults.companionRuntime, ...overrides.companionRuntime },
 		character: {
 			...defaults.character,
 			...overrides.character,
@@ -31,8 +34,10 @@ function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfi
 		},
 		llmProfiles: overrides.llmProfiles ?? defaults.llmProfiles,
 		ttsProfiles: overrides.ttsProfiles ?? defaults.ttsProfiles,
+		asrProfiles: overrides.asrProfiles ?? defaults.asrProfiles,
 		activeLlmProfileId: overrides.activeLlmProfileId ?? defaults.activeLlmProfileId,
 		activeTtsProfileId: overrides.activeTtsProfileId ?? defaults.activeTtsProfileId,
+		activeAsrProfileId: overrides.activeAsrProfileId ?? defaults.activeAsrProfileId,
 		knowledge: {
 			embedding: {
 				...defaults.knowledge.embedding,
@@ -65,10 +70,62 @@ function normalizeCharacterSettings(
 	return {
 		activeProfileId: character.activeProfileId ?? DEFAULT_CONFIG.character.activeProfileId,
 		customPersona,
+		expressionIdleTimeoutSeconds:
+			character.expressionIdleTimeoutSeconds ?? DEFAULT_CONFIG.character.expressionIdleTimeoutSeconds,
 		behaviorConstraints: {
 			...DEFAULT_CONFIG.character.behaviorConstraints,
 			...(character.behaviorConstraints ?? {}),
 		},
+	};
+}
+
+function normalizeTtsConfig(tts: TTSProviderConfig & { gptWeightsPath?: string }): TTSProviderConfig {
+	const rawProvider = (tts as { provider?: string }).provider;
+	const provider = rawProvider === "browser-native" ? "gpt-sovits" : (rawProvider ?? "mock");
+	return {
+		provider: provider as TTSProviderConfig["provider"],
+		baseUrl: tts.baseUrl ?? "",
+		speakerId: tts.speakerId ?? "",
+		speed: tts.speed ?? 1.0,
+		gptWeightsPath: (tts as TTSProviderConfig & { gptWeightsPath?: string }).gptWeightsPath ?? "",
+		sovitsWeightsPath: (tts as TTSProviderConfig & { sovitsWeightsPath?: string }).sovitsWeightsPath ?? "",
+		refAudioPath: (tts as TTSProviderConfig & { refAudioPath?: string }).refAudioPath ?? "",
+		promptText: (tts as TTSProviderConfig & { promptText?: string }).promptText ?? "",
+		promptLang: (tts as TTSProviderConfig & { promptLang?: string }).promptLang ?? "zh",
+		textLang: tts.textLang ?? "zh",
+	};
+}
+
+function normalizeTtsProfile(profile: TTSProfile & { gptWeightsPath?: string }): TTSProfile {
+	return {
+		id: profile.id,
+		name: profile.name,
+		...normalizeTtsConfig(profile),
+	};
+}
+
+function normalizeAsrConfig(asr: Partial<ASRProviderConfig> & { provider?: string }): ASRProviderConfig {
+	const rawProvider = (asr as { provider?: string }).provider;
+	const provider = rawProvider === "vosk-local" ? "local-sherpa" : (rawProvider ?? DEFAULT_CONFIG.asr.provider);
+	return {
+		provider: provider as ASRProviderConfig["provider"],
+		baseUrl: asr.baseUrl ?? "",
+		model: asr.model ?? DEFAULT_CONFIG.asr.model,
+		language: asr.language ?? DEFAULT_CONFIG.asr.language,
+		autoDetectLanguage: asr.autoDetectLanguage ?? DEFAULT_CONFIG.asr.autoDetectLanguage,
+		vadEnabled: asr.vadEnabled ?? DEFAULT_CONFIG.asr.vadEnabled,
+		vadAggressiveness: asr.vadAggressiveness ?? DEFAULT_CONFIG.asr.vadAggressiveness,
+		silenceThresholdMs: asr.silenceThresholdMs ?? DEFAULT_CONFIG.asr.silenceThresholdMs,
+		minSpeechMs: asr.minSpeechMs ?? DEFAULT_CONFIG.asr.minSpeechMs,
+	};
+}
+
+function normalizeAsrProfile(profile: ASRProfile & { provider?: string }): ASRProfile {
+	return {
+		id: profile.id,
+		name: profile.name,
+		apiKey: profile.apiKey ?? "",
+		...normalizeAsrConfig(profile),
 	};
 }
 
@@ -148,6 +205,14 @@ export async function loadConfig(): Promise<AppConfig> {
 	cachedConfig = deepMerge(DEFAULT_CONFIG, overrides);
 	cachedConfig = {
 		...cachedConfig,
+		tts: normalizeTtsConfig(cachedConfig.tts as TTSProviderConfig & { gptWeightsPath?: string }),
+		ttsProfiles: cachedConfig.ttsProfiles.map((profile) =>
+			normalizeTtsProfile(profile as TTSProfile & { gptWeightsPath?: string }),
+		),
+		asr: normalizeAsrConfig(cachedConfig.asr as Partial<ASRProviderConfig> & { provider?: string }),
+		asrProfiles: cachedConfig.asrProfiles.map((profile) =>
+			normalizeAsrProfile(profile as ASRProfile & { provider?: string }),
+		),
 		character: normalizeCharacterSettings(
 			cachedConfig.character as CharacterSettingsConfig & { persona?: string },
 		),
@@ -155,6 +220,7 @@ export async function loadConfig(): Promise<AppConfig> {
 	log.info("config loaded", {
 		llmProvider: cachedConfig.llm.provider,
 		ttsProvider: cachedConfig.tts.provider,
+		asrProvider: cachedConfig.asr.provider,
 	});
 	return cachedConfig;
 }
@@ -181,6 +247,7 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
 	log.info("config updated", {
 		llmProvider: updated.llm.provider,
 		ttsProvider: updated.tts.provider,
+		asrProvider: updated.asr.provider,
 	});
 	return updated;
 }
@@ -190,11 +257,15 @@ export async function resetConfig(): Promise<AppConfig> {
 		...DEFAULT_CONFIG,
 		llm: { ...DEFAULT_CONFIG.llm },
 		tts: { ...DEFAULT_CONFIG.tts },
+		asr: { ...DEFAULT_CONFIG.asr },
+		companionRuntime: { ...DEFAULT_CONFIG.companionRuntime },
 		character: { ...DEFAULT_CONFIG.character },
 		llmProfiles: [],
 		ttsProfiles: [],
+		asrProfiles: [],
 		activeLlmProfileId: "",
 		activeTtsProfileId: "",
+		activeAsrProfileId: "",
 	};
 
 	if (isTauriEnvironment()) {

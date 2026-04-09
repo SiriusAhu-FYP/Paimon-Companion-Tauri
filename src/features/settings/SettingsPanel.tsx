@@ -23,8 +23,11 @@ import {
 import { createLogger } from "@/services/logger";
 import { GptSovitsTTSService, MockTTSService, splitText, normalizeForSpeech, SpeechQueue } from "@/services/tts";
 import { AudioPlayer } from "@/services/audio/audio-player";
+import { checkLocalSherpaHealth } from "@/services/asr";
 import { HelpTooltip } from "@/components";
+import { useI18n } from "@/contexts/I18nProvider";
 import { refreshProviders } from "@/services";
+import { AsrProfilesSection } from "./AsrProfilesSection";
 
 const log = createLogger("settings");
 
@@ -33,11 +36,13 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
+	const { t } = useI18n();
 	const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
 	const [message, setMessage] = useState<{ type: "success" | "error" | "info" | "warning"; text: string } | null>(null);
 	const [llmTestResult, setLlmTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 	const [ttsTestResult, setTtsTestResult] = useState<{ ok: boolean; text: string } | null>(null);
-	const [testing, setTesting] = useState<"llm" | "tts" | null>(null);
+	const [asrTestResult, setAsrTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+	const [testing, setTesting] = useState<"llm" | "tts" | "asr" | null>(null);
 	const [ttsTestText, setTtsTestText] = useState("你好，我是测试文本");
 	const [ttsTesting, setTtsTesting] = useState(false);
 
@@ -80,6 +85,15 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 			ttsBaseUrl: config.tts.baseUrl,
 		});
 		return config.tts;
+	}, [config]);
+
+	/** 从激活的 ASR 档案或根配置中获取当前 ASR 配置 */
+	const getActiveAsrConfig = useCallback(() => {
+		if (config.activeAsrProfileId) {
+			const profile = config.asrProfiles.find((p) => p.id === config.activeAsrProfileId);
+			if (profile) return profile;
+		}
+		return config.asr;
 	}, [config]);
 
 	const handleTestLLM = useCallback(async () => {
@@ -209,16 +223,71 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 		}
 	}, [getActiveTtsConfig, ttsTestText]);
 
+	const handleTestASR = useCallback(async () => {
+		setTesting("asr");
+		setAsrTestResult(null);
+		try {
+			const asrCfg = getActiveAsrConfig();
+			if (asrCfg.provider === "mock") {
+				setAsrTestResult({ ok: true, text: "Mock ASR 始终可用" });
+				return;
+			}
+			if (asrCfg.provider === "local-sherpa") {
+				const health = await checkLocalSherpaHealth();
+				setAsrTestResult({
+					ok: true,
+					text: `本地模型已就绪：${health.modelName} @ ${health.modelDir}`,
+				});
+				log.info("local sherpa healthcheck passed", health);
+				return;
+			}
+			const baseUrl = (asrCfg.baseUrl || "").trim().replace(/\/+$/, "");
+			if (!baseUrl) {
+				setAsrTestResult({ ok: false, text: "请先在档案中配置服务地址" });
+				return;
+			}
+
+			const profileId = config.activeAsrProfileId || null;
+			const secretKey = profileId ? SECRET_KEYS.ASR_API_KEY(profileId) : undefined;
+			const resp = await proxyRequest({
+				url: baseUrl,
+				method: "GET",
+				secretKey,
+				timeoutMs: 8000,
+			});
+
+			if (resp.status < 500) {
+				setAsrTestResult({
+					ok: true,
+					text: `服务可达 (HTTP ${resp.status})。这是连通性测试，不代表识别链路已完成验证。`,
+				});
+				log.info("ASR connection test passed", { status: resp.status, provider: asrCfg.provider });
+				return;
+			}
+
+			setAsrTestResult({
+				ok: false,
+				text: `服务返回异常 (HTTP ${resp.status}): ${resp.body.slice(0, 120)}`,
+			});
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			setAsrTestResult({ ok: false, text: msg });
+			log.warn("ASR connection test failed", msg);
+		} finally {
+			setTesting(null);
+		}
+	}, [config.activeAsrProfileId, getActiveAsrConfig]);
+
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1, height: "100%", overflowY: "auto" }}>
 			<Stack direction="row" alignItems="center" spacing={1}>
-				<Tooltip title="返回控制面板">
+				<Tooltip title={t("返回控制面板", "Back to control panel")}>
 					<IconButton size="small" onClick={onClose}>
 						<ArrowBackIcon fontSize="small" />
 					</IconButton>
 				</Tooltip>
 				<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
-					设置
+					{t("设置", "Settings")}
 				</Typography>
 			</Stack>
 
@@ -256,12 +325,71 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 			onPersist={async (newProfiles, newActiveId) => (await updateConfig({ ttsProfiles: newProfiles, activeTtsProfileId: newActiveId }), refreshProviders())}
 		/>
 
+		<Divider />
+
+		<SectionTitle>
+			ASR 配置
+			<HelpTooltip title="ASR 会作为独立 provider/profile 管理。本地默认路线是应用内置的 sherpa-onnx 双语模型；云端保留火山和阿里云。" />
+		</SectionTitle>
+		<AsrProfilesSection
+			profiles={config.asrProfiles}
+			activeId={config.activeAsrProfileId}
+			onAdd={(profile) => setConfig((current) => ({ ...current, asrProfiles: [...current.asrProfiles, profile] }))}
+			onUpdate={(profile) => setConfig((current) => ({
+				...current,
+				asrProfiles: current.asrProfiles.map((item) => item.id === profile.id ? profile : item),
+			}))}
+			onDelete={(id) => setConfig((current) => ({
+				...current,
+				asrProfiles: current.asrProfiles.filter((item) => item.id !== id),
+				activeAsrProfileId: current.activeAsrProfileId === id ? "" : current.activeAsrProfileId,
+			}))}
+			onSelect={(id) => {
+				setConfig((current) => ({ ...current, activeAsrProfileId: id }));
+				updateConfig({ activeAsrProfileId: id });
+				refreshProviders();
+			}}
+			onPersist={async (newProfiles, newActiveId) => {
+				await updateConfig({ asrProfiles: newProfiles, activeAsrProfileId: newActiveId });
+				refreshProviders();
+			}}
+		/>
+
 		{/* ═══ 第二级：连接测试 ═══ */}
 		<Box sx={{ mt: 1, pt: 1, borderTop: 2, borderColor: "divider" }}>
 			<Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ textTransform: "uppercase", letterSpacing: 0.5, mb: 0.5, display: "block" }}>
 				连接测试
 			</Typography>
 		</Box>
+
+		{/* ── LLM 测试 ── */}
+		<SectionTitle>
+			ASR 测试
+			<HelpTooltip title="本地 sherpa 会验证内置模型是否已加载；云端 provider 会验证接口可达性。真正的麦克风 -> 识别链路仍需在聊天区手测。" />
+		</SectionTitle>
+		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+				当前读取：{config.activeAsrProfileId
+					? `档案「${config.asrProfiles.find((p) => p.id === config.activeAsrProfileId)?.name || "(未命名)"}」`
+					: "根配置（无激活档案）"}
+				· {getActiveAsrConfig().provider}
+			</Typography>
+			<Button
+				size="small" variant="outlined"
+				startIcon={<NetworkCheckIcon />}
+				onClick={handleTestASR}
+				disabled={testing === "asr"}
+			>
+				{testing === "asr" ? "测试中..." : "测试连接"}
+			</Button>
+			{asrTestResult && (
+				<Alert severity={asrTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
+					{asrTestResult.text}
+				</Alert>
+			)}
+		</Box>
+
+		<Divider />
 
 		{/* ── LLM 测试 ── */}
 		<SectionTitle>
@@ -763,6 +891,9 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 											<MenuItem value="ja">日本語</MenuItem>
 										</Select>
 									</Stack>
+									<Alert severity="info" sx={{ py: 0 }}>
+										TTS 当前只接受 GPT-SoVITS 路线。
+									</Alert>
 								</>
 							)}
 

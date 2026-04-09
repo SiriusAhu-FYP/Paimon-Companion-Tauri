@@ -6,6 +6,8 @@
  */
 
 import { isTauriEnvironment } from "@/utils/window-sync";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("http-proxy");
@@ -25,6 +27,20 @@ export interface ProxyResponse {
 	status: number;
 	headers: Record<string, string>;
 	body: string;
+}
+
+export interface ProxyMultipartRequestOptions {
+	url: string;
+	method?: string;
+	headers?: Record<string, string>;
+	fields?: Record<string, string>;
+	secretKey?: string;
+	file: {
+		fieldName: string;
+		fileName: string;
+		mimeType: string;
+		bytes: ArrayBuffer;
+	};
 }
 
 /**
@@ -47,8 +63,6 @@ export async function proxyRequest(options: ProxyRequestOptions): Promise<ProxyR
 // ── Rust invoke 代理 ──
 
 async function invokeProxy(options: ProxyRequestOptions): Promise<ProxyResponse> {
-	const { invoke } = await import("@tauri-apps/api/core");
-
 	const request = {
 		url: options.url,
 		method: options.method ?? "GET",
@@ -113,9 +127,6 @@ export async function proxySSERequest(
 		return () => {};
 	}
 
-	const { invoke } = await import("@tauri-apps/api/core");
-	const { listen } = await import("@tauri-apps/api/event");
-
 	const channelId = `sse-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 	const unlisten = await listen<{ type: string; data?: string; body?: string; status?: number }>(
@@ -159,8 +170,6 @@ export async function proxySSERequest(
  */
 export async function proxyBinaryRequest(options: ProxyRequestOptions): Promise<ArrayBuffer> {
 	if (isTauriEnvironment()) {
-		const { invoke } = await import("@tauri-apps/api/core");
-
 		const request = {
 			url: options.url,
 			method: options.method ?? "GET",
@@ -203,4 +212,49 @@ export async function proxyBinaryRequest(options: ProxyRequestOptions): Promise<
 	} finally {
 		clearTimeout(timer);
 	}
+}
+
+export async function proxyMultipartRequest(options: ProxyMultipartRequestOptions): Promise<ProxyResponse> {
+	if (!isTauriEnvironment()) {
+		const form = new FormData();
+		for (const [key, value] of Object.entries(options.fields ?? {})) {
+			form.append(key, value);
+		}
+		const file = new File([options.file.bytes], options.file.fileName, { type: options.file.mimeType });
+		form.append(options.file.fieldName, file);
+
+		const response = await fetch(options.url, {
+			method: options.method ?? "POST",
+			headers: options.headers,
+			body: form,
+		});
+
+		const headers: Record<string, string> = {};
+		response.headers.forEach((value, key) => {
+			headers[key] = value;
+		});
+
+		return {
+			status: response.status,
+			headers,
+			body: await response.text(),
+		};
+	}
+
+	const request = {
+		url: options.url,
+		method: options.method ?? "POST",
+		headers: options.headers ?? {},
+		fields: options.fields ?? {},
+		secretKey: options.secretKey ?? null,
+		file: {
+			fieldName: options.file.fieldName,
+			fileName: options.file.fileName,
+			mimeType: options.file.mimeType,
+			bytes: Array.from(new Uint8Array(options.file.bytes)),
+		},
+	};
+
+	log.debug(`multipart proxy request: ${request.method} ${request.url}`);
+	return invoke<ProxyResponse>("proxy_multipart_request", { request });
 }

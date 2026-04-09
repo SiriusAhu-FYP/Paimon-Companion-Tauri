@@ -1,16 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback } from "react";
 import { getServices } from "@/services";
 import type { CharacterState } from "@/types";
+import { useServiceState } from "./use-service-state";
 
 export function useCharacter() {
-	const { character, bus } = getServices();
-	const [state, setState] = useState<CharacterState>(character.getState());
-
-	useEffect(() => {
-		return bus.on("character:state-change", () => {
-			setState(character.getState());
-		});
-	}, [bus, character]);
+	const { character } = getServices();
+	const state = useServiceState<CharacterState, "character:state-change">({
+		getInitialState: () => character.getState(),
+		event: "character:state-change",
+		getNextState: () => character.getState(),
+	});
 
 	const setEmotion = useCallback(
 		(emotion: string) => character.setEmotion(emotion),

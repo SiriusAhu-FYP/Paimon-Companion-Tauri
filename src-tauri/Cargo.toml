@@ -24,11 +24,13 @@ tauri-plugin-store = "2"
 tauri-plugin-keyring = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-reqwest = { version = "0.12", features = ["json", "stream", "native-tls"] }
+reqwest = { version = "0.12", features = ["json", "stream", "native-tls", "multipart"] }
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
+axum = "0.8"
 base64 = "0.22"
 png = "0.17"
+sherpa-onnx = { version = "1.12.34", default-features = false, features = ["shared"] }
 windows = { version = "0.61", features = [
 	"Win32_Foundation",
 	"Win32_Graphics_Gdi",

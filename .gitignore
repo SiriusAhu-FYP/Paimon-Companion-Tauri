@@ -1,6 +1,7 @@
 # Logs
 logs
 *.log
+vite-port-check*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -17,6 +18,8 @@ dist-ssr
 
 # Rust / Tauri
 src-tauri/target/
+src-tauri/resources/asr/
+src-tauri/vendor/sherpa-onnx/
 
 # Environment
 .env

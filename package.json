@@ -4,11 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "setup:local-asr": "powershell -ExecutionPolicy Bypass -File .\\scripts\\ensure-local-asr-model.ps1",
+    "dev": "pnpm setup:local-asr && vite",
+    "build": "pnpm setup:local-asr && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "kill-port": "powershell -Command \"Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }\""
+    "kill-port": "powershell -Command \"$ports = 31420,31421; $connections = Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in $ports }; if ($connections) { $connections | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }; exit 0\""
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

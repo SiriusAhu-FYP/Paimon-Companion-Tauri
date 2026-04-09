@@ -27,12 +27,29 @@ const EMOTION_PARAMS: Record<string, Record<string, number>> = {
 		ParamMouthForm: -0.4,
 		ParamAngleZ: -5,
 	},
-	surprised: {
+	delighted: {
+		ParamMouthForm: 1,
+		ParamEyeLSmile: 1,
+		ParamEyeRSmile: 1,
+		ParamEyeLOpen: 1.15,
+		ParamEyeROpen: 1.15,
+		ParamMouthOpenY: 0.45,
+		ParamBrowLY: 0.2,
+		ParamBrowRY: 0.2,
+	},
+	alarmed: {
 		ParamEyeLOpen: 1.3,
 		ParamEyeROpen: 1.3,
 		ParamMouthOpenY: 0.6,
 		ParamBrowLY: 0.8,
 		ParamBrowRY: 0.8,
+	},
+	dazed: {
+		ParamEyeLOpen: 0.45,
+		ParamEyeROpen: 0.45,
+		ParamMouthOpenY: 0.18,
+		ParamMouthForm: -0.15,
+		ParamAngleZ: -3,
 	},
 };
 
@@ -140,8 +157,10 @@ export function Live2DPreview() {
 
 		// 播放一个动作作为切换时的视觉反馈
 		try {
-			if (newEmotion === "happy" || newEmotion === "surprised") {
+			if (newEmotion === "happy" || newEmotion === "delighted") {
 				model.motion("TapBody", 0);
+			} else if (newEmotion === "alarmed") {
+				model.motion("TapBody", 1);
 			} else if (newEmotion !== "neutral") {
 				model.motion("Idle", Math.floor(Math.random() * 9));
 			}

@@ -5,6 +5,7 @@
  */
 
 import { isTauriEnvironment } from "@/utils/window-sync";
+import { invoke } from "@tauri-apps/api/core";
 import { createLogger } from "@/services/logger";
 
 const log = createLogger("secret-store");
@@ -14,7 +15,6 @@ const SESSION_PREFIX = "paimon-companion-tauri:secret:";
 // ── Tauri invoke 后端 ──
 
 async function invokeSecret<T>(cmd: string, args: Record<string, string>): Promise<T> {
-	const { invoke } = await import("@tauri-apps/api/core");
 	return invoke<T>(cmd, args);
 }
 

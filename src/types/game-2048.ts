@@ -1,11 +1,13 @@
 import type { FunctionalTarget } from "./functional";
 
-export type Game2048Move = "Up" | "Down" | "Left" | "Right";
+export type Game2048ActionId = "move_up" | "move_left" | "move_right" | "move_down";
+export type Game2048Move = Game2048ActionId;
 export type Game2048RunStatus = "running" | "completed" | "failed";
 export type Game2048AnalysisSource = "vision-llm" | "heuristic";
 
 export interface Game2048Analysis {
 	source: Game2048AnalysisSource;
+	reflection: string;
 	strategy: string;
 	reasoning: string;
 	preferredMoves: Game2048Move[];
@@ -32,10 +34,28 @@ export interface Game2048RunRecord {
 	error: string | null;
 }
 
+export interface Game2048DecisionHistoryEntry {
+	runId: string;
+	recordedAt: number;
+	status: Game2048RunStatus;
+	reflection: string;
+	strategy: string;
+	reasoning: string;
+	planSignature: string;
+	preferredMoves: Game2048Move[];
+	attemptedMoves: Game2048Move[];
+	successfulMoves: Game2048Move[];
+	selectedMove: Game2048Move | null;
+	boardChanged: boolean;
+	repeatedFailureCount: number;
+	summary: string;
+}
+
 export interface Game2048State {
 	activeRunId: string | null;
 	lastRun: Game2048RunRecord | null;
 	history: Game2048RunRecord[];
+	decisionHistory: Game2048DecisionHistoryEntry[];
 	detectedTarget: FunctionalTarget | null;
 	detectionSummary: string | null;
 }

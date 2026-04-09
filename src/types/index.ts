@@ -10,21 +10,37 @@ export type {
 	EvaluationState,
 } from "./evaluation";
 export type { RuntimeMode, RuntimeState } from "./runtime";
-export type { CharacterProfile, CharacterProfileSource, CharacterState } from "./character";
+export type { VoiceInputState, VoiceInputStatus } from "./voice";
 export type {
-	StardewActionKey,
-	StardewAnalysis,
-	StardewAnalysisSource,
-	StardewAttemptRecord,
-	StardewRunRecord,
-	StardewRunStatus,
-	StardewState,
-	StardewTaskDefinition,
-	StardewTaskId,
-} from "./stardew";
+	CharacterExpressionMap,
+	CharacterProfile,
+	CharacterProfileSource,
+	CharacterState,
+	CompanionEmotion,
+} from "./character";
+export type {
+	UnifiedRunPhase,
+	UnifiedRunTrigger,
+	UnifiedRunStatus,
+	UnifiedRunRecord,
+	UnifiedRuntimeState,
+} from "./unified";
+export type {
+	CompanionRuntimeBenchmarkDefinition,
+	CompanionRuntimeBenchmarkMetrics,
+	CompanionRuntimeBenchmarkResult,
+	CompanionRuntimeBenchmarkState,
+	CompanionFrameDescriptionRecord,
+	CompanionRuntimeMetrics,
+	CompanionRuntimePhase,
+	CompanionRuntimeState,
+	CompanionSummaryRecord,
+} from "./companion-runtime";
 export type {
 	Game2048Analysis,
+	Game2048ActionId,
 	Game2048AnalysisSource,
+	Game2048DecisionHistoryEntry,
 	Game2048Move,
 	Game2048MoveAttempt,
 	Game2048RunRecord,
@@ -47,6 +63,23 @@ export type {
 	HostWindowCapture,
 	HostWindowInfo,
 } from "./system";
+export type {
+	SemanticActionExecutionResult,
+	SemanticGameActionDefinition,
+	SemanticGameManifest,
+	SemanticGamePluginDefinition,
+	SemanticHostStep,
+} from "./semantic-game";
+export type {
+	SokobanActionId,
+	SokobanAnalysis,
+	SokobanAnalysisSource,
+	SokobanDecisionHistoryEntry,
+	SokobanMoveAttempt,
+	SokobanRunRecord,
+	SokobanRunStatus,
+	SokobanState,
+} from "./sokoban";
 export type {
 	KnowledgeDocument,
 	KnowledgeChunk,
