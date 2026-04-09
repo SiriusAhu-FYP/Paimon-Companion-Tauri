@@ -236,9 +236,6 @@
 }
 
 .event-log-entries {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
 	font-family: "Consolas", "Monaco", monospace;
 	font-size: 11px;
 	min-height: 0;
@@ -247,6 +244,11 @@
 	border-radius: 10px;
 	background: rgba(255, 255, 255, 0.02);
 	padding: 4px 6px;
+	position: relative;
+}
+
+.event-log-virtual-list {
+	position: relative;
 }
 
 .event-log-entry {
@@ -265,6 +267,8 @@
 	cursor: pointer;
 	border-radius: 6px;
 	padding-inline: 4px;
+	position: absolute;
+	margin: 0;
 }
 
 .event-log-entry:hover {

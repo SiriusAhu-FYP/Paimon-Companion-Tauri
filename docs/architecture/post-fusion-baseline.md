@@ -89,4 +89,31 @@ The first follow-up work after `P2` is therefore performance profiling:
 - surface UI stall/jank signals while fusion is active
 - only optimize once the slowest segments are confirmed
 
-Those remain later work after source fusion is accepted.
+## Post-P2 Performance Baseline (2026-04-09)
+
+The first profiling/optimization slice is now in place on top of the accepted fusion path:
+
+- fusion runs now expose stable timing breakdown fields per run:
+  - `actionMs`
+  - `runtimeRefreshMs`
+  - `llmReplyMs`
+  - `speechMs`
+  - `totalBlockingMs` (round ends after speech completes)
+  - `totalNonBlockingMs` (round timing before speech wait)
+- fusion evaluation metrics now aggregate both blocking and non-blocking totals.
+- UI stall telemetry is now tracked in evaluation:
+  - `averageUiStallCount`
+  - `maxUiStallMs`
+- run-level trace IDs are carried through unified, LLM, MCP, and evaluation events so one round can be correlated in logs.
+
+Runtime/UI pressure reduction landed in the same slice:
+
+- high-frequency companion runtime state events are deduplicated and throttled.
+- event console list rendering uses a virtualized window instead of full-list repaint.
+- event search stays on lightweight fields (`event/category/summary/preview`) and full payload remains on-demand in the detail panel.
+
+Known limits after this slice:
+
+- blocking totals are still dominated by model/tool/speech workload; they are expected wall-clock round duration, not pure model inference delay.
+- first-run warmup and external service readiness can still create outlier rounds.
+- under heavy local vision + speech load, UI responsiveness is improved but not guaranteed to be completely stall-free on every machine.
