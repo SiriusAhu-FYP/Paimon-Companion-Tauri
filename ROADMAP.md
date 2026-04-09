@@ -81,8 +81,8 @@ P1 close-out:
   - [ ] P2.3 Companion Expression Protocol
     - [x] define a first-pass emotion taxonomy and randomized per-model expression candidate mapping
     - [x] extend the same protocol to first-pass motion selection where models expose reusable motions
-    - [ ] validate the real LLM path can consistently drive visible Live2D expression changes through MCP tools instead of mock-only/internal-only wiring
-    - [ ] migrate the accepted expression-control path toward a formal MCP-facing contract
+    - [x] validate the real LLM path can consistently drive visible Live2D expression changes through MCP tools instead of mock-only/internal-only wiring
+    - [x] migrate the accepted expression-control path toward a formal MCP-facing contract
     - [ ] keep motion as an optional enhancement rather than the current acceptance gate
   - [ ] P2.4 `LLMPlay-MVP` Completion
     - [x] keep `Sokoban` in scope as the second reasoning-oriented validation game
@@ -115,7 +115,7 @@ P1 close-out:
     - [x] let unified game results ask the active LLM for grounded companion follow-up text instead of relying only on hardcoded per-game copy
     - [x] add a first fusion evaluation case that samples runtime-context usage, LLM follow-up generation, and speech in one pass
     - [x] refresh the active companion observation context after unified game rounds so follow-up replies can speak from fresher runtime state
-    - [ ] land the first real MCP server boundary for companion control and semantic game control
+    - [x] land the first real MCP server boundary for companion control and semantic game control
     - [ ] verify that all three source lines coexist in one Tauri runtime through that MCP-facing runtime path
     - [ ] verify companion behavior, expression, speech, and functional execution together
     - [ ] define the accepted post-fusion baseline after MCP-backed fusion is working

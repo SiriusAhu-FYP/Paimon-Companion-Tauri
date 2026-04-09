@@ -54,3 +54,16 @@ export async function callLocalMcpTool(name: string, args: Record<string, unknow
 
 	return text;
 }
+
+export async function callLocalMcpToolJson<T>(name: string, args: Record<string, unknown>): Promise<T> {
+	const text = await callLocalMcpTool(name, args);
+	if (!text) {
+		throw new Error(`empty MCP tool response for ${name}`);
+	}
+
+	try {
+		return JSON.parse(text) as T;
+	} catch {
+		throw new Error(`invalid JSON MCP tool response for ${name}: ${text}`);
+	}
+}
