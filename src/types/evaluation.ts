@@ -1,3 +1,5 @@
+import type { UnifiedRunTimings } from "./unified";
+
 export type EvaluationGame = "2048" | "fusion";
 export type EvaluationCaseTargetMode = "auto-detect" | "selected-target";
 export type EvaluationCaseStatus = "running" | "completed" | "failed";
@@ -27,6 +29,7 @@ export interface EvaluationRunEntry {
 	mcpGameUsed: boolean;
 	summary: string;
 	error: string | null;
+	timings?: UnifiedRunTimings | null;
 }
 
 export interface EvaluationCaseMetrics {
@@ -43,6 +46,10 @@ export interface EvaluationCaseMetrics {
 	mcpGameRate: number;
 	averageLatencyMs: number;
 	medianLatencyMs: number;
+	averageActionMs: number;
+	averageRuntimeRefreshMs: number;
+	averageLlmReplyMs: number;
+	averageSpeechMs: number;
 }
 
 export interface EvaluationCaseResult {

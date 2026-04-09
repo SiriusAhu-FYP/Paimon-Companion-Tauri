@@ -59,8 +59,14 @@ export function EvaluationSection(props: {
 			<InfoLine>
 				{t("成功率", "Success")}：{props.evaluationState.latestResult ? `${(props.evaluationState.latestResult.metrics.successRate * 100).toFixed(0)}%` : "—"}
 				{" · "}
-				{t("平均延迟", "Avg latency")}：{props.evaluationState.latestResult ? `${props.evaluationState.latestResult.metrics.averageLatencyMs.toFixed(0)}ms` : "—"}
+				{t("平均总时长", "Avg total")}：{props.evaluationState.latestResult ? `${props.evaluationState.latestResult.metrics.averageLatencyMs.toFixed(0)}ms` : "—"}
 			</InfoLine>
+			{props.evaluationState.latestResult?.caseId === "fusion-selected-target-round" && (
+				<InfoLine>
+					{t("拆分", "Breakdown")}：
+					{` action ${props.evaluationState.latestResult.metrics.averageActionMs.toFixed(0)}ms · runtime ${props.evaluationState.latestResult.metrics.averageRuntimeRefreshMs.toFixed(0)}ms · llm ${props.evaluationState.latestResult.metrics.averageLlmReplyMs.toFixed(0)}ms · speech ${props.evaluationState.latestResult.metrics.averageSpeechMs.toFixed(0)}ms`}
+				</InfoLine>
+			)}
 			<InfoLine>{t("最近摘要", "Latest Summary")}：{props.evaluationState.latestResult?.summary ?? "—"}</InfoLine>
 		</PanelCard>
 	);

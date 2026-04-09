@@ -186,8 +186,13 @@ export function EvaluationSummaryCard(props: { latestResult: EvaluationCaseResul
 					success: {formatPercent(props.latestResult.metrics.successRate)} · valid: {formatPercent(props.latestResult.metrics.actionValidityRate)}
 				</Typography>
 				<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
-					latency: avg {props.latestResult.metrics.averageLatencyMs.toFixed(0)}ms · p50 {props.latestResult.metrics.medianLatencyMs.toFixed(0)}ms
+					total: avg {props.latestResult.metrics.averageLatencyMs.toFixed(0)}ms · p50 {props.latestResult.metrics.medianLatencyMs.toFixed(0)}ms
 				</Typography>
+				{props.latestResult.caseId === "fusion-selected-target-round" && (
+					<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
+						breakdown: action {props.latestResult.metrics.averageActionMs.toFixed(0)}ms · runtime {props.latestResult.metrics.averageRuntimeRefreshMs.toFixed(0)}ms · llm {props.latestResult.metrics.averageLlmReplyMs.toFixed(0)}ms · speech {props.latestResult.metrics.averageSpeechMs.toFixed(0)}ms
+					</Typography>
+				)}
 			</Stack>
 		</>
 	);

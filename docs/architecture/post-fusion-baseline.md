@@ -79,10 +79,14 @@ The following are explicitly not required to close `P2`:
 
 The following issues remain real, but do not block `P2` close-out:
 
-- the current fusion `latency` metric is an end-to-end round duration, not a fine-grained delay metric
+- the current fusion timing headline is an end-to-end round duration, not a pure low-level latency number
 - that end-to-end duration currently includes downstream stages such as speech playback, so it should not be interpreted as a pure model/tool delay number
 - under active fusion load, the Tauri UI can still feel sluggish while local vision, logging, and speech are all active
 
-These issues should be treated as the first follow-up work after `P2`, with latency breakdown and UI responsiveness profiling taking priority over new product scope.
+The first follow-up work after `P2` is therefore performance profiling:
+
+- split fusion timing into at least action, runtime refresh, LLM follow-up, speech, and end-to-end totals
+- surface UI stall/jank signals while fusion is active
+- only optimize once the slowest segments are confirmed
 
 Those remain later work after source fusion is accepted.

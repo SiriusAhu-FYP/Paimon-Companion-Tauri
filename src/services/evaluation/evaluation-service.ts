@@ -152,6 +152,7 @@ export class EvaluationService {
 						mcpGameUsed: gameRun.mcpGameUsed,
 						summary: gameRun.summary,
 						error: null,
+						timings: gameRun.timings,
 					});
 				} catch (err) {
 					const message = err instanceof Error ? err.message : String(err);
@@ -171,6 +172,7 @@ export class EvaluationService {
 						mcpGameUsed: false,
 						summary: message,
 						error: message,
+						timings: null,
 					});
 				}
 
@@ -241,6 +243,13 @@ export class EvaluationService {
 		mcpCompanionUsed: boolean;
 		mcpGameUsed: boolean;
 		summary: string;
+		timings: {
+			actionMs: number;
+			runtimeRefreshMs: number;
+			llmReplyMs: number;
+			speechMs: number;
+			totalMs: number;
+		} | null;
 	}> {
 		if (definition.game === "2048") {
 			if (definition.targetMode === "auto-detect") {
@@ -258,6 +267,7 @@ export class EvaluationService {
 					mcpCompanionUsed: false,
 					mcpGameUsed: true,
 					summary: run.summary,
+					timings: null,
 				};
 			}
 
@@ -278,6 +288,7 @@ export class EvaluationService {
 				mcpCompanionUsed: false,
 				mcpGameUsed: true,
 				summary: run.summary,
+				timings: null,
 			};
 		}
 		if (definition.game === "fusion") {
@@ -327,6 +338,7 @@ export class EvaluationService {
 				mcpCompanionUsed,
 				mcpGameUsed,
 				summary: run.summary,
+				timings: { ...run.timings },
 			};
 		}
 		throw new Error(`unsupported evaluation game: ${definition.game}`);
@@ -348,11 +360,16 @@ function emptyMetrics(totalRuns: number): EvaluationCaseMetrics {
 		mcpGameRate: 0,
 		averageLatencyMs: 0,
 		medianLatencyMs: 0,
+		averageActionMs: 0,
+		averageRuntimeRefreshMs: 0,
+		averageLlmReplyMs: 0,
+		averageSpeechMs: 0,
 	};
 }
 
 function computeMetrics(runs: EvaluationRunEntry[], totalRuns: number): EvaluationCaseMetrics {
 	const latencies = runs.map((run) => run.latencyMs).sort((left, right) => left - right);
+	const timingRuns = runs.filter((run) => run.timings);
 	const successfulRuns = runs.filter((run) => run.boardChanged).length;
 	const validActions = runs.filter((run) => run.actionValid).length;
 	const runtimeContextRuns = runs.filter((run) => run.runtimeContextUsed).length;
@@ -361,6 +378,11 @@ function computeMetrics(runs: EvaluationRunEntry[], totalRuns: number): Evaluati
 	const emotionRuns = runs.filter((run) => run.emotionApplied).length;
 	const mcpCompanionRuns = runs.filter((run) => run.mcpCompanionUsed).length;
 	const mcpGameRuns = runs.filter((run) => run.mcpGameUsed).length;
+	const averageTiming = (selector: (run: EvaluationRunEntry) => number) => (
+		timingRuns.length > 0
+			? timingRuns.reduce((sum, run) => sum + selector(run), 0) / timingRuns.length
+			: 0
+	);
 
 	return {
 		totalRuns,
@@ -376,6 +398,10 @@ function computeMetrics(runs: EvaluationRunEntry[], totalRuns: number): Evaluati
 		mcpGameRate: totalRuns > 0 ? mcpGameRuns / totalRuns : 0,
 		averageLatencyMs: latencies.length > 0 ? latencies.reduce((sum, value) => sum + value, 0) / latencies.length : 0,
 		medianLatencyMs: computeMedian(latencies),
+		averageActionMs: averageTiming((run) => run.timings?.actionMs ?? 0),
+		averageRuntimeRefreshMs: averageTiming((run) => run.timings?.runtimeRefreshMs ?? 0),
+		averageLlmReplyMs: averageTiming((run) => run.timings?.llmReplyMs ?? 0),
+		averageSpeechMs: averageTiming((run) => run.timings?.speechMs ?? 0),
 	};
 }
 
@@ -388,9 +414,9 @@ function computeMedian(values: number[]): number {
 
 function buildSummary(definition: EvaluationCaseDefinition, metrics: EvaluationCaseMetrics): string {
 	if (definition.game === "fusion") {
-		return `${definition.name}: success ${formatPercent(metrics.successRate)}, runtime ${formatPercent(metrics.runtimeContextRate)}, llm ${formatPercent(metrics.llmReplyRate)}, speech ${formatPercent(metrics.speechRate)}, emotion ${formatPercent(metrics.emotionRate)}, mcp-companion ${formatPercent(metrics.mcpCompanionRate)}, mcp-game ${formatPercent(metrics.mcpGameRate)}, avg latency ${metrics.averageLatencyMs.toFixed(0)}ms`;
+		return `${definition.name}: success ${formatPercent(metrics.successRate)}, runtime ${formatPercent(metrics.runtimeContextRate)}, llm ${formatPercent(metrics.llmReplyRate)}, speech ${formatPercent(metrics.speechRate)}, emotion ${formatPercent(metrics.emotionRate)}, mcp-companion ${formatPercent(metrics.mcpCompanionRate)}, mcp-game ${formatPercent(metrics.mcpGameRate)}, avg total ${metrics.averageLatencyMs.toFixed(0)}ms`;
 	}
-	return `${definition.name}: success ${formatPercent(metrics.successRate)}, valid ${formatPercent(metrics.actionValidityRate)}, avg latency ${metrics.averageLatencyMs.toFixed(0)}ms`;
+	return `${definition.name}: success ${formatPercent(metrics.successRate)}, valid ${formatPercent(metrics.actionValidityRate)}, avg total ${metrics.averageLatencyMs.toFixed(0)}ms`;
 }
 
 function formatPercent(value: number): string {
@@ -401,6 +427,9 @@ function cloneResult(result: EvaluationCaseResult): EvaluationCaseResult {
 	return {
 		...result,
 		metrics: { ...result.metrics },
-		runs: result.runs.map((run) => ({ ...run })),
+		runs: result.runs.map((run) => ({
+			...run,
+			timings: run.timings ? { ...run.timings } : null,
+		})),
 	};
 }
