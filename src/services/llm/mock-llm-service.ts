@@ -30,7 +30,13 @@ export class MockLLMService implements ILLMService {
 
 		// 先发工具调用（表情切换）
 		if (pick.emotion) {
-			yield { type: "tool-call", name: "setExpression", args: { emotion: pick.emotion } };
+			yield {
+				type: "tool-call",
+				id: `mock-emotion-${Date.now()}`,
+				name: "companion_set_emotion",
+				args: { emotion: pick.emotion },
+				rawArguments: JSON.stringify({ emotion: pick.emotion }),
+			};
 			await delay(100);
 		}
 

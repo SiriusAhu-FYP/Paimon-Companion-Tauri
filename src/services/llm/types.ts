@@ -1,7 +1,24 @@
-export interface ChatMessage {
-	role: "system" | "user" | "assistant" | "tool";
-	content: string;
+export interface ChatToolCall {
+	id: string;
+	name: string;
+	arguments: string;
 }
+
+export type ChatMessage =
+	| {
+		role: "system" | "user";
+		content: string;
+	}
+	| {
+		role: "assistant";
+		content: string;
+		toolCalls?: ChatToolCall[];
+	}
+	| {
+		role: "tool";
+		content: string;
+		toolCallId: string;
+	};
 
 export interface ToolDef {
 	name: string;
@@ -11,7 +28,13 @@ export interface ToolDef {
 
 export type LLMChunk =
 	| { type: "delta"; text: string }
-	| { type: "tool-call"; name: string; args: Record<string, unknown> }
+	| {
+		type: "tool-call";
+		id: string;
+		name: string;
+		args: Record<string, unknown>;
+		rawArguments: string;
+	}
 	| { type: "done"; fullText: string };
 
 export interface ILLMService {
