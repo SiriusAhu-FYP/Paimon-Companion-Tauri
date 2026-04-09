@@ -372,6 +372,16 @@ function getSeverity(event: EventName, payload: unknown): "info" | "warn" | "err
 			const data = payload as EventMap["companion-runtime:benchmark-complete"];
 			return data.result.status === "completed" ? "info" : "warn";
 		}
+		case "evaluation:case-complete": {
+			const data = payload as EventMap["evaluation:case-complete"];
+			if (data.result.status !== "completed") {
+				return "error";
+			}
+			if (data.result.metrics.successRate < 1) {
+				return "warn";
+			}
+			return "info";
+		}
 		case "safety:decision": {
 			const data = payload as EventMap["safety:decision"];
 			return data.allowed ? "info" : "warn";
