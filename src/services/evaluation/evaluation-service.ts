@@ -54,7 +54,6 @@ function makeInitialState(): EvaluationState {
 
 export class EvaluationService {
 	private bus: EventBus;
-	private character: CharacterService;
 	private game2048: Game2048Service;
 	private orchestrator: OrchestratorService;
 	private unified: UnifiedRuntimeService;
@@ -70,7 +69,6 @@ export class EvaluationService {
 		companionRuntime: CompanionRuntimeService;
 	}) {
 		this.bus = deps.bus;
-		this.character = deps.character;
 		this.game2048 = deps.game2048;
 		this.orchestrator = deps.orchestrator;
 		this.unified = deps.unified;
@@ -299,9 +297,13 @@ export class EvaluationService {
 			const promptContext = this.companionRuntime.getPromptContext();
 			let mcpCompanionUsed = false;
 			let mcpGameUsed = false;
+			let emotionApplied = false;
 			const offStart = this.bus.on("mcp:tool-start", (payload) => {
 				if (payload.name.startsWith("companion.")) {
 					mcpCompanionUsed = true;
+					if (payload.name === "companion.set_emotion") {
+						emotionApplied = true;
+					}
 				}
 				if (payload.name.startsWith("game.")) {
 					mcpGameUsed = true;
@@ -313,7 +315,6 @@ export class EvaluationService {
 			} finally {
 				offStart();
 			}
-			const characterState = this.character.getState();
 			return {
 				boardChanged: run.status === "completed",
 				selectedAction: run.selectedAction,
@@ -322,7 +323,7 @@ export class EvaluationService {
 				runtimeContextUsed: promptContext.length > 0,
 				llmReplyUsed: run.companionTextSource === "llm",
 				spoke: run.spoke,
-				emotionApplied: characterState.emotion === run.emotion,
+				emotionApplied,
 				mcpCompanionUsed,
 				mcpGameUsed,
 				summary: run.summary,
