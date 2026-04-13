@@ -8,6 +8,52 @@ Public progress tracker for `paimon-companion-tauri`.
 - `[ ]` not started
 - `[-]` intentionally deferred
 
+## Branch Snapshot And Working Model
+
+This roadmap tracks product phases, but the repository has also accumulated a small set of long-lived historical branches that are worth recording explicitly.
+
+Current surviving branch snapshot:
+
+- `main`
+  accepted stable baseline branch; `P1` is already merged here, and the accepted `P2` fusion baseline plus immediate post-`P2` performance follow-up currently also live here
+- `chore/tauri-bootstrap-cleanup`
+  repository/bootstrap cleanup line tied to the early host-base cleanup work
+- `feat/p1-host-primitives`
+  early `P1` functional-validation line centered on host primitives and the first runnable task loop
+- `refactor/p2-preflight-shrink`
+  pre-`P2` cleanup line used to reduce maintenance surface before the larger fusion pass
+- `feat/p2-relational-core`
+  main `P2` source-fusion branch where the three-source runtime merge was driven to the accepted baseline
+- `perf/post-p2-runtime-profiling`
+  first immediate post-`P2` branch for profiling and measurement after fusion close-out
+- `perf/post-p2-latency-followup`
+  second immediate post-`P2` branch for latency/stall reduction and runtime stabilization
+
+Working branch model from this point onward:
+
+- `main` should remain the feature-complete accepted baseline branch
+- each new roadmap phase should start from `main` as its own phase branch
+- smaller feature/fix branches should branch from the active phase branch and merge back there first
+- only when a phase has passed its own acceptance/testing bar should that phase branch merge back into `main`
+
+## Historical Acceptance Note
+
+The checked items below remain checked because they satisfied the acceptance bar that was active when each milestone was closed.
+
+Current final-version discussion has tightened the intended product definition:
+
+- companion-first by default
+- explicit delegation before gameplay takeover
+- bounded GCC task scope instead of broad autonomous gameplay
+- local lightweight VLM as the main perception direction
+- stronger functional correctness bar for validated tasks, especially where real solving is expected
+
+This means some already-checked roadmap items may still need follow-up work to meet the newer final-version bar.
+
+They are not being re-opened as unfinished historical milestones.
+
+Instead, the remaining gap is tracked as post-`P2` convergence phases on top of the accepted baseline.
+
 - [x] P0: Repository And Host Baseline
   - [x] Create `paimon-companion-tauri` from the reusable Tauri host base
   - [x] Rename app/package identity away from `paimon-live`
@@ -128,19 +174,44 @@ Cross-cutting rule during `P2` and later:
 - current definite migration targets are recorded in `docs/architecture/runtime-backend-migration.md`
 - each migration must be followed by a focused manual regression check before it is treated as accepted
 
-- [-] P3: Expansion After Fusion
-  - [-] Minecraft transfer
-    gated until `P2` source fusion is accepted
-  - [-] Genshin Impact transfer test
-    gated until `P2` source fusion is accepted
-  - [-] broader pluginized multi-game support
-    gated until `P2` source fusion is accepted
-  - [-] user study
-    gated until `P2` source fusion is accepted
-  - [-] release packaging polish
-    gated until `P2` source fusion is accepted
+- [ ] P3: Emotion Runtime Foundation
+  Goal: build the first bounded, inspectable emotion state that actually persists across turns and runtime events instead of being treated as one-off reply flavoring.
+  This phase is about establishing the shared emotional substrate that later companion behavior and functional follow-up can reliably consume.
+  - [ ] define a bounded affect-state model with explicit emotion labels, intensity, hold, and decay rules
+  - [ ] separate immediate reaction, short carry-over mood, and output-style hints instead of treating emotion as one-shot reply decoration
+  - [ ] unify emotion inputs from voice turns, runtime observations, task outcomes, and recent interaction context
+  - [ ] make Live2D expression selection, reply wording, and speech delivery hints consume the same emotion state
+  - [ ] expose emotion state and transition reasons in runtime/debug surfaces so the loop is inspectable
+  - [-] keep new game/plugin expansion out of scope unless it is strictly required to validate the emotion loop
 
-P2 note:
+- [ ] P4: Full Emotion Companion Validation
+  Goal: raise the emotion runtime from "state exists" to "companion feels coherently emotional" across chat, observation, and delegated execution.
+  The acceptance bar here is a basic but believable full-emotion module rather than a loose collection of separate text/voice/expression tricks.
+  - [ ] keep emotion continuity across multi-turn chat, passive companion runtime, and delegated-task follow-up
+  - [ ] let functional results and companion appraisal feed back into the persistent emotion state instead of resetting every turn
+  - [ ] validate consistency across text reply, speech output, Live2D expression, and runtime follow-up behavior
+  - [ ] add targeted evaluation cases for stale emotion, overreaction, failed recovery to neutral, and contradictory multimodal output
+  - [ ] define and meet the minimum accepted bar for a "basic full emotion module"
+
+- [ ] P5: Functional Module Hardening
+  Goal: after the companion-side emotional baseline is usable, harden the actual task/delegation stack so the system is not expressive but unreliable.
+  This phase narrows functional work to the existing validated targets first, with clearer companion-first boundaries before any broader expansion.
+  - [ ] raise `2048` from accepted loop validation to a more repeatable stable solving baseline
+  - [ ] raise `Sokoban` from minimum semantic-action skeleton to real simple-level solving
+  - [ ] make companion-first and delegated-execution boundaries explicit in runtime/orchestration behavior
+  - [ ] decide which task/game capabilities stay in core MCP tools and which should become pluginized phase-by-phase
+  - [-] keep broader new-game transfer outside the acceptance bar until the existing functional pair is stable
+
+- [ ] P6: Final Convergence And FYP Packaging
+  Goal: converge the now-separate emotion, runtime, and functional decisions into one final product definition that is defensible for the FYP.
+  This phase is for final architecture closure, validation packaging, and write-up quality rather than opening another large implementation frontier.
+  - [ ] finalize the local-small / cloud-big split for perception, reasoning, and reply paths
+  - [ ] decide whether a fast local reaction layer is needed for speech while keeping richer cloud replies where appropriate
+  - [ ] tighten bounded GCC scope, mode-aware orchestration, and layered memory into the final explicit product definition
+  - [ ] complete the final write-up, user study, and release packaging polish
+  - [-] treat larger-scale game transfer as optional stretch work rather than the default `P6` acceptance bar
+
+## Appendix: P2 Historical Notes
 
 - `paimon-live` is framework heritage only
 - the functional source-of-truth repos for this stage are `LLMPlay-MVP`, `VoiceL2D-MVP`, and `Video-Understanding-MVP`
