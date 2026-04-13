@@ -1,6 +1,7 @@
 import { EventBus, eventBus } from "./event-bus";
 import { RuntimeService } from "./runtime";
 import { AffectStateService } from "./affect-state";
+import { AffectInputsService } from "./affect-inputs";
 import { CharacterService } from "./character";
 import { KnowledgeService } from "./knowledge";
 import { PerceptionService } from "./perception";
@@ -26,6 +27,7 @@ export interface ServiceContainer {
 	bus: EventBus;
 	runtime: RuntimeService;
 	affect: AffectStateService;
+	affectInputs: AffectInputsService;
 	character: CharacterService;
 	knowledge: KnowledgeService;
 	perception: PerceptionService;
@@ -56,6 +58,10 @@ export function initServices(): ServiceContainer {
 
 	const runtime = new RuntimeService(eventBus);
 	const affect = new AffectStateService(eventBus);
+	const affectInputs = new AffectInputsService({
+		bus: eventBus,
+		affect,
+	});
 	const character = new CharacterService(eventBus, affect);
 	const knowledge = new KnowledgeService(eventBus);
 	const perception = new PerceptionService(eventBus);
@@ -133,6 +139,7 @@ export function initServices(): ServiceContainer {
 		bus: eventBus,
 		runtime,
 		affect,
+		affectInputs,
 		character,
 		knowledge,
 		perception,
