@@ -220,7 +220,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "affect:state-change": {
 			const data = payload as EventMap["affect:state-change"];
-			return `${data.state.presentationEmotion} / core=${data.state.currentEmotion} ${data.state.intensity.toFixed(2)} / carry=${data.state.carryEmotion} ${data.state.carryIntensity.toFixed(2)}${data.state.isHeldForSpeech ? " / held" : ""} / ${data.source}: ${data.reason}`;
+			return `${data.state.presentationEmotion} / core=${data.state.currentEmotion} ${data.state.intensity.toFixed(2)} / carry=${data.state.carryEmotion} ${data.state.carryIntensity.toFixed(2)} / p${data.state.priority}${data.state.isHeldForSpeech ? " / held" : ""} / ${data.source}: ${data.reason}`;
 		}
 		case "character:motion": {
 			const data = payload as EventMap["character:motion"];

@@ -9,6 +9,7 @@ function makeState(overrides?: Partial<AffectState>): AffectState {
 		carryEmotion: "neutral",
 		carryIntensity: 0,
 		presentationEmotion: "neutral",
+		priority: 0,
 		isHeldForSpeech: false,
 		lastReason: "initial",
 		lastSource: "system",

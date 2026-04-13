@@ -8,6 +8,7 @@ export interface AffectState {
 	carryEmotion: CompanionEmotion;
 	carryIntensity: number;
 	presentationEmotion: CompanionEmotion;
+	priority: number;
 	isHeldForSpeech: boolean;
 	lastReason: string;
 	lastSource: AffectEventSource;
