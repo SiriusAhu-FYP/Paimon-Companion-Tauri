@@ -521,7 +521,7 @@ export class VoiceInputService {
 				source: "voice",
 			});
 
-			void this.pipeline.run(text).catch((err) => {
+			void this.pipeline.run(text, { inputSource: "voice" }).catch((err) => {
 				const message = err instanceof Error ? err.message : String(err);
 				this.updateState({
 					lastError: message,

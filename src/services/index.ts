@@ -90,7 +90,7 @@ export function initServices(): ServiceContainer {
 	});
 
 	const llmProvider = resolveLLMProvider(config);
-	const llm = new LLMService(eventBus, runtime, llmProvider, character, knowledge, companionRuntime);
+	const llm = new LLMService(eventBus, runtime, llmProvider, affect, character, knowledge, companionRuntime);
 	const asr = resolveASRProvider(config);
 	const ttsProvider = resolveTTSProvider(config);
 	const player = new AudioPlayer();
@@ -98,6 +98,7 @@ export function initServices(): ServiceContainer {
 	const pipeline = new PipelineService({
 		bus: eventBus,
 		runtime,
+		affect,
 		character,
 		llm,
 		tts: ttsProvider,

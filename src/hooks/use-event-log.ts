@@ -192,7 +192,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "llm:request-start": {
 			const data = payload as EventMap["llm:request-start"];
-			return `${data.source === "companion-reply" ? "跟进" : "请求"}${formatTraceTag(data.traceId)}: ${truncate(data.userText, 80)}${data.companionRuntimeContextUsed ? " / runtime context" : ""}`;
+			return `${data.source === "companion-reply" ? "跟进" : "请求"}${formatTraceTag(data.traceId)}: ${truncate(data.userText, 80)}${data.inputSource ? ` / ${data.inputSource}` : ""}${data.companionRuntimeContextUsed ? " / runtime context" : ""}`;
 		}
 		case "llm:tool-call": {
 			const data = payload as EventMap["llm:tool-call"];

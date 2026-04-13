@@ -293,7 +293,7 @@ export class UnifiedRuntimeService {
 		}
 
 		try {
-			await this.pipeline.run(trimmed);
+			await this.pipeline.run(trimmed, { inputSource: "voice" });
 			this.state.phase = "idle";
 		} catch (err) {
 			this.state.phase = "failed";

@@ -1,11 +1,16 @@
-import type { CharacterProfile } from "@/types";
+import type { AffectState, CharacterProfile } from "@/types";
 import type { BehaviorConstraintsConfig } from "@/services/config/types";
 import type { ChatMessage } from "./types";
+import type { UserInputSource } from "@/services/affect-state";
+import { buildAffectPromptSummary } from "@/services/affect-state";
 
 export interface PromptContext {
 	characterProfile: CharacterProfile | null;
+	affectState: AffectState;
 	knowledgeContext: string;
 	companionRuntimeContext: string;
+	recentInteractionContext: string;
+	inputSource?: UserInputSource;
 	customPersona: string;
 	behaviorConstraints?: BehaviorConstraintsConfig;
 }
@@ -109,6 +114,11 @@ export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 		sections.push(`【最近游戏时序观察】\n${companionRuntime}`);
 	}
 
+	sections.push(`【当前情感与表达引导】\n${buildAffectPromptSummary(ctx.affectState, {
+		inputSource: ctx.inputSource,
+		recentInteractionContext: ctx.recentInteractionContext,
+	})}`);
+
 	const knowledge = truncateKnowledge(ctx.knowledgeContext ?? "");
 	if (knowledge) {
 		sections.push(`【当前参考知识与任务上下文】\n${knowledge}`);
@@ -136,6 +146,11 @@ export function summarizePromptContext(ctx: PromptContext): Record<string, unkno
 		systemPromptLen: (ctx.characterProfile?.systemPrompt ?? "").length,
 		personaLen: (ctx.characterProfile?.persona ?? "").length,
 		scenarioLen: (ctx.characterProfile?.scenario ?? "").length,
+		affectEmotion: ctx.affectState.presentationEmotion,
+		affectIntensity: ctx.affectState.intensity,
+		affectSource: ctx.affectState.lastSource,
+		recentInteractionLen: (ctx.recentInteractionContext ?? "").length,
+		inputSource: ctx.inputSource ?? "manual",
 		customPersonaLen: (ctx.customPersona ?? "").length,
 		companionRuntimeLen: (ctx.companionRuntimeContext ?? "").length,
 		knowledgeLen: (ctx.knowledgeContext ?? "").length,

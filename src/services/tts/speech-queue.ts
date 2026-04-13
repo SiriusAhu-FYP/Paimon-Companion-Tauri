@@ -1,4 +1,4 @@
-import type { ITTSService } from "./types";
+import type { ITTSService, VoiceConfig } from "./types";
 import type { SplitSegment } from "./text-splitter";
 import type { AudioPlayer } from "@/services/audio/audio-player";
 import { trimSilence } from "@/services/audio/audio-trimmer";
@@ -106,7 +106,7 @@ export class SpeechQueue {
 	 * 3. unsupported 语言的段直接跳过
 	 * 4. 合成失败的段跳过，后续段继续
 	 */
-	async speakAll(segments: SplitSegment[]): Promise<SpeakAllResult> {
+	async speakAll(segments: SplitSegment[], voiceConfig?: VoiceConfig): Promise<SpeakAllResult> {
 		if (!segments.length) return { totalSegments: 0, playedSegments: 0, skippedSegments: 0, errors: [], stopped: false };
 
 		this.resetStopped();
@@ -118,7 +118,7 @@ export class SpeechQueue {
 
 		// 启动第一段合成（跳过 unsupported）
 		let nextSynthPromise: Promise<SynthResult> | null =
-			this.prepareSegment(segments[0], 0);
+			this.prepareSegment(segments[0], 0, voiceConfig);
 
 		for (let i = 0; i < segments.length; i++) {
 			// 检查停止标志
@@ -138,7 +138,7 @@ export class SpeechQueue {
 
 			// 启动下一段的预缓冲合成（如果有）
 			if (i + 1 < segments.length) {
-				nextSynthPromise = this.prepareSegment(segments[i + 1], i + 1);
+				nextSynthPromise = this.prepareSegment(segments[i + 1], i + 1, voiceConfig);
 			} else {
 				nextSynthPromise = null;
 			}
@@ -228,6 +228,7 @@ export class SpeechQueue {
 	private prepareSegment(
 		segment: SplitSegment,
 		index: number,
+		voiceConfig?: VoiceConfig,
 	): Promise<SynthResult> {
 		if (!SUPPORTED_LANGS.has(segment.lang)) {
 			log.info(`[lang][${index + 1}] unsupported lang="${segment.lang}", skipping: "${segment.text.slice(0, 30)}"`);
@@ -240,12 +241,13 @@ export class SpeechQueue {
 				synthDoneMs: now,
 			});
 		}
-		return this.synthesizeSegment(segment, index);
+		return this.synthesizeSegment(segment, index, voiceConfig);
 	}
 
 	private async synthesizeSegment(
 		segment: SplitSegment,
 		index: number,
+		voiceConfig?: VoiceConfig,
 	): Promise<SynthResult> {
 		const synthStartMs = performance.now();
 		log.debug(`[synth][${index + 1}] start: "${segment.text.slice(0, 40)}..." lang=${segment.lang}`);
@@ -261,7 +263,7 @@ export class SpeechQueue {
 		}
 
 		try {
-			const audio = await this.tts.synthesize(segment.text, { lang: segment.lang });
+			const audio = await this.tts.synthesize(segment.text, { ...voiceConfig, lang: segment.lang });
 			const synthDoneMs = performance.now();
 			log.info(
 				`[synth][${index + 1}] done: ${audio.byteLength} bytes ` +

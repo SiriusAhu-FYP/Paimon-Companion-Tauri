@@ -50,6 +50,7 @@ export interface AudioTtsPendingPayload {
 export interface LlmRequestStartPayload {
 	userText: string;
 	source?: "chat" | "companion-reply";
+	inputSource?: "manual" | "voice" | "system";
 	traceId?: string;
 	companionRuntimeContextUsed?: boolean;
 	companionRuntimeTarget?: string | null;
