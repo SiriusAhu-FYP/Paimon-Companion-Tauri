@@ -30,6 +30,8 @@ export interface CharacterProfile {
 export interface CharacterState {
 	characterId: string;
 	emotion: string;
+	emotionReason: string | null;
+	emotionSource: string | null;
 	isSpeaking: boolean;
 	activeModel: string | null;
 }

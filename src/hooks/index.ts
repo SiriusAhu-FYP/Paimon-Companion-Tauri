@@ -1,4 +1,5 @@
 export { useRuntime } from "./use-runtime";
+export { useAffectState } from "./use-affect-state";
 export { useCharacter } from "./use-character";
 export { useCompanionRuntimeBenchmark } from "./use-companion-runtime-benchmark";
 export { useCompanionRuntime } from "./use-companion-runtime";

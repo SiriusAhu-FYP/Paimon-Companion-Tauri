@@ -1,5 +1,6 @@
 import { EventBus, eventBus } from "./event-bus";
 import { RuntimeService } from "./runtime";
+import { AffectStateService } from "./affect-state";
 import { CharacterService } from "./character";
 import { KnowledgeService } from "./knowledge";
 import { PerceptionService } from "./perception";
@@ -24,6 +25,7 @@ const log = createLogger("services");
 export interface ServiceContainer {
 	bus: EventBus;
 	runtime: RuntimeService;
+	affect: AffectStateService;
 	character: CharacterService;
 	knowledge: KnowledgeService;
 	perception: PerceptionService;
@@ -53,7 +55,8 @@ export function initServices(): ServiceContainer {
 	const config = getConfig();
 
 	const runtime = new RuntimeService(eventBus);
-	const character = new CharacterService(eventBus);
+	const affect = new AffectStateService(eventBus);
+	const character = new CharacterService(eventBus, affect);
 	const knowledge = new KnowledgeService(eventBus);
 	const perception = new PerceptionService(eventBus);
 	const safety = new SafetyService(eventBus, runtime);
@@ -108,7 +111,7 @@ export function initServices(): ServiceContainer {
 	const unified = new UnifiedRuntimeService({
 		bus: eventBus,
 		runtime,
-		character,
+		affect,
 		companionRuntime,
 		orchestrator,
 		game2048,
@@ -128,6 +131,7 @@ export function initServices(): ServiceContainer {
 	services = {
 		bus: eventBus,
 		runtime,
+		affect,
 		character,
 		knowledge,
 		perception,

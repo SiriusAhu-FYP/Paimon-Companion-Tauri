@@ -6,7 +6,7 @@ import {
 } from "@mui/material";
 import StopIcon from "@mui/icons-material/Stop";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import { useRuntime, useCharacter } from "@/hooks";
+import { useRuntime, useCharacter, useAffectState } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { useI18n } from "@/contexts/I18nProvider";
 import { getServices } from "@/services";
@@ -29,7 +29,8 @@ function normalizeSelectedCharacterId(currentId: string | null, available: reado
 export function ControlPanel() {
 	const { t } = useI18n();
 	const { mode, stop, resume } = useRuntime();
-	const { emotion, isSpeaking } = useCharacter();
+	const { emotion, emotionReason, emotionSource, isSpeaking } = useCharacter();
+	const affect = useAffectState();
 
 	const [profiles, setProfiles] = useState<CharacterProfile[]>([]);
 	const [selectedId, setSelectedId] = useState<string>("__manual__");
@@ -187,22 +188,34 @@ export function ControlPanel() {
 					))}
 				</Select>
 				<Typography variant="body2">{t("情绪", "Emotion")}：{emotion}</Typography>
+				<Typography variant="body2">{t("情绪来源", "Emotion Source")}：{emotionSource ?? t("无", "None")}</Typography>
+				<Typography variant="body2">{t("情绪原因", "Emotion Reason")}：{emotionReason ?? t("无", "None")}</Typography>
 				<Typography variant="body2">{t("说话中", "Speaking")}：{isSpeaking ? t("是", "Yes") : t("否", "No")}</Typography>
 				<Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 1 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("表情回闲置时间", "Expression Idle Timeout")}</Typography>
-					<HelpTooltip title={t("非 neutral 表情在没有新的情绪事件时，等待多久自动回到 idle。默认 60 秒。", "How long a non-neutral expression waits before returning to idle. Default is 60 seconds.")} />
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("情感衰减窗口", "Affect Decay Window")}</Typography>
+					<HelpTooltip title={t("非 neutral 情感在没有新输入时，先经过一个窗口衰减到 carry，再经过一个窗口回到 neutral。默认 15 秒。", "A non-neutral affect first decays to carry after one idle window, then returns to neutral after another. Default is 15 seconds.")} />
 				</Stack>
 				<TextField
 					size="small"
 					type="number"
 					sx={{ width: 140, mt: 0.5 }}
 					value={config.character.expressionIdleTimeoutSeconds}
-					placeholder="60"
+					placeholder="15"
 					onChange={(event) => handleExpressionTimeoutChange(event.target.value)}
 					onBlur={persistExpressionTimeout}
 					inputProps={{ min: 5, max: 600, step: 5 }}
-					helperText={t("默认 60 秒", "Default: 60 seconds")}
+					helperText={t("默认 15 秒", "Default: 15 seconds")}
 				/>
+				<Stack spacing={0.25} sx={{ mt: 1 }}>
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("Affect Core", "Affect Core")}</Typography>
+					<Typography variant="body2">{t("当前情感", "Current Emotion")}：{affect.currentEmotion} ({affect.intensity.toFixed(2)})</Typography>
+					<Typography variant="body2">{t("表现情感", "Presentation Emotion")}：{affect.presentationEmotion}</Typography>
+					<Typography variant="body2">{t("Carry 情感", "Carry Emotion")}：{affect.carryEmotion} ({affect.carryIntensity.toFixed(2)})</Typography>
+					<Typography variant="body2">{t("语音保持", "Speech Hold")}：{affect.isHeldForSpeech ? t("是", "Yes") : t("否", "No")}</Typography>
+					<Typography variant="body2">{t("最近来源", "Latest Source")}：{affect.lastSource}</Typography>
+					<Typography variant="body2">{t("最近原因", "Latest Reason")}：{affect.lastReason}</Typography>
+					<Typography variant="body2">{t("更新时间", "Updated At")}：{new Date(affect.updatedAt).toLocaleTimeString()}</Typography>
+				</Stack>
 			</PanelCard>
 
 			<Divider />

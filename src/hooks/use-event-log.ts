@@ -85,7 +85,7 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 		debug: true,
 	},
 	"角色": {
-		events: ["character:expression", "character:motion", "character:state-change", "character:switch"],
+		events: ["affect:state-change", "character:expression", "character:motion", "character:state-change", "character:switch"],
 		color: "#81c784",
 	},
 	"语音": {
@@ -218,13 +218,17 @@ function formatSummary(event: EventName, payload: unknown): string {
 			const data = payload as EventMap["character:expression"];
 			return `${data.emotion} / ${data.expressionName}`;
 		}
+		case "affect:state-change": {
+			const data = payload as EventMap["affect:state-change"];
+			return `${data.state.presentationEmotion} / core=${data.state.currentEmotion} ${data.state.intensity.toFixed(2)} / carry=${data.state.carryEmotion} ${data.state.carryIntensity.toFixed(2)}${data.state.isHeldForSpeech ? " / held" : ""} / ${data.source}: ${data.reason}`;
+		}
 		case "character:motion": {
 			const data = payload as EventMap["character:motion"];
 			return `${data.motionGroup} #${data.index}`;
 		}
 		case "character:state-change": {
 			const data = payload as EventMap["character:state-change"];
-			return `${data.characterId}: ${data.emotion}${data.isSpeaking ? " / speaking" : ""}`;
+			return `${data.characterId}: ${data.emotion}${data.isSpeaking ? " / speaking" : ""}${data.emotionSource ? ` / ${data.emotionSource}` : ""}${data.emotionReason ? ` / ${truncate(data.emotionReason, 48)}` : ""}`;
 		}
 		case "character:switch": {
 			const data = payload as EventMap["character:switch"];
