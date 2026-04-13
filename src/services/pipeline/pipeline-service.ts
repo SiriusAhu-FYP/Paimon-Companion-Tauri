@@ -1,6 +1,8 @@
 import type { EventBus } from "@/services/event-bus";
 import type { RuntimeService } from "@/services/runtime";
 import type { CharacterService } from "@/services/character";
+import type { AffectStateService, UserInputSource } from "@/services/affect-state";
+import { resolveSpeechVoiceConfig } from "@/services/affect-state";
 import type { LLMService } from "@/services/llm";
 import type { ITTSService } from "@/services/tts";
 import { AudioPlayer } from "@/services/audio";
@@ -19,6 +21,7 @@ const log = createLogger("pipeline");
 export class PipelineService {
 	private bus: EventBus;
 	private runtime: RuntimeService;
+	private affect: AffectStateService;
 	private character: CharacterService;
 	private llm: LLMService;
 	private speechQueue: SpeechQueue;
@@ -27,6 +30,7 @@ export class PipelineService {
 	constructor(deps: {
 		bus: EventBus;
 		runtime: RuntimeService;
+		affect: AffectStateService;
 		character: CharacterService;
 		llm: LLMService;
 		tts: ITTSService;
@@ -34,6 +38,7 @@ export class PipelineService {
 	}) {
 		this.bus = deps.bus;
 		this.runtime = deps.runtime;
+		this.affect = deps.affect;
 		this.character = deps.character;
 		this.llm = deps.llm;
 
@@ -71,7 +76,7 @@ export class PipelineService {
 	}
 
 	/** 执行完整主链路：文本 → LLM → 分段合成+播放 */
-	async run(userText: string): Promise<void> {
+	async run(userText: string, options?: { inputSource?: UserInputSource }): Promise<void> {
 		if (!this.runtime.isAllowed()) {
 			log.warn("pipeline blocked — runtime stopped");
 			return;
@@ -79,7 +84,9 @@ export class PipelineService {
 
 		log.info(`pipeline start: "${userText.slice(0, 30)}..."`);
 
-		await this.llm.sendMessage(userText);
+		await this.llm.sendMessage(userText, {
+			inputSource: options?.inputSource ?? "manual",
+		});
 
 		if (!this.runtime.isAllowed()) return;
 
@@ -124,10 +131,11 @@ export class PipelineService {
 
 		this.pendingSpeechText = displayText;
 		this.bus.emit("audio:tts-pending", { text: displayText });
+		const voiceConfig = resolveSpeechVoiceConfig(this.affect.getState());
 		log.info(`[split] ${segments.length} segments: ${segments.map((s) => `[${s.lang}]"${s.text.slice(0, 20)}"`).join(", ")}`);
 
 		try {
-			await this.speechQueue.speakAll(segments);
+			await this.speechQueue.speakAll(segments, voiceConfig);
 		} catch (err) {
 			log.error("speech queue failed", err);
 			throw err;

@@ -1,5 +1,6 @@
 import type { EventBus } from "@/services/event-bus";
 import type { RuntimeService } from "@/services/runtime";
+import type { AffectStateService, UserInputSource } from "@/services/affect-state";
 import type { CharacterService } from "@/services/character";
 import type { KnowledgeService } from "@/services/knowledge";
 import type { CompanionRuntimeService } from "@/services/companion-runtime";
@@ -21,6 +22,7 @@ export class LLMService {
 	private bus: EventBus;
 	private runtime: RuntimeService;
 	private provider: ILLMService;
+	private affect: AffectStateService;
 	private character: CharacterService;
 	private knowledge: KnowledgeService;
 	private companionRuntime: CompanionRuntimeService;
@@ -31,6 +33,7 @@ export class LLMService {
 		bus: EventBus,
 		runtime: RuntimeService,
 		provider: ILLMService,
+		affect: AffectStateService,
 		character: CharacterService,
 		knowledge: KnowledgeService,
 		companionRuntime: CompanionRuntimeService,
@@ -38,6 +41,7 @@ export class LLMService {
 		this.bus = bus;
 		this.runtime = runtime;
 		this.provider = provider;
+		this.affect = affect;
 		this.character = character;
 		this.knowledge = knowledge;
 		this.companionRuntime = companionRuntime;
@@ -224,8 +228,11 @@ export class LLMService {
 		const appCharacter = getConfig().character;
 		const promptCtx = {
 			characterProfile: this.character.getProfile(),
+			affectState: this.affect.getState(),
 			knowledgeContext: options?.knowledgeContext ?? "",
 			companionRuntimeContext: options?.companionRuntimeContext ?? this.companionRuntime.getPromptContext(),
+			recentInteractionContext: summarizeRecentInteraction(this.history),
+			inputSource: "system" as const,
 			customPersona: appCharacter.customPersona,
 			behaviorConstraints: appCharacter.behaviorConstraints,
 		};
@@ -258,7 +265,7 @@ export class LLMService {
 		return normalized;
 	}
 
-	async sendMessage(userText: string): Promise<void> {
+	async sendMessage(userText: string, options?: { inputSource?: UserInputSource }): Promise<void> {
 		if (!this.runtime.isAllowed()) {
 			log.warn("LLM request blocked — runtime stopped");
 			return;
@@ -269,7 +276,8 @@ export class LLMService {
 		}
 
 		this.processing = true;
-		this.history.push({ role: "user", content: userText });
+		const inputSource = options?.inputSource ?? "manual";
+		this.history.push({ role: "user", content: userText, inputSource });
 		const companionRuntimeContext = this.companionRuntime.getPromptContext();
 		const companionRuntimeTarget = this.companionRuntime.getState().target?.title ?? null;
 
@@ -297,6 +305,7 @@ export class LLMService {
 		this.bus.emit("llm:request-start", {
 			userText,
 			traceId: undefined,
+			inputSource,
 			companionRuntimeContextUsed: companionRuntimeContext.length > 0,
 			companionRuntimeTarget,
 			companionRuntimeContextLength: companionRuntimeContext.length,
@@ -305,8 +314,11 @@ export class LLMService {
 
 		const promptCtx = {
 			characterProfile: this.character.getProfile(),
+			affectState: this.affect.getState(),
 			knowledgeContext,
 			companionRuntimeContext,
+			recentInteractionContext: summarizeRecentInteraction(this.history),
+			inputSource,
 			customPersona: appCharacter.customPersona,
 			behaviorConstraints: appCharacter.behaviorConstraints,
 		};
@@ -342,4 +354,32 @@ export class LLMService {
 	clearHistory() {
 		this.history = [];
 	}
+}
+
+function summarizeRecentInteraction(history: readonly ChatMessage[]): string {
+	const recent = history
+		.filter((message) => message.role === "user" || message.role === "assistant")
+		.slice(-6);
+
+	if (!recent.length) {
+		return "";
+	}
+
+	return recent.map((message) => {
+		if (message.role === "assistant") {
+			return `- assistant: ${truncateForInteraction(message.content)}`;
+		}
+		if (message.role === "user") {
+			return `- user/${message.inputSource ?? "manual"}: ${truncateForInteraction(message.content)}`;
+		}
+		return `- tool: ${truncateForInteraction(message.content)}`;
+	}).join("\n");
+}
+
+function truncateForInteraction(text: string, limit = 120): string {
+	const normalized = text.trim();
+	if (normalized.length <= limit) {
+		return normalized;
+	}
+	return `${normalized.slice(0, limit - 1)}…`;
 }

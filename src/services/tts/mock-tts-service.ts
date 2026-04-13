@@ -8,16 +8,21 @@ const log = createLogger("mock-tts");
  * 产出 WAV 格式 ArrayBuffer。
  */
 export class MockTTSService implements ITTSService {
-	async synthesize(text: string, _config?: VoiceConfig): Promise<ArrayBuffer> {
+	async synthesize(text: string, config?: VoiceConfig): Promise<ArrayBuffer> {
 		// 根据文本长度模拟合成延迟
 		const delayMs = 200 + text.length * 15;
 		await new Promise((r) => setTimeout(r, delayMs));
 
 		// 生成 1–3 秒的正弦波 WAV，时长与文本长度相关
-		const durationSec = Math.min(3, Math.max(1, text.length * 0.08));
-		const wav = generateSineWav(440, durationSec, 0.3);
+		const speed = config?.speed ?? 1;
+		const pitch = config?.pitch ?? 1;
+		const durationSec = Math.min(3, Math.max(0.8, (text.length * 0.08) / Math.max(0.7, speed)));
+		const wav = generateSineWav(440 * pitch, durationSec, 0.3);
 
-		log.info(`synthesized ${text.length} chars → ${durationSec.toFixed(1)}s audio`);
+		log.info(`synthesized ${text.length} chars → ${durationSec.toFixed(1)}s audio`, {
+			speed,
+			pitch,
+		});
 		return wav;
 	}
 }

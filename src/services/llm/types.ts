@@ -8,6 +8,7 @@ export type ChatMessage =
 	| {
 		role: "system" | "user";
 		content: string;
+		inputSource?: "manual" | "voice" | "system";
 	}
 	| {
 		role: "assistant";

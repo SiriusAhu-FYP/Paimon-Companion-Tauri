@@ -103,7 +103,7 @@ export function ChatPanel() {
 
 		try {
 			const { pipeline } = getServices();
-			await pipeline.run(text);
+			await pipeline.run(text, { inputSource: "manual" });
 		} catch (err) {
 			log.error("pipeline error", err);
 		}
