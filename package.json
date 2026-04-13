@@ -8,6 +8,7 @@
     "dev": "pnpm setup:local-asr && vite",
     "build": "pnpm setup:local-asr && tsc && vite build",
     "preview": "vite preview",
+    "test": "vitest run",
     "tauri": "tauri",
     "kill-port": "powershell -Command \"$ports = 31420,31421; $connections = Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in $ports }; if ($connections) { $connections | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }; exit 0\""
   },
@@ -35,7 +36,8 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.1.4"
   },
   "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319"
 }

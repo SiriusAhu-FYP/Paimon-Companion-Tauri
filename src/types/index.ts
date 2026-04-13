@@ -19,6 +19,12 @@ export type {
 	CompanionEmotion,
 } from "./character";
 export type {
+	AffectEventSource,
+	AffectState,
+	ApplyEmotionInput,
+	ResetAffectInput,
+} from "./affect";
+export type {
 	UnifiedRunPhase,
 	UnifiedRunTrigger,
 	UnifiedRunStatus,

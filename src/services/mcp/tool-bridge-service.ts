@@ -38,7 +38,7 @@ function resolveTarget(
 	return services.orchestrator.getState().selectedTarget;
 }
 
-async function dispatchTool(
+export async function dispatchTool(
 	services: ServiceContainer,
 	toolName: string,
 	args: Record<string, unknown>,
@@ -49,24 +49,35 @@ async function dispatchTool(
 			if (!emotion) {
 				throw new Error("companion.set_emotion requires a non-empty emotion");
 			}
-			services.character.setEmotion(emotion);
+			services.affect.applyEmotion({
+				emotion: resolveCompanionEmotion(emotion),
+				source: "mcp",
+				reason: "mcp-set-emotion",
+				holdForSpeech: true,
+			});
 			return {
 				applied: true,
 				emotion,
 				state: services.character.getState(),
+				affectState: services.affect.getState(),
 			};
 		}
 		case "companion.reset_emotion": {
-			services.character.setEmotion("neutral");
+			services.affect.reset({
+				source: "mcp",
+				reason: "mcp-reset-emotion",
+			});
 			return {
 				applied: true,
 				emotion: "neutral",
 				state: services.character.getState(),
+				affectState: services.affect.getState(),
 			};
 		}
 		case "companion.get_state": {
 			return {
 				state: services.character.getState(),
+				affectState: services.affect.getState(),
 			};
 		}
 		case "game.list_actions": {
@@ -136,6 +147,21 @@ async function dispatchTool(
 		}
 		default:
 			throw new Error(`unsupported MCP tool: ${toolName}`);
+	}
+}
+
+function resolveCompanionEmotion(value: string): "neutral" | "happy" | "angry" | "sad" | "delighted" | "alarmed" | "dazed" {
+	switch (value) {
+		case "happy":
+		case "angry":
+		case "sad":
+		case "delighted":
+		case "alarmed":
+		case "dazed":
+		case "neutral":
+			return value;
+		default:
+			throw new Error(`unsupported companion emotion: ${value}`);
 	}
 }
 

@@ -1,6 +1,6 @@
-import type { CharacterService } from "@/services/character";
 import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { EventBus } from "@/services/event-bus";
+import type { AffectStateService } from "@/services/affect-state";
 import { findSemanticGameByTargetTitle } from "@/services/games/semantic-game-registry";
 import type { Game2048Service, SokobanService } from "@/services/games";
 import type { LLMService } from "@/services/llm";
@@ -45,7 +45,7 @@ const VOICE_GAME_ANALYZE_COMMAND_RE = /(帮我看|看一下|看看|分析一下|
 export class UnifiedRuntimeService {
 	private bus: EventBus;
 	private runtime: RuntimeService;
-	private character: CharacterService;
+	private affect: AffectStateService;
 	private companionRuntime: CompanionRuntimeService;
 	private orchestrator: OrchestratorService;
 	private game2048: Game2048Service;
@@ -57,7 +57,7 @@ export class UnifiedRuntimeService {
 	constructor(deps: {
 		bus: EventBus;
 		runtime: RuntimeService;
-		character: CharacterService;
+		affect: AffectStateService;
 		companionRuntime: CompanionRuntimeService;
 		orchestrator: OrchestratorService;
 		game2048: Game2048Service;
@@ -67,7 +67,7 @@ export class UnifiedRuntimeService {
 	}) {
 		this.bus = deps.bus;
 		this.runtime = deps.runtime;
-		this.character = deps.character;
+		this.affect = deps.affect;
 		this.companionRuntime = deps.companionRuntime;
 		this.orchestrator = deps.orchestrator;
 		this.game2048 = deps.game2048;
@@ -312,7 +312,12 @@ export class UnifiedRuntimeService {
 			await callLocalMcpTool("companion.set_emotion", { emotion }, { timeoutMs: 45_000, traceId });
 		} catch (err) {
 			log.warn("unified emotion application via MCP failed", err);
-			this.character.setEmotion(emotion);
+			this.affect.applyEmotion({
+				emotion: resolveUnifiedEmotion(emotion),
+				source: "unified-runtime",
+				reason: "unified-mcp-fallback",
+				holdForSpeech: true,
+			});
 		}
 	}
 
@@ -442,6 +447,21 @@ export class UnifiedRuntimeService {
 			log.warn("grounded companion reply generation failed", err);
 			return { text: input.fallbackText, source: "fallback" };
 		}
+	}
+}
+
+function resolveUnifiedEmotion(value: string): "neutral" | "happy" | "angry" | "sad" | "delighted" | "alarmed" | "dazed" {
+	switch (value) {
+		case "happy":
+		case "angry":
+		case "sad":
+		case "delighted":
+		case "alarmed":
+		case "dazed":
+		case "neutral":
+			return value;
+		default:
+			return "neutral";
 	}
 }
 

@@ -23,6 +23,7 @@ import type {
 import type { Game2048Move, Game2048State } from "./game-2048";
 import type { SokobanActionId, SokobanState } from "./sokoban";
 import type { VoiceInputState } from "./voice";
+import type { AffectState, AffectEventSource } from "./affect";
 
 export interface RuntimeModeChangePayload {
 	mode: RuntimeMode;
@@ -102,7 +103,15 @@ export interface CharacterMotionPayload {
 export interface CharacterStateChangePayload {
 	characterId: string;
 	emotion: string;
+	emotionReason: string | null;
+	emotionSource: string | null;
 	isSpeaking: boolean;
+}
+
+export interface AffectStateChangePayload {
+	state: AffectState;
+	source: AffectEventSource;
+	reason: string;
 }
 
 export interface CharacterSwitchPayload {
@@ -340,6 +349,7 @@ export interface EventMap {
 	"character:motion": CharacterMotionPayload;
 	"character:state-change": CharacterStateChangePayload;
 	"character:switch": CharacterSwitchPayload;
+	"affect:state-change": AffectStateChangePayload;
 	"system:emergency-stop": void;
 	"system:manual-takeover": void;
 	"system:resume": void;
