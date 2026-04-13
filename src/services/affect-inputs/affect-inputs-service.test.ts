@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "@/services/event-bus";
 import { AffectStateService } from "@/services/affect-state";
 import { AffectInputsService, inferEmotionFromObservation, inferEmotionFromUserText } from "./affect-inputs-service";
@@ -19,7 +19,12 @@ describe("affect input inference", () => {
 });
 
 describe("AffectInputsService", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	it("routes user/manual, runtime, task, and system error signals into affect state", () => {
+		vi.useFakeTimers();
 		const bus = new EventBus();
 		const affect = new AffectStateService(bus);
 		new AffectInputsService({ bus, affect });
@@ -42,6 +47,23 @@ describe("AffectInputsService", () => {
 				createdAt: 1,
 				windowStartedAt: 0,
 				windowEndedAt: 1,
+				frameCount: 4,
+				summary: "当前局面有风险，而且角色似乎卡住了。",
+				source: "cloud",
+			},
+		});
+		expect(affect.getState()).toMatchObject({
+			presentationEmotion: "delighted",
+			lastReason: "user-turn:manual:delighted",
+		});
+
+		vi.advanceTimersByTime(12_500);
+		bus.emit("companion-runtime:summary-complete", {
+			record: {
+				id: "summary-2",
+				createdAt: 2,
+				windowStartedAt: 1,
+				windowEndedAt: 2,
 				frameCount: 4,
 				summary: "当前局面有风险，而且角色似乎卡住了。",
 				source: "cloud",
