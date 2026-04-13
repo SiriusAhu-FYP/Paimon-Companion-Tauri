@@ -211,6 +211,7 @@ export function ControlPanel() {
 					<Typography variant="body2">{t("当前情感", "Current Emotion")}：{affect.currentEmotion} ({affect.intensity.toFixed(2)})</Typography>
 					<Typography variant="body2">{t("表现情感", "Presentation Emotion")}：{affect.presentationEmotion}</Typography>
 					<Typography variant="body2">{t("Carry 情感", "Carry Emotion")}：{affect.carryEmotion} ({affect.carryIntensity.toFixed(2)})</Typography>
+					<Typography variant="body2">{t("当前优先级", "Current Priority")}：{affect.priority}</Typography>
 					<Typography variant="body2">{t("语音保持", "Speech Hold")}：{affect.isHeldForSpeech ? t("是", "Yes") : t("否", "No")}</Typography>
 					<Typography variant="body2">{t("最近来源", "Latest Source")}：{affect.lastSource}</Typography>
 					<Typography variant="body2">{t("最近原因", "Latest Reason")}：{affect.lastReason}</Typography>

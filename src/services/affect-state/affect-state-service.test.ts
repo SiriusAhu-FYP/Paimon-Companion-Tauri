@@ -142,4 +142,51 @@ describe("AffectStateService", () => {
 			lastReason: "manual-reset",
 		});
 	});
+
+	it("suppresses lower-priority overrides during the active guard window", () => {
+		vi.useFakeTimers();
+		const bus = new EventBus();
+		const service = new AffectStateService(bus);
+
+		service.applyEmotion({
+			emotion: "delighted",
+			source: "manual",
+			reason: "manual-character-set:delighted",
+		});
+		service.applyEmotion({
+			emotion: "dazed",
+			source: "system",
+			reason: "runtime-summary:cloud:dazed",
+		});
+
+		expect(service.getState()).toMatchObject({
+			presentationEmotion: "delighted",
+			priority: 4,
+			lastReason: "manual-character-set:delighted",
+		});
+	});
+
+	it("allows lower-priority overrides after the guard window expires", () => {
+		vi.useFakeTimers();
+		const bus = new EventBus();
+		const service = new AffectStateService(bus);
+
+		service.applyEmotion({
+			emotion: "happy",
+			source: "system",
+			reason: "task-result:2048:success",
+		});
+		vi.advanceTimersByTime(12_500);
+		service.applyEmotion({
+			emotion: "dazed",
+			source: "system",
+			reason: "runtime-summary:cloud:dazed",
+		});
+
+		expect(service.getState()).toMatchObject({
+			presentationEmotion: "dazed",
+			priority: 1,
+			lastReason: "runtime-summary:cloud:dazed",
+		});
+	});
 });
