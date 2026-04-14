@@ -20,9 +20,9 @@ describe("AffectStateService", () => {
 		expect(service.getState()).toMatchObject({
 			currentEmotion: "happy",
 			presentationEmotion: "happy",
-			carryEmotion: "happy",
+			residualEmotion: "happy",
 			intensity: 1,
-			carryIntensity: 0.45,
+			residualIntensity: 0.45,
 			isHeldForSpeech: false,
 			lastSource: "manual",
 			lastReason: "test-apply",
@@ -54,7 +54,7 @@ describe("AffectStateService", () => {
 			currentEmotion: "happy",
 			presentationEmotion: "happy",
 			intensity: 0.45,
-			lastReason: "decay-to-carry",
+			lastReason: "decay-to-residual",
 		});
 	});
 
@@ -86,7 +86,7 @@ describe("AffectStateService", () => {
 		});
 	});
 
-	it("decays from active to carry and then to neutral after speech ends", () => {
+	it("decays from active to residual and then to neutral after speech ends", () => {
 		vi.useFakeTimers();
 		const bus = new EventBus();
 		const service = new AffectStateService(bus);
@@ -105,14 +105,14 @@ describe("AffectStateService", () => {
 			presentationEmotion: "happy",
 			currentEmotion: "happy",
 			intensity: 0.45,
-			lastReason: "decay-to-carry",
+			lastReason: "decay-to-residual",
 		});
 
 		vi.advanceTimersByTime(15_000);
 		expect(service.getState()).toMatchObject({
 			presentationEmotion: "neutral",
 			currentEmotion: "neutral",
-			carryEmotion: "neutral",
+			residualEmotion: "neutral",
 			intensity: 0,
 			lastReason: "decay-to-neutral",
 		});
@@ -138,7 +138,7 @@ describe("AffectStateService", () => {
 			currentEmotion: "neutral",
 			presentationEmotion: "neutral",
 			intensity: 0,
-			carryIntensity: 0,
+			residualIntensity: 0,
 			lastReason: "manual-reset",
 		});
 	});

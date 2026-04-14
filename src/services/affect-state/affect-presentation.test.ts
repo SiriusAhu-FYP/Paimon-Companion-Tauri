@@ -6,8 +6,8 @@ function makeState(overrides?: Partial<AffectState>): AffectState {
 	return {
 		currentEmotion: "neutral",
 		intensity: 0,
-		carryEmotion: "neutral",
-		carryIntensity: 0,
+		residualEmotion: "neutral",
+		residualIntensity: 0,
 		presentationEmotion: "neutral",
 		priority: 0,
 		isHeldForSpeech: false,
@@ -24,8 +24,8 @@ describe("affect presentation helpers", () => {
 			currentEmotion: "delighted",
 			presentationEmotion: "delighted",
 			intensity: 1,
-			carryEmotion: "happy",
-			carryIntensity: 0.45,
+			residualEmotion: "happy",
+			residualIntensity: 0.45,
 			lastSource: "mcp",
 			lastReason: "tool-result",
 		}), {
