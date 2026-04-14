@@ -109,7 +109,7 @@ export interface CharacterSettingsConfig {
 	activeProfileId: string;
 	/** 用户自定义附加人设，拼入 system prompt（优先级低于卡内 system_prompt / persona） */
 	customPersona: string;
-	/** affect core 的单个空闲衰减窗口秒数：先衰减到短时残留状态，再经过一个窗口回到 neutral */
+	/** relational core 的单个空闲衰减窗口秒数：先衰减到短时残留状态，再经过一个窗口回到 neutral */
 	expressionIdleTimeoutSeconds: number;
 	behaviorConstraints: BehaviorConstraintsConfig;
 }

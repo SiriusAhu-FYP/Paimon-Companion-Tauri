@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "@/services/event-bus";
 import { AffectStateService } from "@/services/affect-state";
-import { AffectInputsService, inferEmotionFromObservation, inferEmotionFromUserText } from "./affect-inputs-service";
+import { AffectInputsService, inferEmotionFromUserText } from "./affect-inputs-service";
 
 describe("affect input inference", () => {
 	it("infers emotion from user text", () => {
@@ -10,12 +10,6 @@ describe("affect input inference", () => {
 		expect(inferEmotionFromUserText("我有点看不清现在发生了什么")).toBe("dazed");
 		expect(inferEmotionFromUserText("帮我看看下一步")).toBe("neutral");
 	});
-
-	it("infers emotion from runtime observation summary", () => {
-		expect(inferEmotionFromObservation("当前局面风险很高，角色似乎被卡住了。")).toBe("alarmed");
-		expect(inferEmotionFromObservation("画面变化不大，暂时看不清关键进展。")).toBe("dazed");
-		expect(inferEmotionFromObservation("整体局面稳定，没有明显异常。")).toBe("neutral");
-	});
 });
 
 describe("AffectInputsService", () => {
@@ -23,7 +17,7 @@ describe("AffectInputsService", () => {
 		vi.useRealTimers();
 	});
 
-	it("routes user/manual, runtime, task, and system error signals into affect state", () => {
+	it("routes user/manual, task, and system error signals into affect state", () => {
 		vi.useFakeTimers();
 		const bus = new EventBus();
 		const affect = new AffectStateService(bus);
@@ -55,23 +49,6 @@ describe("AffectInputsService", () => {
 		expect(affect.getState()).toMatchObject({
 			presentationEmotion: "delighted",
 			lastReason: "user-turn:manual:delighted",
-		});
-
-		vi.advanceTimersByTime(12_500);
-		bus.emit("companion-runtime:summary-complete", {
-			record: {
-				id: "summary-2",
-				createdAt: 2,
-				windowStartedAt: 1,
-				windowEndedAt: 2,
-				frameCount: 4,
-				summary: "当前局面有风险，而且角色似乎卡住了。",
-				source: "cloud",
-			},
-		});
-		expect(affect.getState()).toMatchObject({
-			presentationEmotion: "alarmed",
-			lastReason: "runtime-summary:cloud:alarmed",
 		});
 
 		bus.emit("game2048:run-complete", {

@@ -285,7 +285,6 @@ function resolveAffectPriority(input: ApplyEmotionInput): number {
 			if (input.reason.startsWith("task-result:")) return 3;
 			if (input.reason.startsWith("character-profile-load:")) return 2;
 			if (input.reason.startsWith("user-turn:")) return 2;
-			if (input.reason.startsWith("runtime-summary:")) return 1;
 			return 1;
 	}
 }

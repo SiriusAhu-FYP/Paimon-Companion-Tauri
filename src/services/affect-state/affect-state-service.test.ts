@@ -156,7 +156,7 @@ describe("AffectStateService", () => {
 		service.applyEmotion({
 			emotion: "dazed",
 			source: "system",
-			reason: "runtime-summary:cloud:dazed",
+			reason: "observation-note:cloud:dazed",
 		});
 
 		expect(service.getState()).toMatchObject({
@@ -180,13 +180,13 @@ describe("AffectStateService", () => {
 		service.applyEmotion({
 			emotion: "dazed",
 			source: "system",
-			reason: "runtime-summary:cloud:dazed",
+			reason: "observation-note:cloud:dazed",
 		});
 
 		expect(service.getState()).toMatchObject({
 			presentationEmotion: "dazed",
 			priority: 1,
-			lastReason: "runtime-summary:cloud:dazed",
+			lastReason: "observation-note:cloud:dazed",
 		});
 	});
 });

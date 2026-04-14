@@ -176,10 +176,11 @@ Cross-cutting rule during `P2` and later:
 
 - [ ] P3: Emotion Runtime Foundation
   Goal: build the first bounded, inspectable emotion state that actually persists across turns and runtime events instead of being treated as one-off reply flavoring.
-  This phase is about establishing the shared emotional substrate that later companion behavior and functional follow-up can reliably consume.
-  - [ ] define a bounded affect-state model with explicit emotion labels, intensity, hold, and decay rules
+  This phase is about establishing the first shared relational core that later companion behavior and functional follow-up can reliably consume.
+  - [ ] define a bounded relational core model with explicit emotion labels, intensity, hold, and decay rules
   - [ ] separate immediate reaction, short carry-over mood, and output-style hints instead of treating emotion as one-shot reply decoration
   - [ ] unify emotion inputs from voice turns, runtime observations, task outcomes, and recent interaction context
+  - [ ] keep runtime summaries as neutral observation context for later companion reasoning instead of treating summary text itself as a direct relational-core trigger
   - [ ] make Live2D expression selection, reply wording, and speech delivery hints consume the same emotion state
   - [ ] expose emotion state and transition reasons in runtime/debug surfaces so the loop is inspectable
   - [-] keep new game/plugin expansion out of scope unless it is strictly required to validate the emotion loop
@@ -187,7 +188,11 @@ Cross-cutting rule during `P2` and later:
 - [ ] P4: Full Emotion Companion Validation
   Goal: raise the emotion runtime from "state exists" to "companion feels coherently emotional" across chat, observation, and delegated execution.
   The acceptance bar here is a basic but believable full-emotion module rather than a loose collection of separate text/voice/expression tricks.
+  This phase should prefer controllable video/scenario-based validation for companion behavior and should not wait for full functional hardening.
   - [ ] keep emotion continuity across multi-turn chat, passive companion runtime, and delegated-task follow-up
+  - [ ] let runtime observations and summaries support companion appraisal and proactive response, while keeping the actual relational-core change tied to companion reply/appraisal rather than raw summary text
+  - [ ] define and validate a proactive response policy around event relevance plus a minimum silence threshold so the companion can speak up without becoming noisy
+  - [ ] build a small set of repeatable video/scenario validation cases for observation -> appraisal -> reply/expression consistency before relying on stronger game-solving quality
   - [ ] let functional results and companion appraisal feed back into the persistent emotion state instead of resetting every turn
   - [ ] validate consistency across text reply, speech output, Live2D expression, and runtime follow-up behavior
   - [ ] add targeted evaluation cases for stale emotion, overreaction, failed recovery to neutral, and contradictory multimodal output
@@ -196,9 +201,12 @@ Cross-cutting rule during `P2` and later:
 - [ ] P5: Functional Module Hardening
   Goal: after the companion-side emotional baseline is usable, harden the actual task/delegation stack so the system is not expressive but unreliable.
   This phase narrows functional work to the existing validated targets first, with clearer companion-first boundaries before any broader expansion.
+  It is also the right place to formalize the heavier reflection loop instead of forcing that complexity into `P4`.
   - [ ] raise `2048` from accepted loop validation to a more repeatable stable solving baseline
   - [ ] raise `Sokoban` from minimum semantic-action skeleton to real simple-level solving
+  - [ ] land an explicit companion mode / delegated mode state with clear entry and exit conditions instead of relying on temporary unified-run style control flow
   - [ ] make companion-first and delegated-execution boundaries explicit in runtime/orchestration behavior
+  - [ ] structure delegated-task follow-up around explicit verification plus memory update rather than treating action execution as the end of the loop
   - [ ] decide which task/game capabilities stay in core MCP tools and which should become pluginized phase-by-phase
   - [-] keep broader new-game transfer outside the acceptance bar until the existing functional pair is stable
 
@@ -206,9 +214,12 @@ Cross-cutting rule during `P2` and later:
   Goal: converge the now-separate emotion, runtime, and functional decisions into one final product definition that is defensible for the FYP.
   This phase is for final architecture closure, validation packaging, and write-up quality rather than opening another large implementation frontier.
   - [ ] finalize the local-small / cloud-big split for perception, reasoning, and reply paths
-  - [ ] decide whether a fast local reaction layer is needed for speech while keeping richer cloud replies where appropriate
+  - [ ] decide whether a fast local reaction layer is needed for speech/short companion reactions while keeping richer cloud replies where appropriate, or explicitly justify not implementing it
   - [ ] tighten bounded GCC scope, mode-aware orchestration, and layered memory into the final explicit product definition
+  - [ ] remove stale UI buttons, debug controls, and other low-value surface actions before final acceptance
+  - [ ] fix build artifacts and release packaging so generated outputs are directly usable without local dev-only adjustments
   - [ ] complete the final write-up, user study, and release packaging polish
+  - [-] if time remains, land one bounded large-game micro-task demo rather than reopening broad autonomous gameplay
   - [-] treat larger-scale game transfer as optional stretch work rather than the default `P6` acceptance bar
 
 ## Appendix: P2 Historical Notes
