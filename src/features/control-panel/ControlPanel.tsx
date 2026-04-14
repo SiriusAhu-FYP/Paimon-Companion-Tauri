@@ -6,7 +6,7 @@ import {
 } from "@mui/material";
 import StopIcon from "@mui/icons-material/Stop";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import { useRuntime, useCharacter, useAffectState } from "@/hooks";
+import { useRuntime, useCharacter, useAffectState, useProactiveState } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { useI18n } from "@/contexts/I18nProvider";
 import { getServices } from "@/services";
@@ -31,6 +31,7 @@ export function ControlPanel() {
 	const { mode, stop, resume } = useRuntime();
 	const { emotion, emotionReason, emotionSource, isSpeaking } = useCharacter();
 	const affect = useAffectState();
+	const proactive = useProactiveState();
 
 	const [profiles, setProfiles] = useState<CharacterProfile[]>([]);
 	const [selectedId, setSelectedId] = useState<string>("__manual__");
@@ -216,6 +217,17 @@ export function ControlPanel() {
 					<Typography variant="body2">{t("最近来源", "Latest Source")}：{affect.lastSource}</Typography>
 					<Typography variant="body2">{t("最近原因", "Latest Reason")}：{affect.lastReason}</Typography>
 					<Typography variant="body2">{t("更新时间", "Updated At")}：{new Date(affect.updatedAt).toLocaleTimeString()}</Typography>
+				</Stack>
+				<Stack spacing={0.25} sx={{ mt: 1 }}>
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("Proactive Debug", "Proactive Debug")}</Typography>
+					<Typography variant="body2">{t("内部模式", "Internal Mode")}：{proactive.mode}</Typography>
+					<Typography variant="body2">{t("系统忙碌", "System Busy")}：{proactive.isBusy ? t("是", "Yes") : t("否", "No")}</Typography>
+					<Typography variant="body2">{t("待处理来源", "Pending Source")}：{proactive.pendingSource ?? t("无", "None")}</Typography>
+					<Typography variant="body2">{t("待处理预览", "Pending Preview")}：{proactive.pendingPreview ?? t("无", "None")}</Typography>
+					<Typography variant="body2">{t("最近决策", "Latest Decision")}：{proactive.lastDecision}</Typography>
+					<Typography variant="body2">{t("最近跳过原因", "Latest Skip Reason")}：{proactive.lastSkipReason ?? t("无", "None")}</Typography>
+					<Typography variant="body2">{t("最近主动来源", "Latest Proactive Source")}：{proactive.lastEmittedSource ?? t("无", "None")}</Typography>
+					<Typography variant="body2">{t("最近主动时间", "Latest Proactive At")}：{proactive.lastEmittedAt ? new Date(proactive.lastEmittedAt).toLocaleTimeString() : t("无", "None")}</Typography>
 				</Stack>
 			</PanelCard>
 

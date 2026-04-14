@@ -80,12 +80,13 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 			"companion-runtime:state-change",
 			"companion-runtime:benchmark-state-change",
 			"voice:state-change",
+			"companion:proactive-state-change",
 		],
 		color: "#90a4ae",
 		debug: true,
 	},
 	"角色": {
-		events: ["affect:state-change", "character:expression", "character:motion", "character:state-change", "character:switch"],
+		events: ["affect:state-change", "character:expression", "character:motion", "character:state-change", "character:switch", "companion:mode-change"],
 		color: "#81c784",
 	},
 	"语音": {
@@ -185,6 +186,20 @@ function formatPayloadPreview(event: EventName, payload: unknown): string {
 			}
 			return parts.join(" | ");
 		}
+		case "companion:mode-change": {
+			const data = payload as EventMap["companion:mode-change"];
+			return `mode=${data.mode} | prev=${data.previous} | reason=${data.reason}`;
+		}
+		case "companion:proactive-state-change": {
+			const data = payload as EventMap["companion:proactive-state-change"];
+			return [
+				`mode=${data.state.mode}`,
+				`busy=${data.state.isBusy ? "yes" : "no"}`,
+				`pending=${data.state.pendingSource ?? "none"}`,
+				`decision=${data.state.lastDecision}`,
+				data.reason ? `reason=${compactReason(data.reason, 56)}` : "",
+			].filter(Boolean).join(" | ");
+		}
 		default:
 			return serializePayload(payload);
 	}
@@ -236,7 +251,12 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "llm:request-start": {
 			const data = payload as EventMap["llm:request-start"];
-			return `${data.source === "companion-reply" ? "跟进" : "请求"}${formatTraceTag(data.traceId)}: ${truncate(data.userText, 80)}${data.inputSource ? ` / ${data.inputSource}` : ""}${data.companionRuntimeContextUsed ? " / runtime context" : ""}`;
+			const sourceLabel = data.source === "companion-reply"
+				? "跟进"
+				: data.source === "proactive-reply"
+					? "主动"
+					: "请求";
+			return `${sourceLabel}${formatTraceTag(data.traceId)}: ${truncate(data.userText, 80)}${data.inputSource ? ` / ${data.inputSource}` : ""}${data.companionRuntimeContextUsed ? " / runtime context" : ""}`;
 		}
 		case "llm:tool-call": {
 			const data = payload as EventMap["llm:tool-call"];
@@ -277,6 +297,14 @@ function formatSummary(event: EventName, payload: unknown): string {
 		case "character:switch": {
 			const data = payload as EventMap["character:switch"];
 			return `切换角色: ${data.characterId}`;
+		}
+		case "companion:mode-change": {
+			const data = payload as EventMap["companion:mode-change"];
+			return `${data.previous} -> ${data.mode}${data.reason ? ` / ${data.reason}` : ""}`;
+		}
+		case "companion:proactive-state-change": {
+			const data = payload as EventMap["companion:proactive-state-change"];
+			return `${data.action}${data.source ? ` / ${data.source}` : ""}${data.reason ? ` / ${truncate(data.reason, 48)}` : ""}`;
 		}
 		case "functional:target-change": {
 			const data = payload as EventMap["functional:target-change"];

@@ -1,0 +1,2 @@
+export const PROACTIVE_NO_REPLY_SENTINEL = "[[NO_PROACTIVE_REPLY]]";
+

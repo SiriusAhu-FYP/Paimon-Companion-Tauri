@@ -12,6 +12,7 @@ import { EvaluationService } from "./evaluation";
 import { UnifiedRuntimeService } from "./unified";
 import { CompanionRuntimeBenchmarkService, CompanionRuntimeService } from "./companion-runtime";
 import { LLMService } from "./llm";
+import { ProactiveCompanionService } from "./proactive-companion";
 import { AudioPlayer } from "./audio";
 import type { IASRService } from "./asr";
 import { PipelineService } from "./pipeline";
@@ -40,6 +41,7 @@ export interface ServiceContainer {
 	companionRuntime: CompanionRuntimeService;
 	companionRuntimeBenchmark: CompanionRuntimeBenchmarkService;
 	llm: LLMService;
+	proactiveCompanion: ProactiveCompanionService;
 	asr: IASRService;
 	player: AudioPlayer;
 	pipeline: PipelineService;
@@ -126,6 +128,12 @@ export function initServices(): ServiceContainer {
 		llm,
 		pipeline,
 	});
+	const proactiveCompanion = new ProactiveCompanionService({
+		bus: eventBus,
+		llm,
+		pipeline,
+		companionRuntime,
+	});
 	const evaluation = new EvaluationService({
 		bus: eventBus,
 		character,
@@ -152,6 +160,7 @@ export function initServices(): ServiceContainer {
 		companionRuntime,
 		companionRuntimeBenchmark,
 		llm,
+		proactiveCompanion,
 		asr,
 		player,
 		pipeline,

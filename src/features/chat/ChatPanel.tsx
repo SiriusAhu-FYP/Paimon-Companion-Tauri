@@ -7,6 +7,7 @@ import GraphicEqIcon from "@mui/icons-material/GraphicEq";
 import { useEventBus, useVoiceInput } from "@/hooks";
 import { getServices } from "@/services";
 import { createLogger } from "@/services/logger";
+import { PROACTIVE_NO_REPLY_SENTINEL } from "@/services/proactive-companion";
 import { RebuildGate } from "@/features/knowledge";
 
 const log = createLogger("chat-panel");
@@ -54,17 +55,22 @@ export function ChatPanel() {
 
 	useEventBus("llm:response-end", (payload) => {
 		streamBufferRef.current = "";
+		const shouldSuppressMessage = payload.source === "proactive-reply" && payload.fullText.trim() === PROACTIVE_NO_REPLY_SENTINEL;
 		setMessages((prev) => {
 			const copy = [...prev];
 			const last = copy[copy.length - 1];
 			if (last?.streaming) {
+				if (shouldSuppressMessage) {
+					copy.pop();
+					return copy;
+				}
 				const text = payload.fullText || "[AI 未返回有效内容]";
 				copy[copy.length - 1] = { ...last, content: text, streaming: false };
 			}
 			return copy;
 		});
 		// 空响应时 TTS 不会触发，需要手动恢复 idle 状态
-		if (!payload.fullText) {
+		if (!payload.fullText || shouldSuppressMessage) {
 			setStatus("idle");
 		}
 	});
