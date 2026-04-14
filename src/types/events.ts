@@ -24,6 +24,7 @@ import type { Game2048Move, Game2048State } from "./game-2048";
 import type { SokobanActionId, SokobanState } from "./sokoban";
 import type { VoiceInputState } from "./voice";
 import type { AffectState, AffectEventSource } from "./affect";
+import type { CompanionInteractionMode, ProactiveState, ProactiveTriggerSource } from "./proactive";
 
 export interface RuntimeModeChangePayload {
 	mode: RuntimeMode;
@@ -49,7 +50,7 @@ export interface AudioTtsPendingPayload {
 
 export interface LlmRequestStartPayload {
 	userText: string;
-	source?: "chat" | "companion-reply";
+	source?: "chat" | "companion-reply" | "proactive-reply";
 	inputSource?: "manual" | "voice" | "system";
 	traceId?: string;
 	companionRuntimeContextUsed?: boolean;
@@ -84,6 +85,7 @@ export interface McpToolCompletePayload {
 
 export interface LlmResponseEndPayload {
 	fullText: string;
+	source?: "chat" | "companion-reply" | "proactive-reply";
 	traceId?: string;
 }
 
@@ -311,6 +313,19 @@ export interface CompanionRuntimeSummaryPayload {
 	record: CompanionSummaryRecord;
 }
 
+export interface CompanionModeChangePayload {
+	mode: CompanionInteractionMode;
+	previous: CompanionInteractionMode;
+	reason: string;
+}
+
+export interface CompanionProactiveStateChangePayload {
+	state: ProactiveState;
+	action: ProactiveState["lastDecision"];
+	source: ProactiveTriggerSource | null;
+	reason: string | null;
+}
+
 export interface CompanionRuntimeBenchmarkStateChangePayload {
 	state: CompanionRuntimeBenchmarkState;
 }
@@ -386,6 +401,8 @@ export interface EventMap {
 	"companion-runtime:benchmark-state-change": CompanionRuntimeBenchmarkStateChangePayload;
 	"companion-runtime:benchmark-start": CompanionRuntimeBenchmarkStartPayload;
 	"companion-runtime:benchmark-complete": CompanionRuntimeBenchmarkCompletePayload;
+	"companion:mode-change": CompanionModeChangePayload;
+	"companion:proactive-state-change": CompanionProactiveStateChangePayload;
 }
 
 export type EventName = keyof EventMap;

@@ -25,6 +25,12 @@ export type {
 	ResetAffectInput,
 } from "./affect";
 export type {
+	CompanionInteractionMode,
+	ProactiveDecision,
+	ProactiveState,
+	ProactiveTriggerSource,
+} from "./proactive";
+export type {
 	UnifiedRunPhase,
 	UnifiedRunTrigger,
 	UnifiedRunStatus,

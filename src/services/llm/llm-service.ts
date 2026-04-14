@@ -218,6 +218,7 @@ export class LLMService {
 			companionRuntimeContext?: string;
 			knowledgeContext?: string;
 			traceId?: string;
+			source?: "companion-reply" | "proactive-reply";
 		},
 	): Promise<string> {
 		if (!this.runtime.isAllowed()) {
@@ -243,7 +244,7 @@ export class LLMService {
 		const tools = listLlmTools("companion");
 		this.bus.emit("llm:request-start", {
 			userText,
-			source: "companion-reply",
+			source: options?.source ?? "companion-reply",
 			traceId: options?.traceId,
 			companionRuntimeContextUsed: promptCtx.companionRuntimeContext.length > 0,
 			companionRuntimeContextLength: promptCtx.companionRuntimeContext.length,
@@ -255,7 +256,11 @@ export class LLMService {
 			traceId: options?.traceId,
 		});
 		const normalized = response.fullText;
-		this.bus.emit("llm:response-end", { fullText: normalized, traceId: options?.traceId });
+		this.bus.emit("llm:response-end", {
+			fullText: normalized,
+			source: options?.source ?? "companion-reply",
+			traceId: options?.traceId,
+		});
 		if (normalized) {
 			log.info("generated transient companion reply", {
 				length: normalized.length,
@@ -304,6 +309,7 @@ export class LLMService {
 
 		this.bus.emit("llm:request-start", {
 			userText,
+			source: "chat",
 			traceId: undefined,
 			inputSource,
 			companionRuntimeContextUsed: companionRuntimeContext.length > 0,
@@ -340,7 +346,11 @@ export class LLMService {
 			const fullText = response.fullText;
 
 			this.history.push(...response.historyAppend);
-			this.bus.emit("llm:response-end", { fullText, traceId: undefined });
+			this.bus.emit("llm:response-end", {
+				fullText,
+				source: "chat",
+				traceId: undefined,
+			});
 			log.info(`response complete (${fullText.length} chars)`);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
