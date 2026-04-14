@@ -193,7 +193,7 @@ export function ControlPanel() {
 				<Typography variant="body2">{t("说话中", "Speaking")}：{isSpeaking ? t("是", "Yes") : t("否", "No")}</Typography>
 				<Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 1 }}>
 					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("情感衰减窗口", "Affect Decay Window")}</Typography>
-					<HelpTooltip title={t("非 neutral 情感在没有新输入时，先经过一个窗口衰减到 carry，再经过一个窗口回到 neutral。默认 15 秒。", "A non-neutral affect first decays to carry after one idle window, then returns to neutral after another. Default is 15 seconds.")} />
+					<HelpTooltip title={t("非 neutral 情感在没有新输入时，先经过一个窗口衰减到短时残留状态，再经过一个窗口回到 neutral。默认 15 秒。", "A non-neutral affect first decays to a short residual state after one idle window, then returns to neutral after another. Default is 15 seconds.")} />
 				</Stack>
 				<TextField
 					size="small"
@@ -210,7 +210,7 @@ export function ControlPanel() {
 					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("Affect Core", "Affect Core")}</Typography>
 					<Typography variant="body2">{t("当前情感", "Current Emotion")}：{affect.currentEmotion} ({affect.intensity.toFixed(2)})</Typography>
 					<Typography variant="body2">{t("表现情感", "Presentation Emotion")}：{affect.presentationEmotion}</Typography>
-					<Typography variant="body2">{t("Carry 情感", "Carry Emotion")}：{affect.carryEmotion} ({affect.carryIntensity.toFixed(2)})</Typography>
+					<Typography variant="body2">{t("残留情感", "Residual Emotion")}：{affect.residualEmotion} ({affect.residualIntensity.toFixed(2)})</Typography>
 					<Typography variant="body2">{t("当前优先级", "Current Priority")}：{affect.priority}</Typography>
 					<Typography variant="body2">{t("语音保持", "Speech Hold")}：{affect.isHeldForSpeech ? t("是", "Yes") : t("否", "No")}</Typography>
 					<Typography variant="body2">{t("最近来源", "Latest Source")}：{affect.lastSource}</Typography>

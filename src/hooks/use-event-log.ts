@@ -130,6 +130,14 @@ function truncate(text: string, limit = PAYLOAD_PREVIEW_LIMIT): string {
 	return `${text.slice(0, Math.max(0, limit - 1))}…`;
 }
 
+function formatShortTime(timestamp: number): string {
+	return new Date(timestamp).toLocaleTimeString();
+}
+
+function compactReason(reason: string, limit = 40): string {
+	return truncate(reason, limit);
+}
+
 function serializePayload(payload: unknown, pretty = false): string {
 	if (payload == null) return "—";
 	if (typeof payload === "string") return pretty ? payload : truncate(payload);
@@ -144,6 +152,42 @@ function serializePayload(payload: unknown, pretty = false): string {
 
 function formatPercent(value: number): string {
 	return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatPayloadPreview(event: EventName, payload: unknown): string {
+	switch (event) {
+		case "affect:state-change": {
+			const data = payload as EventMap["affect:state-change"];
+			const parts = [
+				`show=${data.state.presentationEmotion}`,
+				`core=${data.state.currentEmotion}@${data.state.intensity.toFixed(2)}`,
+				`residual=${data.state.residualEmotion}@${data.state.residualIntensity.toFixed(2)}`,
+				`src=${data.source}`,
+				`reason=${compactReason(data.reason, 56)}`,
+				`at=${formatShortTime(data.state.updatedAt)}`,
+			];
+			if (data.state.isHeldForSpeech) {
+				parts.splice(4, 0, "hold=speech");
+			}
+			return parts.join(" | ");
+		}
+		case "character:state-change": {
+			const data = payload as EventMap["character:state-change"];
+			const parts = [
+				`emotion=${data.emotion}`,
+				`speaking=${data.isSpeaking ? "yes" : "no"}`,
+			];
+			if (data.emotionSource) {
+				parts.push(`src=${data.emotionSource}`);
+			}
+			if (data.emotionReason) {
+				parts.push(`reason=${compactReason(data.emotionReason, 56)}`);
+			}
+			return parts.join(" | ");
+		}
+		default:
+			return serializePayload(payload);
+	}
 }
 
 function formatSummary(event: EventName, payload: unknown): string {
@@ -220,7 +264,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "affect:state-change": {
 			const data = payload as EventMap["affect:state-change"];
-			return `${data.state.presentationEmotion} / core=${data.state.currentEmotion} ${data.state.intensity.toFixed(2)} / carry=${data.state.carryEmotion} ${data.state.carryIntensity.toFixed(2)} / p${data.state.priority}${data.state.isHeldForSpeech ? " / held" : ""} / ${data.source}: ${data.reason}`;
+			return `${data.state.presentationEmotion} | p${data.state.priority} | ${data.source} | ${compactReason(data.reason)}${data.state.isHeldForSpeech ? " | hold" : ""}`;
 		}
 		case "character:motion": {
 			const data = payload as EventMap["character:motion"];
@@ -440,7 +484,7 @@ function toEntry(entry: EventHistoryEntry): EventLogEntry | null {
 		isDebug: isDebugEvent(entry.event),
 		severity: getSeverity(entry.event, entry.payload),
 		summary: formatSummary(entry.event, entry.payload),
-		payloadPreviewText: serializePayload(entry.payload),
+		payloadPreviewText: formatPayloadPreview(entry.event, entry.payload),
 		rawPayload: entry.payload,
 	};
 }

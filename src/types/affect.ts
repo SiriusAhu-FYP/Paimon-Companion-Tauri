@@ -5,8 +5,8 @@ export type AffectEventSource = "mcp" | "unified-runtime" | "manual" | "system";
 export interface AffectState {
 	currentEmotion: CompanionEmotion;
 	intensity: number;
-	carryEmotion: CompanionEmotion;
-	carryIntensity: number;
+	residualEmotion: CompanionEmotion;
+	residualIntensity: number;
 	presentationEmotion: CompanionEmotion;
 	priority: number;
 	isHeldForSpeech: boolean;

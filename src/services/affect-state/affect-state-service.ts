@@ -4,7 +4,7 @@ import type { AffectState, AffectEventSource, ApplyEmotionInput, ResetAffectInpu
 
 const log = createLogger("affect-state");
 const DEFAULT_INITIAL_INTENSITY = 1;
-const DEFAULT_CARRY_INTENSITY = 0.45;
+const DEFAULT_RESIDUAL_INTENSITY = 0.45;
 const DEFAULT_DECAY_WINDOW_MS = 15_000;
 const PENDING_SPEECH_HOLD_MS = 30_000;
 const ACTIVE_OVERRIDE_GUARD_MS = 8_000;
@@ -14,8 +14,8 @@ function makeInitialState(): AffectState {
 	return {
 		currentEmotion: "neutral",
 		intensity: 0,
-		carryEmotion: "neutral",
-		carryIntensity: 0,
+		residualEmotion: "neutral",
+		residualIntensity: 0,
 		presentationEmotion: "neutral",
 		priority: 0,
 		isHeldForSpeech: false,
@@ -74,8 +74,8 @@ export class AffectStateService {
 		this.state.currentEmotion = input.emotion;
 		this.state.presentationEmotion = input.emotion;
 		this.state.intensity = input.emotion === "neutral" ? 0 : DEFAULT_INITIAL_INTENSITY;
-		this.state.carryEmotion = input.emotion;
-		this.state.carryIntensity = input.emotion === "neutral" ? 0 : DEFAULT_CARRY_INTENSITY;
+		this.state.residualEmotion = input.emotion;
+		this.state.residualIntensity = input.emotion === "neutral" ? 0 : DEFAULT_RESIDUAL_INTENSITY;
 		this.state.priority = input.emotion === "neutral" ? 0 : nextPriority;
 		this.state.lastSource = input.source;
 		this.state.lastReason = input.reason;
@@ -108,8 +108,8 @@ export class AffectStateService {
 		this.state.currentEmotion = "neutral";
 		this.state.presentationEmotion = "neutral";
 		this.state.intensity = 0;
-		this.state.carryEmotion = "neutral";
-		this.state.carryIntensity = 0;
+		this.state.residualEmotion = "neutral";
+		this.state.residualIntensity = 0;
 		this.state.priority = 0;
 		this.state.isHeldForSpeech = false;
 		this.state.lastSource = input.source;
@@ -170,13 +170,13 @@ export class AffectStateService {
 			return;
 		}
 
-		if (this.state.intensity > this.state.carryIntensity) {
-			this.state.intensity = this.state.carryIntensity;
+		if (this.state.intensity > this.state.residualIntensity) {
+			this.state.intensity = this.state.residualIntensity;
 			this.state.priority = Math.min(this.state.priority, 2);
 			this.state.lastSource = "system";
-			this.state.lastReason = "decay-to-carry";
+			this.state.lastReason = "decay-to-residual";
 			this.state.updatedAt = Date.now();
-			this.emitStateChange("system", "decay-to-carry");
+			this.emitStateChange("system", "decay-to-residual");
 			this.scheduleDecay();
 			return;
 		}
@@ -184,8 +184,8 @@ export class AffectStateService {
 		this.state.currentEmotion = "neutral";
 		this.state.presentationEmotion = "neutral";
 		this.state.intensity = 0;
-		this.state.carryEmotion = "neutral";
-		this.state.carryIntensity = 0;
+		this.state.residualEmotion = "neutral";
+		this.state.residualIntensity = 0;
 		this.state.priority = 0;
 		this.state.lastSource = "system";
 		this.state.lastReason = "decay-to-neutral";
@@ -261,8 +261,8 @@ export class AffectStateService {
 		log.info(`affect -> ${this.state.presentationEmotion}`, {
 			currentEmotion: this.state.currentEmotion,
 			intensity: this.state.intensity,
-			carryEmotion: this.state.carryEmotion,
-			carryIntensity: this.state.carryIntensity,
+			residualEmotion: this.state.residualEmotion,
+			residualIntensity: this.state.residualIntensity,
 			priority: this.state.priority,
 			held: this.state.isHeldForSpeech,
 			source,

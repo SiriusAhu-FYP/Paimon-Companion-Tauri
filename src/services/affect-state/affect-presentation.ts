@@ -17,7 +17,7 @@ export function buildAffectPromptSummary(
 	const sections = [
 		`当前主情感：${state.currentEmotion}（强度 ${state.intensity.toFixed(2)}）`,
 		`当前表现情感：${state.presentationEmotion}`,
-		`短时 carry 情感：${state.carryEmotion}（强度 ${state.carryIntensity.toFixed(2)}）`,
+		`短时残留情感：${state.residualEmotion}（强度 ${state.residualIntensity.toFixed(2)}）`,
 		`语音保持：${state.isHeldForSpeech ? "是" : "否"}`,
 		`最近触发来源：${state.lastSource}`,
 		`最近触发原因：${state.lastReason}`,
