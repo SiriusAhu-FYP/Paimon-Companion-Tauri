@@ -1,1 +1,1 @@
-export { AffectInputsService, inferEmotionFromObservation, inferEmotionFromUserText } from "./affect-inputs-service";
+export { AffectInputsService, inferEmotionFromUserText } from "./affect-inputs-service";

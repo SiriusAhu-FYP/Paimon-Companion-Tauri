@@ -25,9 +25,6 @@ export class AffectInputsService {
 		this.bus.on("llm:request-start", (payload) => {
 			this.handleUserTurn(payload);
 		});
-		this.bus.on("companion-runtime:summary-complete", (payload) => {
-			this.handleRuntimeSummary(payload);
-		});
 		this.bus.on("game2048:run-complete", (payload) => {
 			this.handle2048Result(payload);
 		});
@@ -54,19 +51,6 @@ export class AffectInputsService {
 			reason: `user-turn:${inputSource}:${inferred}`,
 		});
 		log.info("affect input from user turn", { inputSource, emotion: inferred });
-	}
-
-	private handleRuntimeSummary(payload: EventMap["companion-runtime:summary-complete"]) {
-		const inferred = inferEmotionFromObservation(payload.record.summary);
-		if (!inferred || inferred === "neutral") {
-			return;
-		}
-		this.affect.applyEmotion({
-			emotion: inferred,
-			source: "system",
-			reason: `runtime-summary:${payload.record.source}:${inferred}`,
-		});
-		log.info("affect input from runtime summary", { source: payload.record.source, emotion: inferred });
 	}
 
 	private handle2048Result(payload: EventMap["game2048:run-complete"]) {
@@ -107,14 +91,5 @@ export function inferEmotionFromUserText(text: string): CompanionEmotion {
 	if (DELIGHTED_PATTERNS.test(normalized)) return "delighted";
 	if (DAZED_PATTERNS.test(normalized)) return "dazed";
 	if (/[!?！？]{2,}/.test(normalized)) return "happy";
-	return "neutral";
-}
-
-export function inferEmotionFromObservation(summary: string): CompanionEmotion {
-	const normalized = summary.trim();
-	if (!normalized) return "neutral";
-	if (ALARM_PATTERNS.test(normalized)) return "alarmed";
-	if (DAZED_PATTERNS.test(normalized)) return "dazed";
-	if (DELIGHTED_PATTERNS.test(normalized)) return "happy";
 	return "neutral";
 }

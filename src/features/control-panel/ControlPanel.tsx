@@ -207,7 +207,7 @@ export function ControlPanel() {
 					helperText={t("默认 15 秒", "Default: 15 seconds")}
 				/>
 				<Stack spacing={0.25} sx={{ mt: 1 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("Affect Core", "Affect Core")}</Typography>
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("Relational Core", "Relational Core")}</Typography>
 					<Typography variant="body2">{t("当前情感", "Current Emotion")}：{affect.currentEmotion} ({affect.intensity.toFixed(2)})</Typography>
 					<Typography variant="body2">{t("表现情感", "Presentation Emotion")}：{affect.presentationEmotion}</Typography>
 					<Typography variant="body2">{t("残留情感", "Residual Emotion")}：{affect.residualEmotion} ({affect.residualIntensity.toFixed(2)})</Typography>
