@@ -26,9 +26,10 @@ src-tauri/vendor/sherpa-onnx/
 .env.*
 !.env.example
 
-# Live2D SDK and model assets (binary / redistributable)
-public/Core/
-public/Resources/
+# Public web assets: only track character cards
+public/*
+!public/cards/
+!public/cards/**
 
 # Editor directories and files
 .vscode/*
