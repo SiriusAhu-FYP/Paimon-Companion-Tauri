@@ -11,6 +11,23 @@ const RUNTIME_SUMMARY_SILENCE_MS = 45_000;
 const TASK_RESULT_SILENCE_MS = 20_000;
 const SYSTEM_ERROR_DEDUPE_MS = 30_000;
 const DELEGATED_TASK_COOLDOWN_MS = 10_000;
+const RUNTIME_SUMMARY_REPEAT_MS = 90_000;
+const CROSS_CONTEXT_WINDOW_MS = 60_000;
+
+interface RuntimeSummaryContext {
+	summary: string;
+	source: string;
+	createdAt: number;
+}
+
+interface TaskResultContext {
+	source: "game2048-result" | "sokoban-result";
+	summary: string;
+	primaryAction: string | null;
+	success: boolean;
+	boardChanged: boolean;
+	createdAt: number;
+}
 
 interface ProactiveCandidate {
 	source: ProactiveTriggerSource;
@@ -58,6 +75,9 @@ export class ProactiveCompanionService {
 	private lastSpokenAt = 0;
 	private delegatedTaskCooldownUntil = 0;
 	private lastSystemErrorSeen = new Map<string, number>();
+	private lastRuntimeSummarySeen = new Map<string, number>();
+	private latestRuntimeSummary: RuntimeSummaryContext | null = null;
+	private latestTaskResult: TaskResultContext | null = null;
 
 	constructor(deps: {
 		bus: EventBus;
@@ -126,6 +146,11 @@ export class ProactiveCompanionService {
 	}
 
 	private handleRuntimeSummary(payload: EventMap["companion-runtime:summary-complete"]) {
+		this.latestRuntimeSummary = {
+			summary: payload.record.summary,
+			source: payload.record.source,
+			createdAt: payload.record.createdAt,
+		};
 		const candidate: ProactiveCandidate = {
 			source: "runtime-summary",
 			priority: 1,
@@ -141,6 +166,14 @@ export class ProactiveCompanionService {
 	}
 
 	private handle2048Result(payload: EventMap["game2048:run-complete"]) {
+		this.latestTaskResult = {
+			source: "game2048-result",
+			summary: payload.summary,
+			primaryAction: payload.selectedMove,
+			success: payload.success,
+			boardChanged: payload.boardChanged,
+			createdAt: Date.now(),
+		};
 		const candidate: ProactiveCandidate = {
 			source: "game2048-result",
 			priority: 2,
@@ -159,6 +192,14 @@ export class ProactiveCompanionService {
 	}
 
 	private handleSokobanResult(payload: EventMap["sokoban:run-complete"]) {
+		this.latestTaskResult = {
+			source: "sokoban-result",
+			summary: payload.summary,
+			primaryAction: payload.executedMoves[0] ?? null,
+			success: payload.success,
+			boardChanged: payload.boardChanged,
+			createdAt: Date.now(),
+		};
 		const candidate: ProactiveCandidate = {
 			source: "sokoban-result",
 			priority: 2,
@@ -217,6 +258,12 @@ export class ProactiveCompanionService {
 	}
 
 	private getImmediateSkipReason(candidate: ProactiveCandidate): string | null {
+		if (candidate.source === "runtime-summary") {
+			const repeatReason = this.getRuntimeSummaryPreFilterReason(candidate);
+			if (repeatReason) {
+				return repeatReason;
+			}
+		}
 		if (candidate.source === "runtime-summary" && this.state.mode === "delegated") {
 			return "delegated-mode";
 		}
@@ -233,6 +280,22 @@ export class ProactiveCompanionService {
 		if ((candidate.source === "game2048-result" || candidate.source === "sokoban-result") && this.lastSpokenAt > 0 && sinceLastSpeech < TASK_RESULT_SILENCE_MS) {
 			return "task-result-silence-window";
 		}
+		return null;
+	}
+
+	private getRuntimeSummaryPreFilterReason(candidate: ProactiveCandidate): string | null {
+		const normalizedPreview = normalizeForDedupe(candidate.preview);
+		if (!normalizedPreview) {
+			return "runtime-summary-empty";
+		}
+		if (looksLikeLowSignalRuntimeSummary(normalizedPreview)) {
+			return "runtime-summary-low-signal";
+		}
+		const lastSeenAt = this.lastRuntimeSummarySeen.get(normalizedPreview) ?? 0;
+		if (Date.now() - lastSeenAt < RUNTIME_SUMMARY_REPEAT_MS) {
+			return "runtime-summary-repeat-window";
+		}
+		this.lastRuntimeSummarySeen.set(normalizedPreview, Date.now());
 		return null;
 	}
 
@@ -321,16 +384,48 @@ export class ProactiveCompanionService {
 			"你正在决定是否主动对玩家说一句话。",
 			`如果不值得主动说话，请精确输出 ${PROACTIVE_NO_REPLY_SENTINEL} 。`,
 			"如果值得主动说话，请只输出一句到两句简短、自然、可直接播报的中文陪伴回复。",
+			"先判断再回答：重点考虑这件事是否足够相关、是否有新信息、是否值得打断当前沉默，以及现在是否真的需要由你开口。",
+			"普通、平稳、无明显变化的观察，通常不需要主动说话。",
+			"如果只是重复已经说过的内容，或者当前没有新增价值，请输出不说话哨兵。",
 			"不要过度热情，不要频繁刷存在感，不要编造未观察到的事实。",
 			"如果你选择不主动说话，不要调用任何工具。",
 			"如果你选择主动说话，并且需要同步表情/情绪，请调用现有 companion emotion 工具。",
 			`【当前内部模式】${this.state.mode}`,
 			...candidate.facts,
 		];
+		const relatedContext = this.getRelatedContextFacts(candidate.source);
+		if (relatedContext.length) {
+			parts.push(...relatedContext);
+		}
 		if (runtimeContext) {
 			parts.push(`【当前可用观察上下文】\n${runtimeContext}`);
 		}
 		return parts.join("\n\n");
+	}
+
+	private getRelatedContextFacts(source: ProactiveTriggerSource): string[] {
+		const parts: string[] = [];
+		if ((source === "runtime-summary" || source === "system-error") && this.latestTaskResult && Date.now() - this.latestTaskResult.createdAt <= CROSS_CONTEXT_WINDOW_MS) {
+			parts.push([
+				"【最近任务结果】",
+				`来源：${this.latestTaskResult.source}`,
+				`结果：${this.latestTaskResult.summary}`,
+				`是否成功：${this.latestTaskResult.success ? "是" : "否"}`,
+				`是否有明显变化：${this.latestTaskResult.boardChanged ? "是" : "否"}`,
+				this.latestTaskResult.primaryAction ? `关键动作：${this.latestTaskResult.primaryAction}` : "",
+			].filter(Boolean).join("\n"));
+		}
+		if ((source === "game2048-result" || source === "sokoban-result" || source === "system-error") && this.latestRuntimeSummary && Date.now() - this.latestRuntimeSummary.createdAt <= CROSS_CONTEXT_WINDOW_MS) {
+			parts.push([
+				"【最近观察总结】",
+				`来源：${this.latestRuntimeSummary.source}`,
+				`内容：${this.latestRuntimeSummary.summary}`,
+			].join("\n"));
+		}
+		if (this.state.lastEmittedAt) {
+			parts.push(`【距离上次已播报回复】约 ${Math.round((Date.now() - this.state.lastEmittedAt) / 1000)} 秒`);
+		}
+		return parts;
 	}
 
 	private setMode(mode: ProactiveState["mode"], reason: string) {
@@ -376,4 +471,19 @@ export class ProactiveCompanionService {
 			reason,
 		});
 	}
+}
+
+function normalizeForDedupe(text: string): string {
+	return text.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function looksLikeLowSignalRuntimeSummary(summary: string): boolean {
+	return [
+		"画面变化很小",
+		"当前画面与上一帧基本一致",
+		"没有明显新变化",
+		"暂无足够的画面描述可供总结",
+		"最近画面概况",
+		"基本一致",
+	].some((pattern) => summary.includes(pattern.toLowerCase()));
 }
