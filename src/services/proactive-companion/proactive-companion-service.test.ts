@@ -231,4 +231,69 @@ describe("ProactiveCompanionService", () => {
 			}),
 		);
 	});
+
+	it("skips low-signal runtime summaries before calling the llm", async () => {
+		const { bus, llm, service } = createService();
+
+		bus.emit("companion-runtime:summary-complete", {
+			record: {
+				id: "summary-static",
+				createdAt: Date.now(),
+				windowStartedAt: Date.now() - 5000,
+				windowEndedAt: Date.now(),
+				frameCount: 2,
+				summary: "画面变化很小，当前画面与上一帧基本一致，没有明显新变化。",
+				source: "cloud",
+			},
+		});
+		await flushAsyncWork();
+
+		expect(llm.generateCompanionReply).not.toHaveBeenCalled();
+		expect(service.getState()).toMatchObject({
+			lastDecision: "skipped",
+			lastSkipReason: "runtime-summary-low-signal",
+		});
+	});
+
+	it("includes recent task context when appraising a later runtime summary", async () => {
+		const { bus, llm } = createService({
+			reply: "这一步没有推进太多，我继续帮你盯着。",
+		});
+
+		bus.emit("game2048:run-complete", {
+			runId: "2048-ctx",
+			success: false,
+			selectedMove: "move_left",
+			boardChanged: false,
+			summary: "2048 stalled",
+		});
+		await flushAsyncWork();
+		expect(llm.generateCompanionReply).toHaveBeenCalledTimes(1);
+		llm.generateCompanionReply.mockClear();
+
+		bus.emit("audio:tts-start", { text: "previous reply" });
+		bus.emit("audio:tts-end");
+		vi.setSystemTime(new Date("2026-04-14T09:01:00.000Z"));
+
+		bus.emit("companion-runtime:summary-complete", {
+			record: {
+				id: "summary-context",
+				createdAt: Date.now(),
+				windowStartedAt: Date.now() - 5000,
+				windowEndedAt: Date.now(),
+				frameCount: 4,
+				summary: "角色还在原地试探，没有形成明显突破。",
+				source: "cloud",
+			},
+		});
+		await flushAsyncWork();
+
+		expect(llm.generateCompanionReply).toHaveBeenCalledWith(
+			expect.stringContaining("【最近任务结果】"),
+			expect.objectContaining({
+				source: "proactive-reply",
+			}),
+		);
+		expect(llm.generateCompanionReply.mock.calls[0]?.[0]).toContain("结果：2048 stalled");
+	});
 });
