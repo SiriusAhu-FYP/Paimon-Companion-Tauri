@@ -350,7 +350,7 @@ describe("ProactiveCompanionService", () => {
 
 	it("uses a configurable runtime-summary silence window", async () => {
 		const { bus, llm, service } = createService({
-			reply: "我继续陪你看着。",
+			reply: PROACTIVE_NO_REPLY_SENTINEL,
 		});
 		service.setRuntimeSummarySilenceSeconds(30);
 
@@ -406,6 +406,59 @@ describe("ProactiveCompanionService", () => {
 		await flushAsyncWork();
 
 		expect(llm.generateCompanionReply).toHaveBeenCalledTimes(1);
+		expect(llm.generateCompanionReply).toHaveBeenCalledWith(
+			expect.stringContaining("本轮禁止输出不说话哨兵"),
+			expect.objectContaining({
+				source: "proactive-reply",
+			}),
+		);
+	});
+
+	it("forces a short runtime-summary fallback after the silence window when the llm still declines", async () => {
+		const speakText = vi.fn().mockResolvedValue(undefined);
+		const { bus, llm, service, pipeline } = createService({
+			reply: PROACTIVE_NO_REPLY_SENTINEL,
+			speakText,
+		});
+		service.setRuntimeSummarySilenceSeconds(30);
+
+		bus.emit("companion-runtime:summary-complete", {
+			record: {
+				id: "summary-entrance-first",
+				createdAt: Date.now(),
+				windowStartedAt: Date.now() - 5000,
+				windowEndedAt: Date.now(),
+				frameCount: 3,
+				summary: "当前刚切到一段新的动画内容。",
+				source: "cloud",
+			},
+		});
+		await flushAsyncWork();
+		llm.generateCompanionReply.mockClear();
+		speakText.mockClear();
+
+		bus.emit("audio:tts-start", { text: "previous reply" });
+		bus.emit("audio:tts-end");
+
+		vi.setSystemTime(new Date("2026-04-14T09:00:31.000Z"));
+		bus.emit("companion-runtime:summary-complete", {
+			record: {
+				id: "summary-force-speak",
+				createdAt: Date.now(),
+				windowStartedAt: Date.now() - 5000,
+				windowEndedAt: Date.now(),
+				frameCount: 3,
+				summary: "当前气氛有点紧张，但画面变化不算大。",
+				source: "cloud",
+			},
+		});
+		await flushAsyncWork();
+
+		expect(pipeline.speakText).toHaveBeenCalledWith("派蒙还在陪你看着呢，这段气氛有点紧，我继续帮你盯着后面，汪。");
+		expect(service.getState()).toMatchObject({
+			lastDecision: "emitted",
+			lastEmittedSource: "runtime-summary",
+		});
 	});
 
 	it("resets proactive session state when the companion runtime restarts", async () => {
