@@ -3,6 +3,8 @@ import { EventBus } from "@/services/event-bus";
 import { RuntimeService } from "@/services/runtime";
 import { LLMService } from "./llm-service";
 import type { ILLMService, ToolDef } from "./types";
+import { listLlmTools } from "@/services/mcp/tool-defs";
+import { callLocalMcpTool } from "@/services/mcp/local-mcp-client";
 
 vi.mock("./prompt-builder", () => ({
 	buildSystemMessage: vi.fn(() => null),
@@ -85,5 +87,72 @@ describe("LLMService proactive source emission", () => {
 			traceId: "trace-proactive-1",
 			fullText: "我会继续看着情况。",
 		});
+	});
+
+	it("keeps first-pass text when a tool-call follow-up returns no second assistant text", async () => {
+		vi.mocked(listLlmTools).mockReturnValueOnce([
+			{
+				name: "companion_set_emotion",
+				description: "set emotion",
+				parameters: {
+					type: "object",
+					properties: {},
+				},
+			},
+		]);
+		vi.mocked(callLocalMcpTool).mockResolvedValueOnce("{\"ok\":true}");
+
+		const bus = new EventBus();
+		const runtime = new RuntimeService(bus);
+		let callIndex = 0;
+		const provider: ILLMService = {
+			async *chat() {
+				callIndex += 1;
+				if (callIndex === 1) {
+					yield { type: "tool-call", id: "tool-1", name: "companion_set_emotion", args: { emotion: "happy" }, rawArguments: "{\"emotion\":\"happy\"}" } as const;
+					yield { type: "done", fullText: "小心一点，我在看着。" } as const;
+					return;
+				}
+				yield { type: "done", fullText: "" } as const;
+			},
+		};
+		const service = new LLMService(
+			bus,
+			runtime,
+			provider,
+			{
+				getState: vi.fn(() => ({
+					currentEmotion: "neutral",
+					intensity: 0,
+					residualEmotion: "neutral",
+					residualIntensity: 0,
+					presentationEmotion: "neutral",
+					isHeldForSpeech: false,
+					lastReason: null,
+					lastSource: "system",
+					updatedAt: 0,
+					priority: 0,
+				})),
+			} as never,
+			{
+				getProfile: vi.fn(() => ({
+					id: "paimon",
+					name: "Paimon",
+					description: "",
+					defaultEmotion: "neutral",
+				})),
+			} as never,
+			{} as never,
+			{
+				getPromptContext: vi.fn(() => "最近观察：危险接近。"),
+			} as never,
+		);
+
+		const reply = await service.generateCompanionReply("请判断是否需要主动回应", {
+			source: "proactive-reply",
+			traceId: "trace-proactive-2",
+		});
+
+		expect(reply).toBe("小心一点，我在看着。");
 	});
 });

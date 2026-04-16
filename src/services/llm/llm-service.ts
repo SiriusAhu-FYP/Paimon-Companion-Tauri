@@ -201,13 +201,14 @@ export class LLMService {
 			emitToolCalls: false,
 			traceId: options?.traceId,
 		});
+		const finalText = secondPass.fullText.trim() || firstPass.fullText.trim();
 
 		return {
-			fullText: secondPass.fullText.trim(),
+			fullText: finalText,
 			historyAppend: [
 				assistantToolMessage,
 				...toolMessages,
-				{ role: "assistant", content: secondPass.fullText.trim() },
+				{ role: "assistant", content: finalText },
 			],
 		};
 	}
