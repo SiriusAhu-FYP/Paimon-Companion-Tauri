@@ -106,6 +106,10 @@ export class CharacterService {
 		this.notifyStateChange();
 	}
 
+	replayPresentation() {
+		this.applyPresentationEmotion(this.state.emotion, null);
+	}
+
 	private notifyStateChange() {
 		this.bus.emit("character:state-change", {
 			characterId: this.state.characterId,

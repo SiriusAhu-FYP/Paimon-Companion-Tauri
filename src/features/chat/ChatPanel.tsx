@@ -31,7 +31,10 @@ export function ChatPanel() {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [messages]);
 
-	useEventBus("llm:request-start", () => {
+	useEventBus("llm:request-start", (payload) => {
+		if (payload.source === "proactive-reply") {
+			return;
+		}
 		setStatus("thinking");
 		streamBufferRef.current = "";
 		setMessages((prev) => [
@@ -55,6 +58,7 @@ export function ChatPanel() {
 
 	useEventBus("llm:response-end", (payload) => {
 		streamBufferRef.current = "";
+		const isProactive = payload.source === "proactive-reply";
 		const shouldSuppressMessage = payload.source === "proactive-reply" && payload.fullText.trim() === PROACTIVE_NO_REPLY_SENTINEL;
 		setMessages((prev) => {
 			const copy = [...prev];
@@ -66,11 +70,19 @@ export function ChatPanel() {
 				}
 				const text = payload.fullText || "[AI 未返回有效内容]";
 				copy[copy.length - 1] = { ...last, content: text, streaming: false };
+				return copy;
+			}
+			if (isProactive && !shouldSuppressMessage && payload.fullText.trim()) {
+				copy.push({
+					role: "assistant",
+					content: payload.fullText,
+					timestamp: Date.now(),
+				});
 			}
 			return copy;
 		});
-		// 空响应时 TTS 不会触发，需要手动恢复 idle 状态
-		if (!payload.fullText || shouldSuppressMessage) {
+		// proactive 决策是后台流程，不应该长时间占用前台输入态
+		if (isProactive || !payload.fullText || shouldSuppressMessage) {
 			setStatus("idle");
 		}
 	});

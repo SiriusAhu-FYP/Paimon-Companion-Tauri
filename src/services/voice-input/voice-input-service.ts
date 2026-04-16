@@ -127,7 +127,10 @@ export class VoiceInputService {
 			this.interactionLocked = false;
 			this.syncState();
 		});
-		this.bus.on("llm:request-start", () => {
+		this.bus.on("llm:request-start", (payload) => {
+			if (payload.source === "proactive-reply") {
+				return;
+			}
 			this.interactionLocked = true;
 			void this.interruptRecording(true);
 			this.syncState();

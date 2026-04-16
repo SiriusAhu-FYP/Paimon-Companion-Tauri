@@ -21,18 +21,6 @@ async function bootstrap() {
 
 	if (windowLabel === "main") {
 		await services.character.refreshCatalogFromPublic();
-		const charCfg = getConfig().character;
-		const savedId = charCfg.activeProfileId?.trim() ?? "";
-		const fromCard = savedId ? services.character.findProfileById(savedId) : undefined;
-		if (fromCard) {
-			services.character.loadFromProfile(fromCard);
-		} else {
-			mockCharacterInit(services.character);
-		}
-		services.character.setExpressionIdleTimeoutSeconds(charCfg.expressionIdleTimeoutSeconds);
-		services.character.setActiveModel(DEFAULT_MODEL.path);
-		exposeMockTools(services.bus, services.character, services.runtime);
-
 		const broadcastFullState = (expressionEmotion?: string) => {
 			const charState = services.character.getState();
 			broadcastState({
@@ -56,8 +44,22 @@ async function bootstrap() {
 		onControlCommand((cmd) => {
 			if (cmd.type === "request-state") {
 				broadcastFullState();
+				services.character.replayPresentation();
 			}
 		});
+
+		const charCfg = getConfig().character;
+		const savedId = charCfg.activeProfileId?.trim() ?? "";
+		const fromCard = savedId ? services.character.findProfileById(savedId) : undefined;
+		if (fromCard) {
+			services.character.loadFromProfile(fromCard);
+		} else {
+			mockCharacterInit(services.character);
+		}
+		services.character.setExpressionIdleTimeoutSeconds(charCfg.expressionIdleTimeoutSeconds);
+		services.character.setActiveModel(DEFAULT_MODEL.path);
+		services.character.replayPresentation();
+		exposeMockTools(services.bus, services.character, services.runtime);
 
 		await initMcpToolBridge(services);
 
