@@ -241,6 +241,10 @@ export class CompanionRuntimeService {
 		this.state.running = true;
 		this.state.phase = "idle";
 		this.state.target = { ...target };
+		this.state.lastFrame = null;
+		this.state.lastSummary = null;
+		this.state.frameQueue = [];
+		this.state.summaryHistory = [];
 		this.state.metrics = {
 			...makeInitialMetrics(),
 			sessionStartedAt: Date.now(),

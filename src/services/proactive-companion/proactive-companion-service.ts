@@ -81,6 +81,8 @@ export class ProactiveCompanionService {
 	private latestTaskResult: TaskResultContext | null = null;
 	private runtimeSummarySilenceMs = DEFAULT_RUNTIME_SUMMARY_SILENCE_MS;
 	private firstRuntimeSummaryPendingEntrance = true;
+	private companionRuntimeRunning = false;
+	private companionRuntimeTargetTitle: string | null = null;
 
 	constructor(deps: {
 		bus: EventBus;
@@ -106,6 +108,9 @@ export class ProactiveCompanionService {
 		});
 		this.bus.on("system:error", (payload) => {
 			this.handleSystemError(payload);
+		});
+		this.bus.on("companion-runtime:state-change", (payload) => {
+			this.handleCompanionRuntimeStateChange(payload);
 		});
 		this.bus.on("llm:request-start", () => {
 			this.llmBusy = true;
@@ -155,6 +160,21 @@ export class ProactiveCompanionService {
 			? Math.max(5, Math.min(600, Math.round(seconds as number)))
 			: DEFAULT_RUNTIME_SUMMARY_SILENCE_MS / 1000;
 		this.runtimeSummarySilenceMs = normalizedSeconds * 1000;
+	}
+
+	private handleCompanionRuntimeStateChange(payload: EventMap["companion-runtime:state-change"]) {
+		const runtimeStopped = !payload.running && this.companionRuntimeRunning;
+		const runtimeStarted = payload.running && !this.companionRuntimeRunning;
+		const targetChanged = payload.running && this.companionRuntimeRunning && payload.targetTitle !== this.companionRuntimeTargetTitle;
+
+		if (runtimeStopped) {
+			this.resetRuntimeSession("runtime-session-stop");
+		} else if (runtimeStarted || targetChanged) {
+			this.resetRuntimeSession(runtimeStarted ? "runtime-session-start" : "runtime-target-changed");
+		}
+
+		this.companionRuntimeRunning = payload.running;
+		this.companionRuntimeTargetTitle = payload.running ? payload.targetTitle : null;
 	}
 
 	private handleRuntimeSummary(payload: EventMap["companion-runtime:summary-complete"]) {
@@ -461,6 +481,25 @@ export class ProactiveCompanionService {
 			reason,
 		});
 		this.emitStateChange(this.state.lastDecision, null, reason);
+	}
+
+	private resetRuntimeSession(reason: string) {
+		this.pendingCandidate = null;
+		this.delegatedTaskCooldownUntil = 0;
+		this.lastSpokenAt = 0;
+		this.lastSystemErrorSeen.clear();
+		this.lastRuntimeSummarySeen.clear();
+		this.latestRuntimeSummary = null;
+		this.latestTaskResult = null;
+		this.firstRuntimeSummaryPendingEntrance = true;
+		this.state.pendingSource = null;
+		this.state.pendingPriority = null;
+		this.state.pendingPreview = null;
+		this.state.lastCandidateSource = null;
+		this.state.lastSkipReason = null;
+		this.state.lastEmittedAt = null;
+		this.state.lastEmittedSource = null;
+		this.emitStateChange("idle", null, reason);
 	}
 
 	private isBusy(): boolean {
