@@ -14,7 +14,6 @@ import { StageHost, StageSlot } from "@/features/stage";
 import { ControlPanel } from "@/features/control-panel/ControlPanel";
 import { ChatPanel } from "@/features/chat";
 import { StatusBar } from "@/app/StatusBar";
-import { ResizablePane } from "@/components";
 import { broadcastControl, type StageDisplayMode, isTauriEnvironment } from "@/utils/window-sync";
 import { createLogger } from "@/services/logger";
 import { getServices } from "@/services";
@@ -22,10 +21,9 @@ import { useThemeMode } from "@/contexts/JoyThemeProvider";
 import { useI18n } from "@/contexts/I18nProvider";
 
 const log = createLogger("main-window");
-const FunctionalPanel = lazy(async () => import("@/features/control-panel/FunctionalPanel").then((module) => ({ default: module.FunctionalPanel })));
 const SettingsPanel = lazy(async () => import("@/features/settings/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
 const KnowledgePanel = lazy(async () => import("@/features/knowledge/KnowledgePanel").then((module) => ({ default: module.KnowledgePanel })));
-const EventLog = lazy(async () => import("@/app/EventLog").then((module) => ({ default: module.EventLog })));
+const WorkbenchPanel = lazy(async () => import("@/features/control-panel/WorkbenchPanel").then((module) => ({ default: module.WorkbenchPanel })));
 const UI_STALL_THRESHOLD_MS = 200;
 const UI_STALL_THROTTLE_MS = 3000;
 
@@ -45,8 +43,7 @@ export function MainWindow() {
 	const [stageMode, setStageMode] = useState<"docked" | "floating">("docked");
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
 	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("clean");
-	const [eventLogOpen, setEventLogOpen] = useState(false);
-	const [rightPanel, setRightPanel] = useState<"control" | "functional" | "settings" | "knowledge">("control");
+	const [rightPanel, setRightPanel] = useState<"companion" | "workbench" | "settings" | "knowledge">("companion");
 
 	const slotRectRef = useRef<DOMRect | null>(null);
 	const unlistenMoveRef = useRef<(() => void) | null>(null);
@@ -234,11 +231,25 @@ export function MainWindow() {
 
 	const showSlot = stageVisible && stageMode === "docked";
 	const rightPanelContent = rightPanel === "settings"
-		? <SettingsPanel onClose={() => setRightPanel("control")} />
+		? <SettingsPanel onClose={() => setRightPanel("companion")} />
 		: rightPanel === "knowledge"
-			? <KnowledgePanel onClose={() => setRightPanel("control")} />
-			: rightPanel === "functional"
-				? <FunctionalPanel />
+			? <KnowledgePanel onClose={() => setRightPanel("companion")} />
+			: rightPanel === "workbench"
+				? (
+					<WorkbenchPanel
+						stageHostProps={{
+							stageVisible,
+							stageMode,
+							alwaysOnTop,
+							displayMode,
+							onShowStage: handleShowStage,
+							onModeChange: handleModeChange,
+							onVisibilityChange: setStageVisible,
+							onAlwaysOnTopChange: setAlwaysOnTop,
+							onDisplayModeChange: setDisplayMode,
+						}}
+					/>
+				)
 				: <ControlPanel />;
 
 	return (
@@ -288,8 +299,8 @@ export function MainWindow() {
 					<Tooltip title={t("控制面板", "Control Panel")}>
 						<IconButton
 							size="small"
-							onClick={() => setRightPanel("control")}
-							sx={{ color: rightPanel === "control" ? "primary.main" : "text.secondary" }}
+							onClick={() => setRightPanel("companion")}
+							sx={{ color: rightPanel === "companion" ? "primary.main" : "text.secondary" }}
 						>
 							<TuneIcon fontSize="small" />
 						</IconButton>
@@ -303,11 +314,11 @@ export function MainWindow() {
 							<AutoStoriesIcon fontSize="small" />
 						</IconButton>
 					</Tooltip>
-					<Tooltip title={t("功能实验", "Functional Lab")}>
+					<Tooltip title={t("开发工作台", "Developer Workbench")}>
 						<IconButton
 							size="small"
-							onClick={() => setRightPanel("functional")}
-							sx={{ color: rightPanel === "functional" ? "primary.main" : "text.secondary" }}
+							onClick={() => setRightPanel("workbench")}
+							sx={{ color: rightPanel === "workbench" ? "primary.main" : "text.secondary" }}
 						>
 							<ScienceIcon fontSize="small" />
 						</IconButton>
@@ -337,6 +348,7 @@ export function MainWindow() {
 						stageMode={stageMode}
 						alwaysOnTop={alwaysOnTop}
 						displayMode={displayMode}
+						variant="product"
 						onShowStage={handleShowStage}
 						onModeChange={handleModeChange}
 						onVisibilityChange={setStageVisible}
@@ -370,51 +382,27 @@ export function MainWindow() {
 				</Box>
 
 				{/* 右栏: 控制面板 / 设置 / 知识库 */}
-				<Box sx={{ width: 280, minWidth: 220, flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+				<Box
+					sx={{
+						width: rightPanel === "workbench" ? 420 : 280,
+						minWidth: rightPanel === "workbench" ? 320 : 220,
+						flexShrink: 0,
+						overflowY: "auto",
+						display: "flex",
+						flexDirection: "column",
+					}}
+				>
 					<Suspense fallback={<PanelLoadingState />}>
 						{rightPanelContent}
 					</Suspense>
 				</Box>
 			</Box>
 
-			{/* 可折叠事件日志（在状态栏上方） */}
-			{eventLogOpen && (
-				<ResizablePane
-					axis="y"
-					storageKey="event-log-height"
-					initialSize={260}
-					minSize={180}
-					maxSize={520}
-					handlePlacement="start"
-					className="resizable-pane resizable-pane-vertical"
-					handleClassName="resizable-pane-handle resizable-pane-handle-vertical"
-					style={{
-						flexShrink: 0,
-						borderTop: "1px solid var(--mui-palette-secondary-main, rgba(255,255,255,0.12))",
-						background: "var(--mui-palette-background-default, transparent)",
-						overflow: "hidden",
-					}}
-					onResizeStart={() => {
-						suspendDockedSyncRef.current = true;
-					}}
-					onResizeEnd={() => {
-						suspendDockedSyncRef.current = false;
-						debouncedSync();
-					}}
-				>
-					<Suspense fallback={<PanelLoadingState />}>
-						<EventLog />
-					</Suspense>
-				</ResizablePane>
-			)}
-
 			{/* 底部状态栏——始终在最底部 */}
 			<StatusBar
 				stageVisible={stageVisible}
 				stageMode={stageMode}
 				displayMode={displayMode}
-				eventLogOpen={eventLogOpen}
-				onToggleEventLog={() => setEventLogOpen((v) => !v)}
 			/>
 		</Box>
 	);

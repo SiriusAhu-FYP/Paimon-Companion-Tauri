@@ -1,32 +1,22 @@
-import { Box, Typography, IconButton, Tooltip, Chip, Stack } from "@mui/material";
-import TerminalIcon from "@mui/icons-material/Terminal";
+import { Box, Typography, Chip, Stack } from "@mui/material";
 import type { StageDisplayMode } from "@/utils/window-sync";
-import { useRuntime, useCharacter, useFunctional, useEventLog } from "@/hooks";
+import { useRuntime, useCharacter, useFunctional } from "@/hooks";
 import { useI18n } from "@/contexts/I18nProvider";
 
 interface StatusBarProps {
 	stageVisible: boolean;
 	stageMode: "docked" | "floating";
 	displayMode: StageDisplayMode;
-	eventLogOpen: boolean;
-	onToggleEventLog: () => void;
 }
 
 export function StatusBar({
 	stageVisible,
 	stageMode,
 	displayMode,
-	eventLogOpen,
-	onToggleEventLog,
 }: StatusBarProps) {
 	const { mode } = useRuntime();
 	const { emotion, isSpeaking } = useCharacter();
 	const { state: functionalState } = useFunctional();
-	const { latestEntry } = useEventLog(1, {
-		showDebug: false,
-		mode: "latest",
-		includeTotalTrackedEntries: false,
-	});
 	const { t } = useI18n();
 
 	return (
@@ -108,41 +98,21 @@ export function StatusBar({
 				/>
 			)}
 
-			<Tooltip title={latestEntry?.payloadPreviewText ?? t("暂无事件", "No events yet")}>
-				<Typography
-					variant="caption"
-					color="text.secondary"
-					sx={{
-						fontSize: 11,
-						maxWidth: 320,
-						overflow: "hidden",
-						textOverflow: "ellipsis",
-						whiteSpace: "nowrap",
-					}}
-				>
-					{latestEntry ? `${t("最近事件", "Latest")}: ${latestEntry.summary}` : `${t("最近事件", "Latest")}: ${t("暂无", "None")}`}
-				</Typography>
-			</Tooltip>
-
-			{/* 事件日志开关 */}
-			<Tooltip title={eventLogOpen ? t("关闭事件日志", "Hide event log") : t("打开事件日志", "Show event log")}>
-				<IconButton
-					size="small"
-					onClick={onToggleEventLog}
-					sx={{
-						p: 0.25,
-						color: eventLogOpen ? "primary.main" : "text.secondary",
-					}}
-				>
-					<TerminalIcon sx={{ fontSize: 16 }} />
-				</IconButton>
-			</Tooltip>
-			<Chip
-				label={t("日志", "Logs")}
-				size="small"
-				variant={eventLogOpen ? "filled" : "outlined"}
-				sx={{ height: 18, fontSize: 10, "& .MuiChip-label": { px: 0.75 } }}
-			/>
+			<Typography
+				variant="caption"
+				color="text.secondary"
+				sx={{
+					fontSize: 11,
+					maxWidth: 280,
+					overflow: "hidden",
+					textOverflow: "ellipsis",
+					whiteSpace: "nowrap",
+				}}
+			>
+				{functionalState.activeTaskId
+					? t("托管执行中", "Delegated execution in progress")
+					: t("陪伴待机中", "Companion standing by")}
+			</Typography>
 		</Box>
 	);
 }
