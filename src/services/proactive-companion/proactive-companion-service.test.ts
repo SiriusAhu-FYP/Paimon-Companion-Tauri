@@ -407,4 +407,98 @@ describe("ProactiveCompanionService", () => {
 
 		expect(llm.generateCompanionReply).toHaveBeenCalledTimes(1);
 	});
+
+	it("resets proactive session state when the companion runtime restarts", async () => {
+		const { bus, llm, service } = createService({
+			reply: "派蒙来啦，先一起看看现在播到哪里了。",
+		});
+
+		bus.emit("companion-runtime:state-change", {
+			running: true,
+			phase: "connecting",
+			targetTitle: "target-a",
+			frameQueueLength: 0,
+			summaryHistoryLength: 0,
+			lastFrameId: null,
+			lastSummaryId: null,
+			captureTicks: 0,
+			summariesGenerated: 0,
+			lastError: null,
+		});
+		bus.emit("companion-runtime:summary-complete", {
+			record: {
+				id: "summary-session-a",
+				createdAt: Date.now(),
+				windowStartedAt: Date.now() - 5000,
+				windowEndedAt: Date.now(),
+				frameCount: 3,
+				summary: "当前刚进入一段新的媒体内容，画面和字幕都已经很明确。",
+				source: "cloud",
+			},
+		});
+		await flushAsyncWork();
+
+		expect(llm.generateCompanionReply).toHaveBeenCalledWith(
+			expect.stringContaining("【入场提示】这是你进入当前观看场景后的第一次观察。"),
+			expect.objectContaining({
+				source: "proactive-reply",
+			}),
+		);
+		expect(service.getState().lastEmittedAt).not.toBeNull();
+
+		llm.generateCompanionReply.mockClear();
+		bus.emit("companion-runtime:state-change", {
+			running: false,
+			phase: "idle",
+			targetTitle: null,
+			frameQueueLength: 0,
+			summaryHistoryLength: 0,
+			lastFrameId: null,
+			lastSummaryId: null,
+			captureTicks: 0,
+			summariesGenerated: 0,
+			lastError: null,
+		});
+		await flushAsyncWork();
+
+		expect(service.getState()).toMatchObject({
+			lastDecision: "idle",
+			lastCandidateSource: null,
+			lastSkipReason: null,
+			lastEmittedAt: null,
+			lastEmittedSource: null,
+		});
+
+		bus.emit("companion-runtime:state-change", {
+			running: true,
+			phase: "connecting",
+			targetTitle: "target-a",
+			frameQueueLength: 0,
+			summaryHistoryLength: 0,
+			lastFrameId: null,
+			lastSummaryId: null,
+			captureTicks: 0,
+			summariesGenerated: 0,
+			lastError: null,
+		});
+		bus.emit("companion-runtime:summary-complete", {
+			record: {
+				id: "summary-session-b",
+				createdAt: Date.now(),
+				windowStartedAt: Date.now() - 5000,
+				windowEndedAt: Date.now(),
+				frameCount: 3,
+				summary: "现在重新进入了一个新的观察会话，画面内容已经恢复更新。",
+				source: "cloud",
+			},
+		});
+		await flushAsyncWork();
+
+		expect(llm.generateCompanionReply).toHaveBeenCalledWith(
+			expect.stringContaining("【入场提示】这是你进入当前观看场景后的第一次观察。"),
+			expect.objectContaining({
+				source: "proactive-reply",
+			}),
+		);
+	});
 });
