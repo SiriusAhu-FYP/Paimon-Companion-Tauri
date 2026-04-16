@@ -37,7 +37,7 @@ export class AffectInputsService {
 	}
 
 	private handleUserTurn(payload: EventMap["llm:request-start"]) {
-		if (payload.source === "companion-reply") {
+		if (payload.source === "companion-reply" || payload.source === "proactive-reply") {
 			return;
 		}
 		const inputSource = payload.inputSource ?? "manual";
