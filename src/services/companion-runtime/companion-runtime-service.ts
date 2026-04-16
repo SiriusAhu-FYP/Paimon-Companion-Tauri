@@ -298,6 +298,7 @@ export class CompanionRuntimeService {
 				captureIntervalMs: this.state.captureIntervalMs,
 				summaryWindowMs: this.state.summaryWindowMs,
 				historyRetentionMs: this.state.historyRetentionMs,
+				proactiveRuntimeSummarySilenceSeconds: getConfig().companionRuntime.proactiveRuntimeSummarySilenceSeconds,
 			},
 		});
 

@@ -144,6 +144,27 @@ export function ControlPanel() {
 		await updateConfig({ character: { ...config.character } });
 	}, [config.character]);
 
+	const handleProactiveSilenceChange = useCallback((rawValue: string) => {
+		const parsed = Number(rawValue);
+		const nextValue = Number.isFinite(parsed)
+			? Math.max(5, Math.min(600, Math.round(parsed)))
+			: DEFAULT_CONFIG.companionRuntime.proactiveRuntimeSummarySilenceSeconds;
+
+		setConfig((current) => ({
+			...current,
+			companionRuntime: {
+				...current.companionRuntime,
+				proactiveRuntimeSummarySilenceSeconds: nextValue,
+			},
+		}));
+	}, []);
+
+	const persistProactiveSilence = useCallback(async () => {
+		const { proactiveCompanion } = getServices();
+		proactiveCompanion.setRuntimeSummarySilenceSeconds(config.companionRuntime.proactiveRuntimeSummarySilenceSeconds);
+		await updateConfig({ companionRuntime: { ...config.companionRuntime } });
+	}, [config.companionRuntime]);
+
 	return (
 		<PanelRoot title={t("控制面板", "Control Panel")}>
 			<PanelCard>
@@ -226,6 +247,21 @@ export function ControlPanel() {
 				</Stack>
 				<Stack spacing={0.25} sx={{ mt: 1 }}>
 					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("Proactive Debug", "Proactive Debug")}</Typography>
+					<Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 0.5 }}>
+						<Typography variant="caption" color="text.secondary">{t("主动静默窗口", "Proactive Silence Window")}</Typography>
+						<HelpTooltip title={t("runtime summary 主动发言的最短间隔。首次入场不受这条限制。默认 30 秒。", "Minimum gap between runtime-summary proactive replies. First-scene entrance is not blocked by this. Default: 30 seconds.")} />
+					</Stack>
+					<TextField
+						size="small"
+						type="number"
+						sx={{ width: 140, mt: 0.25 }}
+						value={config.companionRuntime.proactiveRuntimeSummarySilenceSeconds}
+						placeholder="30"
+						onChange={(event) => handleProactiveSilenceChange(event.target.value)}
+						onBlur={persistProactiveSilence}
+						inputProps={{ min: 5, max: 600, step: 5 }}
+						helperText={t("默认 30 秒", "Default: 30 seconds")}
+					/>
 					<Typography variant="body2">{t("内部模式", "Internal Mode")}：{proactive.mode}</Typography>
 					<Typography variant="body2">{t("系统忙碌", "System Busy")}：{proactive.isBusy ? t("是", "Yes") : t("否", "No")}</Typography>
 					<Typography variant="body2">{t("待处理来源", "Pending Source")}：{proactive.pendingSource ?? t("无", "None")}</Typography>
