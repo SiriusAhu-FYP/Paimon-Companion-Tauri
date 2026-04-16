@@ -73,4 +73,24 @@ describe("AffectInputsService", () => {
 			lastReason: "system-error:voice-input",
 		});
 	});
+
+	it("does not infer emotion from proactive prompt text", () => {
+		const bus = new EventBus();
+		const affect = new AffectStateService(bus);
+		new AffectInputsService({ bus, affect });
+
+		bus.emit("llm:request-start", {
+			userText: "你正在决定是否主动对玩家说一句话。A close-up anime scene shows a character with a distressed expression, their face contorted in anger or frustration.",
+			source: "proactive-reply",
+			inputSource: "system",
+			companionRuntimeContextUsed: true,
+			companionRuntimeContextLength: 100,
+			knowledgeContextLength: 0,
+		});
+
+		expect(affect.getState()).toMatchObject({
+			presentationEmotion: "neutral",
+			lastReason: "initial",
+		});
+	});
 });
