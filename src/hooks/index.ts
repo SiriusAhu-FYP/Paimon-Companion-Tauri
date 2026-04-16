@@ -1,5 +1,6 @@
 export { useRuntime } from "./use-runtime";
 export { useAffectState } from "./use-affect-state";
+export { useDebugCaptureState } from "./use-debug-capture-state";
 export { useProactiveState } from "./use-proactive-state";
 export { useCharacter } from "./use-character";
 export { useCompanionRuntimeBenchmark } from "./use-companion-runtime-benchmark";

@@ -81,6 +81,7 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 			"companion-runtime:benchmark-state-change",
 			"voice:state-change",
 			"companion:proactive-state-change",
+			"debug-capture:state-change",
 		],
 		color: "#90a4ae",
 		debug: true,
@@ -200,6 +201,16 @@ function formatPayloadPreview(event: EventName, payload: unknown): string {
 				data.reason ? `reason=${compactReason(data.reason, 56)}` : "",
 			].filter(Boolean).join(" | ");
 		}
+		case "debug-capture:state-change": {
+			const data = payload as EventMap["debug-capture:state-change"];
+			return [
+				`enabled=${data.state.enabled ? "yes" : "no"}`,
+				`session=${data.state.sessionId ?? "none"}`,
+				`events=${data.state.capturedEventCount}`,
+				`images=${data.state.capturedImageCount}`,
+				data.state.lastError ? `error=${compactReason(data.state.lastError, 56)}` : "",
+			].filter(Boolean).join(" | ");
+		}
 		default:
 			return serializePayload(payload);
 	}
@@ -305,6 +316,10 @@ function formatSummary(event: EventName, payload: unknown): string {
 		case "companion:proactive-state-change": {
 			const data = payload as EventMap["companion:proactive-state-change"];
 			return `${data.action}${data.source ? ` / ${data.source}` : ""}${data.reason ? ` / ${truncate(data.reason, 48)}` : ""}`;
+		}
+		case "debug-capture:state-change": {
+			const data = payload as EventMap["debug-capture:state-change"];
+			return `${data.state.enabled ? "capture-on" : "capture-off"} / ${data.state.sessionId ?? "no-session"} / events ${data.state.capturedEventCount} / images ${data.state.capturedImageCount}`;
 		}
 		case "functional:target-change": {
 			const data = payload as EventMap["functional:target-change"];

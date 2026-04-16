@@ -1,2 +1,2 @@
-export { LoggerService, createLogger } from "./logger-service";
-export type { LogLevel } from "./logger-service";
+export { LoggerService, createLogger, registerLogSink } from "./logger-service";
+export type { LogEntry, LogLevel } from "./logger-service";

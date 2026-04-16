@@ -1,4 +1,5 @@
 import type { EventBus } from "@/services/event-bus";
+import type { DebugCaptureService } from "@/services/debug-capture";
 import type { FunctionalTarget, PerceptionSnapshot } from "@/types";
 import { captureWindow } from "@/services/system";
 import { createLogger } from "@/services/logger";
@@ -8,9 +9,11 @@ const LOW_CONFIDENCE_CAPTURE_THRESHOLD = 0.12;
 
 export class PerceptionService {
 	private bus: EventBus;
+	private debugCapture?: DebugCaptureService;
 
-	constructor(bus: EventBus) {
+	constructor(bus: EventBus, debugCapture?: DebugCaptureService) {
 		this.bus = bus;
+		this.debugCapture = debugCapture;
 	}
 
 	async captureTarget(target: FunctionalTarget): Promise<PerceptionSnapshot> {
@@ -42,6 +45,13 @@ export class PerceptionService {
 			captureMethod: snapshot.captureMethod,
 			qualityScore: Number(snapshot.qualityScore.toFixed(3)),
 			lowConfidence: snapshot.lowConfidence,
+		});
+		this.debugCapture?.recordPerceptionImage({
+			targetTitle: snapshot.targetTitle,
+			capturedAt: snapshot.capturedAt,
+			captureMethod: snapshot.captureMethod,
+			qualityScore: snapshot.qualityScore,
+			dataUrl: snapshot.dataUrl,
 		});
 		return snapshot;
 	}
