@@ -37,6 +37,7 @@ interface ProactiveCandidate {
 	facts: string[];
 	traceId?: string;
 	isEntrance?: boolean;
+	forceSpeak?: boolean;
 }
 
 function makeInitialState(): ProactiveState {
@@ -180,6 +181,10 @@ export class ProactiveCompanionService {
 	private handleRuntimeSummary(payload: EventMap["companion-runtime:summary-complete"]) {
 		const isEntrance = this.firstRuntimeSummaryPendingEntrance;
 		this.firstRuntimeSummaryPendingEntrance = false;
+		const forceSpeak =
+			!isEntrance
+			&& this.lastSpokenAt > 0
+			&& (Date.now() - this.lastSpokenAt) >= this.runtimeSummarySilenceMs;
 		this.latestRuntimeSummary = {
 			summary: payload.record.summary,
 			source: payload.record.source,
@@ -191,6 +196,7 @@ export class ProactiveCompanionService {
 			preview: truncate(payload.record.summary),
 			dedupeKey: `runtime-summary:${payload.record.source}:${payload.record.summary}`,
 			isEntrance,
+			forceSpeak,
 			facts: [
 				`【触发源】runtime summary`,
 				`【summary 来源】${payload.record.source}`,
@@ -319,6 +325,9 @@ export class ProactiveCompanionService {
 	}
 
 	private getRuntimeSummaryPreFilterReason(candidate: ProactiveCandidate): string | null {
+		if (candidate.forceSpeak) {
+			return null;
+		}
 		const normalizedPreview = normalizeForDedupe(candidate.preview);
 		if (!normalizedPreview) {
 			return "runtime-summary-empty";
@@ -389,6 +398,18 @@ export class ProactiveCompanionService {
 				source: "proactive-reply",
 			});
 			const normalized = reply.trim();
+			if ((!normalized || normalized === PROACTIVE_NO_REPLY_SENTINEL) && candidate.forceSpeak) {
+				const fallback = this.buildForcedRuntimeSummaryFallback();
+				this.state.lastEmittedAt = Date.now();
+				this.state.lastEmittedSource = candidate.source;
+				await this.pipeline.speakText(fallback);
+				this.emitStateChange("emitted", candidate.source, "forced-runtime-summary-fallback");
+				log.info("proactive reply emitted via forced fallback", {
+					source: candidate.source,
+					preview: candidate.preview,
+				});
+				return;
+			}
 			if (!normalized || normalized === PROACTIVE_NO_REPLY_SENTINEL) {
 				this.emitStateChange("skipped", candidate.source, "llm-no-proactive-reply");
 				return;
@@ -432,6 +453,13 @@ export class ProactiveCompanionService {
 			parts.push(
 				"【入场提示】这是你进入当前观看场景后的第一次观察。",
 				"如果画面已经足够明确，优先用一句自然的入场白开启陪看，再顺手点出你现在看到了什么；不要过长，也不要像正式解说。",
+			);
+		}
+		if (candidate.forceSpeak) {
+			parts.push(
+				"【陪伴存在感要求】距离上次已播报回复已经超过当前静默窗口，本轮必须说一句简短的陪伴性评论或确认。",
+				`【当前静默窗口】${Math.round(this.runtimeSummarySilenceMs / 1000)} 秒`,
+				"本轮禁止输出不说话哨兵；即使只是轻量回应，也要明确开口。",
 			);
 		}
 		const relatedContext = this.getRelatedContextFacts(candidate.source);
@@ -500,6 +528,17 @@ export class ProactiveCompanionService {
 		this.state.lastEmittedAt = null;
 		this.state.lastEmittedSource = null;
 		this.emitStateChange("idle", null, reason);
+	}
+
+	private buildForcedRuntimeSummaryFallback(): string {
+		const summary = this.latestRuntimeSummary?.summary ?? "";
+		if (summary.includes("紧张") || summary.includes("不安")) {
+			return "派蒙还在陪你看着呢，这段气氛有点紧，我继续帮你盯着后面，汪。";
+		}
+		if (summary.includes("暂停") || summary.includes("等待")) {
+			return "派蒙还在呢，这里像是先停住了一下，我继续陪你看后面会怎么发展，汪。";
+		}
+		return "派蒙还在陪你看着呢，我继续帮你盯着接下来会发生什么，汪。";
 	}
 
 	private isBusy(): boolean {
