@@ -174,29 +174,38 @@ Cross-cutting rule during `P2` and later:
 - current definite migration targets are recorded in `docs/architecture/runtime-backend-migration.md`
 - each migration must be followed by a focused manual regression check before it is treated as accepted
 
-- [ ] P3: Emotion Runtime Foundation
+- [x] P3: Emotion Runtime Foundation
   Goal: build the first bounded, inspectable emotion state that actually persists across turns and runtime events instead of being treated as one-off reply flavoring.
   This phase is about establishing the first shared relational core that later companion behavior and functional follow-up can reliably consume.
-  - [ ] define a bounded relational core model with explicit emotion labels, intensity, hold, and decay rules
-  - [ ] separate immediate reaction, short carry-over mood, and output-style hints instead of treating emotion as one-shot reply decoration
-  - [ ] unify emotion inputs from voice turns, runtime observations, task outcomes, and recent interaction context
-  - [ ] keep runtime summaries as neutral observation context for later companion reasoning instead of treating summary text itself as a direct relational-core trigger
-  - [ ] make Live2D expression selection, reply wording, and speech delivery hints consume the same emotion state
-  - [ ] expose emotion state and transition reasons in runtime/debug surfaces so the loop is inspectable
+  - [x] define a bounded relational core model with explicit emotion labels, intensity, hold, and decay rules
+  - [x] separate immediate reaction, short carry-over mood, and output-style hints instead of treating emotion as one-shot reply decoration
+  - [x] unify emotion inputs from voice turns, runtime observations, task outcomes, and recent interaction context
+  - [x] keep runtime summaries as neutral observation context for later companion reasoning instead of treating summary text itself as a direct relational-core trigger
+  - [x] make Live2D expression selection, reply wording, and speech delivery hints consume the same emotion state
+  - [x] expose emotion state and transition reasons in runtime/debug surfaces so the loop is inspectable
   - [-] keep new game/plugin expansion out of scope unless it is strictly required to validate the emotion loop
 
-- [ ] P4: Full Emotion Companion Validation
+- [x] P4: Full Emotion Companion Validation
   Goal: raise the emotion runtime from "state exists" to "companion feels coherently emotional" across chat, observation, and delegated execution.
   The acceptance bar here is a basic but believable full-emotion module rather than a loose collection of separate text/voice/expression tricks.
   This phase should prefer controllable video/scenario-based validation for companion behavior and should not wait for full functional hardening.
-  - [ ] keep emotion continuity across multi-turn chat, passive companion runtime, and delegated-task follow-up
-  - [ ] let runtime observations and summaries support companion appraisal and proactive response, while keeping the actual relational-core change tied to companion reply/appraisal rather than raw summary text
-  - [ ] define and validate a proactive response policy around event relevance plus a minimum silence threshold so the companion can speak up without becoming noisy
-  - [ ] build a small set of repeatable video/scenario validation cases for observation -> appraisal -> reply/expression consistency before relying on stronger game-solving quality
-  - [ ] let functional results and companion appraisal feed back into the persistent emotion state instead of resetting every turn
-  - [ ] validate consistency across text reply, speech output, Live2D expression, and runtime follow-up behavior
-  - [ ] add targeted evaluation cases for stale emotion, overreaction, failed recovery to neutral, and contradictory multimodal output
-  - [ ] define and meet the minimum accepted bar for a "basic full emotion module"
+  - [x] keep emotion continuity across multi-turn chat, passive companion runtime, and delegated-task follow-up
+  - [x] let runtime observations and summaries support companion appraisal and proactive response, while keeping the actual relational-core change tied to companion reply/appraisal rather than raw summary text
+  - [x] define and validate a proactive response policy around event relevance plus a minimum silence threshold so the companion can speak up without becoming noisy
+  - [x] build a small set of repeatable video/scenario validation cases for observation -> appraisal -> reply/expression consistency before relying on stronger game-solving quality
+  - [x] let functional results and companion appraisal feed back into the persistent emotion state instead of resetting every turn
+  - [x] validate consistency across text reply, speech output, Live2D expression, and runtime follow-up behavior
+  - [x] add targeted evaluation cases for stale emotion, overreaction, failed recovery to neutral, and contradictory multimodal output
+  - [x] define and meet the minimum accepted bar for a "basic full emotion module"
+
+P3/P4 close-out:
+
+- accepted `P3` status: the relational core is now persistent, inspectable, and shared across expression, speech, prompt context, and debug surfaces
+- accepted `P4` status: proactive companion behavior is now functioning end-to-end with session entry, silence-window gating, forced post-silence check-in, restart-safe session reset, and foreground-safe behavior
+- accepted validation method: debug-capture-backed manual checks plus targeted service tests, using repeatable observation/runtime scenarios rather than waiting for full gameplay hardening
+- accepted known remaining gap before later polish phases:
+  - proactive reply quality is now present and stable, but still not consistently strong enough to feel like an especially natural watch-along / observation-side companion
+  - this is treated as a tuning/polish problem on top of an accepted `P4` baseline, not as a blocker for phase close-out
 
 - [ ] P5: Functional Module Hardening
   Goal: after the companion-side emotional baseline is usable, harden the actual task/delegation stack so the system is not expressive but unreliable.
