@@ -136,6 +136,7 @@ export function initServices(): ServiceContainer {
 		llm,
 		pipeline,
 		companionRuntime,
+		runtimeSummarySilenceSeconds: config.companionRuntime.proactiveRuntimeSummarySilenceSeconds,
 	});
 	const evaluation = new EvaluationService({
 		bus: eventBus,

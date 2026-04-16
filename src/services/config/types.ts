@@ -120,6 +120,7 @@ export interface CompanionRuntimeConfig {
 	captureIntervalMs: number;
 	summaryWindowMs: number;
 	historyRetentionMs: number;
+	proactiveRuntimeSummarySilenceSeconds: number;
 }
 
 // ── Knowledge（知识库配置，独立于 LLM / TTS） ──
@@ -205,6 +206,7 @@ export const DEFAULT_CONFIG: AppConfig = {
 		captureIntervalMs: 1000,
 		summaryWindowMs: 10000,
 		historyRetentionMs: 60000,
+		proactiveRuntimeSummarySilenceSeconds: 30,
 	},
 	llmProfiles: [],
 	ttsProfiles: [],

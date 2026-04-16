@@ -232,6 +232,57 @@ describe("ProactiveCompanionService", () => {
 		);
 	});
 
+	it("adds an entrance hint on the first runtime summary", async () => {
+		const { bus, llm } = createService({
+			reply: "派蒙来啦，你这是在看利根川讲猜拳规则吗？",
+		});
+
+		bus.emit("companion-runtime:summary-complete", {
+			record: {
+				id: "summary-first",
+				createdAt: Date.now(),
+				windowStartedAt: Date.now() - 5000,
+				windowEndedAt: Date.now(),
+				frameCount: 3,
+				summary: "当前正在播放一段动画，画面里有人在讲解猜拳卡片规则。",
+				source: "cloud",
+			},
+		});
+		await flushAsyncWork();
+
+		expect(llm.generateCompanionReply).toHaveBeenCalledWith(
+			expect.stringContaining("【入场提示】这是你进入当前观看场景后的第一次观察。"),
+			expect.objectContaining({
+				source: "proactive-reply",
+			}),
+		);
+	});
+
+	it("does not let the first-scene entrance get blocked by the silence window", async () => {
+		const { bus, llm } = createService({
+			reply: "派蒙来啦，你这是刚切到新内容吗？",
+		});
+
+		bus.emit("audio:tts-start", { text: "previous reply" });
+		bus.emit("audio:tts-end");
+		vi.setSystemTime(new Date("2026-04-14T09:00:10.000Z"));
+
+		bus.emit("companion-runtime:summary-complete", {
+			record: {
+				id: "summary-entrance",
+				createdAt: Date.now(),
+				windowStartedAt: Date.now() - 5000,
+				windowEndedAt: Date.now(),
+				frameCount: 3,
+				summary: "当前刚切到一段正在播放的动画内容，画面和字幕都已经很明确。",
+				source: "cloud",
+			},
+		});
+		await flushAsyncWork();
+
+		expect(llm.generateCompanionReply).toHaveBeenCalledTimes(1);
+	});
+
 	it("skips low-signal runtime summaries before calling the llm", async () => {
 		const { bus, llm, service } = createService();
 
@@ -295,5 +346,65 @@ describe("ProactiveCompanionService", () => {
 			}),
 		);
 		expect(llm.generateCompanionReply.mock.calls[0]?.[0]).toContain("结果：2048 stalled");
+	});
+
+	it("uses a configurable runtime-summary silence window", async () => {
+		const { bus, llm, service } = createService({
+			reply: "我继续陪你看着。",
+		});
+		service.setRuntimeSummarySilenceSeconds(30);
+
+		bus.emit("companion-runtime:summary-complete", {
+			record: {
+				id: "summary-entrance-first",
+				createdAt: Date.now(),
+				windowStartedAt: Date.now() - 5000,
+				windowEndedAt: Date.now(),
+				frameCount: 3,
+				summary: "当前刚切到一段新的动画内容。",
+				source: "cloud",
+			},
+		});
+		await flushAsyncWork();
+		llm.generateCompanionReply.mockClear();
+
+		bus.emit("audio:tts-start", { text: "previous reply" });
+		bus.emit("audio:tts-end");
+
+		vi.setSystemTime(new Date("2026-04-14T09:00:20.000Z"));
+		bus.emit("companion-runtime:summary-complete", {
+			record: {
+				id: "summary-too-soon",
+				createdAt: Date.now(),
+				windowStartedAt: Date.now() - 5000,
+				windowEndedAt: Date.now(),
+				frameCount: 3,
+				summary: "画面出现了新的卡片说明。",
+				source: "cloud",
+			},
+		});
+		await flushAsyncWork();
+
+		expect(llm.generateCompanionReply).not.toHaveBeenCalled();
+		expect(service.getState()).toMatchObject({
+			lastDecision: "skipped",
+			lastSkipReason: "runtime-summary-silence-window",
+		});
+
+		vi.setSystemTime(new Date("2026-04-14T09:00:31.000Z"));
+		bus.emit("companion-runtime:summary-complete", {
+			record: {
+				id: "summary-after-window",
+				createdAt: Date.now(),
+				windowStartedAt: Date.now() - 5000,
+				windowEndedAt: Date.now(),
+				frameCount: 3,
+				summary: "画面切到新的讲解段落，字幕内容也变了。",
+				source: "cloud",
+			},
+		});
+		await flushAsyncWork();
+
+		expect(llm.generateCompanionReply).toHaveBeenCalledTimes(1);
 	});
 });

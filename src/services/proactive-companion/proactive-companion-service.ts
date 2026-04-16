@@ -7,7 +7,7 @@ import type { EventMap, ProactiveState, ProactiveTriggerSource } from "@/types";
 import { PROACTIVE_NO_REPLY_SENTINEL } from "./constants";
 
 const log = createLogger("proactive-companion");
-const RUNTIME_SUMMARY_SILENCE_MS = 45_000;
+const DEFAULT_RUNTIME_SUMMARY_SILENCE_MS = 30_000;
 const TASK_RESULT_SILENCE_MS = 20_000;
 const SYSTEM_ERROR_DEDUPE_MS = 30_000;
 const DELEGATED_TASK_COOLDOWN_MS = 10_000;
@@ -36,6 +36,7 @@ interface ProactiveCandidate {
 	dedupeKey: string;
 	facts: string[];
 	traceId?: string;
+	isEntrance?: boolean;
 }
 
 function makeInitialState(): ProactiveState {
@@ -78,17 +79,21 @@ export class ProactiveCompanionService {
 	private lastRuntimeSummarySeen = new Map<string, number>();
 	private latestRuntimeSummary: RuntimeSummaryContext | null = null;
 	private latestTaskResult: TaskResultContext | null = null;
+	private runtimeSummarySilenceMs = DEFAULT_RUNTIME_SUMMARY_SILENCE_MS;
+	private firstRuntimeSummaryPendingEntrance = true;
 
 	constructor(deps: {
 		bus: EventBus;
 		llm: LLMService;
 		pipeline: PipelineService;
 		companionRuntime: CompanionRuntimeService;
+		runtimeSummarySilenceSeconds?: number;
 	}) {
 		this.bus = deps.bus;
 		this.llm = deps.llm;
 		this.pipeline = deps.pipeline;
 		this.companionRuntime = deps.companionRuntime;
+		this.setRuntimeSummarySilenceSeconds(deps.runtimeSummarySilenceSeconds);
 
 		this.bus.on("companion-runtime:summary-complete", (payload) => {
 			this.handleRuntimeSummary(payload);
@@ -145,7 +150,16 @@ export class ProactiveCompanionService {
 		return { ...this.state };
 	}
 
+	setRuntimeSummarySilenceSeconds(seconds: number | null | undefined) {
+		const normalizedSeconds = Number.isFinite(seconds)
+			? Math.max(5, Math.min(600, Math.round(seconds as number)))
+			: DEFAULT_RUNTIME_SUMMARY_SILENCE_MS / 1000;
+		this.runtimeSummarySilenceMs = normalizedSeconds * 1000;
+	}
+
 	private handleRuntimeSummary(payload: EventMap["companion-runtime:summary-complete"]) {
+		const isEntrance = this.firstRuntimeSummaryPendingEntrance;
+		this.firstRuntimeSummaryPendingEntrance = false;
 		this.latestRuntimeSummary = {
 			summary: payload.record.summary,
 			source: payload.record.source,
@@ -156,6 +170,7 @@ export class ProactiveCompanionService {
 			priority: 1,
 			preview: truncate(payload.record.summary),
 			dedupeKey: `runtime-summary:${payload.record.source}:${payload.record.summary}`,
+			isEntrance,
 			facts: [
 				`【触发源】runtime summary`,
 				`【summary 来源】${payload.record.source}`,
@@ -274,7 +289,7 @@ export class ProactiveCompanionService {
 			return "delegated-follow-up-cooldown";
 		}
 		const sinceLastSpeech = Date.now() - this.lastSpokenAt;
-		if (candidate.source === "runtime-summary" && this.lastSpokenAt > 0 && sinceLastSpeech < RUNTIME_SUMMARY_SILENCE_MS) {
+		if (candidate.source === "runtime-summary" && !candidate.isEntrance && this.lastSpokenAt > 0 && sinceLastSpeech < this.runtimeSummarySilenceMs) {
 			return "runtime-summary-silence-window";
 		}
 		if ((candidate.source === "game2048-result" || candidate.source === "sokoban-result") && this.lastSpokenAt > 0 && sinceLastSpeech < TASK_RESULT_SILENCE_MS) {
@@ -393,6 +408,12 @@ export class ProactiveCompanionService {
 			`【当前内部模式】${this.state.mode}`,
 			...candidate.facts,
 		];
+		if (candidate.isEntrance) {
+			parts.push(
+				"【入场提示】这是你进入当前观看场景后的第一次观察。",
+				"如果画面已经足够明确，优先用一句自然的入场白开启陪看，再顺手点出你现在看到了什么；不要过长，也不要像正式解说。",
+			);
+		}
 		const relatedContext = this.getRelatedContextFacts(candidate.source);
 		if (relatedContext.length) {
 			parts.push(...relatedContext);
