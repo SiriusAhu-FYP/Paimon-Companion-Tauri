@@ -25,6 +25,7 @@ import type { SokobanActionId, SokobanState } from "./sokoban";
 import type { VoiceInputState } from "./voice";
 import type { AffectState, AffectEventSource } from "./affect";
 import type { CompanionInteractionMode, ProactiveState, ProactiveTriggerSource } from "./proactive";
+import type { DebugCaptureState } from "./debug-capture";
 
 export interface RuntimeModeChangePayload {
 	mode: RuntimeMode;
@@ -345,6 +346,10 @@ export interface VoiceInputStateChangePayload {
 	state: VoiceInputState;
 }
 
+export interface DebugCaptureStateChangePayload {
+	state: DebugCaptureState;
+}
+
 export interface EventMap {
 	"runtime:mode-change": RuntimeModeChangePayload;
 	"audio:vad-start": void;
@@ -403,6 +408,7 @@ export interface EventMap {
 	"companion-runtime:benchmark-complete": CompanionRuntimeBenchmarkCompletePayload;
 	"companion:mode-change": CompanionModeChangePayload;
 	"companion:proactive-state-change": CompanionProactiveStateChangePayload;
+	"debug-capture:state-change": DebugCaptureStateChangePayload;
 }
 
 export type EventName = keyof EventMap;

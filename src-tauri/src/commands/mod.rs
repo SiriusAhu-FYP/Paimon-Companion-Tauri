@@ -1,3 +1,4 @@
+pub mod debug_capture;
 pub mod http_proxy;
 pub mod local_asr;
 pub mod mcp;

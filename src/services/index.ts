@@ -3,6 +3,7 @@ import { RuntimeService } from "./runtime";
 import { AffectStateService } from "./affect-state";
 import { AffectInputsService } from "./affect-inputs";
 import { CharacterService } from "./character";
+import { DebugCaptureService } from "./debug-capture";
 import { KnowledgeService } from "./knowledge";
 import { PerceptionService } from "./perception";
 import { SafetyService } from "./safety";
@@ -30,6 +31,7 @@ export interface ServiceContainer {
 	affect: AffectStateService;
 	affectInputs: AffectInputsService;
 	character: CharacterService;
+	debugCapture: DebugCaptureService;
 	knowledge: KnowledgeService;
 	perception: PerceptionService;
 	safety: SafetyService;
@@ -65,8 +67,9 @@ export function initServices(): ServiceContainer {
 		affect,
 	});
 	const character = new CharacterService(eventBus, affect);
+	const debugCapture = new DebugCaptureService(eventBus);
 	const knowledge = new KnowledgeService(eventBus);
-	const perception = new PerceptionService(eventBus);
+	const perception = new PerceptionService(eventBus, debugCapture);
 	const safety = new SafetyService(eventBus, runtime);
 	const orchestrator = new OrchestratorService({
 		bus: eventBus,
@@ -98,7 +101,7 @@ export function initServices(): ServiceContainer {
 	});
 
 	const llmProvider = resolveLLMProvider(config);
-	const llm = new LLMService(eventBus, runtime, llmProvider, affect, character, knowledge, companionRuntime);
+	const llm = new LLMService(eventBus, runtime, llmProvider, affect, character, knowledge, companionRuntime, debugCapture);
 	const asr = resolveASRProvider(config);
 	const ttsProvider = resolveTTSProvider(config);
 	const player = new AudioPlayer();
@@ -149,6 +152,7 @@ export function initServices(): ServiceContainer {
 		affect,
 		affectInputs,
 		character,
+		debugCapture,
 		knowledge,
 		perception,
 		safety,

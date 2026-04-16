@@ -6,7 +6,7 @@ import {
 } from "@mui/material";
 import StopIcon from "@mui/icons-material/Stop";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import { useRuntime, useCharacter, useAffectState, useProactiveState } from "@/hooks";
+import { useRuntime, useCharacter, useAffectState, useProactiveState, useDebugCaptureState } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { useI18n } from "@/contexts/I18nProvider";
 import { getServices } from "@/services";
@@ -32,6 +32,7 @@ export function ControlPanel() {
 	const { emotion, emotionReason, emotionSource, isSpeaking } = useCharacter();
 	const affect = useAffectState();
 	const proactive = useProactiveState();
+	const debugCapture = useDebugCaptureState();
 
 	const [profiles, setProfiles] = useState<CharacterProfile[]>([]);
 	const [selectedId, setSelectedId] = useState<string>("__manual__");
@@ -116,6 +117,11 @@ export function ControlPanel() {
 		const { bus, runtime } = getServices();
 		await mockVoicePipeline(bus, runtime);
 	}, []);
+
+	const handleToggleDebugCapture = useCallback(async () => {
+		const { debugCapture: debugCaptureService } = getServices();
+		await debugCaptureService.setEnabled(!debugCapture.enabled);
+	}, [debugCapture.enabled]);
 
 	const handleExpressionTimeoutChange = useCallback((rawValue: string) => {
 		const parsed = Number(rawValue);
@@ -228,6 +234,24 @@ export function ControlPanel() {
 					<Typography variant="body2">{t("最近跳过原因", "Latest Skip Reason")}：{proactive.lastSkipReason ?? t("无", "None")}</Typography>
 					<Typography variant="body2">{t("最近主动来源", "Latest Proactive Source")}：{proactive.lastEmittedSource ?? t("无", "None")}</Typography>
 					<Typography variant="body2">{t("最近主动时间", "Latest Proactive At")}：{proactive.lastEmittedAt ? new Date(proactive.lastEmittedAt).toLocaleTimeString() : t("无", "None")}</Typography>
+				</Stack>
+				<Stack spacing={0.25} sx={{ mt: 1 }}>
+					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("Debug Capture", "Debug Capture")}</Typography>
+					<Button
+						variant={debugCapture.enabled ? "contained" : "outlined"}
+						size="small"
+						color={debugCapture.enabled ? "warning" : "inherit"}
+						onClick={() => { void handleToggleDebugCapture(); }}
+						sx={{ alignSelf: "flex-start" }}
+					>
+						{debugCapture.enabled ? t("停止日志写入", "Stop Capture") : t("开始日志写入", "Start Capture")}
+					</Button>
+					<Typography variant="body2">{t("当前会话", "Current Session")}：{debugCapture.sessionId ?? t("无", "None")}</Typography>
+					<Typography variant="body2">{t("写入目录", "Capture Directory")}：{debugCapture.sessionDirectory ?? t("无", "None")}</Typography>
+					<Typography variant="body2">{t("已记录事件", "Captured Events")}：{debugCapture.capturedEventCount}</Typography>
+					<Typography variant="body2">{t("已记录图片", "Captured Images")}：{debugCapture.capturedImageCount}</Typography>
+					<Typography variant="body2">{t("最近写入", "Last Write")}：{debugCapture.lastWriteAt ? new Date(debugCapture.lastWriteAt).toLocaleTimeString() : t("无", "None")}</Typography>
+					<Typography variant="body2">{t("最近错误", "Last Error")}：{debugCapture.lastError ?? t("无", "None")}</Typography>
 				</Stack>
 			</PanelCard>
 

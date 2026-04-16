@@ -4,6 +4,7 @@ import type { AffectStateService, UserInputSource } from "@/services/affect-stat
 import type { CharacterService } from "@/services/character";
 import type { KnowledgeService } from "@/services/knowledge";
 import type { CompanionRuntimeService } from "@/services/companion-runtime";
+import type { DebugCaptureService } from "@/services/debug-capture";
 import { getConfig } from "@/services/config";
 import type { ILLMService, ChatMessage } from "./types";
 import { buildSystemMessage, summarizePromptContext } from "./prompt-builder";
@@ -26,6 +27,7 @@ export class LLMService {
 	private character: CharacterService;
 	private knowledge: KnowledgeService;
 	private companionRuntime: CompanionRuntimeService;
+	private debugCapture?: DebugCaptureService;
 	private history: ChatMessage[] = [];
 	private processing = false;
 
@@ -37,6 +39,7 @@ export class LLMService {
 		character: CharacterService,
 		knowledge: KnowledgeService,
 		companionRuntime: CompanionRuntimeService,
+		debugCapture?: DebugCaptureService,
 	) {
 		this.bus = bus;
 		this.runtime = runtime;
@@ -45,6 +48,7 @@ export class LLMService {
 		this.character = character;
 		this.knowledge = knowledge;
 		this.companionRuntime = companionRuntime;
+		this.debugCapture = debugCapture;
 	}
 
 	isProcessing(): boolean {
@@ -243,6 +247,14 @@ export class LLMService {
 			? [systemMsg, { role: "user", content: userText }]
 			: [{ role: "user", content: userText }];
 		const tools = listLlmTools("companion");
+		this.debugCapture?.recordLlmExchange("request", {
+			source: options?.source ?? "companion-reply",
+			traceId: options?.traceId ?? null,
+			userText,
+			messages,
+			companionRuntimeContextLength: promptCtx.companionRuntimeContext.length,
+			knowledgeContextLength: promptCtx.knowledgeContext.length,
+		});
 		this.bus.emit("llm:request-start", {
 			userText,
 			source: options?.source ?? "companion-reply",
@@ -257,6 +269,12 @@ export class LLMService {
 			traceId: options?.traceId,
 		});
 		const normalized = response.fullText;
+		this.debugCapture?.recordLlmExchange("response", {
+			source: options?.source ?? "companion-reply",
+			traceId: options?.traceId ?? null,
+			fullText: normalized,
+			historyAppend: response.historyAppend,
+		});
 		this.bus.emit("llm:response-end", {
 			fullText: normalized,
 			source: options?.source ?? "companion-reply",
@@ -334,6 +352,14 @@ export class LLMService {
 			? [systemMsg, ...this.history]
 			: [...this.history];
 		const tools = listLlmTools("companion");
+		this.debugCapture?.recordLlmExchange("request", {
+			source: "chat",
+			traceId: null,
+			userText,
+			messages,
+			companionRuntimeContextLength: companionRuntimeContext.length,
+			knowledgeContextLength: knowledgeContext.length,
+		});
 
 		if (systemMsg) {
 			log.info("LLM system prompt assembled", summarizePromptContext(promptCtx));
@@ -347,6 +373,12 @@ export class LLMService {
 			const fullText = response.fullText;
 
 			this.history.push(...response.historyAppend);
+			this.debugCapture?.recordLlmExchange("response", {
+				source: "chat",
+				traceId: null,
+				fullText,
+				historyAppend: response.historyAppend,
+			});
 			this.bus.emit("llm:response-end", {
 				fullText,
 				source: "chat",
@@ -355,6 +387,12 @@ export class LLMService {
 			log.info(`response complete (${fullText.length} chars)`);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
+			this.debugCapture?.recordLlmExchange("error", {
+				source: "chat",
+				traceId: null,
+				error: msg,
+				userText,
+			});
 			this.bus.emit("llm:error", { error: msg });
 			log.error("LLM error", msg);
 		} finally {

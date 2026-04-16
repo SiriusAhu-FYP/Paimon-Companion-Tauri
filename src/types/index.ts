@@ -30,6 +30,7 @@ export type {
 	ProactiveState,
 	ProactiveTriggerSource,
 } from "./proactive";
+export type { DebugCaptureState } from "./debug-capture";
 export type {
 	UnifiedRunPhase,
 	UnifiedRunTrigger,
