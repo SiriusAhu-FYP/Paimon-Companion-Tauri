@@ -196,6 +196,12 @@ export function ChatPanel() {
 		locked: "已锁定",
 		error: "错误",
 	};
+	const showVoiceDiagnostics = voiceState.status === "requesting-permission"
+		|| voiceState.status === "recording"
+		|| voiceState.status === "transcribing"
+		|| voiceState.status === "locked"
+		|| voiceState.status === "error"
+		|| !!voiceState.lastError;
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100%", p: 1.5 }}>
@@ -244,7 +250,7 @@ export function ChatPanel() {
 				</Typography>
 			)}
 
-			{(voiceState.enabled || voiceState.status === "error" || !!voiceState.lastTranscript || !!voiceState.lastError) && (
+			{showVoiceDiagnostics && (
 				<Box sx={{ py: 0.5 }}>
 					<Paper
 						elevation={0}

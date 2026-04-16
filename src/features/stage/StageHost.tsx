@@ -39,6 +39,7 @@ interface StageHostProps {
 	stageMode: "docked" | "floating";
 	alwaysOnTop: boolean;
 	displayMode: StageDisplayMode;
+	variant?: "product" | "developer";
 	onModeChange: (mode: "docked" | "floating") => void;
 	onVisibilityChange: (visible: boolean) => void;
 	onAlwaysOnTopChange: (value: boolean) => void;
@@ -59,6 +60,7 @@ export function StageHost({
 	stageMode,
 	alwaysOnTop,
 	displayMode,
+	variant = "developer",
 	onModeChange,
 	onVisibilityChange,
 	onAlwaysOnTopChange,
@@ -195,6 +197,7 @@ export function StageHost({
 
 	const isDocked = stageMode === "docked";
 	const isFloating = stageMode === "floating";
+	const showAdvancedControls = variant === "developer";
 
 	const EYE_MODES: { mode: EyeMode; label: string }[] = [
 		{ mode: "fixed", label: t("静止", "Fixed") },
@@ -208,60 +211,62 @@ export function StageHost({
 				{t("舞台", "Stage")}
 			</Typography>
 
-			{/* 模型切换 */}
-			<Box>
-				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("模型", "Model")}</Typography>
-					<HelpTooltip title={t("切换 Live2D 模型。切换后 Stage 窗口会重新加载", "Switch the Live2D model. The Stage window reloads after switching.")} />
-				</Stack>
-				<FormControl size="small" fullWidth>
-					<Select
-						value={selectedModel}
-						onChange={handleModelChange}
-						sx={{ fontSize: 12 }}
-					>
-						{MODEL_REGISTRY.map((m) => (
-							<MenuItem key={m.path} value={m.path} sx={{ fontSize: 12 }}>
-								{m.name}
-							</MenuItem>
-						))}
-					</Select>
-				</FormControl>
-			</Box>
+			{showAdvancedControls && (
+				<>
+					<Box>
+						<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
+							<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("模型", "Model")}</Typography>
+							<HelpTooltip title={t("切换 Live2D 模型。切换后 Stage 窗口会重新加载", "Switch the Live2D model. The Stage window reloads after switching.")} />
+						</Stack>
+						<FormControl size="small" fullWidth>
+							<Select
+								value={selectedModel}
+								onChange={handleModelChange}
+								sx={{ fontSize: 12 }}
+							>
+								{MODEL_REGISTRY.map((m) => (
+									<MenuItem key={m.path} value={m.path} sx={{ fontSize: 12 }}>
+										{m.name}
+									</MenuItem>
+								))}
+							</Select>
+						</FormControl>
+					</Box>
 
-		{/* 表情切换 */}
-		{expressions.length > 0 && (
-			<Box>
-				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("表情", "Expressions")}</Typography>
-					<HelpTooltip title={t("模型自带的表情文件。点击后 Stage 中的模型会切换表情", "Built-in model expressions. Click to switch the model expression in Stage.")} />
-				</Stack>
-				<Box sx={{
-					display: "flex",
-					flexWrap: "wrap",
-					gap: 0.5,
-					maxHeight: 80,
-					overflowY: "auto",
-					p: 0.5,
-					bgcolor: "background.paper",
-					borderRadius: 1,
-				}}>
-					{expressions.map((e) => (
-						<Button
-							key={e}
-							size="small"
-							variant="outlined"
-							onClick={() => handleExpression(e)}
-							sx={{ fontSize: 10, px: 1, py: 0.25, minWidth: 0, textTransform: "none" }}
-						>
-							{e}
-						</Button>
-					))}
-				</Box>
-			</Box>
-		)}
+					{expressions.length > 0 && (
+						<Box>
+							<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
+								<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("表情", "Expressions")}</Typography>
+								<HelpTooltip title={t("模型自带的表情文件。点击后 Stage 中的模型会切换表情", "Built-in model expressions. Click to switch the model expression in Stage.")} />
+							</Stack>
+							<Box sx={{
+								display: "flex",
+								flexWrap: "wrap",
+								gap: 0.5,
+								maxHeight: 80,
+								overflowY: "auto",
+								p: 0.5,
+								bgcolor: "background.paper",
+								borderRadius: 1,
+							}}>
+								{expressions.map((e) => (
+									<Button
+										key={e}
+										size="small"
+										variant="outlined"
+										onClick={() => handleExpression(e)}
+										sx={{ fontSize: 10, px: 1, py: 0.25, minWidth: 0, textTransform: "none" }}
+									>
+										{e}
+									</Button>
+								))}
+							</Box>
+						</Box>
+					)}
 
-			<Divider />
+					<Divider />
+				</>
+			)}
 
 			{/* 窗口控制 */}
 			<Box>
@@ -348,7 +353,7 @@ export function StageHost({
 			</Box>
 
 		{/* 透明穿透 */}
-		{stageVisible && (
+		{showAdvancedControls && stageVisible && (
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
 					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("穿透", "Passthrough")}</Typography>
@@ -367,9 +372,10 @@ export function StageHost({
 			</Box>
 		)}
 
-		<Divider />
+		{showAdvancedControls && <Divider />}
 
 		{/* 缩放锁定 */}
+		{showAdvancedControls && (
 			<Box>
 				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
 					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("缩放", "Zoom")}</Typography>
@@ -398,28 +404,30 @@ export function StageHost({
 				</Tooltip>
 			</Stack>
 			</Box>
+		)}
 
-			{/* 眼神模式 */}
-			<Box>
-				<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("眼神", "Eyes")}</Typography>
-					<HelpTooltip title={t("静止：注视前方；跟随：跟随鼠标位置；随机：沿自然路径随机注视", "Fixed looks forward; follow tracks the pointer; random follows a natural path.")} />
-				</Stack>
-				<ButtonGroup size="small" fullWidth>
-					{EYE_MODES.map(({ mode, label }) => (
-						<Button
-							key={mode}
-							variant={eyeMode === mode ? "contained" : "outlined"}
-							onClick={() => handleSetEyeMode(mode)}
-						>
-							{label}
-						</Button>
-					))}
-				</ButtonGroup>
-			</Box>
+			{showAdvancedControls && (
+				<Box>
+					<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
+						<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("眼神", "Eyes")}</Typography>
+						<HelpTooltip title={t("静止：注视前方；跟随：跟随鼠标位置；随机：沿自然路径随机注视", "Fixed looks forward; follow tracks the pointer; random follows a natural path.")} />
+					</Stack>
+					<ButtonGroup size="small" fullWidth>
+						{EYE_MODES.map(({ mode, label }) => (
+							<Button
+								key={mode}
+								variant={eyeMode === mode ? "contained" : "outlined"}
+								onClick={() => handleSetEyeMode(mode)}
+							>
+								{label}
+							</Button>
+						))}
+					</ButtonGroup>
+				</Box>
+			)}
 
 			{/* 浮动模式 — 窗口尺寸预设 */}
-			{isFloating && stageVisible && (
+			{showAdvancedControls && isFloating && stageVisible && (
 				<>
 					<Divider />
 					<Box>
