@@ -32,13 +32,13 @@ import {
 	countRepeatedFailures,
 } from "./decision-history";
 import { buildSharedGamePrompt } from "./game-prompt-template";
+import { findSokobanPlan } from "./sokoban-solver";
 import { callLocalMcpToolJson } from "@/services/mcp/local-mcp-client";
 import type { SemanticActionExecutionResult } from "@/types";
 
 const log = createLogger("sokoban");
 const MAX_RUN_HISTORY = 10;
 const MAX_DECISION_HISTORY = 8;
-const MAX_PLANNED_MOVES = 4;
 const DEFAULT_MOVE_ORDER: SokobanActionId[] = [...SOKOBAN_DEFAULT_ACTION_ORDER];
 const TARGET_KEYWORDS = ["sokoban", "push box", "boxoban", "推箱子", "仓库番"];
 
@@ -251,14 +251,14 @@ export class SokobanService {
 		const repeatedFailureHint = buildRepeatedFailureHint(this.state.decisionHistory[0]);
 
 		try {
-			return await this.requestVisionAnalysis(target, snapshot, recentDecisionSummary, repeatedFailureHint);
+			return await this.requestStructuredBoardAnalysis(target, snapshot, recentDecisionSummary, repeatedFailureHint);
 		} catch (err) {
 			log.warn("sokoban vision analysis unavailable, falling back to heuristic", err);
 			return buildHeuristicAnalysis(recentDecisionSummary, this.state.decisionHistory[0] ?? null);
 		}
 	}
 
-	private async requestVisionAnalysis(
+	private async requestStructuredBoardAnalysis(
 		target: FunctionalTarget,
 		snapshot: PerceptionSnapshot,
 		recentDecisionSummary: string[],
@@ -271,21 +271,26 @@ export class SokobanService {
 
 		const content = await requestOpenAICompatibleVision({
 			client,
-			userPrompt: buildVisionPrompt(target.title, recentDecisionSummary, repeatedFailureHint),
+			userPrompt: buildStructuredBoardPrompt(target.title, recentDecisionSummary, repeatedFailureHint),
 			imageDataUrl: snapshot.dataUrl,
 			maxTokens: 320,
 			temperature: 0.1,
 			jsonResponse: true,
 			timeoutMs: 30000,
 		});
-		const parsed = parseVisionResponse(content);
+		const parsed = parseStructuredBoardResponse(content);
+		const solverResult = findSokobanPlan(parsed.rows);
+		if (!solverResult || !solverResult.plannedMoves.length) {
+			throw new Error("structured Sokoban board did not produce a solvable short plan");
+		}
 
 		return {
-			source: "vision-llm",
+			source: "solver",
 			reflection: parsed.reflection,
 			strategy: parsed.strategy,
-			reasoning: parsed.reasoning,
-			plannedMoves: parsed.plannedMoves,
+			reasoning: `${parsed.reasoning} Local solver explored ${solverResult.exploredStates} state(s).`,
+			plannedMoves: solverResult.plannedMoves,
+			solverSummary: solverResult.summary,
 		};
 	}
 
@@ -316,7 +321,7 @@ function buildPendingAnalysis(): SokobanAnalysis {
 	return {
 		source: "heuristic",
 		reflection: "Preparing the next Sokoban validation round.",
-		strategy: "capture the board, propose a short semantic move sequence, then verify per-step changes",
+		strategy: "capture the board, parse a compact grid, run a short local search plan, then verify per-step changes",
 		reasoning: "The runtime is still capturing the baseline snapshot and analysis context.",
 		plannedMoves: DEFAULT_MOVE_ORDER.slice(0, 2),
 	};
@@ -343,10 +348,11 @@ function buildHeuristicAnalysis(
 		strategy: "probe short movement sequences instead of committing to a long push chain without visual confidence",
 		reasoning: "Without image reasoning, prefer a short conservative sequence that can still prove the runtime loop works.",
 		plannedMoves,
+		solverSummary: "heuristic fallback",
 	};
 }
 
-function buildVisionPrompt(
+function buildStructuredBoardPrompt(
 	targetTitle: string,
 	recentDecisionSummary: string[],
 	repeatedFailureHint: string | null,
@@ -373,51 +379,55 @@ function buildVisionPrompt(
 
 	return [
 		promptBody,
-		"Analyze the screenshot and plan the next short Sokoban sequence.",
-		"Return strict JSON with keys: reflection, strategy, reasoning, plannedMoves.",
-		"plannedMoves must be an array of 1 to 4 action IDs chosen from: move_up, move_left, move_right, move_down.",
-		"plannedMoves may repeat directions if needed, but keep the sequence short and purposeful.",
+		"Analyze the screenshot and convert the visible Sokoban board into a compact machine-readable grid.",
+		"Return strict JSON with keys: reflection, strategy, reasoning, rows.",
+		"rows must be an array of equal-length strings using only these symbols: # wall, space floor, . target, $ box, * box on target, @ player, + player on target.",
+		"Represent only the board area. Do not include explanations, markdown fences, or extra keys.",
 	].join("\n\n");
 }
 
-function parseVisionResponse(content: string): {
+function parseStructuredBoardResponse(content: string): {
 	reflection: string;
 	strategy: string;
 	reasoning: string;
-	plannedMoves: SokobanActionId[];
+	rows: string[];
 } {
 	const jsonText = extractJsonObject(content);
 	const parsed = JSON.parse(jsonText) as {
 		reflection?: unknown;
 		strategy?: unknown;
 		reasoning?: unknown;
-		plannedMoves?: unknown;
+		rows?: unknown;
 	};
 
-	const plannedMoves = normalizeMoves(parsed.plannedMoves);
-	if (!plannedMoves.length) {
-		throw new Error("vision analysis did not return a valid Sokoban move sequence");
+	const rows = normalizeRows(parsed.rows);
+	if (!rows.length) {
+		throw new Error("vision analysis did not return a valid Sokoban board grid");
 	}
 
 	return {
 		reflection: typeof parsed.reflection === "string"
 			? parsed.reflection
 			: "No explicit reflection was returned. Use the current screenshot and recent history conservatively.",
-		strategy: typeof parsed.strategy === "string" ? parsed.strategy : "vision-guided Sokoban sequence selection",
-		reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "The model selected a short sequence based on the screenshot.",
-		plannedMoves,
+		strategy: typeof parsed.strategy === "string" ? parsed.strategy : "vision-guided Sokoban board parsing for local search",
+		reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "The model converted the screenshot into a compact Sokoban grid.",
+		rows,
 	};
 }
 
-function normalizeMoves(value: unknown): SokobanActionId[] {
+function normalizeRows(value: unknown): string[] {
 	if (!Array.isArray(value)) {
-		throw new Error("plannedMoves is not an array");
+		throw new Error("rows is not an array");
 	}
-
-	return value
-		.map((entry) => String(entry))
-		.filter((entry): entry is SokobanActionId => DEFAULT_MOVE_ORDER.includes(entry as SokobanActionId))
-		.slice(0, MAX_PLANNED_MOVES);
+	const rows = value.map((entry) => String(entry).replace(/\r/g, ""));
+	const width = rows[0]?.length ?? 0;
+	if (!width || rows.some((row) => row.length !== width)) {
+		throw new Error("Sokoban rows must be equal-length strings");
+	}
+	if (rows.some((row) => /[^# .$*@+]/.test(row))) {
+		throw new Error("Sokoban rows contain unsupported symbols");
+	}
+	return rows;
 }
 
 function selectFallbackSequence(candidates: SokobanActionId[][], failedSignature: string | null): SokobanActionId[] {
@@ -506,7 +516,10 @@ function buildRunSummary(run: SokobanRunRecord): string {
 
 function buildCompanionText(run: SokobanRunRecord): string {
 	if (run.boardChanged) {
-		return `我先按 ${run.analysis.source === "vision-llm" ? "截图分析" : "保守启发式"} 规划了一小段推箱子动作，并确认至少有一步真的让棋盘状态发生了变化。`;
+		const sourceLabel = run.analysis.source === "solver"
+			? "结构化读盘加本地求解"
+			: "保守启发式";
+		return `我先按 ${sourceLabel} 规划了一小段推箱子动作，并确认至少有一步真的让棋盘状态发生了变化。`;
 	}
 
 	return "这轮推箱子动作没有观察到足够明显的画面变化。可能当前画面不是关卡主视图，或者计划动作全都撞墙了。";
