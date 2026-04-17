@@ -2,7 +2,7 @@ import type { FunctionalTarget } from "./functional";
 
 export type SokobanActionId = "move_up" | "move_left" | "move_right" | "move_down";
 export type SokobanRunStatus = "running" | "completed" | "failed";
-export type SokobanAnalysisSource = "vision-llm" | "heuristic";
+export type SokobanAnalysisSource = "solver" | "vision-llm" | "heuristic";
 
 export interface SokobanAnalysis {
 	source: SokobanAnalysisSource;
@@ -10,6 +10,7 @@ export interface SokobanAnalysis {
 	strategy: string;
 	reasoning: string;
 	plannedMoves: SokobanActionId[];
+	solverSummary?: string;
 }
 
 export interface SokobanMoveAttempt {
