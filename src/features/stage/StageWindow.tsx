@@ -81,6 +81,11 @@ export function StageWindow() {
 		async function applyAlwaysOnTop() {
 			try {
 				const win = getCurrentWindow();
+				if (stageMode === "docked") {
+					await win.setAlwaysOnTop(false);
+					await win.setSkipTaskbar(true);
+					return;
+				}
 				await win.setAlwaysOnTop(alwaysOnTop);
 				await win.setSkipTaskbar(false);
 			} catch (err) {
@@ -96,7 +101,7 @@ export function StageWindow() {
 		async function applyCursorEvents() {
 			try {
 				const win = getCurrentWindow();
-				await win.setIgnoreCursorEvents(false);
+				await win.setIgnoreCursorEvents(stageMode === "docked");
 			} catch (err) {
 				log.warn("setIgnoreCursorEvents failed", err);
 			}
@@ -412,7 +417,7 @@ export function StageWindow() {
 		syncStateToHost({ displayMode: next });
 	}, [displayMode, syncStateToHost]);
 
-	const shouldShowToolbar = showControls;
+	const shouldShowToolbar = stageMode === "floating" && showControls;
 
 	return (
 		<div
@@ -420,34 +425,36 @@ export function StageWindow() {
 			onMouseEnter={() => setShowControls(true)}
 			onMouseLeave={() => setShowControls(false)}
 		>
-			<div
-				className={`stage-toolbar ${displayMode === "interactive" ? "stage-toolbar-interactive" : "stage-toolbar-static"} ${shouldShowToolbar ? "stage-toolbar-visible" : ""}`}
-				data-tauri-drag-region={displayMode === "interactive" && stageMode === "floating" ? true : undefined}
-			>
-				<span
-					className="stage-toolbar-label"
-					data-tauri-drag-region={displayMode === "interactive" && stageMode === "floating" ? true : undefined}
+			{stageMode === "floating" && (
+				<div
+					className={`stage-toolbar ${displayMode === "interactive" ? "stage-toolbar-interactive" : "stage-toolbar-static"} ${shouldShowToolbar ? "stage-toolbar-visible" : ""}`}
+					data-tauri-drag-region={displayMode === "interactive" ? true : undefined}
 				>
-					{displayMode === "interactive" ? `⋮⋮ ${t("interactive 已开启", "Interactive on")}` : `⋮⋮ ${t("interactive 已关闭", "Interactive off")}`}
-				</span>
-				<div className="stage-toolbar-actions">
-					<button className={`stage-tb-btn ${alwaysOnTop ? "stage-tb-btn-active" : ""}`} onClick={toggleAlwaysOnTop} title={t("切换置顶", "Toggle always on top")}>
-						<PushPinIcon sx={{ fontSize: 15 }} />
-					</button>
-					{displayMode === "interactive" ? (
-						<button className="stage-tb-btn" onClick={toggleDisplayMode} title={t("关闭 interactive", "Disable interactive")}>
-							{t("关闭 interactive", "Disable interactive")}
+					<span
+						className="stage-toolbar-label"
+						data-tauri-drag-region={displayMode === "interactive" ? true : undefined}
+					>
+						{displayMode === "interactive" ? `⋮⋮ ${t("interactive 已开启", "Interactive on")}` : `⋮⋮ ${t("interactive 已关闭", "Interactive off")}`}
+					</span>
+					<div className="stage-toolbar-actions">
+						<button className={`stage-tb-btn ${alwaysOnTop ? "stage-tb-btn-active" : ""}`} onClick={toggleAlwaysOnTop} title={t("切换置顶", "Toggle always on top")}>
+							<PushPinIcon sx={{ fontSize: 15 }} />
 						</button>
-					) : (
-						<button className="stage-tb-btn" onClick={toggleDisplayMode} title={t("开启 interactive", "Enable interactive")}>
-							{t("开启 interactive", "Enable interactive")}
+						{displayMode === "interactive" ? (
+							<button className="stage-tb-btn" onClick={toggleDisplayMode} title={t("关闭 interactive", "Disable interactive")}>
+								{t("关闭 interactive", "Disable interactive")}
+							</button>
+						) : (
+							<button className="stage-tb-btn" onClick={toggleDisplayMode} title={t("开启 interactive", "Enable interactive")}>
+								{t("开启 interactive", "Enable interactive")}
+							</button>
+						)}
+						<button className="stage-tb-btn stage-tb-close" onClick={handleClose} title={t("关闭", "Close")}>
+							<CloseIcon sx={{ fontSize: 16 }} />
 						</button>
-					)}
-					<button className="stage-tb-btn stage-tb-close" onClick={handleClose} title={t("关闭", "Close")}>
-						<CloseIcon sx={{ fontSize: 16 }} />
-					</button>
+					</div>
 				</div>
-			</div>
+			)}
 
 			{loadStatus === "error" ? (
 				<div style={{ color: "#F87171", textAlign: "center", marginTop: 40, padding: "0 16px" }}>
