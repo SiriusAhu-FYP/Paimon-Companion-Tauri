@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "@/services/event-bus";
+import { CompanionModeService } from "@/services/companion-mode";
+import { DelegationMemoryService } from "@/services/delegation-memory";
 import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { LLMService } from "@/services/llm";
 import type { PipelineService } from "@/services/pipeline";
@@ -37,14 +39,18 @@ describe("ProactiveCompanionService", () => {
 		const companionRuntime = {
 			getPromptContext: vi.fn().mockReturnValue(options?.runtimeContext ?? "最近观察：角色正在谨慎探索。"),
 		};
+		const companionMode = new CompanionModeService(bus);
+		const delegationMemory = new DelegationMemoryService(bus);
 		const service = new ProactiveCompanionService({
 			bus,
 			llm: llm as unknown as LLMService,
 			pipeline: pipeline as unknown as PipelineService,
 			companionRuntime: companionRuntime as unknown as CompanionRuntimeService,
+			companionMode,
+			delegationMemory,
 		});
 
-		return { bus, llm, pipeline, companionRuntime, service };
+		return { bus, llm, pipeline, companionRuntime, companionMode, delegationMemory, service };
 	}
 
 	it("skips proactive emission when the model returns the no-reply sentinel", async () => {
@@ -155,13 +161,9 @@ describe("ProactiveCompanionService", () => {
 	});
 
 	it("suppresses opportunistic proactive chatter during delegated execution", async () => {
-		const { bus, llm, service } = createService();
+		const { bus, llm, companionMode, service } = createService();
 
-		bus.emit("unified:run-start", {
-			runId: "run-1",
-			trigger: "manual",
-			requestText: "帮我看看下一步",
-		});
+		companionMode.setMode("delegated", "test-enter-delegated", "system");
 		bus.emit("game2048:run-complete", {
 			runId: "2048-1",
 			success: false,
@@ -178,6 +180,7 @@ describe("ProactiveCompanionService", () => {
 			lastSkipReason: "delegated-follow-up-active",
 		});
 
+		companionMode.setMode("companion", "test-exit-delegated", "system");
 		bus.emit("unified:run-complete", {
 			runId: "run-1",
 			gameId: "game-2048",

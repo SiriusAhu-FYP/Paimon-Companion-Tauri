@@ -7,8 +7,10 @@ import type { LLMService } from "@/services/llm";
 import type { OrchestratorService } from "@/services/orchestrator";
 import type { PipelineService } from "@/services/pipeline";
 import type { RuntimeService } from "@/services/runtime";
+import type { CompanionModeService } from "@/services/companion-mode";
+import type { DelegationMemoryService } from "@/services/delegation-memory";
 import { createLogger } from "@/services/logger";
-import type { UnifiedRunRecord, UnifiedRuntimeState } from "@/types";
+import type { DelegatedExecutionRecord, UnifiedRunRecord, UnifiedRuntimeState } from "@/types";
 import { callLocalMcpTool } from "@/services/mcp/local-mcp-client";
 
 const log = createLogger("unified-runtime");
@@ -52,6 +54,8 @@ export class UnifiedRuntimeService {
 	private sokoban: SokobanService;
 	private llm: LLMService;
 	private pipeline: PipelineService;
+	private companionMode: CompanionModeService;
+	private delegationMemory: DelegationMemoryService;
 	private state: UnifiedRuntimeState = makeInitialState();
 
 	constructor(deps: {
@@ -64,6 +68,8 @@ export class UnifiedRuntimeService {
 		sokoban: SokobanService;
 		llm: LLMService;
 		pipeline: PipelineService;
+		companionMode: CompanionModeService;
+		delegationMemory: DelegationMemoryService;
 	}) {
 		this.bus = deps.bus;
 		this.runtime = deps.runtime;
@@ -74,6 +80,8 @@ export class UnifiedRuntimeService {
 		this.sokoban = deps.sokoban;
 		this.llm = deps.llm;
 		this.pipeline = deps.pipeline;
+		this.companionMode = deps.companionMode;
+		this.delegationMemory = deps.delegationMemory;
 	}
 
 	getState(): Readonly<UnifiedRuntimeState> {
@@ -140,6 +148,7 @@ export class UnifiedRuntimeService {
 		this.state.phase = "acting";
 		this.state.lastCommand = `${targetGame}-step`;
 		this.state.lastRun = cloneRun(run);
+		this.companionMode.setMode("delegated", "unified:run-start", "system");
 		await this.applyEmotion("neutral", run.id);
 		this.bus.emit("unified:run-start", {
 			runId: run.id,
@@ -151,6 +160,7 @@ export class UnifiedRuntimeService {
 
 		try {
 			let companionText = "";
+			let delegatedRecord: DelegatedExecutionRecord | null = null;
 			if (targetGame === "2048") {
 				const actionStartedAt = Date.now();
 				const result = await this.game2048.runSingleStep(undefined, { traceId: run.id });
@@ -161,22 +171,37 @@ export class UnifiedRuntimeService {
 				run.summary = result.summary;
 				run.selectedAction = result.selectedMove;
 				run.emotion = result.boardChanged ? "happy" : "dazed";
+				delegatedRecord = this.delegationMemory.appendRecord({
+					createdAt: Date.now(),
+					mode: this.companionMode.getState().mode,
+					sourceGame: "2048",
+					trigger,
+					requestText,
+					selectedAction: result.selectedMove,
+					executionSummary: result.summary,
+					verificationResult: {
+						success: result.boardChanged,
+						boardChanged: result.boardChanged,
+						error: null,
+					},
+					followUpSummary: "",
+					emotion: run.emotion,
+					nextStepHint: extractNextStepHint(result.analysis.reflection, result.analysis.reasoning, result.selectedMove),
+					traceId: run.id,
+				});
 				const llmReplyStartedAt = Date.now();
 				const generatedReply = await this.generateGroundedCompanionReply({
 					traceId: run.id,
-					gameId: "2048",
-					requestText,
-					summary: result.summary,
-					analysisReflection: result.analysis.reflection,
-					analysisReasoning: result.analysis.reasoning,
-					primaryAction: result.selectedMove,
-					boardChanged: result.boardChanged,
+					delegationRecord: delegatedRecord,
 					fallbackText: result.companionText,
 				});
 				run.timings.llmReplyMs = Date.now() - llmReplyStartedAt;
 				run.companionText = generatedReply.text;
 				run.companionTextSource = generatedReply.source;
 				companionText = generatedReply.text;
+				this.delegationMemory.updateRecord(delegatedRecord.id, {
+					followUpSummary: generatedReply.text,
+				});
 			} else {
 				const actionStartedAt = Date.now();
 				const result = await this.sokoban.runValidationRound(undefined, { traceId: run.id });
@@ -187,22 +212,41 @@ export class UnifiedRuntimeService {
 				run.summary = result.summary;
 				run.selectedAction = result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null;
 				run.emotion = result.boardChanged ? "delighted" : "alarmed";
+				delegatedRecord = this.delegationMemory.appendRecord({
+					createdAt: Date.now(),
+					mode: this.companionMode.getState().mode,
+					sourceGame: "sokoban",
+					trigger,
+					requestText,
+					selectedAction: result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null,
+					executionSummary: result.summary,
+					verificationResult: {
+						success: result.boardChanged,
+						boardChanged: result.boardChanged,
+						error: null,
+					},
+					followUpSummary: "",
+					emotion: run.emotion,
+					nextStepHint: extractNextStepHint(
+						result.analysis.reflection,
+						result.analysis.reasoning,
+						result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null,
+					),
+					traceId: run.id,
+				});
 				const llmReplyStartedAt = Date.now();
 				const generatedReply = await this.generateGroundedCompanionReply({
 					traceId: run.id,
-					gameId: "sokoban",
-					requestText,
-					summary: result.summary,
-					analysisReflection: result.analysis.reflection,
-					analysisReasoning: result.analysis.reasoning,
-					primaryAction: result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null,
-					boardChanged: result.boardChanged,
+					delegationRecord: delegatedRecord,
 					fallbackText: result.companionText,
 				});
 				run.timings.llmReplyMs = Date.now() - llmReplyStartedAt;
 				run.companionText = generatedReply.text;
 				run.companionTextSource = generatedReply.source;
 				companionText = generatedReply.text;
+				this.delegationMemory.updateRecord(delegatedRecord.id, {
+					followUpSummary: generatedReply.text,
+				});
 			}
 			this.state.lastCompanionText = companionText;
 			await this.applyEmotion(run.emotion, run.id);
@@ -226,6 +270,24 @@ export class UnifiedRuntimeService {
 			run.companionTextSource = "fallback";
 			run.emotion = "sad";
 			this.state.lastCompanionText = run.companionText;
+			this.delegationMemory.appendRecord({
+				createdAt: Date.now(),
+				mode: this.companionMode.getState().mode,
+				sourceGame: run.gameId,
+				trigger,
+				requestText,
+				selectedAction: run.selectedAction,
+				executionSummary: run.summary,
+				verificationResult: {
+					success: false,
+					boardChanged: false,
+					error: message,
+				},
+				followUpSummary: run.companionText,
+				emotion: run.emotion,
+				nextStepHint: null,
+				traceId: run.id,
+			});
 			await this.applyEmotion(run.emotion, run.id);
 			const beforeSpeechAt = Date.now();
 			run.timings.totalNonBlockingMs = Math.max(0, beforeSpeechAt - run.startedAt);
@@ -249,6 +311,7 @@ export class UnifiedRuntimeService {
 		this.state.phase = run.status === "failed" ? "failed" : "idle";
 		this.state.lastRun = cloneRun(run);
 		this.state.history = [cloneRun(run), ...this.state.history].slice(0, MAX_HISTORY);
+		this.companionMode.setMode(this.companionMode.getPreferredMode(), "unified:run-complete", "system");
 		this.bus.emit("unified:run-complete", {
 			runId: run.id,
 			gameId: run.gameId,
@@ -411,33 +474,25 @@ export class UnifiedRuntimeService {
 
 	private async generateGroundedCompanionReply(input: {
 		traceId: string;
-		gameId: SupportedUnifiedGameId;
-		requestText: string | null;
-		summary: string;
-		analysisReflection: string;
-		analysisReasoning: string;
-		primaryAction: string | null;
-		boardChanged: boolean;
+		delegationRecord: DelegatedExecutionRecord;
 		fallbackText: string;
 	}): Promise<{ text: string; source: "llm" | "fallback" }> {
 		try {
 			const reply = await this.llm.generateCompanionReply(
 				[
-					"你刚刚完成了一轮游戏托管动作。请基于提供事实，生成一句到两句简短、口语化、适合 TTS 播报的中文陪伴回复。",
+					"你刚刚完成了一轮游戏托管动作。请基于最近托管执行记录，生成一句到两句简短、口语化、适合 TTS 播报的中文陪伴回复。",
 					"要求：",
-					"1. 严格依据提供事实，不要脑补未给出的 Boss 战、血量、奖励或别的游戏剧情。",
+					"1. 严格依据最近托管执行记录，不要脑补未给出的 Boss 战、血量、奖励或别的游戏剧情。",
 					"2. 语气保持陪伴感和轻度支持感，但不要夸张。",
 					"3. 不要暴露实现细节，如 API、模型、截图链路。",
 					"4. 如果本轮没有明显进展，就直接说没有明显进展，并给出很短的下一步建议。",
-					`【游戏】${input.gameId}`,
-					input.requestText ? `【触发请求】${input.requestText}` : "",
-					`【本轮结果】${input.summary}`,
-					input.primaryAction ? `【关键动作】${input.primaryAction}` : "",
-					`【是否观察到有效变化】${input.boardChanged ? "是" : "否"}`,
-					`【决策反思】${input.analysisReflection}`,
-					`【决策理由】${input.analysisReasoning}`,
+					`【记录引用】${input.delegationRecord.id}`,
 				].filter(Boolean).join("\n"),
-				{ knowledgeContext: "", traceId: input.traceId },
+				{
+					knowledgeContext: "",
+					delegationMemoryContext: this.delegationMemory.buildPromptContext([input.delegationRecord]),
+					traceId: input.traceId,
+				},
 			);
 			if (!reply) {
 				return { text: input.fallbackText, source: "fallback" };
@@ -448,6 +503,16 @@ export class UnifiedRuntimeService {
 			return { text: input.fallbackText, source: "fallback" };
 		}
 	}
+}
+
+function extractNextStepHint(reflection: string, reasoning: string, selectedAction: string | null): string | null {
+	const candidate = [reflection, reasoning, selectedAction ?? ""]
+		.map((value) => value.trim())
+		.find(Boolean);
+	if (!candidate) {
+		return null;
+	}
+	return candidate.length <= 120 ? candidate : `${candidate.slice(0, 119)}…`;
 }
 
 function resolveUnifiedEmotion(value: string): "neutral" | "happy" | "angry" | "sad" | "delighted" | "alarmed" | "dazed" {

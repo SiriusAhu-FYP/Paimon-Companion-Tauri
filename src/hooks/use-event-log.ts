@@ -81,6 +81,8 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 			"companion-runtime:benchmark-state-change",
 			"voice:state-change",
 			"companion:proactive-state-change",
+			"delegation-memory:state-change",
+			"delegation-memory:record-added",
 			"debug-capture:state-change",
 		],
 		color: "#90a4ae",
@@ -189,7 +191,7 @@ function formatPayloadPreview(event: EventName, payload: unknown): string {
 		}
 		case "companion:mode-change": {
 			const data = payload as EventMap["companion:mode-change"];
-			return `mode=${data.mode} | prev=${data.previous} | reason=${data.reason}`;
+			return `mode=${data.mode} | prev=${data.previous} | pref=${data.preferredMode} | src=${data.source} | reason=${data.reason}`;
 		}
 		case "companion:proactive-state-change": {
 			const data = payload as EventMap["companion:proactive-state-change"];
@@ -210,6 +212,23 @@ function formatPayloadPreview(event: EventName, payload: unknown): string {
 				`images=${data.state.capturedImageCount}`,
 				data.state.lastError ? `error=${compactReason(data.state.lastError, 56)}` : "",
 			].filter(Boolean).join(" | ");
+		}
+		case "delegation-memory:state-change": {
+			const data = payload as EventMap["delegation-memory:state-change"];
+			return [
+				`latest=${data.state.latestRecord?.sourceGame ?? "none"}`,
+				`records=${data.state.recentRecords.length}`,
+				data.state.latestRecord ? `verified=${data.state.latestRecord.verificationResult.success ? "yes" : "no"}` : "",
+			].filter(Boolean).join(" | ");
+		}
+		case "delegation-memory:record-added": {
+			const data = payload as EventMap["delegation-memory:record-added"];
+			return [
+				`game=${data.record.sourceGame ?? "none"}`,
+				`mode=${data.record.mode}`,
+				`verified=${data.record.verificationResult.success ? "yes" : "no"}`,
+				`summary=${compactReason(data.record.executionSummary, 56)}`,
+			].join(" | ");
 		}
 		default:
 			return serializePayload(payload);
@@ -311,7 +330,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "companion:mode-change": {
 			const data = payload as EventMap["companion:mode-change"];
-			return `${data.previous} -> ${data.mode}${data.reason ? ` / ${data.reason}` : ""}`;
+			return `${data.previous} -> ${data.mode}${data.reason ? ` / ${data.reason}` : ""}${data.source ? ` / ${data.source}` : ""}`;
 		}
 		case "companion:proactive-state-change": {
 			const data = payload as EventMap["companion:proactive-state-change"];
@@ -320,6 +339,16 @@ function formatSummary(event: EventName, payload: unknown): string {
 		case "debug-capture:state-change": {
 			const data = payload as EventMap["debug-capture:state-change"];
 			return `${data.state.enabled ? "capture-on" : "capture-off"} / ${data.state.sessionId ?? "no-session"} / events ${data.state.capturedEventCount} / images ${data.state.capturedImageCount}`;
+		}
+		case "delegation-memory:state-change": {
+			const data = payload as EventMap["delegation-memory:state-change"];
+			return data.state.latestRecord
+				? `latest memory: ${data.state.latestRecord.sourceGame ?? "none"} / ${data.state.latestRecord.verificationResult.success ? "success" : "failed"}`
+				: "delegation memory updated";
+		}
+		case "delegation-memory:record-added": {
+			const data = payload as EventMap["delegation-memory:record-added"];
+			return `record added: ${data.record.sourceGame ?? "none"} / ${data.record.verificationResult.success ? "success" : "failed"}`;
 		}
 		case "functional:target-change": {
 			const data = payload as EventMap["functional:target-change"];

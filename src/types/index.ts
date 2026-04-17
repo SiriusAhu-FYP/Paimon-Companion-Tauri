@@ -25,12 +25,21 @@ export type {
 	ResetAffectInput,
 } from "./affect";
 export type {
-	CompanionInteractionMode,
 	ProactiveDecision,
 	ProactiveState,
 	ProactiveTriggerSource,
 } from "./proactive";
+export type {
+	CompanionInteractionMode,
+	CompanionModeSource,
+	CompanionModeState,
+} from "./companion-mode";
 export type { DebugCaptureState } from "./debug-capture";
+export type {
+	DelegatedExecutionRecord,
+	DelegatedExecutionVerificationResult,
+	DelegationMemoryState,
+} from "./delegation-memory";
 export type {
 	UnifiedRunPhase,
 	UnifiedRunTrigger,

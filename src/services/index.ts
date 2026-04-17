@@ -14,6 +14,8 @@ import { UnifiedRuntimeService } from "./unified";
 import { CompanionRuntimeBenchmarkService, CompanionRuntimeService } from "./companion-runtime";
 import { LLMService } from "./llm";
 import { ProactiveCompanionService } from "./proactive-companion";
+import { CompanionModeService } from "./companion-mode";
+import { DelegationMemoryService } from "./delegation-memory";
 import { AudioPlayer } from "./audio";
 import type { IASRService } from "./asr";
 import { PipelineService } from "./pipeline";
@@ -48,6 +50,8 @@ export interface ServiceContainer {
 	player: AudioPlayer;
 	pipeline: PipelineService;
 	voiceInput: VoiceInputService;
+	companionMode: CompanionModeService;
+	delegationMemory: DelegationMemoryService;
 }
 
 let services: ServiceContainer | null = null;
@@ -61,6 +65,8 @@ export function initServices(): ServiceContainer {
 	const config = getConfig();
 
 	const runtime = new RuntimeService(eventBus);
+	const companionMode = new CompanionModeService(eventBus);
+	const delegationMemory = new DelegationMemoryService(eventBus);
 	const affect = new AffectStateService(eventBus);
 	const affectInputs = new AffectInputsService({
 		bus: eventBus,
@@ -101,7 +107,7 @@ export function initServices(): ServiceContainer {
 	});
 
 	const llmProvider = resolveLLMProvider(config);
-	const llm = new LLMService(eventBus, runtime, llmProvider, affect, character, knowledge, companionRuntime, debugCapture);
+	const llm = new LLMService(eventBus, runtime, llmProvider, affect, character, knowledge, companionRuntime, companionMode, delegationMemory, debugCapture);
 	const asr = resolveASRProvider(config);
 	const ttsProvider = resolveTTSProvider(config);
 	const player = new AudioPlayer();
@@ -130,12 +136,16 @@ export function initServices(): ServiceContainer {
 		sokoban,
 		llm,
 		pipeline,
+		companionMode,
+		delegationMemory,
 	});
 	const proactiveCompanion = new ProactiveCompanionService({
 		bus: eventBus,
 		llm,
 		pipeline,
 		companionRuntime,
+		companionMode,
+		delegationMemory,
 		runtimeSummarySilenceSeconds: config.companionRuntime.proactiveRuntimeSummarySilenceSeconds,
 	});
 	const evaluation = new EvaluationService({
@@ -170,6 +180,8 @@ export function initServices(): ServiceContainer {
 		player,
 		pipeline,
 		voiceInput,
+		companionMode,
+		delegationMemory,
 	};
 
 	log.info("all services initialized", {
