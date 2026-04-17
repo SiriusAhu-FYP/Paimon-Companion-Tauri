@@ -7,6 +7,7 @@ const ZOOM_KEY = "paimon-companion-tauri:stage-zoom";
 const CUSTOM_PRESETS_KEY = "paimon-companion-tauri:custom-size-presets";
 const SCALE_LOCK_KEY = "paimon-companion-tauri:stage-scale-lock";
 const MODEL_EXPRESSION_STATE_KEY = "paimon-companion-tauri:stage-model-expression-state";
+const WINDOW_SIZE_KEY = "paimon-companion-tauri:stage-window-size";
 
 // ── 缩放比例 ──
 
@@ -45,6 +46,11 @@ export interface SizePreset {
 	custom?: boolean;
 }
 
+export interface StageWindowSize {
+	width: number;
+	height: number;
+}
+
 export function loadCustomPresets(): SizePreset[] {
 	try {
 		const raw = localStorage.getItem(CUSTOM_PRESETS_KEY);
@@ -57,6 +63,30 @@ export function loadCustomPresets(): SizePreset[] {
 
 export function saveCustomPresets(presets: SizePreset[]): void {
 	localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(presets));
+}
+
+export function loadStageWindowSize(): StageWindowSize | null {
+	try {
+		const raw = localStorage.getItem(WINDOW_SIZE_KEY);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as Partial<StageWindowSize>;
+		if (!parsed.width || !parsed.height) return null;
+		if (parsed.width < 100 || parsed.height < 100) return null;
+		return {
+			width: parsed.width,
+			height: parsed.height,
+		};
+	} catch {
+		return null;
+	}
+}
+
+export function saveStageWindowSize(width: number, height: number): void {
+	try {
+		localStorage.setItem(WINDOW_SIZE_KEY, JSON.stringify({ width, height }));
+	} catch {
+		// ignore storage failures
+	}
 }
 
 // ── 每个模型的最近表情状态 ──

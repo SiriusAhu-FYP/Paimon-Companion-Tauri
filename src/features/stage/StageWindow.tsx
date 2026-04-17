@@ -7,6 +7,7 @@ import {
 	type ControlCommand, type StageDisplayMode,
 } from "@/utils/window-sync";
 import CloseIcon from "@mui/icons-material/Close";
+import PushPinIcon from "@mui/icons-material/PushPin";
 import { Live2DRenderer, DEFAULT_MODEL, MODEL_REGISTRY } from "@/features/live2d";
 import type { EyeMode } from "@/features/live2d";
 import { createLogger } from "@/services/logger";
@@ -14,10 +15,12 @@ import { useI18n } from "@/contexts/I18nProvider";
 import {
 	saveZoom, loadZoom,
 	loadModelExpression, saveModelExpression, clearModelExpression,
+	loadStageWindowSize, saveStageWindowSize,
 } from "@/utils/stage-storage";
 
 const log = createLogger("stage-window");
 const BLOCKED_EXPRESSIONS = new Set(["watermark", "水印"]);
+const DEFAULT_STAGE_WINDOW_SIZE = { width: 480, height: 640 } as const;
 
 function isBlockedExpression(name: string | null | undefined): boolean {
 	return !!name && BLOCKED_EXPRESSIONS.has(name);
@@ -41,9 +44,9 @@ export function StageWindow() {
 	const [loadStatus, setLoadStatus] = useState<"loading" | "ok" | "error">("loading");
 	const [loadErrorMessage, setLoadErrorMessage] = useState<string | null>(null);
 	const [showControls, setShowControls] = useState(false);
-	const [stageMode, setStageMode] = useState<"docked" | "floating">("docked");
+	const [stageMode, setStageMode] = useState<"docked" | "floating">("floating");
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
-	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("clean");
+	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("static");
 	const currentModelPath = useRef(DEFAULT_MODEL.path);
 	const [scaleLocked, setScaleLocked] = useState(false);
 	const eyeModeRef = useRef<EyeMode>("random-path");
@@ -78,13 +81,8 @@ export function StageWindow() {
 		async function applyAlwaysOnTop() {
 			try {
 				const win = getCurrentWindow();
-				if (stageMode === "docked") {
-					await win.setAlwaysOnTop(false);
-					await win.setSkipTaskbar(true);
-				} else {
-					await win.setAlwaysOnTop(alwaysOnTop);
-					await win.setSkipTaskbar(false);
-				}
+				await win.setAlwaysOnTop(alwaysOnTop);
+				await win.setSkipTaskbar(false);
 			} catch (err) {
 				log.warn("applyAlwaysOnTop failed", err);
 			}
@@ -98,14 +96,33 @@ export function StageWindow() {
 		async function applyCursorEvents() {
 			try {
 				const win = getCurrentWindow();
-				const shouldIgnore = displayMode === "clean" && stageMode === "docked";
-				await win.setIgnoreCursorEvents(shouldIgnore);
+				await win.setIgnoreCursorEvents(false);
 			} catch (err) {
 				log.warn("setIgnoreCursorEvents failed", err);
 			}
 		}
 		applyCursorEvents();
 	}, [displayMode, stageMode]);
+
+	useEffect(() => {
+		if (!isTauriEnvironment()) return;
+
+		async function applyInitialSize() {
+			try {
+				const win = getCurrentWindow();
+				const savedSize = loadStageWindowSize();
+				const size = savedSize ?? DEFAULT_STAGE_WINDOW_SIZE;
+				await win.setSize(new LogicalSize(size.width, size.height));
+				if (!savedSize) {
+					saveStageWindowSize(size.width, size.height);
+				}
+			} catch (err) {
+				log.warn("applyInitialSize failed", err);
+			}
+		}
+
+		applyInitialSize();
+	}, []);
 
 	// 初始加载（创建 renderer + app）
 	const initRenderer = useCallback(async (modelPath: string) => {
@@ -277,6 +294,7 @@ export function StageWindow() {
 			case "set-size":
 				try {
 					await win.setSize(new LogicalSize(cmd.width, cmd.height));
+					saveStageWindowSize(cmd.width, cmd.height);
 				} catch { /* */ }
 				break;
 			case "reset-zoom":
@@ -343,7 +361,7 @@ export function StageWindow() {
 		if (!canvas) return;
 
 		const handleWheel = (e: WheelEvent) => {
-			if (scaleLocked) return;
+			if (scaleLocked || displayMode !== "interactive") return;
 			e.preventDefault();
 			const delta = e.deltaY < 0 ? 1 : -1;
 			rendererRef.current?.applyZoomDelta(delta);
@@ -353,7 +371,7 @@ export function StageWindow() {
 
 		canvas.addEventListener("wheel", handleWheel, { passive: false });
 		return () => canvas.removeEventListener("wheel", handleWheel);
-	}, [scaleLocked]);
+	}, [displayMode, scaleLocked]);
 
 	// 鼠标跟随（follow-mouse 模式）
 	useEffect(() => {
@@ -380,53 +398,56 @@ export function StageWindow() {
 		}
 	}, [syncStateToHost]);
 
-	const toggleMode = useCallback(() => {
-		const next = stageMode === "docked" ? "floating" : "docked";
-		setStageMode(next);
-		broadcastControl({ type: "set-mode", mode: next });
-		syncStateToHost({ mode: next });
-	}, [stageMode, syncStateToHost]);
+	const toggleAlwaysOnTop = useCallback(() => {
+		const next = !alwaysOnTop;
+		setAlwaysOnTop(next);
+		broadcastControl({ type: "set-always-on-top", value: next });
+		syncStateToHost({ alwaysOnTop: next });
+	}, [alwaysOnTop, syncStateToHost]);
 
 	const toggleDisplayMode = useCallback(() => {
-		const next: StageDisplayMode = displayMode === "clean" ? "interactive" : "clean";
+		const next: StageDisplayMode = displayMode === "interactive" ? "static" : "interactive";
 		setDisplayMode(next);
 		broadcastControl({ type: "set-display-mode", displayMode: next });
 		syncStateToHost({ displayMode: next });
 	}, [displayMode, syncStateToHost]);
 
-	const isFloating = stageMode === "floating";
-	const shouldShowToolbar = displayMode === "interactive" && showControls;
+	const shouldShowToolbar = showControls;
 
 	return (
 		<div
-			className="stage-window"
+			className={`stage-window ${displayMode === "interactive" ? "stage-window-interactive" : "stage-window-static"}`}
 			onMouseEnter={() => setShowControls(true)}
 			onMouseLeave={() => setShowControls(false)}
 		>
-			{displayMode === "interactive" && (
-				<div
-					className={`stage-toolbar ${shouldShowToolbar ? "stage-toolbar-visible" : ""}`}
-					{...(isFloating ? { "data-tauri-drag-region": true } : {})}
+			<div
+				className={`stage-toolbar ${displayMode === "interactive" ? "stage-toolbar-interactive" : "stage-toolbar-static"} ${shouldShowToolbar ? "stage-toolbar-visible" : ""}`}
+				data-tauri-drag-region={displayMode === "interactive" && stageMode === "floating" ? true : undefined}
+			>
+				<span
+					className="stage-toolbar-label"
+					data-tauri-drag-region={displayMode === "interactive" && stageMode === "floating" ? true : undefined}
 				>
-					<span
-						className="stage-toolbar-label"
-						{...(isFloating ? { "data-tauri-drag-region": true } : {})}
-					>
-						{isFloating ? `⋮⋮ ${t("浮动", "Floating")}` : t("贴靠", "Docked")}
-					</span>
-					<div className="stage-toolbar-actions">
-						<button className="stage-tb-btn" onClick={toggleMode} title={t("切换模式", "Switch mode")}>
-							{isFloating ? `⊞ ${t("贴靠", "Docked")}` : `⇱ ${t("浮动", "Floating")}`}
+					{displayMode === "interactive" ? `⋮⋮ ${t("interactive 已开启", "Interactive on")}` : `⋮⋮ ${t("interactive 已关闭", "Interactive off")}`}
+				</span>
+				<div className="stage-toolbar-actions">
+					<button className={`stage-tb-btn ${alwaysOnTop ? "stage-tb-btn-active" : ""}`} onClick={toggleAlwaysOnTop} title={t("切换置顶", "Toggle always on top")}>
+						<PushPinIcon sx={{ fontSize: 15 }} />
+					</button>
+					{displayMode === "interactive" ? (
+						<button className="stage-tb-btn" onClick={toggleDisplayMode} title={t("关闭 interactive", "Disable interactive")}>
+							{t("关闭 interactive", "Disable interactive")}
 						</button>
-						<button className="stage-tb-btn" onClick={toggleDisplayMode} title={t("切换显示模式", "Switch display mode")}>
-							clean
+					) : (
+						<button className="stage-tb-btn" onClick={toggleDisplayMode} title={t("开启 interactive", "Enable interactive")}>
+							{t("开启 interactive", "Enable interactive")}
 						</button>
-						<button className="stage-tb-btn stage-tb-close" onClick={handleClose} title={t("关闭", "Close")}>
-							<CloseIcon sx={{ fontSize: 16 }} />
-						</button>
-					</div>
+					)}
+					<button className="stage-tb-btn stage-tb-close" onClick={handleClose} title={t("关闭", "Close")}>
+						<CloseIcon sx={{ fontSize: 16 }} />
+					</button>
 				</div>
-			)}
+			</div>
 
 			{loadStatus === "error" ? (
 				<div style={{ color: "#F87171", textAlign: "center", marginTop: 40, padding: "0 16px" }}>

@@ -26,7 +26,8 @@ import type { IndexStatus } from "@/services/knowledge";
 import { RebuildGate } from "./RebuildGate";
 
 interface KnowledgePanelProps {
-	onClose: () => void;
+	onClose?: () => void;
+	embedded?: boolean;
 }
 
 const SectionTitle = ({ children }: { children: React.ReactNode }) => (
@@ -35,7 +36,7 @@ const SectionTitle = ({ children }: { children: React.ReactNode }) => (
 	</Typography>
 );
 
-export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
+export function KnowledgePanel({ onClose, embedded = false }: KnowledgePanelProps) {
 	const { t } = useI18n();
 	const [message, setMessage] = useState<{ type: "success" | "error" | "info" | "warning"; text: string } | null>(null);
 
@@ -699,7 +700,9 @@ export function KnowledgePanel({ onClose }: KnowledgePanelProps) {
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1, height: "100%", overflowY: "auto" }}>
 			{/* Header */}
 			<Stack direction="row" alignItems="center" spacing={1}>
-				<Tooltip title={t("返回控制面板", "Back to control panel")}><IconButton size="small" onClick={onClose}><ArrowBackIcon fontSize="small" /></IconButton></Tooltip>
+				{!embedded && onClose ? (
+					<Tooltip title={t("返回控制面板", "Back to control panel")}><IconButton size="small" onClick={onClose}><ArrowBackIcon fontSize="small" /></IconButton></Tooltip>
+				) : null}
 				<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
 					{t("知识库", "Knowledge")}
 				</Typography>

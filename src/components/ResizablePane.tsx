@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 type Axis = "x" | "y";
-type HandlePlacement = "start" | "end";
+type HandlePlacement = "start" | "end" | "none";
 
 interface ResizablePaneProps {
 	axis: Axis;
@@ -91,28 +91,53 @@ export function ResizablePane(props: ResizablePaneProps) {
 	}, [axis, handlePlacement, maxSize, minSize, onResizeEnd, size]);
 
 	const paneStyle = useMemo(() => {
-		const sizedStyle = axis === "y" ? { height: size } : { width: size };
+		const sizedStyle: CSSProperties = axis === "y"
+			? { height: size }
+			: { flexBasis: size, width: size };
+		const layoutStyle: CSSProperties = {
+			display: "flex",
+			flexDirection: axis === "y" ? "column" : "row",
+			minHeight: 0,
+			minWidth: 0,
+		};
 		return {
+			...layoutStyle,
 			...style,
 			...sizedStyle,
 		};
 	}, [axis, size, style]);
 
+	const handleElement = (
+		<div
+			className={handleClassName}
+			onPointerDown={(event) => {
+				dragStateRef.current = {
+					startPointer: axis === "y" ? event.clientY : event.clientX,
+					startSize: size,
+				};
+				document.body.style.userSelect = "none";
+				document.body.style.cursor = axis === "y" ? "row-resize" : "col-resize";
+				onResizeStart?.();
+			}}
+		/>
+	);
+
 	return (
 		<div className={className} style={paneStyle}>
+			{handlePlacement === "start" ? handleElement : null}
 			<div
-				className={handleClassName}
-				onPointerDown={(event) => {
-					dragStateRef.current = {
-						startPointer: axis === "y" ? event.clientY : event.clientX,
-						startSize: size,
-					};
-					document.body.style.userSelect = "none";
-					document.body.style.cursor = axis === "y" ? "row-resize" : "col-resize";
-					onResizeStart?.();
+				style={{
+					flex: 1,
+					minWidth: 0,
+					minHeight: 0,
+					display: "flex",
+					flexDirection: "column",
+					overflow: "hidden",
 				}}
-			/>
-			{children}
+			>
+				{children}
+			</div>
+			{handlePlacement === "end" ? handleElement : null}
 		</div>
 	);
 }

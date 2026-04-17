@@ -12,7 +12,7 @@ export interface SyncPayload {
 	expressionEmotion?: string;
 }
 
-export type StageDisplayMode = "clean" | "interactive";
+export type StageDisplayMode = "interactive" | "static";
 
 export interface StageState {
 	mode: "docked" | "floating";
@@ -30,6 +30,7 @@ export type ControlCommand =
 	| { type: "show-stage" }
 	| { type: "reset-position" }
 	| { type: "set-mode"; mode: "docked" | "floating" }
+	| { type: "set-docked-bounds"; x: number; y: number; width: number; height: number }
 	| { type: "set-always-on-top"; value: boolean }
 	| { type: "restore-always-on-top" }
 	| { type: "set-display-mode"; displayMode: StageDisplayMode }

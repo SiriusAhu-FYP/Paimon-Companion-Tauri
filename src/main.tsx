@@ -11,6 +11,7 @@ import { setLocalMcpEventBus } from "@/services/mcp/local-mcp-client";
 import { ThemeModeProvider } from "./contexts/JoyThemeProvider";
 import { I18nProvider } from "./contexts/I18nProvider";
 import App from "./App";
+import "flexlayout-react/style/dark.css";
 import "./App.css";
 
 async function bootstrap() {

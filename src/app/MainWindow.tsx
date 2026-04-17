@@ -1,20 +1,18 @@
-import { Suspense, lazy, useState, useCallback, useEffect, useRef } from "react";
-import { Box, Button, IconButton, Tooltip } from "@mui/material";
-import SettingsIcon from "@mui/icons-material/Settings";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { Box, Button, IconButton, Menu, MenuItem, Tooltip } from "@mui/material";
+import DashboardCustomizeIcon from "@mui/icons-material/DashboardCustomize";
+import ViewQuiltIcon from "@mui/icons-material/ViewQuilt";
+import CheckIcon from "@mui/icons-material/Check";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
-import AutoStoriesIcon from "@mui/icons-material/AutoStories";
-import ScienceIcon from "@mui/icons-material/Science";
-import TuneIcon from "@mui/icons-material/Tune";
 import TranslateIcon from "@mui/icons-material/Translate";
 import { listen } from "@tauri-apps/api/event";
+import { Window } from "@tauri-apps/api/window";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
-import { getCurrentWindow, Window } from "@tauri-apps/api/window";
-import { StageHost, StageSlot } from "@/features/stage";
-import { ControlPanel } from "@/features/control-panel/ControlPanel";
-import { ChatPanel } from "@/features/chat";
 import { StatusBar } from "@/app/StatusBar";
-import { ResizablePane } from "@/components";
+import { getStoredOpenDockPanels, type DockPanelId } from "@/app/workspace/workspace-layout";
+import { DockWorkspace } from "@/app/workspace/DockWorkspace";
+import { requestCloseWorkspacePanel, requestOpenWorkspacePanel, requestResetWorkspaceLayout } from "@/app/workspace/WorkspaceContext";
 import { broadcastControl, type StageDisplayMode, isTauriEnvironment } from "@/utils/window-sync";
 import { createLogger } from "@/services/logger";
 import { getServices } from "@/services";
@@ -22,183 +20,125 @@ import { useThemeMode } from "@/contexts/JoyThemeProvider";
 import { useI18n } from "@/contexts/I18nProvider";
 
 const log = createLogger("main-window");
-const SettingsPanel = lazy(async () => import("@/features/settings/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
-const KnowledgePanel = lazy(async () => import("@/features/knowledge/KnowledgePanel").then((module) => ({ default: module.KnowledgePanel })));
-const WorkbenchPanel = lazy(async () => import("@/features/control-panel/WorkbenchPanel").then((module) => ({ default: module.WorkbenchPanel })));
-const EventLog = lazy(async () => import("@/app/EventLog").then((module) => ({ default: module.EventLog })));
 const UI_STALL_THRESHOLD_MS = 200;
 const UI_STALL_THROTTLE_MS = 3000;
-
-function PanelLoadingState() {
-	const { t } = useI18n();
-	return (
-		<Box sx={{ p: 1.5, color: "text.secondary", fontSize: 12 }}>
-			{t("加载中...", "Loading...")}
-		</Box>
-	);
-}
 
 export function MainWindow() {
 	const { mode, setMode } = useThemeMode();
 	const { locale, setLocale, t } = useI18n();
 	const [stageVisible, setStageVisible] = useState(true);
-	const [stageMode, setStageMode] = useState<"docked" | "floating">("docked");
+	const [stageMode, setStageMode] = useState<"docked" | "floating">("floating");
 	const [alwaysOnTop, setAlwaysOnTop] = useState(false);
-	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("clean");
-	const [showStagePanel, setShowStagePanel] = useState(true);
-	const [showChatPanel, setShowChatPanel] = useState(true);
-	const [eventLogOpen, setEventLogOpen] = useState(false);
-	const [rightPanel, setRightPanel] = useState<"companion" | "workbench" | "settings" | "knowledge">("companion");
-
-	const slotRectRef = useRef<DOMRect | null>(null);
-	const unlistenMoveRef = useRef<(() => void) | null>(null);
-	const unlistenResizeRef = useRef<(() => void) | null>(null);
-	const syncDebounceRef = useRef(0);
-	const suspendDockedSyncRef = useRef(false);
+	const [displayMode, setDisplayMode] = useState<StageDisplayMode>("static");
+	const [stageSlotOpen, setStageSlotOpen] = useState(false);
+	const [stageSlotRect, setStageSlotRect] = useState<DOMRect | null>(null);
+	const [panelsMenuAnchor, setPanelsMenuAnchor] = useState<null | HTMLElement>(null);
+	const [layoutMenuAnchor, setLayoutMenuAnchor] = useState<null | HTMLElement>(null);
+	const [openPanelsSnapshot, setOpenPanelsSnapshot] = useState<Set<DockPanelId>>(() => getStoredOpenDockPanels());
 	const stageModeRef = useRef(stageMode);
 	const stageVisibleRef = useRef(stageVisible);
+	const syncDebounceRef = useRef(0);
 
 	stageModeRef.current = stageMode;
 	stageVisibleRef.current = stageVisible;
-
-	const syncStagePosition = useCallback(async () => {
-		const rect = slotRectRef.current;
-		if (!rect) return;
-
-		try {
-			const mainWin = await Window.getByLabel("main");
-			const stageWin = await Window.getByLabel("stage");
-			if (!mainWin || !stageWin) return;
-
-			const mainPos = await mainWin.outerPosition();
-			const sf = await mainWin.scaleFactor();
-
-			const mainLogX = mainPos.x / sf;
-			const mainLogY = mainPos.y / sf;
-
-			const titleBarH = 30;
-			const stageX = mainLogX + rect.x;
-			const stageY = mainLogY + rect.y + titleBarH;
-			const stageW = rect.width;
-			const stageH = rect.height;
-
-			await stageWin.setPosition(new LogicalPosition(stageX, stageY));
-			if (stageW > 50 && stageH > 50) {
-				await stageWin.setSize(new LogicalSize(stageW, stageH));
-			}
-		} catch (err) {
-			log.warn("sync stage position failed", err);
-		}
-	}, []);
-
-	const debouncedSync = useCallback(() => {
-		if (syncDebounceRef.current) cancelAnimationFrame(syncDebounceRef.current);
-		syncDebounceRef.current = requestAnimationFrame(() => {
-			syncDebounceRef.current = 0;
-			if (!suspendDockedSyncRef.current && stageModeRef.current === "docked" && stageVisibleRef.current) {
-				syncStagePosition();
-			}
-		});
-	}, [syncStagePosition]);
-
-	const handleSlotRectChange = useCallback((rect: DOMRect) => {
-		slotRectRef.current = rect;
-		debouncedSync();
-	}, [debouncedSync]);
-
-	useEffect(() => {
-		if (stageMode !== "docked" || !stageVisible) return;
-
-		const handleMouseMove = (event: MouseEvent) => {
-			const rect = slotRectRef.current;
-			if (!rect) return;
-
-			const localX = event.clientX - rect.left;
-			const localY = event.clientY - rect.top;
-			if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) return;
-
-			broadcastControl({ type: "set-pointer", x: localX, y: localY });
-		};
-
-		window.addEventListener("mousemove", handleMouseMove);
-		return () => window.removeEventListener("mousemove", handleMouseMove);
-	}, [stageMode, stageVisible]);
-
-	// docked 跟随主窗口 move/resize
-	useEffect(() => {
-		if (stageMode !== "docked" || !stageVisible) {
-			unlistenMoveRef.current?.();
-			unlistenMoveRef.current = null;
-			unlistenResizeRef.current?.();
-			unlistenResizeRef.current = null;
-			return;
-		}
-
-		let cancelled = false;
-
-		async function startFollow() {
-			if (!isTauriEnvironment()) return;
-
-			try {
-				const mainWin = getCurrentWindow();
-
-				if (cancelled) return;
-
-				const unMove = await listen("tauri://move", () => {
-					if (mainWin.label === "main") debouncedSync();
-				});
-				const unResize = await listen("tauri://resize", () => {
-					if (mainWin.label === "main") debouncedSync();
-				});
-
-				if (cancelled) {
-					unMove();
-					unResize();
-					return;
-				}
-
-				unlistenMoveRef.current = unMove;
-				unlistenResizeRef.current = unResize;
-
-				await syncStagePosition();
-			} catch (err) {
-				log.warn("docked follow setup failed", err);
-			}
-		}
-
-		startFollow();
-
-		return () => {
-			cancelled = true;
-			unlistenMoveRef.current?.();
-			unlistenMoveRef.current = null;
-			unlistenResizeRef.current?.();
-			unlistenResizeRef.current = null;
-		};
-	}, [stageMode, stageVisible, syncStagePosition, debouncedSync]);
 
 	const handleShowStage = useCallback(async () => {
 		try {
 			const stageWin = await Window.getByLabel("stage");
 			if (stageWin) {
 				broadcastControl({ type: "show-stage" });
+				broadcastControl({ type: "set-mode", mode: stageMode });
 				await stageWin.show();
 				await stageWin.setFocus();
 				setStageVisible(true);
-				if (stageMode === "docked") {
-					await syncStagePosition();
-				}
 			}
 		} catch (err) {
 			log.error("show stage failed", err);
 		}
-	}, [stageMode, syncStagePosition]);
+	}, [stageMode]);
 
-	// Tauri 环境下自动启动 Stage（clean + docked 默认展示 L2D）
 	useEffect(() => {
 		if (!isTauriEnvironment()) return;
 		handleShowStage();
 	}, [handleShowStage]);
+
+	const syncDockedStageBounds = useCallback(async (rectOverride?: DOMRect | null) => {
+		const rect = rectOverride ?? stageSlotRect;
+		if (!isTauriEnvironment() || stageMode !== "docked" || !rect) return;
+
+		try {
+			const mainWin = await Window.getByLabel("main");
+			const stageWin = await Window.getByLabel("stage");
+			if (!mainWin || !stageWin) return;
+
+			const innerPosition = await mainWin.innerPosition();
+			const scaleFactor = await mainWin.scaleFactor();
+			const logicalPosition = innerPosition.toLogical(scaleFactor);
+
+			await stageWin.setPosition(new LogicalPosition(logicalPosition.x + rect.left, logicalPosition.y + rect.top));
+			if (rect.width > 50 && rect.height > 50) {
+				await stageWin.setSize(new LogicalSize(rect.width, rect.height));
+			}
+		} catch (err) {
+			log.warn("sync docked stage bounds failed", err);
+		}
+	}, [stageMode, stageSlotRect]);
+
+	const debouncedSyncDockedStageBounds = useCallback((rectOverride?: DOMRect | null) => {
+		if (syncDebounceRef.current) {
+			cancelAnimationFrame(syncDebounceRef.current);
+		}
+
+		syncDebounceRef.current = requestAnimationFrame(() => {
+			syncDebounceRef.current = 0;
+			if (stageModeRef.current === "docked" && stageVisibleRef.current) {
+				void syncDockedStageBounds(rectOverride);
+			}
+		});
+	}, [syncDockedStageBounds]);
+
+	useEffect(() => {
+		const nextMode = stageSlotOpen ? "docked" : "floating";
+		setStageMode((current) => {
+			if (current === nextMode) return current;
+			broadcastControl({ type: "set-mode", mode: nextMode });
+			return nextMode;
+		});
+	}, [stageSlotOpen]);
+
+	useEffect(() => {
+		if (stageMode !== "docked") return;
+		void syncDockedStageBounds();
+	}, [stageMode, stageSlotRect, stageVisible, syncDockedStageBounds]);
+
+	useEffect(() => {
+		if (!isTauriEnvironment() || !stageSlotOpen) return;
+
+		let unlistenMove: (() => void) | null = null;
+		let unlistenResize: (() => void) | null = null;
+		let disposed = false;
+
+		(async () => {
+			try {
+				unlistenMove = await listen("tauri://move", () => {
+					debouncedSyncDockedStageBounds();
+				});
+				unlistenResize = await listen("tauri://resize", () => {
+					debouncedSyncDockedStageBounds();
+				});
+			} catch (err) {
+				if (!disposed) {
+					log.warn("subscribe main window dock listeners failed", err);
+				}
+			}
+		})();
+
+		return () => {
+			disposed = true;
+			unlistenMove?.();
+			unlistenResize?.();
+		};
+	}, [stageSlotOpen, debouncedSyncDockedStageBounds]);
 
 	useEffect(() => {
 		const { bus } = getServices();
@@ -230,22 +170,28 @@ export function MainWindow() {
 		};
 	}, []);
 
-	const handleModeChange = useCallback(async (mode: "docked" | "floating") => {
-		setStageMode(mode);
+	const handleOpenPanel = useCallback((panelId: Parameters<typeof requestOpenWorkspacePanel>[0]) => {
+		requestOpenWorkspacePanel(panelId);
 	}, []);
 
-	const showSlot = stageVisible && stageMode === "docked";
-	const rightPanelContent = rightPanel === "settings"
-		? <SettingsPanel onClose={() => setRightPanel("companion")} />
-		: rightPanel === "knowledge"
-			? <KnowledgePanel onClose={() => setRightPanel("companion")} />
-			: rightPanel === "workbench"
-				? <WorkbenchPanel />
-				: <ControlPanel />;
+	const handleResetLayout = useCallback(() => {
+		requestResetWorkspaceLayout();
+	}, []);
+
+	const closePanelsMenu = useCallback(() => setPanelsMenuAnchor(null), []);
+	const closeLayoutMenu = useCallback(() => setLayoutMenuAnchor(null), []);
+	const panelMenuItems = [
+		{ id: "stage-controls", label: t("舞台面板", "Stage Panel") },
+		{ id: "chat", label: t("对话", "Chat") },
+		{ id: "control-panel", label: t("控制面板", "Control Panel") },
+		{ id: "knowledge", label: t("知识库", "Knowledge") },
+		{ id: "workbench", label: t("开发工作台", "Workbench") },
+		{ id: "settings", label: t("设置", "Settings") },
+		{ id: "event-log", label: t("日志", "Event Log") },
+	] as const;
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
-			{/* Header */}
 			<Box sx={{
 				px: 2, py: 1,
 				bgcolor: "background.paper",
@@ -256,45 +202,54 @@ export function MainWindow() {
 				alignItems: "center",
 				justifyContent: "space-between",
 			}}>
-				<Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-					<Box component="h1" sx={{ fontSize: 18, fontWeight: 600, color: "primary.main", m: 0 }}>
-						Paimon Companion Tauri
-					</Box>
+				<Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
 					<Button
 						size="small"
-						variant={showStagePanel ? "contained" : "outlined"}
-						onClick={() => setShowStagePanel((current) => !current)}
-						sx={{ minWidth: 0, px: 1.25, py: 0.35, fontSize: 11, lineHeight: 1 }}
+						startIcon={<DashboardCustomizeIcon sx={{ fontSize: 15 }} />}
+						onClick={(event) => {
+							setOpenPanelsSnapshot(getStoredOpenDockPanels());
+							setPanelsMenuAnchor(event.currentTarget);
+						}}
+						sx={{ minWidth: 0, px: 1.25, fontSize: 12, textTransform: "none", color: "text.secondary" }}
 					>
-						{t("舞台", "Stage")}
+						{t("面板", "Panels")}
 					</Button>
 					<Button
 						size="small"
-						variant={showChatPanel ? "contained" : "outlined"}
-						onClick={() => setShowChatPanel((current) => !current)}
-						sx={{ minWidth: 0, px: 1.25, py: 0.35, fontSize: 11, lineHeight: 1 }}
+						startIcon={<ViewQuiltIcon sx={{ fontSize: 15 }} />}
+						onClick={(event) => setLayoutMenuAnchor(event.currentTarget)}
+						sx={{ minWidth: 0, px: 1.25, fontSize: 12, textTransform: "none", color: "text.secondary" }}
 					>
-						{t("对话", "Chat")}
+						{t("布局", "Layout")}
 					</Button>
 				</Box>
+				<Box sx={{ flex: 1, alignSelf: "stretch" }} data-tauri-drag-region />
 				<Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
 					<Tooltip title={t("切换语言", "Switch language")}>
-						<Button
+						<IconButton
 							size="small"
-							variant="outlined"
-							startIcon={<TranslateIcon sx={{ fontSize: 14 }} />}
 							onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
 							sx={{
-								minWidth: 0,
-								px: 1,
-								py: 0.35,
-								fontSize: 11,
-								lineHeight: 1,
-								mr: 0.5,
+								color: "text.secondary",
+								position: "relative",
 							}}
 						>
-							{locale === "zh" ? "EN" : "中文"}
-						</Button>
+							<TranslateIcon fontSize="small" />
+							<Box
+								component="span"
+								sx={{
+									position: "absolute",
+									right: 2,
+									bottom: 1,
+									fontSize: 8,
+									lineHeight: 1,
+									fontWeight: 700,
+									color: "primary.main",
+								}}
+							>
+								{locale === "zh" ? "EN" : "中"}
+							</Box>
+						</IconButton>
 					</Tooltip>
 					<Tooltip title={mode === "dark" ? t("切换亮色", "Switch to light mode") : t("切换暗色", "Switch to dark mode")}>
 						<IconButton
@@ -305,191 +260,71 @@ export function MainWindow() {
 							{mode === "dark" ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
 						</IconButton>
 					</Tooltip>
-					<Tooltip title={t("控制面板", "Control Panel")}>
-						<IconButton
-							size="small"
-							onClick={() => setRightPanel("companion")}
-							sx={{ color: rightPanel === "companion" ? "primary.main" : "text.secondary" }}
-						>
-							<TuneIcon fontSize="small" />
-						</IconButton>
-					</Tooltip>
-					<Tooltip title={t("知识库", "Knowledge")}>
-						<IconButton
-							size="small"
-							onClick={() => setRightPanel("knowledge")}
-							sx={{ color: rightPanel === "knowledge" ? "primary.main" : "text.secondary" }}
-						>
-							<AutoStoriesIcon fontSize="small" />
-						</IconButton>
-					</Tooltip>
-					<Tooltip title={t("开发工作台", "Developer Workbench")}>
-						<IconButton
-							size="small"
-							onClick={() => setRightPanel("workbench")}
-							sx={{ color: rightPanel === "workbench" ? "primary.main" : "text.secondary" }}
-						>
-							<ScienceIcon fontSize="small" />
-						</IconButton>
-					</Tooltip>
-					<Tooltip title={t("设置", "Settings")}>
-						<IconButton
-							size="small"
-							onClick={() => setRightPanel("settings")}
-							sx={{ color: rightPanel === "settings" ? "primary.main" : "text.secondary" }}
-						>
-							<SettingsIcon fontSize="small" />
-						</IconButton>
-					</Tooltip>
 				</Box>
 			</Box>
 
-			{/* Main content */}
-			<Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
-				{/* 左栏: Stage 控制面板 */}
-				{showStagePanel && (
-					<ResizablePane
-						axis="x"
-						storageKey="stage-panel-width"
-						initialSize={240}
-						minSize={200}
-						maxSize={360}
-						handlePlacement="end"
-						className="resizable-pane resizable-pane-horizontal"
-						handleClassName="resizable-pane-handle resizable-pane-handle-horizontal"
-						style={{
-							flexShrink: 0,
-							borderRight: "1px solid var(--mui-palette-secondary-main, rgba(255,255,255,0.12))",
-							overflow: "hidden",
-						}}
-					>
-						<Box sx={{ height: "100%", overflowY: "auto" }}>
-							<StageHost
-								stageVisible={stageVisible}
-								stageMode={stageMode}
-								alwaysOnTop={alwaysOnTop}
-								displayMode={displayMode}
-								variant="developer"
-								onShowStage={handleShowStage}
-								onModeChange={handleModeChange}
-								onVisibilityChange={setStageVisible}
-								onAlwaysOnTopChange={setAlwaysOnTop}
-								onDisplayModeChange={setDisplayMode}
-							/>
-						</Box>
-					</ResizablePane>
-				)}
+			<Menu
+				anchorEl={panelsMenuAnchor}
+				open={Boolean(panelsMenuAnchor)}
+				onClose={closePanelsMenu}
+				slotProps={{ paper: { onMouseLeave: closePanelsMenu } }}
+			>
+				{panelMenuItems.map((panel) => {
+					const isOpen = openPanelsSnapshot.has(panel.id);
+					return (
+						<MenuItem key={panel.id} onClick={() => {
+							if (isOpen && panel.id !== "control-panel") {
+								requestCloseWorkspacePanel(panel.id);
+								setOpenPanelsSnapshot((current) => {
+									const next = new Set(current);
+									next.delete(panel.id);
+									return next;
+								});
+							} else {
+								handleOpenPanel(panel.id);
+								setOpenPanelsSnapshot((current) => {
+									const next = new Set(current);
+									next.add(panel.id);
+									return next;
+								});
+							}
+						}}>
+							<Box sx={{ width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", mr: 0.75, color: "primary.main" }}>
+								{isOpen ? <CheckIcon sx={{ fontSize: 16 }} /> : null}
+							</Box>
+							{panel.label}
+						</MenuItem>
+					);
+				})}
+			</Menu>
 
-				{/* 中间左: Stage 模型贴靠区（仅 docked + visible 时显示） */}
-				{showSlot && (
-					<ResizablePane
-						axis="x"
-						storageKey="stage-slot-width"
-						initialSize={350}
-						minSize={260}
-						maxSize={640}
-						handlePlacement="end"
-						className="resizable-pane resizable-pane-horizontal"
-						handleClassName="resizable-pane-handle resizable-pane-handle-horizontal"
-						style={{
-							flexShrink: 0,
-							borderRight: "1px solid var(--mui-palette-secondary-main, rgba(255,255,255,0.12))",
-							overflow: "hidden",
-						}}
-					>
-						<StageSlot
-							visible={stageVisible}
-							mode={stageMode}
-							displayMode={displayMode}
-							onRectChange={handleSlotRectChange}
-						/>
-					</ResizablePane>
-				)}
+			<Menu anchorEl={layoutMenuAnchor} open={Boolean(layoutMenuAnchor)} onClose={closeLayoutMenu}>
+				<MenuItem onClick={() => { handleResetLayout(); closeLayoutMenu(); }}>{t("重新打开全部标签页", "Reopen All Tabs")}</MenuItem>
+				<MenuItem onClick={() => { handleResetLayout(); closeLayoutMenu(); }}>{t("恢复默认布局", "Restore Default Layout")}</MenuItem>
+			</Menu>
 
-				{/* 中间: 对话面板 */}
-				{showChatPanel && (
-					<ResizablePane
-						axis="x"
-						storageKey="chat-panel-width"
-						initialSize={560}
-						minSize={360}
-						maxSize={960}
-						handlePlacement="end"
-						className="resizable-pane resizable-pane-horizontal"
-						handleClassName="resizable-pane-handle resizable-pane-handle-horizontal"
-						style={{
-							flex: "1 1 auto",
-							minWidth: 0,
-							borderRight: "1px solid var(--mui-palette-secondary-main, rgba(255,255,255,0.12))",
-							overflow: "hidden",
-						}}
-					>
-						<Box sx={{ height: "100%", overflowY: "auto" }}>
-							<ChatPanel />
-						</Box>
-					</ResizablePane>
-				)}
+			<DockWorkspace
+				stageVisible={stageVisible}
+				stageMode={stageMode}
+				alwaysOnTop={alwaysOnTop}
+				displayMode={displayMode}
+				onShowStage={handleShowStage}
+				onVisibilityChange={setStageVisible}
+				onAlwaysOnTopChange={setAlwaysOnTop}
+				onDisplayModeChange={setDisplayMode}
+				onStageSlotOpenChange={setStageSlotOpen}
+				onStageSlotRectChange={(rect) => {
+					setStageSlotRect(rect);
+					if (rect) {
+						debouncedSyncDockedStageBounds(rect);
+					}
+				}}
+			/>
 
-				{/* 右栏: 控制面板 / 设置 / 知识库 */}
-				<ResizablePane
-					axis="x"
-					storageKey="right-panel-width"
-					initialSize={rightPanel === "workbench" ? 420 : 280}
-					minSize={240}
-					maxSize={640}
-					handlePlacement="start"
-					className="resizable-pane resizable-pane-horizontal"
-					handleClassName="resizable-pane-handle resizable-pane-handle-horizontal"
-					style={{
-						flexShrink: 0,
-						overflow: "hidden",
-					}}
-				>
-					<Box sx={{ height: "100%", overflowY: "auto", display: "flex", flexDirection: "column" }}>
-						<Suspense fallback={<PanelLoadingState />}>
-							{rightPanelContent}
-						</Suspense>
-					</Box>
-				</ResizablePane>
-			</Box>
-
-			{eventLogOpen && (
-				<ResizablePane
-					axis="y"
-					storageKey="event-log-height"
-					initialSize={260}
-					minSize={180}
-					maxSize={520}
-					handlePlacement="start"
-					className="resizable-pane resizable-pane-vertical"
-					handleClassName="resizable-pane-handle resizable-pane-handle-vertical"
-					style={{
-						flexShrink: 0,
-						borderTop: "1px solid var(--mui-palette-secondary-main, rgba(255,255,255,0.12))",
-						background: "var(--mui-palette-background-default, transparent)",
-						overflow: "hidden",
-					}}
-					onResizeStart={() => {
-						suspendDockedSyncRef.current = true;
-					}}
-					onResizeEnd={() => {
-						suspendDockedSyncRef.current = false;
-						debouncedSync();
-					}}
-				>
-					<Suspense fallback={<PanelLoadingState />}>
-						<EventLog />
-					</Suspense>
-				</ResizablePane>
-			)}
-
-			{/* 底部状态栏——始终在最底部 */}
 			<StatusBar
 				stageVisible={stageVisible}
 				stageMode={stageMode}
 				displayMode={displayMode}
-				eventLogOpen={eventLogOpen}
-				onToggleEventLog={() => setEventLogOpen((current) => !current)}
 			/>
 		</Box>
 	);
