@@ -32,10 +32,11 @@ import { AsrProfilesSection } from "./AsrProfilesSection";
 const log = createLogger("settings");
 
 interface SettingsPanelProps {
-	onClose: () => void;
+	onClose?: () => void;
+	embedded?: boolean;
 }
 
-export function SettingsPanel({ onClose }: SettingsPanelProps) {
+export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps) {
 	const { t } = useI18n();
 	const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
 	const [message, setMessage] = useState<{ type: "success" | "error" | "info" | "warning"; text: string } | null>(null);
@@ -281,11 +282,13 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1, height: "100%", overflowY: "auto" }}>
 			<Stack direction="row" alignItems="center" spacing={1}>
-				<Tooltip title={t("返回控制面板", "Back to control panel")}>
-					<IconButton size="small" onClick={onClose}>
-						<ArrowBackIcon fontSize="small" />
-					</IconButton>
-				</Tooltip>
+				{!embedded && onClose ? (
+					<Tooltip title={t("返回控制面板", "Back to control panel")}>
+						<IconButton size="small" onClick={onClose}>
+							<ArrowBackIcon fontSize="small" />
+						</IconButton>
+					</Tooltip>
+				) : null}
 				<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
 					{t("设置", "Settings")}
 				</Typography>

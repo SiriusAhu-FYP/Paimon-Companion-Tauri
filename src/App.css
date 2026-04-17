@@ -4,6 +4,34 @@
 	margin: 0;
 	padding: 0;
 	box-sizing: border-box;
+	scrollbar-width: thin;
+	scrollbar-color: rgba(104, 160, 255, 0.72) rgba(255, 255, 255, 0.06);
+}
+
+*::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+	background: rgba(255, 255, 255, 0.05);
+}
+
+*::-webkit-scrollbar-thumb {
+	background: rgba(104, 160, 255, 0.72);
+	border-radius: 999px;
+	border: 2px solid transparent;
+	background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+	background: rgba(132, 182, 255, 0.88);
+	border: 2px solid transparent;
+	background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+	background: transparent;
 }
 
 /* ── 动画 keyframes ── */
@@ -59,6 +87,138 @@
 		transparent 3px,
 		transparent 100%
 	);
+}
+
+.resizable-pane-handle-horizontal {
+	width: 8px;
+	cursor: col-resize;
+	background:
+	linear-gradient(
+			to right,
+			transparent 0,
+			transparent 2px,
+			rgba(255, 255, 255, 0.12) 2px,
+			rgba(255, 255, 255, 0.12) 3px,
+			transparent 3px,
+			transparent 100%
+		);
+}
+
+.resizable-pane-handle-horizontal:hover {
+	background:
+		linear-gradient(
+			to right,
+			transparent 0,
+			transparent 2px,
+			rgba(255, 255, 255, 0.24) 2px,
+			rgba(255, 255, 255, 0.24) 3px,
+			transparent 3px,
+			transparent 100%
+		);
+}
+
+/* ── Dock Workspace ── */
+
+.paimon-workspace {
+	position: relative;
+	min-height: 0;
+	background: var(--mui-palette-background-default, #0f1117);
+}
+
+.paimon-workspace .flexlayout__layout {
+	--color-text: rgba(255, 255, 255, 0.88);
+	--color-background: var(--mui-palette-background-default, #0f1117);
+	--color-base: var(--mui-palette-background-default, #0f1117);
+	--color-1: rgba(255, 255, 255, 0.02);
+	--color-2: rgba(255, 255, 255, 0.04);
+	--color-3: rgba(255, 255, 255, 0.06);
+	--color-4: rgba(89, 159, 255, 0.22);
+	--color-5: rgba(89, 159, 255, 0.34);
+	--color-6: rgba(89, 159, 255, 0.46);
+	--color-tabset-background: transparent;
+	--color-tabset-header-background: rgba(255, 255, 255, 0.04);
+	--color-tabset-background-selected: rgba(255, 255, 255, 0.04);
+	--color-tab-content: var(--mui-palette-background-default, #0f1117);
+	--color-tab-selected: rgba(255, 255, 255, 0.96);
+	--color-tab-selected-background: rgba(89, 159, 255, 0.22);
+	--color-tab-unselected: rgba(255, 255, 255, 0.62);
+	--color-tab-unselected-background: transparent;
+	--color-splitter: rgba(255, 255, 255, 0.05);
+	--color-splitter-hover: rgba(89, 159, 255, 0.24);
+	--color-splitter-drag: rgba(89, 159, 255, 0.38);
+	--color-drag1: rgba(110, 176, 255, 0.95);
+	--color-drag1-background: rgba(110, 176, 255, 0.16);
+	--color-drag2: rgba(110, 176, 255, 0.95);
+	--color-drag2-background: rgba(110, 176, 255, 0.16);
+	--color-drag-rect-border: rgba(110, 176, 255, 0.55);
+	--color-drag-rect-background: rgba(17, 24, 39, 0.92);
+	--color-border-divider-line: rgba(255, 255, 255, 0.08);
+	--color-tabset-divider-line: rgba(255, 255, 255, 0.08);
+	--color-toolbar-button-hover: rgba(89, 159, 255, 0.18);
+}
+
+.paimon-workspace .flexlayout__layout_main {
+	background: var(--mui-palette-background-default, #0f1117);
+}
+
+.paimon-workspace .flexlayout__tabset {
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.02);
+}
+
+.paimon-workspace .flexlayout__tabset_header {
+	padding: 0 8px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.paimon-workspace .flexlayout__tabset_tabbar_outer {
+	background: rgba(255, 255, 255, 0.02);
+}
+
+.paimon-workspace .flexlayout__tab_button {
+	border-radius: 8px 8px 0 0;
+}
+
+.paimon-workspace .flexlayout__tab_button--selected {
+	font-weight: 600;
+}
+
+.paimon-workspace .flexlayout__tab_toolbar_button,
+.paimon-workspace .flexlayout__tab_button_trailing {
+	border-radius: 6px;
+}
+
+.paimon-tabset-action {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	margin-left: 4px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: rgba(255, 255, 255, 0.72);
+	cursor: pointer;
+	transition: background 160ms ease, color 160ms ease;
+}
+
+.paimon-tabset-action:hover {
+	background: rgba(89, 159, 255, 0.18);
+	color: rgba(255, 255, 255, 0.96);
+}
+
+.paimon-workspace .flexlayout__splitter {
+	background: rgba(255, 255, 255, 0.04);
+}
+
+.paimon-workspace .flexlayout__splitter:hover {
+	background: rgba(89, 159, 255, 0.18);
+}
+
+.paimon-workspace .flexlayout__splitter_handle {
+	background: rgba(255, 255, 255, 0.28);
 }
 
 /* ── 事件日志 ── */
@@ -447,22 +607,55 @@
 	overflow: hidden;
 }
 
+.stage-window-interactive::before,
+.stage-window-static::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	border-radius: 0;
+	transition: background 160ms ease, box-shadow 160ms ease, outline-color 160ms ease;
+}
+
+.stage-window-interactive::before {
+	background: radial-gradient(circle at top, rgba(89, 159, 255, 0.08), transparent 52%);
+	box-shadow: none;
+}
+
+.stage-window-static::before {
+	background: radial-gradient(circle at top, rgba(255, 255, 255, 0.03), transparent 50%);
+	box-shadow: none;
+}
+
 .stage-toolbar {
 	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
+	top: 10px;
+	left: 10px;
+	right: 10px;
 	z-index: 100;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 3px 8px;
-	background: rgba(0, 0, 0, 0.45);
+	padding: 6px 10px;
+	background: rgba(10, 15, 24, 0.72);
+	backdrop-filter: blur(10px);
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 12px;
 	opacity: 0;
 	transition: opacity 0.2s;
 	pointer-events: none;
 	cursor: grab;
 	user-select: none;
+}
+
+.stage-toolbar-interactive {
+	background: rgba(18, 34, 58, 0.82);
+	border-color: rgba(89, 159, 255, 0.34);
+}
+
+.stage-toolbar-static {
+	background: rgba(22, 24, 31, 0.78);
+	border-color: rgba(255, 255, 255, 0.12);
 }
 
 .stage-toolbar-visible {
@@ -472,29 +665,41 @@
 
 .stage-toolbar-label {
 	font-size: 11px;
-	color: rgba(255, 255, 255, 0.6);
-	letter-spacing: 0.5px;
+	color: rgba(255, 255, 255, 0.78);
+	letter-spacing: 0.4px;
+	font-weight: 600;
 }
 
 .stage-toolbar-actions {
 	display: flex;
-	gap: 4px;
+	gap: 6px;
 }
 
 .stage-tb-btn {
-	padding: 1px 8px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 34px;
+	min-height: 28px;
+	padding: 3px 10px;
 	font-size: 11px;
-	background: rgba(255, 255, 255, 0.1);
-	border: 1px solid rgba(255, 255, 255, 0.2);
-	border-radius: 3px;
-	color: rgba(255, 255, 255, 0.7);
+	background: rgba(255, 255, 255, 0.12);
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	border-radius: 8px;
+	color: rgba(255, 255, 255, 0.84);
 	cursor: pointer;
 	line-height: 1.4;
 }
 
 .stage-tb-btn:hover {
-	background: rgba(255, 255, 255, 0.2);
+	background: rgba(255, 255, 255, 0.22);
 	color: #fff;
+}
+
+.stage-tb-btn-active {
+	background: rgba(255, 183, 77, 0.22);
+	border-color: rgba(255, 183, 77, 0.45);
+	color: #ffd180;
 }
 
 .stage-tb-close:hover {

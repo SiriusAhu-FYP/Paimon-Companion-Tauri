@@ -15,13 +15,16 @@
         "label": "main",
         "title": "Paimon Companion Tauri",
         "width": 1200,
-        "height": 800
+        "height": 800,
+        "decorations": true,
+        "dragDropEnabled": false
       },
       {
         "label": "stage",
         "title": "Paimon Companion Tauri - Stage",
-        "width": 800,
-        "height": 600,
+        "width": 480,
+        "height": 640,
+        "dragDropEnabled": false,
         "transparent": true,
         "decorations": false,
         "shadow": false,

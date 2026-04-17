@@ -1,23 +1,28 @@
-import { Box, Typography, IconButton, Tooltip, Chip, Stack } from "@mui/material";
+import { useEffect, useState } from "react";
+import { Box, Typography, Chip, Stack, IconButton, Tooltip } from "@mui/material";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import type { StageDisplayMode } from "@/utils/window-sync";
 import { useRuntime, useCharacter, useFunctional, useEventLog } from "@/hooks";
 import { useI18n } from "@/contexts/I18nProvider";
+import { getStoredOpenDockPanels } from "@/app/workspace/workspace-layout";
+import {
+	requestCloseWorkspacePanel,
+	requestOpenWorkspacePanel,
+	subscribeWorkspaceClosePanel,
+	subscribeWorkspaceOpenPanel,
+	subscribeWorkspaceResetLayout,
+} from "@/app/workspace/WorkspaceContext";
 
 interface StatusBarProps {
 	stageVisible: boolean;
 	stageMode: "docked" | "floating";
 	displayMode: StageDisplayMode;
-	eventLogOpen: boolean;
-	onToggleEventLog: () => void;
 }
 
 export function StatusBar({
 	stageVisible,
 	stageMode,
 	displayMode,
-	eventLogOpen,
-	onToggleEventLog,
 }: StatusBarProps) {
 	const { mode } = useRuntime();
 	const { emotion, isSpeaking } = useCharacter();
@@ -28,6 +33,31 @@ export function StatusBar({
 		includeTotalTrackedEntries: false,
 	});
 	const { t } = useI18n();
+	const [isEventLogOpen, setIsEventLogOpen] = useState(() => getStoredOpenDockPanels().has("event-log"));
+
+	useEffect(() => {
+		const syncFromStorage = () => {
+			setIsEventLogOpen(getStoredOpenDockPanels().has("event-log"));
+		};
+
+		const unsubOpen = subscribeWorkspaceOpenPanel((panelId) => {
+			if (panelId === "event-log") {
+				setIsEventLogOpen(true);
+			}
+		});
+		const unsubClose = subscribeWorkspaceClosePanel((panelId) => {
+			if (panelId === "event-log") {
+				setIsEventLogOpen(false);
+			}
+		});
+		const unsubReset = subscribeWorkspaceResetLayout(syncFromStorage);
+
+		return () => {
+			unsubOpen();
+			unsubClose();
+			unsubReset();
+		};
+	}, []);
 
 	return (
 		<Box sx={{
@@ -42,7 +72,6 @@ export function StatusBar({
 			userSelect: "none",
 			flexShrink: 0,
 		}}>
-			{/* 运行模式 */}
 			<Stack direction="row" spacing={0.5} alignItems="center">
 				<Box sx={{
 					width: 6, height: 6, borderRadius: "50%",
@@ -53,7 +82,6 @@ export function StatusBar({
 				</Typography>
 			</Stack>
 
-			{/* Stage 状态 */}
 			<Stack direction="row" spacing={0.5} alignItems="center">
 				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
 					{t("舞台", "Stage")}:
@@ -78,7 +106,6 @@ export function StatusBar({
 				/>
 			</Stack>
 
-			{/* 角色情绪 */}
 			<Stack direction="row" spacing={0.5} alignItems="center">
 				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
 					{emotion}
@@ -90,7 +117,6 @@ export function StatusBar({
 				)}
 			</Stack>
 
-			{/* 右侧弹性空间 */}
 			<Box sx={{ flex: 1 }} />
 
 			{functionalState.selectedTarget && (
@@ -108,44 +134,45 @@ export function StatusBar({
 				/>
 			)}
 
-			<Tooltip title={latestEntry?.payloadPreviewText ?? t("暂无事件", "No events yet")}>
-				<Typography
-					variant="caption"
-					color="text.secondary"
-					sx={{
-						fontSize: 11,
-						maxWidth: 320,
-						overflow: "hidden",
-						textOverflow: "ellipsis",
-						whiteSpace: "nowrap",
-					}}
-				>
-					{latestEntry
-						? `${t("最近事件", "Latest")}: ${latestEntry.summary}`
-						: (functionalState.activeTaskId
-							? t("托管执行中", "Delegated execution in progress")
-							: t("陪伴待机中", "Companion standing by"))}
-				</Typography>
-			</Tooltip>
-
-			<Tooltip title={eventLogOpen ? t("关闭事件日志", "Hide event log") : t("打开事件日志", "Show event log")}>
+			<Tooltip title={isEventLogOpen ? t("关闭日志", "Hide Log") : t("打开日志", "Show Log")}>
 				<IconButton
 					size="small"
-					onClick={onToggleEventLog}
+					onClick={() => {
+						if (isEventLogOpen) {
+							setIsEventLogOpen(false);
+							requestCloseWorkspacePanel("event-log");
+						} else {
+							setIsEventLogOpen(true);
+							requestOpenWorkspacePanel("event-log");
+						}
+					}}
 					sx={{
-						p: 0.25,
-						color: eventLogOpen ? "primary.main" : "text.secondary",
+						color: isEventLogOpen ? "primary.main" : "text.secondary",
+						p: 0.5,
 					}}
 				>
-					<TerminalIcon sx={{ fontSize: 16 }} />
+					<TerminalIcon sx={{ fontSize: 15 }} />
 				</IconButton>
 			</Tooltip>
-			<Chip
-				label={t("日志", "Logs")}
-				size="small"
-				variant={eventLogOpen ? "filled" : "outlined"}
-				sx={{ height: 18, fontSize: 10, "& .MuiChip-label": { px: 0.75 } }}
-			/>
+
+			<Typography
+				variant="caption"
+				color="text.secondary"
+				sx={{
+					fontSize: 11,
+					maxWidth: 320,
+					overflow: "hidden",
+					textOverflow: "ellipsis",
+					whiteSpace: "nowrap",
+				}}
+				title={latestEntry?.payloadPreviewText ?? t("暂无事件", "No events yet")}
+			>
+				{latestEntry
+					? `${t("最近事件", "Latest")}: ${latestEntry.summary}`
+					: (functionalState.activeTaskId
+						? t("托管执行中", "Delegated execution in progress")
+						: t("陪伴待机中", "Companion standing by"))}
+			</Typography>
 		</Box>
 	);
 }

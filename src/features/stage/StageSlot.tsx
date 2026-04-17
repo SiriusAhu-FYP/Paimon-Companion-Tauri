@@ -44,7 +44,7 @@ export function StageSlot({ visible, mode, displayMode, onRectChange }: StageSlo
 	}, [reportRect]);
 
 	const isDocked = mode === "docked";
-	const isClean = displayMode === "clean";
+	const isStatic = displayMode === "static";
 
 	return (
 		<Box
@@ -55,7 +55,7 @@ export function StageSlot({ visible, mode, displayMode, onRectChange }: StageSlo
 				alignItems: "center",
 				justifyContent: "center",
 				bgcolor: "background.paper",
-				border: isDocked && visible && isClean ? "none" : isDocked && visible ? "1px solid" : "1px dashed",
+				border: isDocked && visible && isStatic ? "none" : isDocked && visible ? "1px solid" : "1px dashed",
 				borderColor: isDocked && visible ? "primary.main" : "secondary.main",
 				borderRadius: 0,
 				transition: "border-color 0.2s, background 0.2s",

@@ -73,7 +73,6 @@ export function ControlPanel() {
 	const currentProfileName = selectedId === "__manual__"
 		? t("手动人设", "Manual Persona")
 		: profiles.find((profile) => profile.id === selectedId)?.name ?? t("手动人设", "Manual Persona");
-
 	return (
 		<PanelRoot title={t("陪伴面板", "Companion Panel")}>
 			<PanelCard>

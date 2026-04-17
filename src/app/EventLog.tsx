@@ -6,6 +6,31 @@ const DEBUG_VISIBILITY_KEY = "paimon:event-console:show-debug";
 const ENTRY_ROW_HEIGHT = 70;
 const ENTRY_OVERSCAN = 10;
 
+function translateCategoryLabel(category: string, t: (zh: string, en: string) => string): string {
+	switch (category) {
+		case "系统":
+			return t("系统", "System");
+		case "性能":
+			return t("性能", "Performance");
+		case "功能":
+			return t("功能", "Functional");
+		case "调试":
+			return t("调试", "Debug");
+		case "角色":
+			return t("角色", "Character");
+		case "语音":
+			return t("语音", "Voice");
+		case "LLM":
+			return "LLM";
+		case "MCP":
+			return "MCP";
+		case "其他":
+			return t("其他", "Other");
+		default:
+			return category;
+	}
+}
+
 async function copyText(text: string) {
 	if (navigator.clipboard?.writeText) {
 		await navigator.clipboard.writeText(text);
@@ -49,8 +74,9 @@ const EventListItem = memo(function EventListItem(props: {
 	selected: boolean;
 	style: CSSProperties;
 	onSelect: (key: string) => void;
+	t: (zh: string, en: string) => string;
 }) {
-	const { entry, selected, style, onSelect } = props;
+	const { entry, selected, style, onSelect, t } = props;
 	return (
 		<button
 			className={`event-log-entry${selected ? " active" : ""}${entry.severity !== "info" ? ` ${entry.severity}` : ""}`}
@@ -59,7 +85,7 @@ const EventListItem = memo(function EventListItem(props: {
 		>
 			<span className="event-log-time">{entry.timestampLabel}</span>
 			<span className="event-log-category" style={{ "--event-color": entry.color } as CSSProperties}>
-				{entry.category}
+				{translateCategoryLabel(entry.category, t)}
 			</span>
 			<div className="event-log-body">
 				<div className="event-log-main">
@@ -227,7 +253,7 @@ export function EventLog() {
 							}}
 						>
 							{severity === "info"
-								? t("信息", "Info")
+								? "INFO"
 								: severity === "warn"
 									? "WARN"
 									: "ERROR"}
@@ -257,7 +283,7 @@ export function EventLog() {
 									);
 								}}
 							>
-								{name}
+								{translateCategoryLabel(name, t)}
 							</button>
 						))}
 					<button
@@ -293,6 +319,7 @@ export function EventLog() {
 									entry={entry}
 									selected={selectedEntry?.key === entry.key}
 									onSelect={setSelectedKey}
+									t={t}
 									style={{
 										position: "absolute",
 										top: (visibleStart + index) * ENTRY_ROW_HEIGHT,
