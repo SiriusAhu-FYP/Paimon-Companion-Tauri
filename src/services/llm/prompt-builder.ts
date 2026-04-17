@@ -1,4 +1,4 @@
-import type { AffectState, CharacterProfile } from "@/types";
+import type { AffectState, CharacterProfile, CompanionModeState } from "@/types";
 import type { BehaviorConstraintsConfig } from "@/services/config/types";
 import type { ChatMessage } from "./types";
 import type { UserInputSource } from "@/services/affect-state";
@@ -7,8 +7,10 @@ import { buildAffectPromptSummary } from "@/services/affect-state";
 export interface PromptContext {
 	characterProfile: CharacterProfile | null;
 	affectState: AffectState;
+	companionModeState: CompanionModeState;
 	knowledgeContext: string;
 	companionRuntimeContext: string;
+	delegationMemoryContext: string;
 	recentInteractionContext: string;
 	inputSource?: UserInputSource;
 	customPersona: string;
@@ -80,6 +82,14 @@ export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 			"除非确实需要执行动作，否则仍应优先给出自然、简洁、可朗读的回复。",
 		].join("\n"),
 	);
+	sections.push(
+		[
+			"【当前交互模式】",
+			`当前系统模式：${ctx.companionModeState.mode}`,
+			`用户偏好模式：${ctx.companionModeState.preferredMode}`,
+			`最近模式切换原因：${ctx.companionModeState.lastReason}`,
+		].join("\n"),
+	);
 
 	if (ctx.behaviorConstraints) {
 		const bcSection = buildBehaviorConstraintsSection(ctx.behaviorConstraints);
@@ -112,6 +122,11 @@ export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 	const companionRuntime = truncateCompanionRuntime(ctx.companionRuntimeContext ?? "");
 	if (companionRuntime) {
 		sections.push(`【最近游戏时序观察】\n${companionRuntime}`);
+	}
+
+	const delegationMemory = truncateCompanionRuntime(ctx.delegationMemoryContext ?? "");
+	if (delegationMemory) {
+		sections.push(`【最近托管执行记录】\n${delegationMemory}`);
 	}
 
 	sections.push(`【当前情感与表达引导】\n${buildAffectPromptSummary(ctx.affectState, {
@@ -149,10 +164,13 @@ export function summarizePromptContext(ctx: PromptContext): Record<string, unkno
 		affectEmotion: ctx.affectState.presentationEmotion,
 		affectIntensity: ctx.affectState.intensity,
 		affectSource: ctx.affectState.lastSource,
+		mode: ctx.companionModeState.mode,
+		preferredMode: ctx.companionModeState.preferredMode,
 		recentInteractionLen: (ctx.recentInteractionContext ?? "").length,
 		inputSource: ctx.inputSource ?? "manual",
 		customPersonaLen: (ctx.customPersona ?? "").length,
 		companionRuntimeLen: (ctx.companionRuntimeContext ?? "").length,
+		delegationMemoryLen: (ctx.delegationMemoryContext ?? "").length,
 		knowledgeLen: (ctx.knowledgeContext ?? "").length,
 		behaviorConstraintsEnabled: ctx.behaviorConstraints?.enabled ?? false,
 	};

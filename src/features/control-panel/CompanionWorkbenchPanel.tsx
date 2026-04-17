@@ -6,7 +6,7 @@ import {
 	TextField,
 	Typography,
 } from "@mui/material";
-import { useAffectState, useCharacter, useDebugCaptureState, useProactiveState } from "@/hooks";
+import { useAffectState, useCharacter, useCompanionMode, useDebugCaptureState, useDelegationMemory, useProactiveState } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { useI18n } from "@/contexts/I18nProvider";
 import { getServices } from "@/services";
@@ -18,6 +18,8 @@ export function CompanionWorkbenchPanel() {
 	const { t } = useI18n();
 	const { emotion, emotionReason, emotionSource, isSpeaking } = useCharacter();
 	const affect = useAffectState();
+	const companionMode = useCompanionMode();
+	const delegationMemory = useDelegationMemory();
 	const proactive = useProactiveState();
 	const debugCapture = useDebugCaptureState();
 	const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
@@ -185,7 +187,8 @@ export function CompanionWorkbenchPanel() {
 					{t("Proactive Debug", "Proactive Debug")}
 				</Typography>
 				<Stack spacing={0.25}>
-					<Typography variant="body2">{t("内部模式", "Internal Mode")}：{proactive.mode}</Typography>
+					<Typography variant="body2">{t("当前模式", "Current Mode")}：{companionMode.mode}</Typography>
+					<Typography variant="body2">{t("用户偏好", "Preferred Mode")}：{companionMode.preferredMode}</Typography>
 					<Typography variant="body2">{t("系统忙碌", "System Busy")}：{proactive.isBusy ? t("是", "Yes") : t("否", "No")}</Typography>
 					<Typography variant="body2">{t("待处理来源", "Pending Source")}：{proactive.pendingSource ?? t("无", "None")}</Typography>
 					<Typography variant="body2">{t("待处理预览", "Pending Preview")}：{proactive.pendingPreview ?? t("无", "None")}</Typography>
@@ -193,6 +196,26 @@ export function CompanionWorkbenchPanel() {
 					<Typography variant="body2">{t("最近跳过原因", "Latest Skip Reason")}：{proactive.lastSkipReason ?? t("无", "None")}</Typography>
 					<Typography variant="body2">{t("最近主动来源", "Latest Proactive Source")}：{proactive.lastEmittedSource ?? t("无", "None")}</Typography>
 				</Stack>
+			</PanelCard>
+
+			<Divider />
+
+			<PanelCard>
+				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
+					{t("Delegation Memory", "Delegation Memory")}
+				</Typography>
+				{delegationMemory.latestRecord ? (
+					<Stack spacing={0.35}>
+						<Typography variant="body2">{t("最近游戏", "Latest Game")}：{delegationMemory.latestRecord.sourceGame ?? t("无", "None")}</Typography>
+						<Typography variant="body2">{t("验证结果", "Verification Result")}：{delegationMemory.latestRecord.verificationResult.success ? t("成功", "Success") : t("失败", "Failed")}</Typography>
+						<Typography variant="body2">{t("执行总结", "Execution Summary")}：{delegationMemory.latestRecord.executionSummary}</Typography>
+						<Typography variant="body2">{t("下一步线索", "Next Step Hint")}：{delegationMemory.latestRecord.nextStepHint ?? t("无", "None")}</Typography>
+						<Typography variant="body2">{t("最近跟进", "Latest Follow-up")}：{delegationMemory.latestRecord.followUpSummary || t("无", "None")}</Typography>
+						<Typography variant="body2">{t("最近条数", "Recent Count")}：{delegationMemory.recentRecords.length}</Typography>
+					</Stack>
+				) : (
+					<Typography variant="body2">{t("尚无托管记录", "No delegated records yet")}</Typography>
+				)}
 			</PanelCard>
 
 			<Divider />

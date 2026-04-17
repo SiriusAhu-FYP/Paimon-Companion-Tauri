@@ -2,8 +2,10 @@ import type { EventBus } from "@/services/event-bus";
 import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { LLMService } from "@/services/llm";
 import type { PipelineService } from "@/services/pipeline";
+import type { CompanionModeService } from "@/services/companion-mode";
+import type { DelegationMemoryService } from "@/services/delegation-memory";
 import { createLogger } from "@/services/logger";
-import type { EventMap, ProactiveState, ProactiveTriggerSource } from "@/types";
+import type { DelegatedExecutionRecord, EventMap, ProactiveState, ProactiveTriggerSource } from "@/types";
 import { PROACTIVE_NO_REPLY_SENTINEL } from "./constants";
 
 const log = createLogger("proactive-companion");
@@ -68,6 +70,7 @@ export class ProactiveCompanionService {
 	private llm: LLMService;
 	private pipeline: PipelineService;
 	private companionRuntime: CompanionRuntimeService;
+	private delegationMemory: DelegationMemoryService;
 	private state: ProactiveState = makeInitialState();
 	private pendingCandidate: ProactiveCandidate | null = null;
 	private llmBusy = false;
@@ -84,18 +87,24 @@ export class ProactiveCompanionService {
 	private firstRuntimeSummaryPendingEntrance = true;
 	private companionRuntimeRunning = false;
 	private companionRuntimeTargetTitle: string | null = null;
+	private latestDelegatedRecord: DelegatedExecutionRecord | null = null;
 
 	constructor(deps: {
 		bus: EventBus;
 		llm: LLMService;
 		pipeline: PipelineService;
 		companionRuntime: CompanionRuntimeService;
+		companionMode: CompanionModeService;
+		delegationMemory: DelegationMemoryService;
 		runtimeSummarySilenceSeconds?: number;
 	}) {
 		this.bus = deps.bus;
 		this.llm = deps.llm;
 		this.pipeline = deps.pipeline;
 		this.companionRuntime = deps.companionRuntime;
+		this.delegationMemory = deps.delegationMemory;
+		this.state.mode = deps.companionMode.getState().mode;
+		this.latestDelegatedRecord = deps.delegationMemory.getLatestRecord();
 		this.setRuntimeSummarySilenceSeconds(deps.runtimeSummarySilenceSeconds);
 
 		this.bus.on("companion-runtime:summary-complete", (payload) => {
@@ -112,6 +121,14 @@ export class ProactiveCompanionService {
 		});
 		this.bus.on("companion-runtime:state-change", (payload) => {
 			this.handleCompanionRuntimeStateChange(payload);
+		});
+		this.bus.on("companion:mode-change", (payload) => {
+			this.state.mode = payload.mode;
+			this.emitStateChange(this.state.lastDecision, null, payload.reason);
+		});
+		this.bus.on("delegation-memory:state-change", (payload) => {
+			this.latestDelegatedRecord = payload.state.latestRecord;
+			this.emitStateChange(this.state.lastDecision, null, null);
 		});
 		this.bus.on("llm:request-start", () => {
 			this.llmBusy = true;
@@ -142,12 +159,8 @@ export class ProactiveCompanionService {
 			this.syncBusyState();
 			void this.maybeDrainPending();
 		});
-		this.bus.on("unified:run-start", () => {
-			this.setMode("delegated", "unified:run-start");
-		});
 		this.bus.on("unified:run-complete", () => {
 			this.delegatedTaskCooldownUntil = Date.now() + DELEGATED_TASK_COOLDOWN_MS;
-			this.setMode("companion", "unified:run-complete");
 			void this.maybeDrainPending();
 		});
 	}
@@ -311,7 +324,10 @@ export class ProactiveCompanionService {
 		if ((candidate.source === "game2048-result" || candidate.source === "sokoban-result") && this.state.mode === "delegated") {
 			return "delegated-follow-up-active";
 		}
-		if ((candidate.source === "game2048-result" || candidate.source === "sokoban-result") && Date.now() < this.delegatedTaskCooldownUntil) {
+		if (
+			(candidate.source === "game2048-result" || candidate.source === "sokoban-result")
+			&& (Date.now() < this.delegatedTaskCooldownUntil || this.hasRecentDelegatedVerification())
+		) {
 			return "delegated-follow-up-cooldown";
 		}
 		const sinceLastSpeech = Date.now() - this.lastSpokenAt;
@@ -474,6 +490,16 @@ export class ProactiveCompanionService {
 
 	private getRelatedContextFacts(source: ProactiveTriggerSource): string[] {
 		const parts: string[] = [];
+		if (this.latestDelegatedRecord && Date.now() - this.latestDelegatedRecord.createdAt <= CROSS_CONTEXT_WINDOW_MS) {
+			parts.push([
+				"【最近托管执行记录】",
+				`游戏：${this.latestDelegatedRecord.sourceGame ?? "none"}`,
+				`模式：${this.latestDelegatedRecord.mode}`,
+				`结果：${this.latestDelegatedRecord.executionSummary}`,
+				`验证：${this.latestDelegatedRecord.verificationResult.success ? "成功" : "失败"}`,
+				this.latestDelegatedRecord.nextStepHint ? `下一步线索：${this.latestDelegatedRecord.nextStepHint}` : "",
+			].filter(Boolean).join("\n"));
+		}
 		if ((source === "runtime-summary" || source === "system-error") && this.latestTaskResult && Date.now() - this.latestTaskResult.createdAt <= CROSS_CONTEXT_WINDOW_MS) {
 			parts.push([
 				"【最近任务结果】",
@@ -497,20 +523,6 @@ export class ProactiveCompanionService {
 		return parts;
 	}
 
-	private setMode(mode: ProactiveState["mode"], reason: string) {
-		if (this.state.mode === mode) {
-			return;
-		}
-		const previous = this.state.mode;
-		this.state.mode = mode;
-		this.bus.emit("companion:mode-change", {
-			mode,
-			previous,
-			reason,
-		});
-		this.emitStateChange(this.state.lastDecision, null, reason);
-	}
-
 	private resetRuntimeSession(reason: string) {
 		this.pendingCandidate = null;
 		this.delegatedTaskCooldownUntil = 0;
@@ -519,6 +531,7 @@ export class ProactiveCompanionService {
 		this.lastRuntimeSummarySeen.clear();
 		this.latestRuntimeSummary = null;
 		this.latestTaskResult = null;
+		this.latestDelegatedRecord = this.delegationMemory.getLatestRecord();
 		this.firstRuntimeSummaryPendingEntrance = true;
 		this.state.pendingSource = null;
 		this.state.pendingPriority = null;
@@ -543,6 +556,13 @@ export class ProactiveCompanionService {
 
 	private isBusy(): boolean {
 		return this.llmBusy || this.ttsBusy || this.voiceBusy || this.processingCandidate;
+	}
+
+	private hasRecentDelegatedVerification(): boolean {
+		if (!this.latestDelegatedRecord) {
+			return false;
+		}
+		return (Date.now() - this.latestDelegatedRecord.createdAt) < DELEGATED_TASK_COOLDOWN_MS;
 	}
 
 	private syncBusyState() {

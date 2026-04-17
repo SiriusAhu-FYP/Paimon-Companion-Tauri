@@ -1,4 +1,4 @@
-export type CompanionInteractionMode = "companion" | "delegated";
+import type { CompanionInteractionMode } from "./companion-mode";
 
 export type ProactiveTriggerSource =
 	| "runtime-summary"

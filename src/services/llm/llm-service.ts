@@ -5,6 +5,8 @@ import type { CharacterService } from "@/services/character";
 import type { KnowledgeService } from "@/services/knowledge";
 import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { DebugCaptureService } from "@/services/debug-capture";
+import type { CompanionModeService } from "@/services/companion-mode";
+import type { DelegationMemoryService } from "@/services/delegation-memory";
 import { getConfig } from "@/services/config";
 import type { ILLMService, ChatMessage } from "./types";
 import { buildSystemMessage, summarizePromptContext } from "./prompt-builder";
@@ -27,6 +29,8 @@ export class LLMService {
 	private character: CharacterService;
 	private knowledge: KnowledgeService;
 	private companionRuntime: CompanionRuntimeService;
+	private companionMode: CompanionModeService;
+	private delegationMemory: DelegationMemoryService;
 	private debugCapture?: DebugCaptureService;
 	private history: ChatMessage[] = [];
 	private processing = false;
@@ -39,6 +43,8 @@ export class LLMService {
 		character: CharacterService,
 		knowledge: KnowledgeService,
 		companionRuntime: CompanionRuntimeService,
+		companionMode: CompanionModeService,
+		delegationMemory: DelegationMemoryService,
 		debugCapture?: DebugCaptureService,
 	) {
 		this.bus = bus;
@@ -48,6 +54,8 @@ export class LLMService {
 		this.character = character;
 		this.knowledge = knowledge;
 		this.companionRuntime = companionRuntime;
+		this.companionMode = companionMode;
+		this.delegationMemory = delegationMemory;
 		this.debugCapture = debugCapture;
 	}
 
@@ -221,6 +229,7 @@ export class LLMService {
 		userText: string,
 		options?: {
 			companionRuntimeContext?: string;
+			delegationMemoryContext?: string;
 			knowledgeContext?: string;
 			traceId?: string;
 			source?: "companion-reply" | "proactive-reply";
@@ -235,8 +244,10 @@ export class LLMService {
 		const promptCtx = {
 			characterProfile: this.character.getProfile(),
 			affectState: this.affect.getState(),
+			companionModeState: this.companionMode.getState(),
 			knowledgeContext: options?.knowledgeContext ?? "",
 			companionRuntimeContext: options?.companionRuntimeContext ?? this.companionRuntime.getPromptContext(),
+			delegationMemoryContext: options?.delegationMemoryContext ?? this.delegationMemory.buildPromptContext(),
 			recentInteractionContext: summarizeRecentInteraction(this.history),
 			inputSource: "system" as const,
 			customPersona: appCharacter.customPersona,
@@ -253,6 +264,7 @@ export class LLMService {
 			userText,
 			messages,
 			companionRuntimeContextLength: promptCtx.companionRuntimeContext.length,
+			delegationMemoryContextLength: promptCtx.delegationMemoryContext.length,
 			knowledgeContextLength: promptCtx.knowledgeContext.length,
 		});
 		this.bus.emit("llm:request-start", {
@@ -261,6 +273,7 @@ export class LLMService {
 			traceId: options?.traceId,
 			companionRuntimeContextUsed: promptCtx.companionRuntimeContext.length > 0,
 			companionRuntimeContextLength: promptCtx.companionRuntimeContext.length,
+			delegationMemoryContextLength: promptCtx.delegationMemoryContext.length,
 			knowledgeContextLength: promptCtx.knowledgeContext.length,
 		});
 
@@ -306,6 +319,7 @@ export class LLMService {
 		const companionRuntimeTarget = this.companionRuntime.getState().target?.title ?? null;
 
 		const appCharacter = getConfig().character;
+		const delegationMemoryContext = this.delegationMemory.buildPromptContext();
 
 		// Phase 3.5：语义检索 + liveContext 格式化（带超时保护，不阻塞主 LLM 流程）
 		let knowledgeContext = "";
@@ -334,14 +348,17 @@ export class LLMService {
 			companionRuntimeContextUsed: companionRuntimeContext.length > 0,
 			companionRuntimeTarget,
 			companionRuntimeContextLength: companionRuntimeContext.length,
+			delegationMemoryContextLength: delegationMemoryContext.length,
 			knowledgeContextLength: knowledgeContext.length,
 		});
 
 		const promptCtx = {
 			characterProfile: this.character.getProfile(),
 			affectState: this.affect.getState(),
+			companionModeState: this.companionMode.getState(),
 			knowledgeContext,
 			companionRuntimeContext,
+			delegationMemoryContext,
 			recentInteractionContext: summarizeRecentInteraction(this.history),
 			inputSource,
 			customPersona: appCharacter.customPersona,
@@ -358,6 +375,7 @@ export class LLMService {
 			userText,
 			messages,
 			companionRuntimeContextLength: companionRuntimeContext.length,
+			delegationMemoryContextLength: delegationMemoryContext.length,
 			knowledgeContextLength: knowledgeContext.length,
 		});
 

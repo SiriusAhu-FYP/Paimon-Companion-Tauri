@@ -2,6 +2,7 @@ import { Alert, Button, FormControlLabel, Stack, Switch, TextField } from "@mui/
 import { useState } from "react";
 import type { UnifiedRuntimeState } from "@/types";
 import { useI18n } from "@/contexts/I18nProvider";
+import { useCompanionMode } from "@/hooks";
 import { InfoLine, PanelCard, SectionHeader, SectionStatusChip } from "./panel-shell";
 
 export function UnifiedRunSection(props: {
@@ -13,6 +14,7 @@ export function UnifiedRunSection(props: {
 	busy: boolean;
 }) {
 	const { t } = useI18n();
+	const companionMode = useCompanionMode();
 	const [voiceText, setVoiceText] = useState("帮我看一下下一步");
 	const [error, setError] = useState<string | null>(null);
 
@@ -103,6 +105,7 @@ export function UnifiedRunSection(props: {
 			)}
 
 			<InfoLine>{t("阶段", "Phase")}：{props.unifiedState.phase}</InfoLine>
+			<InfoLine>{t("当前模式", "Current Mode")}：{companionMode.mode}</InfoLine>
 			<InfoLine>{t("最近语音", "Latest Voice")}：{props.unifiedState.lastVoiceInput ?? "—"}</InfoLine>
 			<InfoLine>{t("最近命令", "Latest Command")}：{props.unifiedState.lastCommand ?? "—"}</InfoLine>
 			<InfoLine>{t("最近播报", "Latest Speech")}：{props.unifiedState.lastCompanionText ?? "—"}</InfoLine>
