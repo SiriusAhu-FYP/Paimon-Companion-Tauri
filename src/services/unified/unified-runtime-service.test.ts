@@ -67,9 +67,15 @@ describe("UnifiedRuntimeService affect application", () => {
 						boardChanged: gameResult.boardChanged,
 						companionText: gameResult.companionText,
 						analysis: {
+							source: "planner",
+							plannerSummary: "planner ranked move_left first",
 							reflection: gameResult.reflection ?? "",
 							reasoning: gameResult.reasoning ?? "",
+							preferredMoves: ["move_left", "move_up", "move_right", "move_down"],
 						},
+						attempts: gameResult.boardChanged
+							? [{ move: gameResult.selectedMove ?? "move_up", changed: true, changeRatio: 0.12 }]
+							: [{ move: "move_up", changed: false, changeRatio: 0 }],
 					}),
 			} as never,
 			sokoban: {} as never,
@@ -211,6 +217,10 @@ describe("UnifiedRuntimeService affect application", () => {
 			sourceGame: "2048",
 			trigger: "manual",
 			requestText: "上一轮",
+			analysisSource: "planner",
+			decisionSummary: "planner ranked move_up first",
+			plannedActions: ["move_up", "move_left", "move_right", "move_down"],
+			attemptedActions: ["move_up"],
 			selectedAction: "move_up",
 			executionSummary: "previous success",
 			verificationResult: {
@@ -240,6 +250,10 @@ describe("UnifiedRuntimeService affect application", () => {
 			sourceGame: "2048",
 			trigger: "manual",
 			requestText: "帮我走一步",
+			analysisSource: "planner",
+			decisionSummary: "planner ranked move_left first",
+			plannedActions: ["move_left", "move_up", "move_right", "move_down"],
+			attemptedActions: ["move_left"],
 			selectedAction: "move_left",
 			executionSummary: "board changed",
 			verificationResult: {

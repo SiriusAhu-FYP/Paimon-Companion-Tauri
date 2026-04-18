@@ -201,6 +201,10 @@ export function ControlPanel() {
 							/>
 						</Stack>
 						<Typography variant="body2">{t("执行结果", "Execution Summary")}：{latestDelegatedRecord.executionSummary}</Typography>
+						<Typography variant="body2">{t("决策来源", "Decision Source")}：{latestDelegatedRecord.analysisSource ?? t("无", "None")}</Typography>
+						<Typography variant="body2">{t("决策摘要", "Decision Summary")}：{latestDelegatedRecord.decisionSummary ?? t("无", "None")}</Typography>
+						<Typography variant="body2">{t("计划动作", "Planned Actions")}：{latestDelegatedRecord.plannedActions.length ? latestDelegatedRecord.plannedActions.join(" -> ") : t("无", "None")}</Typography>
+						<Typography variant="body2">{t("尝试动作", "Attempted Actions")}：{latestDelegatedRecord.attemptedActions.length ? latestDelegatedRecord.attemptedActions.join(" -> ") : t("无", "None")}</Typography>
 						<Typography variant="body2">{t("下一步线索", "Next Step Hint")}：{latestDelegatedRecord.nextStepHint ?? t("无", "None")}</Typography>
 						{latestDelegatedRecord.verificationResult.error ? (
 							<Paper variant="outlined" sx={{ p: 0.75, bgcolor: "background.default" }}>

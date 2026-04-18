@@ -209,6 +209,10 @@ export function CompanionWorkbenchPanel() {
 						<Typography variant="body2">{t("最近游戏", "Latest Game")}：{delegationMemory.latestRecord.sourceGame ?? t("无", "None")}</Typography>
 						<Typography variant="body2">{t("验证结果", "Verification Result")}：{delegationMemory.latestRecord.verificationResult.success ? t("成功", "Success") : t("失败", "Failed")}</Typography>
 						<Typography variant="body2">{t("执行总结", "Execution Summary")}：{delegationMemory.latestRecord.executionSummary}</Typography>
+						<Typography variant="body2">{t("决策来源", "Decision Source")}：{delegationMemory.latestRecord.analysisSource ?? t("无", "None")}</Typography>
+						<Typography variant="body2">{t("决策摘要", "Decision Summary")}：{delegationMemory.latestRecord.decisionSummary ?? t("无", "None")}</Typography>
+						<Typography variant="body2">{t("计划动作", "Planned Actions")}：{delegationMemory.latestRecord.plannedActions.length ? delegationMemory.latestRecord.plannedActions.join(" -> ") : t("无", "None")}</Typography>
+						<Typography variant="body2">{t("尝试动作", "Attempted Actions")}：{delegationMemory.latestRecord.attemptedActions.length ? delegationMemory.latestRecord.attemptedActions.join(" -> ") : t("无", "None")}</Typography>
 						<Typography variant="body2">{t("下一步线索", "Next Step Hint")}：{delegationMemory.latestRecord.nextStepHint ?? t("无", "None")}</Typography>
 						<Typography variant="body2">{t("最近跟进", "Latest Follow-up")}：{delegationMemory.latestRecord.followUpSummary || t("无", "None")}</Typography>
 						<Typography variant="body2">{t("最近条数", "Recent Count")}：{delegationMemory.recentRecords.length}</Typography>

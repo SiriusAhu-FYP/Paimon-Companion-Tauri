@@ -6,6 +6,8 @@ const MAX_RECORDS = 10;
 function cloneRecord(record: DelegatedExecutionRecord): DelegatedExecutionRecord {
 	return {
 		...record,
+		plannedActions: [...record.plannedActions],
+		attemptedActions: [...record.attemptedActions],
 		verificationResult: { ...record.verificationResult },
 	};
 }
@@ -83,6 +85,10 @@ export class DelegationMemoryService {
 				`game=${record.sourceGame ?? "none"}`,
 				`trigger=${record.trigger}`,
 				record.requestText ? `request=${record.requestText}` : "",
+				record.analysisSource ? `analysis=${record.analysisSource}` : "",
+				record.decisionSummary ? `decision=${record.decisionSummary}` : "",
+				record.plannedActions.length ? `planned=${record.plannedActions.join(" -> ")}` : "",
+				record.attemptedActions.length ? `attempted=${record.attemptedActions.join(" -> ")}` : "",
 				record.selectedAction ? `action=${record.selectedAction}` : "",
 				`summary=${record.executionSummary}`,
 				`verified=${record.verificationResult.success ? "success" : "failed"}`,

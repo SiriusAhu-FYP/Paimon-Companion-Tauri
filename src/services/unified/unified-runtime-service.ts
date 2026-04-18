@@ -177,6 +177,10 @@ export class UnifiedRuntimeService {
 					sourceGame: "2048",
 					trigger,
 					requestText,
+					analysisSource: result.analysis.source,
+					decisionSummary: result.analysis.plannerSummary ?? result.analysis.strategy,
+					plannedActions: [...result.analysis.preferredMoves],
+					attemptedActions: result.attempts.map((attempt) => attempt.move),
 					selectedAction: result.selectedMove,
 					executionSummary: result.summary,
 					verificationResult: {
@@ -218,6 +222,10 @@ export class UnifiedRuntimeService {
 					sourceGame: "sokoban",
 					trigger,
 					requestText,
+					analysisSource: result.analysis.source,
+					decisionSummary: result.analysis.solverSummary ?? result.analysis.strategy,
+					plannedActions: [...result.analysis.plannedMoves],
+					attemptedActions: result.attempts.map((attempt) => attempt.move),
 					selectedAction: result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null,
 					executionSummary: result.summary,
 					verificationResult: {
@@ -276,6 +284,10 @@ export class UnifiedRuntimeService {
 				sourceGame: run.gameId,
 				trigger,
 				requestText,
+				analysisSource: null,
+				decisionSummary: null,
+				plannedActions: [],
+				attemptedActions: [],
 				selectedAction: run.selectedAction,
 				executionSummary: run.summary,
 				verificationResult: {
