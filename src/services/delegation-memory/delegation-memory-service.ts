@@ -95,6 +95,35 @@ export class DelegationMemoryService {
 		}).join("\n");
 	}
 
+	buildFocusedPromptContext(input: {
+		currentRecordId?: string | null;
+		sourceGame?: string | null;
+	}): string {
+		const sections: string[] = [];
+		const currentRecord = input.currentRecordId
+			? this.state.recentRecords.find((record) => record.id === input.currentRecordId) ?? null
+			: this.state.latestRecord;
+		const sameGameLatestSuccess = input.sourceGame
+			? this.state.recentRecords.find((record) => record.sourceGame === input.sourceGame && record.verificationResult.success)
+			: null;
+		const nextStepHints = this.state.recentRecords
+			.filter((record) => record.nextStepHint)
+			.slice(0, 3)
+			.map((record, index) => `#${index + 1} ${record.sourceGame ?? "none"} | ${record.nextStepHint}`);
+
+		if (currentRecord) {
+			sections.push(`【本轮托管记录】\n${this.buildPromptContext([currentRecord])}`);
+		}
+		if (sameGameLatestSuccess && sameGameLatestSuccess.id !== currentRecord?.id) {
+			sections.push(`【同游戏最近成功记录】\n${this.buildPromptContext([sameGameLatestSuccess])}`);
+		}
+		if (nextStepHints.length) {
+			sections.push(`【最近下一步提示】\n${nextStepHints.join("\n")}`);
+		}
+
+		return sections.join("\n\n");
+	}
+
 	private emitState() {
 		this.bus.emit("delegation-memory:state-change", { state: this.getState() });
 	}

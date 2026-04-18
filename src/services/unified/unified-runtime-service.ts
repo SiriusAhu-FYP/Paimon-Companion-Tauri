@@ -427,9 +427,15 @@ export class UnifiedRuntimeService {
 				"要求：",
 				"1. 明确说明这是建议，不是已经执行的动作。",
 				"2. 不要假装自己已经移动了棋盘或推了箱子。",
+				"3. 如果最近托管记录里已经有明确验证结果或下一步提示，优先沿用这些 grounded 线索，不要重新发明一套无根据建议。",
 				`【目标游戏】${targetGame}`,
 				`【用户请求】${requestText}`,
-			].join("\n"), { knowledgeContext: "" });
+			].join("\n"), {
+				knowledgeContext: "",
+				delegationMemoryContext: this.delegationMemory.buildFocusedPromptContext({
+					sourceGame: targetGame,
+				}),
+			});
 
 			const finalReply = reply || "我先帮你看了一下，但这轮还没拿到足够明确的建议。";
 			this.state.lastCompanionText = finalReply;
@@ -486,11 +492,15 @@ export class UnifiedRuntimeService {
 					"2. 语气保持陪伴感和轻度支持感，但不要夸张。",
 					"3. 不要暴露实现细节，如 API、模型、截图链路。",
 					"4. 如果本轮没有明显进展，就直接说没有明显进展，并给出很短的下一步建议。",
+					"5. 优先使用本轮验证结果、同游戏最近成功记录和最近下一步提示，不要只复述笼统结果。",
 					`【记录引用】${input.delegationRecord.id}`,
 				].filter(Boolean).join("\n"),
 				{
 					knowledgeContext: "",
-					delegationMemoryContext: this.delegationMemory.buildPromptContext([input.delegationRecord]),
+					delegationMemoryContext: this.delegationMemory.buildFocusedPromptContext({
+						currentRecordId: input.delegationRecord.id,
+						sourceGame: input.delegationRecord.sourceGame,
+					}),
 					traceId: input.traceId,
 				},
 			);

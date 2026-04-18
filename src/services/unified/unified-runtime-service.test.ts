@@ -34,6 +34,9 @@ describe("UnifiedRuntimeService affect application", () => {
 		const runtime = new RuntimeService(bus);
 		const companionMode = new CompanionModeService(bus);
 		const delegationMemory = new DelegationMemoryService(bus);
+		const llm = {
+			generateCompanionReply: vi.fn().mockResolvedValue(options?.reply ?? "grounded reply"),
+		};
 		const gameResult = options?.gameResult ?? {
 			summary: "board changed",
 			boardChanged: true,
@@ -70,9 +73,7 @@ describe("UnifiedRuntimeService affect application", () => {
 					}),
 			} as never,
 			sokoban: {} as never,
-			llm: {
-				generateCompanionReply: vi.fn().mockResolvedValue(options?.reply ?? "grounded reply"),
-			} as never,
+			llm: llm as never,
 			pipeline: {
 				speakText: vi.fn().mockResolvedValue(undefined),
 				run: vi.fn(),
@@ -81,7 +82,7 @@ describe("UnifiedRuntimeService affect application", () => {
 			delegationMemory,
 		});
 
-		return { bus, affect, runtime, companionMode, delegationMemory, service };
+		return { bus, affect, runtime, companionMode, delegationMemory, llm, service };
 	}
 
 	it("keeps using the MCP companion emotion contract", async () => {
@@ -191,5 +192,72 @@ describe("UnifiedRuntimeService affect application", () => {
 			},
 			followUpSummary: "这轮统一运行没成功，我先停下来，等你检查目标窗口或当前画面。",
 		});
+	});
+
+	it("builds grounded follow-up from focused delegation memory context", async () => {
+		const { delegationMemory, llm, service } = createService({
+			gameResult: {
+				summary: "board changed",
+				boardChanged: true,
+				selectedMove: "move_left",
+				companionText: "fallback reply",
+				reflection: "继续保持左上角稳定。",
+				reasoning: "向左可以合并并保留更多空格。",
+			},
+		});
+		delegationMemory.appendRecord({
+			createdAt: Date.now() - 1000,
+			mode: "delegated",
+			sourceGame: "2048",
+			trigger: "manual",
+			requestText: "上一轮",
+			selectedAction: "move_up",
+			executionSummary: "previous success",
+			verificationResult: {
+				success: true,
+				boardChanged: true,
+				error: null,
+			},
+			followUpSummary: "上一轮成功了。",
+			emotion: "happy",
+			nextStepHint: "继续优先保持左上角稳定。",
+			traceId: "previous-trace",
+		});
+
+		await service.runUnifiedGameStep("manual", "帮我走一步");
+
+		expect(llm.generateCompanionReply).toHaveBeenCalled();
+		const options = llm.generateCompanionReply.mock.calls[0]?.[1];
+		expect(options?.delegationMemoryContext).toContain("【本轮托管记录】");
+		expect(options?.delegationMemoryContext).toContain("【最近下一步提示】");
+	});
+
+	it("uses focused delegation memory when analyzing without acting", async () => {
+		const { delegationMemory, llm, service } = createService();
+		delegationMemory.appendRecord({
+			createdAt: Date.now(),
+			mode: "delegated",
+			sourceGame: "2048",
+			trigger: "manual",
+			requestText: "帮我走一步",
+			selectedAction: "move_left",
+			executionSummary: "board changed",
+			verificationResult: {
+				success: true,
+				boardChanged: true,
+				error: null,
+			},
+			followUpSummary: "这一步已经有效。",
+			emotion: "happy",
+			nextStepHint: "如果局面没变差，可以继续左移或上移。",
+			traceId: "trace-ctx",
+		});
+
+		await service.submitVoiceText("帮我看看下一步建议");
+
+		expect(llm.generateCompanionReply).toHaveBeenCalled();
+		const options = llm.generateCompanionReply.mock.calls[0]?.[1];
+		expect(options?.delegationMemoryContext).toContain("【本轮托管记录】");
+		expect(options?.delegationMemoryContext).toContain("如果局面没变差，可以继续左移或上移。");
 	});
 });
