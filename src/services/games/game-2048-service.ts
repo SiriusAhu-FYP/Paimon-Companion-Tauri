@@ -32,6 +32,7 @@ import {
 	countRepeatedFailures,
 } from "./decision-history";
 import { buildSharedGamePrompt } from "./game-prompt-template";
+import { rankGame2048Moves } from "./game-2048-planner";
 import { callLocalMcpToolJson } from "@/services/mcp/local-mcp-client";
 import type { SemanticActionExecutionResult } from "@/types";
 
@@ -253,15 +254,14 @@ export class Game2048Service {
 		const repeatedFailureHint = buildRepeatedFailureHint(this.state.decisionHistory[0]);
 
 		try {
-			const visionAnalysis = await this.requestVisionAnalysis(target, snapshot, previousMove, recentDecisionSummary, repeatedFailureHint);
-			return visionAnalysis;
+			return await this.requestStructuredBoardAnalysis(target, snapshot, previousMove, recentDecisionSummary, repeatedFailureHint);
 		} catch (err) {
 			log.warn("2048 vision analysis unavailable, falling back to heuristic", err);
 			return buildHeuristicAnalysis(previousMove, recentDecisionSummary, this.state.decisionHistory[0] ?? null);
 		}
 	}
 
-	private async requestVisionAnalysis(
+	private async requestStructuredBoardAnalysis(
 		target: FunctionalTarget,
 		snapshot: PerceptionSnapshot,
 		previousMove: Game2048Move | null,
@@ -277,21 +277,23 @@ export class Game2048Service {
 
 		const content = await requestOpenAICompatibleVision({
 			client,
-			userPrompt: buildVisionPrompt(target.title, previousMove, recentDecisionSummary, repeatedFailureHint),
+			userPrompt: buildStructuredBoardPrompt(target.title, previousMove, recentDecisionSummary, repeatedFailureHint),
 			imageDataUrl: snapshot.dataUrl,
 			maxTokens: 250,
 			temperature: 0.1,
 			jsonResponse: true,
 			timeoutMs: 30000,
 		});
-		const parsed = parseVisionResponse(content);
+		const parsed = parseStructuredBoardResponse(content);
+		const plannerResult = rankGame2048Moves(parsed.rows, previousMove);
 
 		return {
-			source: "vision-llm",
+			source: "planner",
 			reflection: parsed.reflection,
 			strategy: parsed.strategy,
-			reasoning: parsed.reasoning,
-			preferredMoves: parsed.preferredMoves,
+			reasoning: `${parsed.reasoning} Local planner selected ${plannerResult.bestMove ?? "no valid move"} from the parsed 4x4 grid.`,
+			preferredMoves: plannerResult.preferredMoves,
+			plannerSummary: plannerResult.summary,
 		};
 	}
 
@@ -322,7 +324,7 @@ function buildPendingAnalysis(): Game2048Analysis {
 	return {
 		source: "heuristic",
 		reflection: "Preparing the next 2048 step.",
-		strategy: "capture the board, choose a semantic move ordering, then verify the result",
+		strategy: "capture the board, parse a 4x4 grid, run a local move ranking heuristic, then verify the result",
 		reasoning: "The runtime is still capturing the baseline snapshot and analysis context.",
 		preferredMoves: [...DEFAULT_MOVE_ORDER],
 	};
@@ -356,10 +358,11 @@ function buildHeuristicAnalysis(
 			? `The last verified move was ${previousMoveLabel}, so test it first before falling back to the stable corner strategy.`
 			: "Without image reasoning, default to a conservative upper-left stacking strategy.",
 		preferredMoves,
+		plannerSummary: "heuristic fallback",
 	};
 }
 
-function buildVisionPrompt(
+function buildStructuredBoardPrompt(
 	targetTitle: string,
 	previousMove: Game2048Move | null,
 	recentDecisionSummary: string[],
@@ -389,52 +392,60 @@ function buildVisionPrompt(
 
 	return [
 		promptBody,
-		"Analyze the current screenshot and decide the next single-step priority order.",
-		"Return strict JSON with keys: reflection, strategy, reasoning, preferredMoves.",
+		"Analyze the current screenshot and convert the visible 2048 board into a strict 4x4 integer grid.",
+		"Return strict JSON with keys: reflection, strategy, reasoning, rows.",
 		"reflection should briefly explain what you learned from the recent decision history before acting again.",
-		`preferredMoves must be an array containing each of these action IDs exactly once, in priority order: ${DEFAULT_MOVE_ORDER.join(", ")}.`,
+		"rows must be a 4-element array, where each row is a 4-element array of non-negative integers. Use 0 for empty cells.",
+		"Do not include markdown fences, extra keys, or any move ordering.",
 	].join("\n\n");
 }
 
-function parseVisionResponse(content: string): {
+function parseStructuredBoardResponse(content: string): {
 	reflection: string;
 	strategy: string;
 	reasoning: string;
-	preferredMoves: Game2048Move[];
+	rows: number[][];
 } {
 	const jsonText = extractJsonObject(content);
 	const parsed = JSON.parse(jsonText) as {
 		reflection?: unknown;
 		strategy?: unknown;
 		reasoning?: unknown;
-		preferredMoves?: unknown;
+		rows?: unknown;
 	};
 
-	const preferredMoves = normalizeMoves(parsed.preferredMoves);
-	if (preferredMoves.length !== 4) {
-		throw new Error("vision analysis did not return a full move ordering");
+	const rows = normalizeRows(parsed.rows);
+	if (rows.length !== 4) {
+		throw new Error("vision analysis did not return a valid 4x4 board grid");
 	}
 
 	return {
 		reflection: typeof parsed.reflection === "string"
 			? parsed.reflection
 			: "No explicit reflection was returned. Use the current screenshot and recent history conservatively.",
-		strategy: typeof parsed.strategy === "string" ? parsed.strategy : "vision-guided 2048 move selection",
-		reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "The model selected an action based on the screenshot.",
-		preferredMoves,
+		strategy: typeof parsed.strategy === "string" ? parsed.strategy : "vision-guided 2048 board parsing for local ranking",
+		reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "The model converted the screenshot into a 4x4 integer grid.",
+		rows,
 	};
 }
 
-function normalizeMoves(value: unknown): Game2048Move[] {
-	if (!Array.isArray(value)) {
-		throw new Error("preferredMoves is not an array");
+function normalizeRows(value: unknown): number[][] {
+	if (!Array.isArray(value) || value.length !== 4) {
+		throw new Error("rows must be a 4-element array");
 	}
 
-	const normalized = value
-		.map((entry) => String(entry))
-		.filter((entry): entry is Game2048Move => DEFAULT_MOVE_ORDER.includes(entry as Game2048Move));
-
-	return uniqueMoves(normalized);
+	return value.map((row) => {
+		if (!Array.isArray(row) || row.length !== 4) {
+			throw new Error("each 2048 row must contain exactly 4 cells");
+		}
+		return row.map((cell) => {
+			const resolved = Number(cell);
+			if (!Number.isInteger(resolved) || resolved < 0) {
+				throw new Error("2048 cells must be non-negative integers");
+			}
+			return resolved;
+		});
+	});
 }
 
 function uniqueMoves(moves: Game2048Move[]): Game2048Move[] {
@@ -531,7 +542,8 @@ function buildRunSummary(run: Game2048RunRecord): string {
 
 function buildCompanionText(run: Game2048RunRecord): string {
 	if (run.boardChanged && run.selectedMove) {
-		return `我先根据${run.analysis.source === "vision-llm" ? "截图分析" : "保守启发式"}判断应该尝试 ${formatGame2048Action(run.selectedMove)}，然后我已经确认棋盘真的变化了。`;
+		const sourceLabel = run.analysis.source === "planner" ? "结构化读盘加本地策略器" : "保守启发式";
+		return `我先根据${sourceLabel}判断应该尝试 ${formatGame2048Action(run.selectedMove)}，然后我已经确认棋盘真的变化了。`;
 	}
 
 	return "我已经试过这轮候选方向，但截图前后没有看到足够明显的棋盘变化。可能当前画面不是 2048 对局，或者游戏窗口还没真正获得焦点。";
