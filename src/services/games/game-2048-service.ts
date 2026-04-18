@@ -251,13 +251,32 @@ export class Game2048Service {
 	private async buildAnalysis(target: FunctionalTarget, snapshot: PerceptionSnapshot): Promise<Game2048Analysis> {
 		const previousMove = this.state.lastRun?.boardChanged ? this.state.lastRun.selectedMove : null;
 		const recentDecisionSummary = buildRecentDecisionSummary(this.state.decisionHistory);
-		const repeatedFailureHint = buildRepeatedFailureHint(this.state.decisionHistory[0]);
+		const lastDecision = this.state.decisionHistory[0] ?? null;
+		const repeatedFailureHint = buildRepeatedFailureHint(lastDecision);
+		const discouragedOpeningMoves = collectRecentFailedOpeningMoves(this.state.decisionHistory);
 
 		try {
-			return await this.requestStructuredBoardAnalysis(target, snapshot, previousMove, recentDecisionSummary, repeatedFailureHint);
+			const analysis = await this.requestStructuredBoardAnalysis(
+				target,
+				snapshot,
+				previousMove,
+				recentDecisionSummary,
+				repeatedFailureHint,
+				discouragedOpeningMoves,
+			);
+			if (lastDecision && !lastDecision.boardChanged && buildPlanSignature(analysis.preferredMoves) === lastDecision.planSignature) {
+				const diversifiedMoves = rotateOrderAwayFromFailure(analysis.preferredMoves, lastDecision.planSignature);
+				return {
+					...analysis,
+					preferredMoves: diversifiedMoves,
+					reasoning: `${analysis.reasoning} Re-ranked away from the last failed ordering to avoid repeating the same no-change plan.`,
+					plannerSummary: `${analysis.plannerSummary ?? "planner ranked moves"}; diversified after repeated failure`,
+				};
+			}
+			return analysis;
 		} catch (err) {
 			log.warn("2048 vision analysis unavailable, falling back to heuristic", err);
-			return buildHeuristicAnalysis(previousMove, recentDecisionSummary, this.state.decisionHistory[0] ?? null);
+			return buildHeuristicAnalysis(previousMove, recentDecisionSummary, lastDecision);
 		}
 	}
 
@@ -267,6 +286,7 @@ export class Game2048Service {
 		previousMove: Game2048Move | null,
 		recentDecisionSummary: string[],
 		repeatedFailureHint: string | null,
+		discouragedOpeningMoves: Game2048Move[] = [],
 	): Promise<Game2048Analysis> {
 		// The functional loop is latency-bound, so game actions bypass the
 		// general chat/retrieval stack and call the configured model directly.
@@ -285,7 +305,10 @@ export class Game2048Service {
 			timeoutMs: 30000,
 		});
 		const parsed = parseStructuredBoardResponse(content);
-		const plannerResult = rankGame2048Moves(parsed.rows, previousMove);
+		const plannerResult = rankGame2048Moves(parsed.rows, previousMove, {
+			discouragedOpeningMoves,
+			discouragedPlanSignature: repeatedFailureHint ? this.state.decisionHistory[0]?.planSignature ?? null : null,
+		});
 
 		return {
 			source: "planner",
@@ -529,6 +552,23 @@ function buildRecentDecisionSummary(history: Game2048DecisionHistoryEntry[]): st
 		const repeatedFailureNote = entry.repeatedFailureCount > 0 ? ` repeatedFailureCount=${entry.repeatedFailureCount};` : "";
 		return `Turn ${index + 1}: planned=${plannedMoves}; attempted=${attemptedMoves}; success=${successfulMoves}; selectedMove=${selectedMove}; outcome=${outcome};${repeatedFailureNote} reflection=${entry.reflection}`;
 	});
+}
+
+function collectRecentFailedOpeningMoves(history: Game2048DecisionHistoryEntry[]): Game2048Move[] {
+	const moves: Game2048Move[] = [];
+	for (const entry of history) {
+		if (entry.boardChanged) {
+			continue;
+		}
+		const move = entry.preferredMoves[0];
+		if (move && !moves.includes(move)) {
+			moves.push(move);
+		}
+		if (moves.length >= 3) {
+			break;
+		}
+	}
+	return moves;
 }
 
 function buildRunSummary(run: Game2048RunRecord): string {

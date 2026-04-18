@@ -38,4 +38,16 @@ describe("sokoban-solver", () => {
 
 		expect(result).toBeNull();
 	});
+
+	it("skips a plan when it exactly matches the discouraged failed signature", () => {
+		const result = findSokobanPlan([
+			"#####",
+			"#@$.#",
+			"#####",
+		], {
+			discouragedPlanSignature: "move_right",
+		});
+
+		expect(result).toBeNull();
+	});
 });

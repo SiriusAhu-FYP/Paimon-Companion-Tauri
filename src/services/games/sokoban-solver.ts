@@ -26,6 +26,11 @@ export interface SokobanSolverResult {
 	summary: string;
 }
 
+export interface SokobanSolverOptions {
+	discouragedOpeningMoves?: SokobanActionId[];
+	discouragedPlanSignature?: string | null;
+}
+
 const DIRS: Array<{ move: SokobanActionId; dx: number; dy: number }> = [
 	{ move: "move_up", dx: 0, dy: -1 },
 	{ move: "move_left", dx: -1, dy: 0 },
@@ -114,7 +119,7 @@ export function parseSokobanBoardRows(rows: string[]): ParsedBoard {
 	};
 }
 
-export function findSokobanPlan(rows: string[]): SokobanSolverResult | null {
+export function findSokobanPlan(rows: string[], options?: SokobanSolverOptions): SokobanSolverResult | null {
 	const board = parseSokobanBoardRows(rows);
 	const initialNode: SearchNode = {
 		player: board.player,
@@ -123,6 +128,7 @@ export function findSokobanPlan(rows: string[]): SokobanSolverResult | null {
 	};
 	const queue: SearchNode[] = [initialNode];
 	const visited = new Set<string>([stateKey(initialNode.player, initialNode.boxes)]);
+	const orderedDirs = prioritizeDirs(options?.discouragedOpeningMoves ?? []);
 	let exploredStates = 0;
 
 	while (queue.length > 0 && exploredStates < MAX_SEARCH_STATES) {
@@ -130,8 +136,12 @@ export function findSokobanPlan(rows: string[]): SokobanSolverResult | null {
 		exploredStates += 1;
 
 		if (isSolved(current.boxes, board.targets)) {
+			const plannedMoves = current.path.slice(0, MAX_RETURNED_MOVES);
+			if (options?.discouragedPlanSignature && buildPlanSignature(plannedMoves) === options.discouragedPlanSignature) {
+				continue;
+			}
 			return {
-				plannedMoves: current.path.slice(0, MAX_RETURNED_MOVES),
+				plannedMoves,
 				solved: true,
 				exploredStates,
 				summary: "solver found a solved path",
@@ -141,7 +151,7 @@ export function findSokobanPlan(rows: string[]): SokobanSolverResult | null {
 		const reachability = buildReachabilityMap(board, current.player, current.boxes);
 		for (const boxIndex of current.boxes) {
 			const { x, y } = fromIndex(boxIndex, board.width);
-			for (const dir of DIRS) {
+			for (const dir of orderedDirs) {
 				const pushFromX = x - dir.dx;
 				const pushFromY = y - dir.dy;
 				const pushToX = x + dir.dx;
@@ -256,6 +266,25 @@ function isBlocked(x: number, y: number, board: ParsedBoard, boxes: Set<number>)
 
 function stateKey(player: number, boxes: Set<number>): string {
 	return `${player}|${Array.from(boxes).sort((a, b) => a - b).join(",")}`;
+}
+
+function buildPlanSignature(moves: SokobanActionId[]): string {
+	return moves.join(" > ");
+}
+
+function prioritizeDirs(discouragedOpeningMoves: SokobanActionId[]) {
+	if (!discouragedOpeningMoves.length) {
+		return DIRS;
+	}
+	const discouraged = new Set(discouragedOpeningMoves);
+	return [...DIRS].sort((left, right) => {
+		const leftScore = discouraged.has(left.move) ? 1 : 0;
+		const rightScore = discouraged.has(right.move) ? 1 : 0;
+		if (leftScore !== rightScore) {
+			return leftScore - rightScore;
+		}
+		return DIRS.indexOf(left) - DIRS.indexOf(right);
+	});
 }
 
 function toIndex(x: number, y: number, width: number): number {

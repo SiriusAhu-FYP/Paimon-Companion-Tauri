@@ -6,6 +6,11 @@ export interface Game2048PlannerResult {
 	bestMove: Game2048Move | null;
 }
 
+export interface Game2048PlannerOptions {
+	discouragedOpeningMoves?: Game2048Move[];
+	discouragedPlanSignature?: string | null;
+}
+
 interface MoveEvaluation {
 	move: Game2048Move;
 	score: number;
@@ -19,6 +24,7 @@ const WEIGHTS = [
 	[8, 7, 6, 5],
 	[1, 2, 3, 4],
 ];
+const DISCOURAGED_OPENING_PENALTY = 10_000;
 
 export function parseGame2048Grid(rows: unknown): number[][] {
 	if (!Array.isArray(rows) || rows.length !== 4) {
@@ -39,9 +45,13 @@ export function parseGame2048Grid(rows: unknown): number[][] {
 	});
 }
 
-export function rankGame2048Moves(rows: number[][], previousMove: Game2048Move | null): Game2048PlannerResult {
+export function rankGame2048Moves(
+	rows: number[][],
+	previousMove: Game2048Move | null,
+	options?: Game2048PlannerOptions,
+): Game2048PlannerResult {
 	const board = parseGame2048Grid(rows);
-	const evaluations = DEFAULT_MOVE_ORDER.map((move) => evaluateMove(board, move, previousMove));
+	const evaluations = DEFAULT_MOVE_ORDER.map((move) => evaluateMove(board, move, previousMove, options));
 	evaluations.sort((a, b) => {
 		if (a.changed !== b.changed) {
 			return a.changed ? -1 : 1;
@@ -52,19 +62,28 @@ export function rankGame2048Moves(rows: number[][], previousMove: Game2048Move |
 		return DEFAULT_MOVE_ORDER.indexOf(a.move) - DEFAULT_MOVE_ORDER.indexOf(b.move);
 	});
 
-	const preferredMoves = evaluations.map((entry) => entry.move);
+	let preferredMoves = evaluations.map((entry) => entry.move);
+	if (options?.discouragedPlanSignature && buildPlanSignature(preferredMoves) === options.discouragedPlanSignature) {
+		preferredMoves = rotateOrderAwayFromSignature(preferredMoves, options.discouragedPlanSignature);
+	}
 	const bestMove = evaluations.find((entry) => entry.changed)?.move ?? null;
+	const discouragedCount = options?.discouragedOpeningMoves?.length ?? 0;
 
 	return {
 		preferredMoves,
 		bestMove,
 		summary: bestMove
-			? `planner ranked ${bestMove} first with ${evaluations.filter((entry) => entry.changed).length} valid move(s)`
+			? `planner ranked ${bestMove} first with ${evaluations.filter((entry) => entry.changed).length} valid move(s)${discouragedCount ? ` while avoiding ${discouragedCount} discouraged opening move(s)` : ""}`
 			: "planner found no board-changing move",
 	};
 }
 
-function evaluateMove(board: number[][], move: Game2048Move, previousMove: Game2048Move | null): MoveEvaluation {
+function evaluateMove(
+	board: number[][],
+	move: Game2048Move,
+	previousMove: Game2048Move | null,
+	options?: Game2048PlannerOptions,
+): MoveEvaluation {
 	const { board: nextBoard, changed, merges } = simulateMove(board, move);
 	if (!changed) {
 		return { move, changed, score: Number.NEGATIVE_INFINITY };
@@ -74,7 +93,8 @@ function evaluateMove(board: number[][], move: Game2048Move, previousMove: Game2
 	const weightedScore = weightedBoardScore(nextBoard);
 	const cornerBonus = highestTileCornerBonus(nextBoard);
 	const continuityBonus = previousMove === move ? 80 : 0;
-	const score = weightedScore + emptyCells * 250 + merges * 120 + cornerBonus + continuityBonus;
+	const discouragedPenalty = options?.discouragedOpeningMoves?.includes(move) ? DISCOURAGED_OPENING_PENALTY : 0;
+	const score = weightedScore + emptyCells * 250 + merges * 120 + cornerBonus + continuityBonus - discouragedPenalty;
 
 	return { move, changed, score };
 }
@@ -166,4 +186,18 @@ function boardsEqual(left: number[][], right: number[][]): boolean {
 		}
 	}
 	return true;
+}
+
+function buildPlanSignature(moves: Game2048Move[]): string {
+	return moves.join(" > ");
+}
+
+function rotateOrderAwayFromSignature(moves: Game2048Move[], discouragedPlanSignature: string): Game2048Move[] {
+	for (let offset = 1; offset < moves.length; offset += 1) {
+		const rotated = moves.slice(offset).concat(moves.slice(0, offset));
+		if (buildPlanSignature(rotated) !== discouragedPlanSignature) {
+			return rotated;
+		}
+	}
+	return moves;
 }
