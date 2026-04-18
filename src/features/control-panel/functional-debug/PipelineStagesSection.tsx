@@ -19,7 +19,7 @@ export function PipelineStagesSection(props: PipelineStagesSectionProps) {
 			? "active"
 			: "idle";
 	const decisionStageStatus = latestRun
-		? (latestRun.analysisSource === "vision-llm" ? "success" : "warning")
+		? (latestRun.analysisSource === "heuristic" ? "warning" : "success")
 		: "idle";
 	const actionStageStatus = latestTask
 		? (latestTask.status === "running" ? "active" : latestTask.status === "completed" ? "success" : "warning")
