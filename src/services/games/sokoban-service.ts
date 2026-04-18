@@ -248,13 +248,26 @@ export class SokobanService {
 
 	private async buildAnalysis(target: FunctionalTarget, snapshot: PerceptionSnapshot): Promise<SokobanAnalysis> {
 		const recentDecisionSummary = buildRecentDecisionSummary(this.state.decisionHistory);
-		const repeatedFailureHint = buildRepeatedFailureHint(this.state.decisionHistory[0]);
+		const lastDecision = this.state.decisionHistory[0] ?? null;
+		const repeatedFailureHint = buildRepeatedFailureHint(lastDecision);
+		const discouragedOpeningMoves = collectRecentFailedOpeningMoves(this.state.decisionHistory);
 
 		try {
-			return await this.requestStructuredBoardAnalysis(target, snapshot, recentDecisionSummary, repeatedFailureHint);
+			const analysis = await this.requestStructuredBoardAnalysis(
+				target,
+				snapshot,
+				recentDecisionSummary,
+				repeatedFailureHint,
+				discouragedOpeningMoves,
+				lastDecision && !lastDecision.boardChanged ? lastDecision.planSignature : null,
+			);
+			if (lastDecision && !lastDecision.boardChanged && buildPlanSignature(analysis.plannedMoves) === lastDecision.planSignature) {
+				return buildHeuristicAnalysis(recentDecisionSummary, lastDecision);
+			}
+			return analysis;
 		} catch (err) {
 			log.warn("sokoban vision analysis unavailable, falling back to heuristic", err);
-			return buildHeuristicAnalysis(recentDecisionSummary, this.state.decisionHistory[0] ?? null);
+			return buildHeuristicAnalysis(recentDecisionSummary, lastDecision);
 		}
 	}
 
@@ -263,6 +276,8 @@ export class SokobanService {
 		snapshot: PerceptionSnapshot,
 		recentDecisionSummary: string[],
 		repeatedFailureHint: string | null,
+		discouragedOpeningMoves: SokobanActionId[] = [],
+		discouragedPlanSignature: string | null = null,
 	): Promise<SokobanAnalysis> {
 		const client = resolveActiveOpenAICompatibleVisionClient();
 		if (!client) {
@@ -279,7 +294,10 @@ export class SokobanService {
 			timeoutMs: 30000,
 		});
 		const parsed = parseStructuredBoardResponse(content);
-		const solverResult = findSokobanPlan(parsed.rows);
+		const solverResult = findSokobanPlan(parsed.rows, {
+			discouragedOpeningMoves,
+			discouragedPlanSignature,
+		});
 		if (!solverResult || !solverResult.plannedMoves.length) {
 			throw new Error("structured Sokoban board did not produce a solvable short plan");
 		}
@@ -504,6 +522,23 @@ function buildRecentDecisionSummary(history: SokobanDecisionHistoryEntry[]): str
 		const repeatedFailureNote = entry.repeatedFailureCount > 0 ? ` repeatedFailureCount=${entry.repeatedFailureCount};` : "";
 		return `Turn ${index + 1}: planned=${planned}; executed=${executed}; failed=${failed}; outcome=${outcome};${repeatedFailureNote} reflection=${entry.reflection}`;
 	});
+}
+
+function collectRecentFailedOpeningMoves(history: SokobanDecisionHistoryEntry[]): SokobanActionId[] {
+	const moves: SokobanActionId[] = [];
+	for (const entry of history) {
+		if (entry.boardChanged) {
+			continue;
+		}
+		const move = entry.plannedMoves[0];
+		if (move && !moves.includes(move)) {
+			moves.push(move);
+		}
+		if (moves.length >= 3) {
+			break;
+		}
+	}
+	return moves;
 }
 
 function buildRunSummary(run: SokobanRunRecord): string {

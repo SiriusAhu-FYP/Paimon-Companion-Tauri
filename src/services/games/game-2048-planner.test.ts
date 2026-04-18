@@ -38,4 +38,18 @@ describe("game-2048-planner", () => {
 		expect(result.bestMove).toBe("move_up");
 		expect(result.preferredMoves[0]).toBe("move_up");
 	});
+
+	it("avoids repeating a discouraged failed opening move when alternatives exist", () => {
+		const result = rankGame2048Moves([
+			[2, 2, 0, 0],
+			[0, 0, 0, 0],
+			[0, 0, 0, 0],
+			[0, 0, 0, 0],
+		], null, {
+			discouragedOpeningMoves: ["move_left"],
+		});
+
+		expect(result.bestMove).toBe("move_right");
+		expect(result.preferredMoves[0]).toBe("move_right");
+	});
 });
