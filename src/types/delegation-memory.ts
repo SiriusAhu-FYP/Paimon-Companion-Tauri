@@ -14,6 +14,10 @@ export interface DelegatedExecutionRecord {
 	sourceGame: string | null;
 	trigger: UnifiedRunTrigger;
 	requestText: string | null;
+	analysisSource: string | null;
+	decisionSummary: string | null;
+	plannedActions: string[];
+	attemptedActions: string[];
 	selectedAction: string | null;
 	executionSummary: string;
 	verificationResult: DelegatedExecutionVerificationResult;

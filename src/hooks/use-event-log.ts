@@ -226,8 +226,11 @@ function formatPayloadPreview(event: EventName, payload: unknown): string {
 			return [
 				`game=${data.record.sourceGame ?? "none"}`,
 				`mode=${data.record.mode}`,
+				data.record.analysisSource ? `analysis=${data.record.analysisSource}` : "",
 				`verified=${data.record.verificationResult.success ? "yes" : "no"}`,
+				data.record.selectedAction ? `action=${data.record.selectedAction}` : "",
 				`summary=${compactReason(data.record.executionSummary, 56)}`,
+				data.record.nextStepHint ? `next=${compactReason(data.record.nextStepHint, 48)}` : "",
 			].join(" | ");
 		}
 		default:
@@ -348,7 +351,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "delegation-memory:record-added": {
 			const data = payload as EventMap["delegation-memory:record-added"];
-			return `record added: ${data.record.sourceGame ?? "none"} / ${data.record.verificationResult.success ? "success" : "failed"}`;
+			return `record added: ${data.record.sourceGame ?? "none"} / ${data.record.analysisSource ?? "none"} / ${data.record.verificationResult.success ? "success" : "failed"}`;
 		}
 		case "functional:target-change": {
 			const data = payload as EventMap["functional:target-change"];
