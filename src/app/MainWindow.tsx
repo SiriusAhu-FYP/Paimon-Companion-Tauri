@@ -12,7 +12,7 @@ import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { StatusBar } from "@/app/StatusBar";
 import { getStoredOpenDockPanels, type DockPanelId } from "@/app/workspace/workspace-layout";
 import { DockWorkspace } from "@/app/workspace/DockWorkspace";
-import { requestCloseWorkspacePanel, requestOpenWorkspacePanel, requestResetWorkspaceLayout } from "@/app/workspace/WorkspaceContext";
+import { requestCloseWorkspacePanel, requestOpenWorkspacePanel, requestResetWorkspaceLayout, subscribeWorkspaceLayoutChanged } from "@/app/workspace/WorkspaceContext";
 import { broadcastControl, type StageDisplayMode, isTauriEnvironment } from "@/utils/window-sync";
 import { createLogger } from "@/services/logger";
 import { getServices } from "@/services";
@@ -233,6 +233,11 @@ export function MainWindow() {
 		{ id: "settings", label: t("设置", "Settings") },
 		{ id: "event-log", label: t("日志", "Event Log") },
 	] as const;
+
+	useEffect(() => {
+		const syncSnapshot = () => setOpenPanelsSnapshot(getStoredOpenDockPanels());
+		return subscribeWorkspaceLayoutChanged(syncSnapshot);
+	}, []);
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>

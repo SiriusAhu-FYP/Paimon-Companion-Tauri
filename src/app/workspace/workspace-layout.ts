@@ -205,15 +205,7 @@ function restoreBottomEventLog(model: Model) {
 
 	const workspaceRoot = model.getNodeById(WORKSPACE_NODE_IDS.root);
 	if (workspaceRoot) {
-		model.doAction(
-			Actions.addNode(
-				createDockTabsetJson(TABSET_IDS.bottom, ["event-log"], TABSET_WEIGHTS.bottom) as unknown as IJsonTabNode,
-				WORKSPACE_NODE_IDS.root,
-				DockLocation.BOTTOM,
-				-1,
-				true,
-			),
-		);
+		model.doAction(Actions.addNode(createDockTabJson("event-log"), WORKSPACE_NODE_IDS.root, DockLocation.BOTTOM, -1, true));
 		return;
 	}
 
@@ -231,30 +223,14 @@ function getRestoreTarget(model: Model, panelId: DockPanelId): { toNodeId: strin
 	if (panelId === "stage-controls") {
 		const workspaceMain = model.getNodeById(WORKSPACE_NODE_IDS.main);
 		if (workspaceMain) {
-			model.doAction(
-				Actions.addNode(
-					createDockTabsetJson(TABSET_IDS.stage, ["stage-controls"], TABSET_WEIGHTS.stage) as unknown as IJsonTabNode,
-					WORKSPACE_NODE_IDS.main,
-					DockLocation.LEFT,
-					-1,
-					true,
-				),
-			);
+			model.doAction(Actions.addNode(createDockTabJson("stage-controls"), WORKSPACE_NODE_IDS.main, DockLocation.LEFT, -1, true));
 			return { toNodeId: TABSET_IDS.stage, location: DockLocation.CENTER };
 		}
 	}
 
 	if (panelId === "stage-slot") {
 		if (model.getNodeById(TABSET_IDS.chatMain)?.getType() === "tabset") {
-			model.doAction(
-				Actions.addNode(
-					createDockTabsetJson(TABSET_IDS.chat, ["stage-slot"], TABSET_WEIGHTS.stageSlot) as unknown as IJsonTabNode,
-					TABSET_IDS.chatMain,
-					DockLocation.LEFT,
-					-1,
-					true,
-				),
-			);
+			model.doAction(Actions.addNode(createDockTabJson("stage-slot"), TABSET_IDS.chatMain, DockLocation.LEFT, -1, true));
 			return { toNodeId: TABSET_IDS.chat, location: DockLocation.CENTER };
 		}
 	}
@@ -262,29 +238,13 @@ function getRestoreTarget(model: Model, panelId: DockPanelId): { toNodeId: strin
 	if (panelId === "chat") {
 		const stageSlotTabset = model.getNodeById(TABSET_IDS.chat);
 		if (stageSlotTabset?.getType() === "tabset") {
-			model.doAction(
-				Actions.addNode(
-					createDockTabsetJson(TABSET_IDS.chatMain, ["chat"], TABSET_WEIGHTS.chat) as unknown as IJsonTabNode,
-					TABSET_IDS.chat,
-					DockLocation.RIGHT,
-					-1,
-					true,
-				),
-			);
+			model.doAction(Actions.addNode(createDockTabJson("chat"), TABSET_IDS.chat, DockLocation.RIGHT, -1, true));
 			return { toNodeId: TABSET_IDS.chatMain, location: DockLocation.CENTER };
 		}
 
 		const workspaceMain = model.getNodeById(WORKSPACE_NODE_IDS.main);
 		if (workspaceMain) {
-			model.doAction(
-				Actions.addNode(
-					createDockTabsetJson(TABSET_IDS.chatMain, ["chat"], TABSET_WEIGHTS.chat) as unknown as IJsonTabNode,
-					WORKSPACE_NODE_IDS.main,
-					DockLocation.LEFT,
-					-1,
-					true,
-				),
-			);
+			model.doAction(Actions.addNode(createDockTabJson("chat"), WORKSPACE_NODE_IDS.main, DockLocation.LEFT, -1, true));
 			return { toNodeId: TABSET_IDS.chatMain, location: DockLocation.CENTER };
 		}
 	}

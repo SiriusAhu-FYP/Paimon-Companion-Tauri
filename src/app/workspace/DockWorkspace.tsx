@@ -25,7 +25,7 @@ import { ChatPanel } from "@/features/chat";
 import { ControlPanel } from "@/features/control-panel/ControlPanel";
 import { EventLog } from "@/app/EventLog";
 import { useI18n } from "@/contexts/I18nProvider";
-import { WorkspaceContext, subscribeWorkspaceClosePanel, subscribeWorkspaceOpenPanel, subscribeWorkspaceResetLayout } from "./WorkspaceContext";
+import { WorkspaceContext, notifyWorkspaceLayoutChanged, subscribeWorkspaceClosePanel, subscribeWorkspaceOpenPanel, subscribeWorkspaceResetLayout } from "./WorkspaceContext";
 import {
 	createWorkspaceModelFromStorage,
 	focusOrRestoreDockPanel,
@@ -101,6 +101,7 @@ export function DockWorkspace(props: DockWorkspaceProps) {
 	const handleModelChange = useCallback((nextModel: Model) => {
 		saveWorkspaceModel(nextModel);
 		setRevision((current) => current + 1);
+		notifyWorkspaceLayoutChanged();
 	}, []);
 
 	const handleAction = useCallback((action: Action) => {
@@ -114,11 +115,13 @@ export function DockWorkspace(props: DockWorkspaceProps) {
 		focusOrRestoreDockPanel(model, panelId);
 		saveWorkspaceModel(model);
 		setRevision((current) => current + 1);
+		notifyWorkspaceLayoutChanged();
 	}, [model]);
 
 	const handleResetLayout = useCallback(() => {
 		setModel(resetWorkspaceModel());
 		setRevision((current) => current + 1);
+		notifyWorkspaceLayoutChanged();
 	}, []);
 
 	const handleCollapseEventLog = useCallback(() => {
@@ -127,6 +130,7 @@ export function DockWorkspace(props: DockWorkspaceProps) {
 			model.doAction(Actions.deleteTab("event-log"));
 			saveWorkspaceModel(model);
 			setRevision((current) => current + 1);
+			notifyWorkspaceLayoutChanged();
 		}
 	}, [model]);
 
@@ -136,6 +140,7 @@ export function DockWorkspace(props: DockWorkspaceProps) {
 			model.doAction(Actions.deleteTab(panelId));
 			saveWorkspaceModel(model);
 			setRevision((current) => current + 1);
+			notifyWorkspaceLayoutChanged();
 		}
 	}, [model]);
 
