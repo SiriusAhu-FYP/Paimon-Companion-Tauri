@@ -231,6 +231,41 @@ export class CompanionRuntimeService {
 		return parts.join("\n\n").trim();
 	}
 
+	requireObservationContext(
+		target: FunctionalTarget,
+		options?: { maxAgeMs?: number },
+	): { promptContext: string; latestTimestamp: number } {
+		if (!this.state.running) {
+			throw new Error("companion runtime is not running; start local observation before delegated actions");
+		}
+		if (!this.state.target) {
+			throw new Error("companion runtime has no active target");
+		}
+		if (this.state.target.handle !== target.handle) {
+			throw new Error("companion runtime target does not match the selected functional target");
+		}
+
+		const latestTimestamp = this.state.lastSummary?.createdAt ?? this.state.lastFrame?.capturedAt ?? 0;
+		if (!latestTimestamp) {
+			throw new Error("companion runtime has no recent local observation yet");
+		}
+
+		const maxAgeMs = options?.maxAgeMs ?? Math.max(this.state.summaryWindowMs * 2, this.state.captureIntervalMs * 4, 15_000);
+		if (Date.now() - latestTimestamp > maxAgeMs) {
+			throw new Error("companion runtime observation is stale; refresh local observation before delegated actions");
+		}
+
+		const promptContext = this.getPromptContext();
+		if (!promptContext) {
+			throw new Error("companion runtime did not produce usable observation context");
+		}
+
+		return {
+			promptContext,
+			latestTimestamp,
+		};
+	}
+
 	async start(target: FunctionalTarget): Promise<void> {
 		if (!target) {
 			throw new Error("no target selected for companion runtime");

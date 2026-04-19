@@ -272,6 +272,11 @@ export class EvaluationService {
 			if (definition.game === "2048") {
 				if (definition.targetMode === "auto-detect") {
 					await this.game2048.detectTargetWindow();
+					const detectedTarget = this.orchestrator.getState().selectedTarget;
+					if (!detectedTarget) {
+						throw new Error("2048 auto-detect evaluation could not bind a target");
+					}
+					await this.ensureCompanionRuntimeReadyForTarget(detectedTarget);
 					const run = await this.game2048.runSingleStep(undefined, { traceId });
 				return {
 					boardChanged: run.boardChanged,
@@ -293,6 +298,7 @@ export class EvaluationService {
 			if (!selectedTarget) {
 				throw new Error("selected-target evaluation requires a manually selected target");
 			}
+			await this.ensureCompanionRuntimeReadyForTarget(selectedTarget);
 			const run = await this.game2048.runSingleStep(selectedTarget, { traceId });
 			return {
 				boardChanged: run.boardChanged,
@@ -314,15 +320,7 @@ export class EvaluationService {
 			if (!selectedTarget) {
 				throw new Error("fusion evaluation requires a manually selected target");
 			}
-
-			const runtimeState = this.companionRuntime.getState();
-			if (!runtimeState.running || runtimeState.target?.handle !== selectedTarget.handle) {
-				await this.companionRuntime.start(selectedTarget);
-			}
-			const runtimeAfterStart = this.companionRuntime.getState();
-			if (!runtimeAfterStart.lastSummary && !runtimeAfterStart.lastFrame) {
-				await this.companionRuntime.runSummaryNow();
-			}
+			await this.ensureCompanionRuntimeReadyForTarget(selectedTarget);
 
 			const promptContext = this.companionRuntime.getPromptContext();
 			let mcpCompanionUsed = false;
@@ -361,6 +359,17 @@ export class EvaluationService {
 			};
 		}
 		throw new Error(`unsupported evaluation game: ${definition.game}`);
+	}
+
+	private async ensureCompanionRuntimeReadyForTarget(target: { handle: string; title: string }): Promise<void> {
+		const runtimeState = this.companionRuntime.getState();
+		if (!runtimeState.running || runtimeState.target?.handle !== target.handle) {
+			await this.companionRuntime.start(target);
+		}
+		const runtimeAfterStart = this.companionRuntime.getState();
+		if (!runtimeAfterStart.lastSummary && !runtimeAfterStart.lastFrame) {
+			await this.companionRuntime.runSummaryNow();
+		}
 	}
 }
 
