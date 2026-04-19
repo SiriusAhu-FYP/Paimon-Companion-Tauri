@@ -228,7 +228,6 @@ export function MainWindow() {
 	const panelMenuItems = [
 		{ id: "stage-controls", label: t("舞台面板", "Stage Panel") },
 		{ id: "chat", label: t("对话", "Chat") },
-		{ id: "control-panel", label: t("控制面板", "Control Panel") },
 		{ id: "knowledge", label: t("知识库", "Knowledge") },
 		{ id: "workbench", label: t("开发工作台", "Workbench") },
 		{ id: "settings", label: t("设置", "Settings") },
@@ -318,7 +317,7 @@ export function MainWindow() {
 					const isOpen = openPanelsSnapshot.has(panel.id);
 					return (
 						<MenuItem key={panel.id} onClick={() => {
-							if (isOpen && panel.id !== "control-panel") {
+							if (isOpen) {
 								requestCloseWorkspacePanel(panel.id);
 								setOpenPanelsSnapshot((current) => {
 									const next = new Set(current);

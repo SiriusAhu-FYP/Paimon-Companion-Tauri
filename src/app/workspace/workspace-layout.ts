@@ -19,7 +19,8 @@ export type DefaultWorkspaceLayout = IJsonModel;
 
 const TABSET_IDS = {
 	stage: "stage-tabset",
-	chat: "chat-tabset",
+	chat: "stage-slot-tabset",
+	chatMain: "chat-main-tabset",
 	right: "right-tabset",
 	bottom: "bottom-tabset",
 } as const;
@@ -92,7 +93,18 @@ const DEFAULT_LAYOUT: DefaultWorkspaceLayout = {
 					{
 						type: "tabset",
 						id: TABSET_IDS.chat,
-						weight: 52,
+						weight: 28,
+						enableDrag: true,
+						enableDrop: true,
+						selected: 0,
+						children: [
+							createDockTabJson("stage-slot"),
+						],
+					},
+					{
+						type: "tabset",
+						id: TABSET_IDS.chatMain,
+						weight: 28,
 						enableDrag: true,
 						enableDrop: true,
 						selected: 0,
@@ -178,20 +190,33 @@ export function getOpenDockPanels(model: Model): Set<DockPanelId> {
 }
 
 export function focusOrRestoreDockPanel(model: Model, panelId: DockPanelId) {
+	if (panelId === "event-log") {
+		moveOrRestoreBottomEventLog(model);
+		return;
+	}
+
 	const existing = model.getNodeById(panelId);
 	if (existing?.getType() === "tab") {
 		model.doAction(Actions.selectTab(panelId));
 		return;
 	}
 
-	if (panelId === "event-log") {
-		restoreBottomEventLog(model);
-		return;
-	}
-
 	const tabJson = createDockTabJson(panelId);
 	const restoreTarget = getRestoreTarget(model, panelId);
 	model.doAction(Actions.addNode(tabJson, restoreTarget.toNodeId, restoreTarget.location, -1, true));
+}
+
+function moveOrRestoreBottomEventLog(model: Model) {
+	const existing = model.getNodeById("event-log");
+	if (existing?.getType() === "tab") {
+		const parentId = existing.getParent()?.getId();
+		if (parentId === TABSET_IDS.bottom) {
+			model.doAction(Actions.selectTab("event-log"));
+			return;
+		}
+		model.doAction(Actions.deleteTab("event-log"));
+	}
+	restoreBottomEventLog(model);
 }
 
 function restoreBottomEventLog(model: Model) {
@@ -219,9 +244,9 @@ function restoreBottomEventLog(model: Model) {
 
 function getRestoreTarget(model: Model, panelId: DockPanelId): { toNodeId: string; location: DockLocation } {
 	if (panelId === "stage-slot") {
-		const chatTabset = model.getNodeById(TABSET_IDS.chat);
-		if (chatTabset?.getType() === "tabset") {
-			return { toNodeId: TABSET_IDS.chat, location: DockLocation.LEFT };
+		const stageSlotTabset = model.getNodeById(TABSET_IDS.chat);
+		if (stageSlotTabset?.getType() === "tabset") {
+			return { toNodeId: TABSET_IDS.chat, location: DockLocation.CENTER };
 		}
 	}
 
@@ -289,7 +314,7 @@ function getPreferredTabsetId(panelId: DockPanelId): string {
 		case "stage-slot":
 			return TABSET_IDS.chat;
 		case "chat":
-			return TABSET_IDS.chat;
+			return TABSET_IDS.chatMain;
 		case "event-log":
 			return TABSET_IDS.bottom;
 		default:
