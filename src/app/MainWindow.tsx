@@ -33,7 +33,6 @@ export function MainWindow() {
 	const [stageSlotOpen, setStageSlotOpen] = useState(false);
 	const [stageSlotRect, setStageSlotRect] = useState<DOMRect | null>(null);
 	const [panelsMenuAnchor, setPanelsMenuAnchor] = useState<null | HTMLElement>(null);
-	const [layoutMenuAnchor, setLayoutMenuAnchor] = useState<null | HTMLElement>(null);
 	const [openPanelsSnapshot, setOpenPanelsSnapshot] = useState<Set<DockPanelId>>(() => getStoredOpenDockPanels());
 	const stageModeRef = useRef(stageMode);
 	const stageVisibleRef = useRef(stageVisible);
@@ -224,7 +223,6 @@ export function MainWindow() {
 	}, []);
 
 	const closePanelsMenu = useCallback(() => setPanelsMenuAnchor(null), []);
-	const closeLayoutMenu = useCallback(() => setLayoutMenuAnchor(null), []);
 	const panelMenuItems = [
 		{ id: "stage-controls", label: t("舞台面板", "Stage Panel") },
 		{ id: "chat", label: t("对话", "Chat") },
@@ -266,10 +264,10 @@ export function MainWindow() {
 					<Button
 						size="small"
 						startIcon={<ViewQuiltIcon sx={{ fontSize: 15 }} />}
-						onClick={(event) => setLayoutMenuAnchor(event.currentTarget)}
+						onClick={handleResetLayout}
 						sx={{ minWidth: 0, px: 1.25, fontSize: 12, textTransform: "none", color: "text.secondary" }}
 					>
-						{t("布局", "Layout")}
+						{t("重置布局", "Reset Layout")}
 					</Button>
 				</Box>
 				<Box sx={{ flex: 1, alignSelf: "stretch" }} data-tauri-drag-region />
@@ -345,11 +343,6 @@ export function MainWindow() {
 						</MenuItem>
 					);
 				})}
-			</Menu>
-
-			<Menu anchorEl={layoutMenuAnchor} open={Boolean(layoutMenuAnchor)} onClose={closeLayoutMenu}>
-				<MenuItem onClick={() => { handleResetLayout(); closeLayoutMenu(); }}>{t("重新打开全部标签页", "Reopen All Tabs")}</MenuItem>
-				<MenuItem onClick={() => { handleResetLayout(); closeLayoutMenu(); }}>{t("恢复默认布局", "Restore Default Layout")}</MenuItem>
 			</Menu>
 
 			<DockWorkspace
