@@ -34,6 +34,15 @@ describe("UnifiedRuntimeService affect application", () => {
 		const runtime = new RuntimeService(bus);
 		const companionMode = new CompanionModeService(bus);
 		const delegationMemory = new DelegationMemoryService(bus);
+		const companionRuntime = {
+			getState: vi.fn(() => ({ running: false, target: null, lastSummary: null, summaryWindowMs: 60_000 })),
+			waitForPostActionObservation: vi.fn().mockResolvedValue({
+				promptContext: "fresh observation",
+				latestTimestamp: Date.now(),
+				changedObservation: true,
+				timedOut: false,
+			}),
+		};
 		const llm = {
 			generateCompanionReply: vi.fn().mockResolvedValue(options?.reply ?? "grounded reply"),
 		};
@@ -49,9 +58,7 @@ describe("UnifiedRuntimeService affect application", () => {
 			bus,
 			runtime,
 			affect,
-			companionRuntime: {
-				getState: vi.fn(() => ({ running: false, target: null, lastSummary: null, summaryWindowMs: 60_000 })),
-			} as never,
+			companionRuntime: companionRuntime as never,
 			orchestrator: {
 				getState: vi.fn(() => ({
 					selectedTarget: { handle: "target-1", title: "2048" },
@@ -88,7 +95,7 @@ describe("UnifiedRuntimeService affect application", () => {
 			delegationMemory,
 		});
 
-		return { bus, affect, runtime, companionMode, delegationMemory, llm, service };
+		return { bus, affect, runtime, companionMode, delegationMemory, companionRuntime, llm, service };
 	}
 
 	it("keeps using the MCP companion emotion contract", async () => {
@@ -240,6 +247,21 @@ describe("UnifiedRuntimeService affect application", () => {
 		const options = llm.generateCompanionReply.mock.calls[0]?.[1];
 		expect(options?.delegationMemoryContext).toContain("【本轮托管记录】");
 		expect(options?.delegationMemoryContext).toContain("【最近下一步提示】");
+	});
+
+	it("waits for a fresh post-action observation before grounded follow-up", async () => {
+		const { companionRuntime, service } = createService();
+
+		await service.runUnifiedGameStep("manual", "帮我走一步");
+
+		expect(companionRuntime.waitForPostActionObservation).toHaveBeenCalledTimes(1);
+		expect(companionRuntime.waitForPostActionObservation).toHaveBeenCalledWith(
+			{ handle: "target-1", title: "2048" },
+			expect.objectContaining({
+				timeoutMs: 5_000,
+				requireChanged: true,
+			}),
+		);
 	});
 
 	it("uses focused delegation memory when analyzing without acting", async () => {

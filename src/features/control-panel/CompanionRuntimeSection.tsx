@@ -102,6 +102,8 @@ export function CompanionRuntimeSection(props: {
 			<InfoLine>{t("当前目标", "Current Target")}：{currentTarget?.title ?? t("未选择", "Not selected")}</InfoLine>
 			<InfoLine>{t("本地视觉", "Local Vision")}：{props.companionRuntimeState.localVisionModel}</InfoLine>
 			<InfoLine>{t("连接状态", "Connection State")}：{props.companionRuntimeState.phase === "connecting" ? t("等待本地视觉节点就绪", "Waiting for local vision ready") : t("已连接或空闲", "Ready or idle")}</InfoLine>
+			<InfoLine>{t("观察就绪", "Observation Ready")}：{props.companionRuntimeState.observationReady ? t("是", "Yes") : t("否", "No")}</InfoLine>
+			<InfoLine>{t("诊断状态", "Runtime Diagnostic")}：{props.companionRuntimeState.diagnosticMessage ?? t("无", "None")}</InfoLine>
 			<InfoLine>{t("帧队列", "Frame Queue")}：{props.companionRuntimeState.frameQueue.length}</InfoLine>
 			<InfoLine>{t("总结历史", "Summary History")}：{props.companionRuntimeState.summaryHistory.length}</InfoLine>
 			<InfoLine>{t("最近总结", "Latest Summary")}：{summaryLabel}</InfoLine>

@@ -493,6 +493,10 @@ describe("ProactiveCompanionService", () => {
 			lastSummaryId: null,
 			captureTicks: 0,
 			summariesGenerated: 0,
+			observationReady: false,
+			lastObservationAt: null,
+			diagnosticCode: null,
+			diagnosticMessage: null,
 			lastError: null,
 		});
 		bus.emit("companion-runtime:summary-complete", {
@@ -527,6 +531,10 @@ describe("ProactiveCompanionService", () => {
 			lastSummaryId: null,
 			captureTicks: 0,
 			summariesGenerated: 0,
+			observationReady: false,
+			lastObservationAt: null,
+			diagnosticCode: null,
+			diagnosticMessage: null,
 			lastError: null,
 		});
 		await flushAsyncWork();
@@ -549,6 +557,10 @@ describe("ProactiveCompanionService", () => {
 			lastSummaryId: null,
 			captureTicks: 0,
 			summariesGenerated: 0,
+			observationReady: false,
+			lastObservationAt: null,
+			diagnosticCode: null,
+			diagnosticMessage: null,
 			lastError: null,
 		});
 		bus.emit("companion-runtime:summary-complete", {

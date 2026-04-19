@@ -1,6 +1,5 @@
 import { useCallback } from "react";
-import { useCompanionRuntime, useCompanionRuntimeBenchmark, useEvaluation, useFunctional, useGame2048, useSokoban, useUnifiedRuntime } from "@/hooks";
-import { CompanionRuntimeSection } from "./CompanionRuntimeSection";
+import { useEvaluation, useFunctional, useGame2048, useSokoban, useUnifiedRuntime } from "@/hooks";
 import { createLogger } from "@/services/logger";
 import { useI18n } from "@/contexts/I18nProvider";
 import { EvaluationSection } from "./EvaluationSection";
@@ -34,19 +33,6 @@ export function FunctionalPanel() {
 		setSpeechEnabled,
 		setVoiceInputEnabled,
 	} = useUnifiedRuntime();
-	const {
-		state: companionRuntimeState,
-		start: startCompanionRuntime,
-		stop: stopCompanionRuntime,
-		clearHistory: clearCompanionRuntimeHistory,
-		runSummaryNow,
-		testLocalVisionConnection,
-		updateRuntimeConfig,
-	} = useCompanionRuntime();
-	const {
-		state: companionRuntimeBenchmarkState,
-		runBenchmark: runCompanionRuntimeBenchmark,
-	} = useCompanionRuntimeBenchmark();
 
 	const handleDetect2048Target = useCallback(async () => {
 		try {
@@ -92,23 +78,10 @@ export function FunctionalPanel() {
 		|| game2048State.activeRunId !== null
 		|| sokobanState.activeRunId !== null
 		|| evaluationState.activeCaseId !== null
-		|| companionRuntimeBenchmarkState.activeBenchmarkId !== null
 		|| unifiedState.activeRunId !== null;
 
 	return (
 		<PanelRoot title={t("功能实验", "Functional Lab")}>
-			<CompanionRuntimeSection
-				functionalState={functionalState}
-				companionRuntimeState={companionRuntimeState}
-				companionRuntimeBenchmarkState={companionRuntimeBenchmarkState}
-				onStart={startCompanionRuntime}
-				onStop={stopCompanionRuntime}
-				onClearHistory={clearCompanionRuntimeHistory}
-				onRunSummaryNow={runSummaryNow}
-				onTestConnection={testLocalVisionConnection}
-				onRunBenchmark={runCompanionRuntimeBenchmark}
-				onUpdateConfig={updateRuntimeConfig}
-			/>
 			<UnifiedRunSection
 				unifiedState={unifiedState}
 				onRunUnifiedGame={runUnifiedGameStep}

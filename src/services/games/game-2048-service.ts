@@ -243,8 +243,10 @@ export class Game2048Service {
 	}
 
 	private async prepareObservationContext(target: FunctionalTarget): Promise<string> {
-		await this.companionRuntime.refreshNow({ summarize: true });
-		return this.companionRuntime.requireObservationContext(target).promptContext;
+		const context = await this.companionRuntime.ensureObservationContext(target, {
+			autoStart: true,
+		});
+		return context.promptContext;
 	}
 
 	private async buildAnalysis(target: FunctionalTarget, observationContext: string): Promise<Game2048Analysis> {
@@ -316,7 +318,7 @@ export class Game2048Service {
 		const changeRatio = await estimateSnapshotChange(beforeSnapshot, afterSnapshot, { cropScale: 0.7 });
 		return {
 			move,
-			changed: changeRatio >= 0.012,
+			changed: changeRatio >= 0.006,
 			changeRatio,
 		};
 	}

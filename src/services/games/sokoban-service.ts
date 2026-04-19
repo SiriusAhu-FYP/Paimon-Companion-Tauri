@@ -249,8 +249,10 @@ export class SokobanService {
 	}
 
 	private async prepareObservationContext(target: FunctionalTarget): Promise<string> {
-		await this.companionRuntime.refreshNow({ summarize: true });
-		return this.companionRuntime.requireObservationContext(target).promptContext;
+		const context = await this.companionRuntime.ensureObservationContext(target, {
+			autoStart: true,
+		});
+		return context.promptContext;
 	}
 
 	private async buildAnalysis(target: FunctionalTarget, observationContext: string): Promise<SokobanAnalysis> {
@@ -321,7 +323,7 @@ export class SokobanService {
 		const changeRatio = await estimateSnapshotChange(beforeSnapshot, afterSnapshot, { cropScale: 0.82 });
 		return {
 			move,
-			changed: changeRatio >= 0.01,
+			changed: changeRatio >= 0.003,
 			changeRatio,
 		};
 	}

@@ -453,7 +453,14 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "companion-runtime:state-change": {
 			const data = payload as EventMap["companion-runtime:state-change"];
-			return `phase=${data.phase}, frames=${data.frameQueueLength}, summaries=${data.summaryHistoryLength}`;
+			return [
+				`phase=${data.phase}`,
+				data.observationReady ? "observation ready" : "waiting for observation",
+				`frames=${data.frameQueueLength}`,
+				`sum=${data.summaryHistoryLength}`,
+				data.diagnosticCode ? `diag=${data.diagnosticCode}` : "",
+				data.diagnosticMessage ? truncate(data.diagnosticMessage, 80) : "",
+			].filter(Boolean).join(" / ");
 		}
 		case "companion-runtime:frame-described": {
 			const data = payload as EventMap["companion-runtime:frame-described"];

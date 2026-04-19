@@ -11,6 +11,7 @@ import type { UnifiedRunTimings } from "./unified";
 import type {
 	CompanionRuntimeBenchmarkResult,
 	CompanionRuntimeBenchmarkState,
+	CompanionRuntimeDiagnosticCode,
 	CompanionFrameDescriptionRecord,
 	CompanionRuntimeState,
 	CompanionSummaryRecord,
@@ -306,6 +307,10 @@ export interface CompanionRuntimeStateChangePayload {
 	lastSummaryId: string | null;
 	captureTicks: number;
 	summariesGenerated: number;
+	observationReady: boolean;
+	lastObservationAt: number | null;
+	diagnosticCode: CompanionRuntimeDiagnosticCode | null;
+	diagnosticMessage: string | null;
 	lastError: string | null;
 }
 
