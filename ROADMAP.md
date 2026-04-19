@@ -212,6 +212,7 @@ P3/P4 close-out:
   This phase narrows functional work to the existing validated targets first, with clearer companion-first boundaries before any broader expansion.
   It is also the right place to formalize the heavier reflection loop instead of forcing that complexity into `P4`.
   The accepted target architecture for this phase is now explicit: `companion` and `delegated` must share the same local-vision primary perception chain, and cloud models should consume that observation context for summary, planning, reply, and follow-up instead of directly reading raw gameplay screenshots as the default functional path.
+  Delegated action planning should also adapt to task type: dynamic / stochastic tasks should default to single-step observe-decide-act loops, while static / deterministic tasks may use bounded short action sequences with per-step verification and replan on mismatch.
   - [ ] raise `2048` from accepted loop validation to a more repeatable stable solving baseline
   - [ ] raise `Sokoban` from minimum semantic-action skeleton to real simple-level solving
   - [ ] land an explicit companion mode / delegated mode state with clear entry and exit conditions instead of relying on temporary unified-run style control flow

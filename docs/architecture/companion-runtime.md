@@ -40,6 +40,11 @@ Both modes should share the same local-vision primary perception path. The diffe
 - `companion`: reply / proactive / emotional support
 - `delegated`: task plan / action decision / grounded follow-up
 
+Delegated planning should not be one-size-fits-all. The cloud layer should adapt action granularity to the task:
+
+- dynamic or stochastic tasks, such as `2048`, should default to single-step closed loops: observe -> decide one move -> execute -> verify -> observe again
+- static or deterministic tasks, such as `Sokoban`, may return a bounded short action sequence, but every step still requires verification and the remaining sequence should be discarded if the observed state diverges
+
 ## Runtime Layers
 
 ### 1. Local Fast Vision Layer
