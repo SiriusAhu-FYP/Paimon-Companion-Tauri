@@ -12,7 +12,6 @@ const log = createLogger("proactive-companion");
 const DEFAULT_RUNTIME_SUMMARY_SILENCE_MS = 30_000;
 const TASK_RESULT_SILENCE_MS = 20_000;
 const SYSTEM_ERROR_DEDUPE_MS = 30_000;
-const DELEGATED_TASK_COOLDOWN_MS = 10_000;
 const RUNTIME_SUMMARY_REPEAT_MS = 90_000;
 const CROSS_CONTEXT_WINDOW_MS = 60_000;
 
@@ -78,7 +77,6 @@ export class ProactiveCompanionService {
 	private voiceBusy = false;
 	private processingCandidate = false;
 	private lastSpokenAt = 0;
-	private delegatedTaskCooldownUntil = 0;
 	private lastSystemErrorSeen = new Map<string, number>();
 	private lastRuntimeSummarySeen = new Map<string, number>();
 	private latestRuntimeSummary: RuntimeSummaryContext | null = null;
@@ -157,10 +155,6 @@ export class ProactiveCompanionService {
 		this.bus.on("voice:state-change", (payload) => {
 			this.voiceBusy = payload.state.status === "recording" || payload.state.status === "transcribing";
 			this.syncBusyState();
-			void this.maybeDrainPending();
-		});
-		this.bus.on("unified:run-complete", () => {
-			this.delegatedTaskCooldownUntil = Date.now() + DELEGATED_TASK_COOLDOWN_MS;
 			void this.maybeDrainPending();
 		});
 	}
@@ -317,18 +311,6 @@ export class ProactiveCompanionService {
 			if (repeatReason) {
 				return repeatReason;
 			}
-		}
-		if (candidate.source === "runtime-summary" && this.state.mode === "delegated") {
-			return "delegated-mode";
-		}
-		if ((candidate.source === "game2048-result" || candidate.source === "sokoban-result") && this.state.mode === "delegated") {
-			return "delegated-follow-up-active";
-		}
-		if (
-			(candidate.source === "game2048-result" || candidate.source === "sokoban-result")
-			&& (Date.now() < this.delegatedTaskCooldownUntil || this.hasRecentDelegatedVerification())
-		) {
-			return "delegated-follow-up-cooldown";
 		}
 		const sinceLastSpeech = Date.now() - this.lastSpokenAt;
 		if (candidate.source === "runtime-summary" && !candidate.isEntrance && this.lastSpokenAt > 0 && sinceLastSpeech < this.runtimeSummarySilenceMs) {
@@ -525,7 +507,6 @@ export class ProactiveCompanionService {
 
 	private resetRuntimeSession(reason: string) {
 		this.pendingCandidate = null;
-		this.delegatedTaskCooldownUntil = 0;
 		this.lastSpokenAt = 0;
 		this.lastSystemErrorSeen.clear();
 		this.lastRuntimeSummarySeen.clear();
@@ -556,13 +537,6 @@ export class ProactiveCompanionService {
 
 	private isBusy(): boolean {
 		return this.llmBusy || this.ttsBusy || this.voiceBusy || this.processingCandidate;
-	}
-
-	private hasRecentDelegatedVerification(): boolean {
-		if (!this.latestDelegatedRecord) {
-			return false;
-		}
-		return (Date.now() - this.latestDelegatedRecord.createdAt) < DELEGATED_TASK_COOLDOWN_MS;
 	}
 
 	private syncBusyState() {

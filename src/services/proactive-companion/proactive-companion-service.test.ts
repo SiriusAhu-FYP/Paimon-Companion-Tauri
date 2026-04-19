@@ -160,47 +160,28 @@ describe("ProactiveCompanionService", () => {
 		expect(llm.generateCompanionReply.mock.calls[0]?.[0]).toContain("【触发源】system error");
 	});
 
-	it("suppresses opportunistic proactive chatter during delegated execution", async () => {
-		const { bus, llm, companionMode, service } = createService();
+	it("still allows proactive speech during delegated execution", async () => {
+		const { bus, llm, pipeline, companionMode, service } = createService({
+			reply: "这一步已经推进了，我们继续盯着局面。",
+		});
 
-		companionMode.setMode("delegated", "test-enter-delegated", "system");
+		companionMode.setMode("delegated", "test-enter-delegated", "manual");
 		bus.emit("game2048:run-complete", {
 			runId: "2048-1",
-			success: false,
-			selectedMove: null,
-			boardChanged: false,
-			summary: "2048 stalled",
+			success: true,
+			selectedMove: "move_right",
+			boardChanged: true,
+			summary: "2048 step verified with Right (4.0%) via planner",
 		});
 		await flushAsyncWork();
 
-		expect(llm.generateCompanionReply).not.toHaveBeenCalled();
+		expect(llm.generateCompanionReply).toHaveBeenCalledTimes(1);
+		expect(pipeline.speakText).toHaveBeenCalledWith("这一步已经推进了，我们继续盯着局面。");
 		expect(service.getState()).toMatchObject({
 			mode: "delegated",
-			lastDecision: "skipped",
-			lastSkipReason: "delegated-follow-up-active",
+			lastDecision: "emitted",
+			lastEmittedSource: "game2048-result",
 		});
-
-		companionMode.setMode("companion", "test-exit-delegated", "system");
-		bus.emit("unified:run-complete", {
-			runId: "run-1",
-			gameId: "game-2048",
-			success: false,
-			summary: "run complete",
-			emotion: "neutral",
-			spoke: true,
-			timings: {
-				totalMs: 1000,
-				actionMs: 300,
-				runtimeRefreshMs: 100,
-				llmReplyMs: 300,
-				speechMs: 300,
-				totalBlockingMs: 700,
-				totalNonBlockingMs: 300,
-			},
-		});
-		await flushAsyncWork();
-
-		expect(service.getState().mode).toBe("companion");
 	});
 
 	it("passes proactive source metadata and runtime context into proactive generation", async () => {
