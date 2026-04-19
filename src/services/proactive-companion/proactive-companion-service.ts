@@ -86,6 +86,7 @@ export class ProactiveCompanionService {
 	private companionRuntimeRunning = false;
 	private companionRuntimeTargetTitle: string | null = null;
 	private latestDelegatedRecord: DelegatedExecutionRecord | null = null;
+	private activeUnifiedRunId: string | null = null;
 
 	constructor(deps: {
 		bus: EventBus;
@@ -126,6 +127,10 @@ export class ProactiveCompanionService {
 		});
 		this.bus.on("delegation-memory:state-change", (payload) => {
 			this.latestDelegatedRecord = payload.state.latestRecord;
+			this.emitStateChange(this.state.lastDecision, null, null);
+		});
+		this.bus.on("unified:state-change", (payload) => {
+			this.activeUnifiedRunId = payload.state.activeRunId;
 			this.emitStateChange(this.state.lastDecision, null, null);
 		});
 		this.bus.on("llm:request-start", () => {
@@ -311,6 +316,13 @@ export class ProactiveCompanionService {
 			if (repeatReason) {
 				return repeatReason;
 			}
+		}
+		if (
+			(candidate.source === "game2048-result" || candidate.source === "sokoban-result")
+			&& candidate.traceId
+			&& this.activeUnifiedRunId === candidate.traceId
+		) {
+			return "unified-follow-up-active";
 		}
 		const sinceLastSpeech = Date.now() - this.lastSpokenAt;
 		if (candidate.source === "runtime-summary" && !candidate.isEntrance && this.lastSpokenAt > 0 && sinceLastSpeech < this.runtimeSummarySilenceMs) {

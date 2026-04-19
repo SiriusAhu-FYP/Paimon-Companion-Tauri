@@ -184,6 +184,39 @@ describe("ProactiveCompanionService", () => {
 		});
 	});
 
+	it("suppresses task-result proactive when the same unified run already owns the follow-up", async () => {
+		const { bus, llm, service } = createService();
+
+		bus.emit("unified:state-change", {
+			state: {
+				speechEnabled: true,
+				voiceInputEnabled: true,
+				activeRunId: "unified-trace-1",
+				phase: "acting",
+				lastVoiceInput: null,
+				lastCommand: "2048-step",
+				lastCompanionText: null,
+				lastRun: null,
+				history: [],
+			},
+		});
+		bus.emit("game2048:run-complete", {
+			runId: "2048-1",
+			success: true,
+			selectedMove: "move_right",
+			boardChanged: true,
+			summary: "2048 step verified with Right (4.0%) via planner",
+			traceId: "unified-trace-1",
+		});
+		await flushAsyncWork();
+
+		expect(llm.generateCompanionReply).not.toHaveBeenCalled();
+		expect(service.getState()).toMatchObject({
+			lastDecision: "skipped",
+			lastSkipReason: "unified-follow-up-active",
+		});
+	});
+
 	it("passes proactive source metadata and runtime context into proactive generation", async () => {
 		const { bus, llm, companionRuntime } = createService({
 			runtimeContext: "最近观察：敌人逼近，角色正在后撤。",

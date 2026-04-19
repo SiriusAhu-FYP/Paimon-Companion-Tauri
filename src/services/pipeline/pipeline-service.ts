@@ -25,7 +25,8 @@ export class PipelineService {
 	private character: CharacterService;
 	private llm: LLMService;
 	private speechQueue: SpeechQueue;
-	private pendingSpeechText = "";
+	private currentSpeechText = "";
+	private speechChain: Promise<void> = Promise.resolve();
 
 	constructor(deps: {
 		bus: EventBus;
@@ -54,9 +55,9 @@ export class PipelineService {
 			(speaking) => {
 				this.character.setSpeaking(speaking);
 				if (speaking) {
-					this.bus.emit("audio:tts-start", { text: this.pendingSpeechText });
+					this.bus.emit("audio:tts-start", { text: this.currentSpeechText });
 				} else {
-					this.pendingSpeechText = "";
+					this.currentSpeechText = "";
 					this.bus.emit("audio:tts-end");
 				}
 			},
@@ -123,22 +124,28 @@ export class PipelineService {
 	}
 
 	private async speakDisplayText(displayText: string, spokenText: string): Promise<void> {
-		const segments = splitText(spokenText);
-		if (!segments.length) {
-			log.warn("text splitting produced no segments");
-			return;
-		}
+		const run = async () => {
+			const segments = splitText(spokenText);
+			if (!segments.length) {
+				log.warn("text splitting produced no segments");
+				return;
+			}
 
-		this.pendingSpeechText = displayText;
-		this.bus.emit("audio:tts-pending", { text: displayText });
-		const voiceConfig = resolveSpeechVoiceConfig(this.affect.getState());
-		log.info(`[split] ${segments.length} segments: ${segments.map((s) => `[${s.lang}]"${s.text.slice(0, 20)}"`).join(", ")}`);
+			this.currentSpeechText = displayText;
+			this.bus.emit("audio:tts-pending", { text: displayText });
+			const voiceConfig = resolveSpeechVoiceConfig(this.affect.getState());
+			log.info(`[split] ${segments.length} segments: ${segments.map((s) => `[${s.lang}]"${s.text.slice(0, 20)}"`).join(", ")}`);
 
-		try {
-			await this.speechQueue.speakAll(segments, voiceConfig);
-		} catch (err) {
-			log.error("speech queue failed", err);
-			throw err;
-		}
+			try {
+				await this.speechQueue.speakAll(segments, voiceConfig);
+			} catch (err) {
+				log.error("speech queue failed", err);
+				throw err;
+			}
+		};
+
+		const next = this.speechChain.then(run, run);
+		this.speechChain = next.catch(() => {});
+		return next;
 	}
 }
