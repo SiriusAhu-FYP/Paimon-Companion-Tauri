@@ -355,11 +355,11 @@ function buildObservationDecisionPrompt(
 		targetWindow: targetTitle,
 		actionList: SOKOBAN_PLUGIN.actions.map((action) => `${action.id}: ${action.description}`),
 		gameRules: [
-			"You can push boxes but never pull them.",
-			"Avoid pushing a box into a non-target corner whenever possible.",
+			...(SOKOBAN_PLUGIN.notes ?? []),
 			"Return only a short move sequence for the next validation round, not a full solution transcript.",
 		],
 		stateCues: [
+			...(SOKOBAN_PLUGIN.observationFocus ?? []),
 			"Identify the player, boxes, walls, and targets only from the provided local observation context.",
 			"Prefer moves that either reposition the player productively or make visible progress toward a target.",
 			"Avoid repeating the same failed probe pattern without a new justification.",

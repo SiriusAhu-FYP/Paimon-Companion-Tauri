@@ -3,13 +3,19 @@
 	"displayName": "Sokoban",
 	"windowTitleHints": ["sokoban", "push box", "pushbox"],
 	"observationFocus": [
+		"Ignore top-page UI such as level selectors, buttons, login text, and menu icons; focus only on the puzzle board.",
 		"Focus on the player, boxes, targets, walls, blocked paths, and whether a push creates or avoids deadlocks.",
+		"Treat the pale beige floor as walkable space and the dark stone pattern as solid wall / non-walkable area.",
+		"Treat the pink dots as targets, the orange or brown crates as boxes, and the human sprite as the player.",
+		"Before proposing a move, verify the immediate next tile in that direction: if it is a wall or blocked box chain, do not choose that move.",
 		"Describe the puzzle layout and movement consequences instead of generic scene narration."
 	],
 	"defaultActionOrder": ["move_up", "move_left", "move_right", "move_down"],
 	"notes": [
 		"You can only push boxes, never pull them.",
-		"Avoid pushing boxes into unrecoverable corners."
+		"Avoid pushing boxes into unrecoverable corners.",
+		"If the very next tile in the chosen direction is a wall, that move is invalid and should not be selected.",
+		"Prefer moves that create visible progress or better positioning over moves that simply bump into walls."
 	],
 	"actions": [
 		{
