@@ -1,4 +1,4 @@
-import { Actions, DockLocation, Model, type IJsonModel, type IJsonTabNode } from "flexlayout-react";
+import { Actions, DockLocation, Model, type IJsonModel, type IJsonTabNode, type IJsonTabSetNode } from "flexlayout-react";
 
 export const WORKSPACE_LAYOUT_STORAGE_KEY = "paimon-companion-tauri:workspace-layout:v1";
 
@@ -30,6 +30,14 @@ const WORKSPACE_NODE_IDS = {
 	main: "workspace-main",
 } as const;
 
+const TABSET_WEIGHTS = {
+	stage: 24,
+	stageSlot: 28,
+	chat: 28,
+	right: 24,
+	bottom: 22,
+} as const;
+
 const PANEL_TITLES: Record<DockPanelId, string> = {
 	"stage-controls": "Stage",
 	"stage-slot": "Attach Stage",
@@ -50,6 +58,18 @@ function createDockTabJson(panelId: DockPanelId): IJsonTabNode {
 		enableClose: panelId !== "control-panel",
 		enableDrag: true,
 		enableRename: false,
+	};
+}
+
+function createDockTabsetJson(tabsetId: string, panelIds: DockPanelId[], weight: number): IJsonTabSetNode {
+	return {
+		type: "tabset",
+		id: tabsetId,
+		weight,
+		enableDrag: true,
+		enableDrop: true,
+		selected: 0,
+		children: panelIds.map((panelId) => createDockTabJson(panelId)),
 	};
 }
 
@@ -80,64 +100,21 @@ const DEFAULT_LAYOUT: DefaultWorkspaceLayout = {
 				weight: 78,
 				children: [
 					{
-						type: "tabset",
-						id: TABSET_IDS.stage,
-						weight: 24,
-						enableDrag: true,
-						enableDrop: true,
-						selected: 0,
-						children: [
-							createDockTabJson("stage-controls"),
-						],
+						...createDockTabsetJson(TABSET_IDS.stage, ["stage-controls"], TABSET_WEIGHTS.stage),
 					},
 					{
-						type: "tabset",
-						id: TABSET_IDS.chat,
-						weight: 28,
-						enableDrag: true,
-						enableDrop: true,
-						selected: 0,
-						children: [
-							createDockTabJson("stage-slot"),
-						],
+						...createDockTabsetJson(TABSET_IDS.chat, ["stage-slot"], TABSET_WEIGHTS.stageSlot),
 					},
 					{
-						type: "tabset",
-						id: TABSET_IDS.chatMain,
-						weight: 28,
-						enableDrag: true,
-						enableDrop: true,
-						selected: 0,
-						children: [
-							createDockTabJson("chat"),
-						],
+						...createDockTabsetJson(TABSET_IDS.chatMain, ["chat"], TABSET_WEIGHTS.chat),
 					},
 					{
-						type: "tabset",
-						id: TABSET_IDS.right,
-						weight: 24,
-						enableDrag: true,
-						enableDrop: true,
-						selected: 0,
-						children: [
-							createDockTabJson("control-panel"),
-							createDockTabJson("knowledge"),
-							createDockTabJson("workbench"),
-							createDockTabJson("settings"),
-						],
+						...createDockTabsetJson(TABSET_IDS.right, ["control-panel", "knowledge", "workbench", "settings"], TABSET_WEIGHTS.right),
 					},
 				],
 			},
 			{
-				type: "tabset",
-				id: TABSET_IDS.bottom,
-				weight: 22,
-				enableDrag: true,
-				enableDrop: true,
-				selected: 0,
-				children: [
-					createDockTabJson("event-log"),
-				],
+				...createDockTabsetJson(TABSET_IDS.bottom, ["event-log"], TABSET_WEIGHTS.bottom),
 			},
 		],
 	},
@@ -226,15 +203,17 @@ function restoreBottomEventLog(model: Model) {
 		return;
 	}
 
-	const workspaceMain = model.getNodeById(WORKSPACE_NODE_IDS.main);
-	if (workspaceMain) {
-		model.doAction(Actions.addNode(createDockTabJson("event-log"), WORKSPACE_NODE_IDS.main, DockLocation.BOTTOM, -1, true));
-		return;
-	}
-
 	const workspaceRoot = model.getNodeById(WORKSPACE_NODE_IDS.root);
 	if (workspaceRoot) {
-		model.doAction(Actions.addNode(createDockTabJson("event-log"), WORKSPACE_NODE_IDS.root, DockLocation.BOTTOM, -1, true));
+		model.doAction(
+			Actions.addNode(
+				createDockTabsetJson(TABSET_IDS.bottom, ["event-log"], TABSET_WEIGHTS.bottom) as unknown as IJsonTabNode,
+				WORKSPACE_NODE_IDS.root,
+				DockLocation.BOTTOM,
+				-1,
+				true,
+			),
+		);
 		return;
 	}
 
@@ -243,58 +222,74 @@ function restoreBottomEventLog(model: Model) {
 }
 
 function getRestoreTarget(model: Model, panelId: DockPanelId): { toNodeId: string; location: DockLocation } {
-	if (panelId === "stage-slot") {
-		const stageSlotTabset = model.getNodeById(TABSET_IDS.chat);
-		if (stageSlotTabset?.getType() === "tabset") {
-			return { toNodeId: TABSET_IDS.chat, location: DockLocation.CENTER };
-		}
-
-		const chatMainTabset = model.getNodeById(TABSET_IDS.chatMain);
-		if (chatMainTabset?.getType() === "tabset") {
-			return { toNodeId: TABSET_IDS.chatMain, location: DockLocation.LEFT };
-		}
-	}
-
-	if (panelId === "chat") {
-		const chatMainTabset = model.getNodeById(TABSET_IDS.chatMain);
-		if (chatMainTabset?.getType() === "tabset") {
-			return { toNodeId: TABSET_IDS.chatMain, location: DockLocation.CENTER };
-		}
-
-		const stageSlotTabset = model.getNodeById(TABSET_IDS.chat);
-		if (stageSlotTabset?.getType() === "tabset") {
-			return { toNodeId: TABSET_IDS.chat, location: DockLocation.RIGHT };
-		}
-	}
-
-	if (panelId === "stage-controls") {
-		const stageTabset = model.getNodeById(TABSET_IDS.stage);
-		if (stageTabset?.getType() === "tabset") {
-			return { toNodeId: TABSET_IDS.stage, location: DockLocation.CENTER };
-		}
-
-		const stageSlotTabset = model.getNodeById(TABSET_IDS.chat);
-		if (stageSlotTabset?.getType() === "tabset") {
-			return { toNodeId: TABSET_IDS.chat, location: DockLocation.LEFT };
-		}
-
-		const chatMainTabset = model.getNodeById(TABSET_IDS.chatMain);
-		if (chatMainTabset?.getType() === "tabset") {
-			return { toNodeId: TABSET_IDS.chatMain, location: DockLocation.LEFT };
-		}
-	}
-
 	const directTargetId = getPreferredTabsetId(panelId);
 	const directTarget = model.getNodeById(directTargetId);
 	if (directTarget?.getType() === "tabset") {
 		return { toNodeId: directTargetId, location: DockLocation.CENTER };
 	}
 
-	if (panelId === "event-log") {
+	if (panelId === "stage-controls") {
 		const workspaceMain = model.getNodeById(WORKSPACE_NODE_IDS.main);
 		if (workspaceMain) {
-			return { toNodeId: WORKSPACE_NODE_IDS.main, location: DockLocation.BOTTOM };
+			model.doAction(
+				Actions.addNode(
+					createDockTabsetJson(TABSET_IDS.stage, ["stage-controls"], TABSET_WEIGHTS.stage) as unknown as IJsonTabNode,
+					WORKSPACE_NODE_IDS.main,
+					DockLocation.LEFT,
+					-1,
+					true,
+				),
+			);
+			return { toNodeId: TABSET_IDS.stage, location: DockLocation.CENTER };
 		}
+	}
+
+	if (panelId === "stage-slot") {
+		if (model.getNodeById(TABSET_IDS.chatMain)?.getType() === "tabset") {
+			model.doAction(
+				Actions.addNode(
+					createDockTabsetJson(TABSET_IDS.chat, ["stage-slot"], TABSET_WEIGHTS.stageSlot) as unknown as IJsonTabNode,
+					TABSET_IDS.chatMain,
+					DockLocation.LEFT,
+					-1,
+					true,
+				),
+			);
+			return { toNodeId: TABSET_IDS.chat, location: DockLocation.CENTER };
+		}
+	}
+
+	if (panelId === "chat") {
+		const stageSlotTabset = model.getNodeById(TABSET_IDS.chat);
+		if (stageSlotTabset?.getType() === "tabset") {
+			model.doAction(
+				Actions.addNode(
+					createDockTabsetJson(TABSET_IDS.chatMain, ["chat"], TABSET_WEIGHTS.chat) as unknown as IJsonTabNode,
+					TABSET_IDS.chat,
+					DockLocation.RIGHT,
+					-1,
+					true,
+				),
+			);
+			return { toNodeId: TABSET_IDS.chatMain, location: DockLocation.CENTER };
+		}
+
+		const workspaceMain = model.getNodeById(WORKSPACE_NODE_IDS.main);
+		if (workspaceMain) {
+			model.doAction(
+				Actions.addNode(
+					createDockTabsetJson(TABSET_IDS.chatMain, ["chat"], TABSET_WEIGHTS.chat) as unknown as IJsonTabNode,
+					WORKSPACE_NODE_IDS.main,
+					DockLocation.LEFT,
+					-1,
+					true,
+				),
+			);
+			return { toNodeId: TABSET_IDS.chatMain, location: DockLocation.CENTER };
+		}
+	}
+
+	if (panelId === "event-log") {
 		const workspaceRoot = model.getNodeById(WORKSPACE_NODE_IDS.root);
 		if (workspaceRoot) {
 			return { toNodeId: WORKSPACE_NODE_IDS.root, location: DockLocation.BOTTOM };
