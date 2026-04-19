@@ -248,6 +248,40 @@ function getRestoreTarget(model: Model, panelId: DockPanelId): { toNodeId: strin
 		if (stageSlotTabset?.getType() === "tabset") {
 			return { toNodeId: TABSET_IDS.chat, location: DockLocation.CENTER };
 		}
+
+		const chatMainTabset = model.getNodeById(TABSET_IDS.chatMain);
+		if (chatMainTabset?.getType() === "tabset") {
+			return { toNodeId: TABSET_IDS.chatMain, location: DockLocation.LEFT };
+		}
+	}
+
+	if (panelId === "chat") {
+		const chatMainTabset = model.getNodeById(TABSET_IDS.chatMain);
+		if (chatMainTabset?.getType() === "tabset") {
+			return { toNodeId: TABSET_IDS.chatMain, location: DockLocation.CENTER };
+		}
+
+		const stageSlotTabset = model.getNodeById(TABSET_IDS.chat);
+		if (stageSlotTabset?.getType() === "tabset") {
+			return { toNodeId: TABSET_IDS.chat, location: DockLocation.RIGHT };
+		}
+	}
+
+	if (panelId === "stage-controls") {
+		const stageTabset = model.getNodeById(TABSET_IDS.stage);
+		if (stageTabset?.getType() === "tabset") {
+			return { toNodeId: TABSET_IDS.stage, location: DockLocation.CENTER };
+		}
+
+		const stageSlotTabset = model.getNodeById(TABSET_IDS.chat);
+		if (stageSlotTabset?.getType() === "tabset") {
+			return { toNodeId: TABSET_IDS.chat, location: DockLocation.LEFT };
+		}
+
+		const chatMainTabset = model.getNodeById(TABSET_IDS.chatMain);
+		if (chatMainTabset?.getType() === "tabset") {
+			return { toNodeId: TABSET_IDS.chatMain, location: DockLocation.LEFT };
+		}
 	}
 
 	const directTargetId = getPreferredTabsetId(panelId);
@@ -269,17 +303,11 @@ function getRestoreTarget(model: Model, panelId: DockPanelId): { toNodeId: strin
 
 	const rightTabset = model.getNodeById(TABSET_IDS.right);
 	if (rightTabset?.getType() === "tabset") {
-		if (panelId === "stage-slot") {
-			return { toNodeId: TABSET_IDS.right, location: DockLocation.LEFT };
-		}
-		if (panelId === "stage-controls") {
-			return { toNodeId: TABSET_IDS.right, location: DockLocation.LEFT };
-		}
-		if (panelId === "chat") {
-			return { toNodeId: TABSET_IDS.right, location: DockLocation.LEFT };
-		}
 		if (panelId === "event-log") {
 			return { toNodeId: TABSET_IDS.right, location: DockLocation.BOTTOM };
+		}
+		if (panelId === "stage-controls" || panelId === "stage-slot" || panelId === "chat") {
+			return { toNodeId: TABSET_IDS.right, location: DockLocation.LEFT };
 		}
 	}
 
