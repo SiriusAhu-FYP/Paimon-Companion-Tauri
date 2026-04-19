@@ -253,31 +253,31 @@ function formatSummary(event: EventName, payload: unknown): string {
 			return `UI stall: ${data.durationMs.toFixed(0)}ms (>${data.thresholdMs}ms)`;
 		}
 		case "system:emergency-stop":
-			return "紧急停止";
+			return "Emergency stop";
 		case "system:manual-takeover":
-			return "手动接管";
+			return "Manual takeover";
 		case "system:resume":
-			return "恢复执行";
+			return "Resume execution";
 		case "audio:asr-result": {
 			const data = payload as EventMap["audio:asr-result"];
 			return `${data.source}: ${truncate(data.text, 80)}`;
 		}
 		case "audio:tts-pending": {
 			const data = payload as EventMap["audio:tts-pending"];
-			return `TTS 准备: ${truncate(data.text, 80)}`;
+			return `TTS pending: ${truncate(data.text, 80)}`;
 		}
 		case "audio:vad-start":
-			return "VAD 开始录音";
+			return "VAD recording started";
 		case "audio:vad-end": {
 			const data = payload as EventMap["audio:vad-end"];
-			return `VAD 结束 (${Math.round(data.audioData.byteLength / 1024)} KB)`;
+			return `VAD ended (${Math.round(data.audioData.byteLength / 1024)} KB)`;
 		}
 		case "audio:tts-start": {
 			const data = payload as EventMap["audio:tts-start"];
 			return `TTS: ${truncate(data.text, 80)}`;
 		}
 		case "audio:tts-end":
-			return "TTS 完成";
+			return "TTS finished";
 		case "voice:state-change": {
 			const data = payload as EventMap["voice:state-change"];
 			return `${data.state.status}${data.state.playbackLocked ? " / playback-lock" : ""}`;
@@ -285,31 +285,31 @@ function formatSummary(event: EventName, payload: unknown): string {
 		case "llm:request-start": {
 			const data = payload as EventMap["llm:request-start"];
 			const sourceLabel = data.source === "companion-reply"
-				? "跟进"
+				? "Follow-up"
 				: data.source === "proactive-reply"
-					? "主动"
-					: "请求";
+					? "Proactive"
+					: "Request";
 			return `${sourceLabel}${formatTraceTag(data.traceId)}: ${truncate(data.userText, 80)}${data.inputSource ? ` / ${data.inputSource}` : ""}${data.companionRuntimeContextUsed ? " / runtime context" : ""}`;
 		}
 		case "llm:tool-call": {
 			const data = payload as EventMap["llm:tool-call"];
-			return `工具调用${formatTraceTag(data.traceId)}: ${data.name}`;
+			return `Tool call${formatTraceTag(data.traceId)}: ${data.name}`;
 		}
 		case "llm:response-end": {
 			const data = payload as EventMap["llm:response-end"];
-			return `响应${formatTraceTag(data.traceId)}: ${truncate(data.fullText, 80)}`;
+			return `Response${formatTraceTag(data.traceId)}: ${truncate(data.fullText, 80)}`;
 		}
 		case "llm:error": {
 			const data = payload as EventMap["llm:error"];
-			return `LLM 错误: ${data.error}`;
+			return `LLM error: ${data.error}`;
 		}
 		case "mcp:tool-start": {
 			const data = payload as EventMap["mcp:tool-start"];
-			return `MCP 调用${formatTraceTag(data.traceId)}: ${data.name}`;
+			return `MCP start${formatTraceTag(data.traceId)}: ${data.name}`;
 		}
 		case "mcp:tool-complete": {
 			const data = payload as EventMap["mcp:tool-complete"];
-			return `${data.ok ? "MCP 完成" : "MCP 失败"}${formatTraceTag(data.traceId)}: ${data.name}${data.error ? ` / ${truncate(data.error, 80)}` : ""}`;
+			return `${data.ok ? "MCP complete" : "MCP failed"}${formatTraceTag(data.traceId)}: ${data.name}${data.error ? ` / ${truncate(data.error, 80)}` : ""}`;
 		}
 		case "character:expression": {
 			const data = payload as EventMap["character:expression"];
@@ -329,7 +329,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "character:switch": {
 			const data = payload as EventMap["character:switch"];
-			return `切换角色: ${data.characterId}`;
+			return `Switch character: ${data.characterId}`;
 		}
 		case "companion:mode-change": {
 			const data = payload as EventMap["companion:mode-change"];
@@ -355,7 +355,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "functional:target-change": {
 			const data = payload as EventMap["functional:target-change"];
-			return data.title ? `目标: ${data.title}` : "目标已清空";
+			return data.title ? `Target: ${data.title}` : "Target cleared";
 		}
 		case "perception:snapshot": {
 			const data = payload as EventMap["perception:snapshot"];
@@ -363,7 +363,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "orchestrator:state-change": {
 			const data = payload as EventMap["orchestrator:state-change"];
-			return `active=${data.state.activeTaskId ?? "none"}, 历史=${data.state.taskHistory.length}`;
+			return `active=${data.state.activeTaskId ?? "none"}, history=${data.state.taskHistory.length}`;
 		}
 		case "orchestrator:task-start": {
 			const data = payload as EventMap["orchestrator:task-start"];
@@ -371,7 +371,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "orchestrator:task-complete": {
 			const data = payload as EventMap["orchestrator:task-complete"];
-			return `${data.success ? "完成" : "失败"}: ${data.summary}`;
+			return `${data.success ? "Complete" : "Failed"}: ${data.summary}`;
 		}
 		case "orchestrator:task-log": {
 			const data = payload as EventMap["orchestrator:task-log"];
@@ -400,7 +400,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		case "game2048:state-change": {
 			const data = payload as EventMap["game2048:state-change"];
 			const latest = data.state.lastRun;
-			return latest ? `最新运行: ${latest.status}` : "状态刷新";
+			return latest ? `Latest run: ${latest.status}` : "State refreshed";
 		}
 		case "sokoban:target-detected": {
 			const data = payload as EventMap["sokoban:target-detected"];
@@ -421,7 +421,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		case "sokoban:state-change": {
 			const data = payload as EventMap["sokoban:state-change"];
 			const latest = data.state.lastRun;
-			return latest ? `最新运行: ${latest.status}` : "状态刷新";
+			return latest ? `Latest run: ${latest.status}` : "State refreshed";
 		}
 		case "evaluation:case-start": {
 			const data = payload as EventMap["evaluation:case-start"];
@@ -433,7 +433,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "evaluation:state-change": {
 			const data = payload as EventMap["evaluation:state-change"];
-			return `active=${data.state.activeCaseId ?? "none"}, 历史=${data.state.history.length}`;
+			return `active=${data.state.activeCaseId ?? "none"}, history=${data.state.history.length}`;
 		}
 		case "unified:state-change": {
 			const data = payload as EventMap["unified:state-change"];
@@ -445,7 +445,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "unified:run-complete": {
 			const data = payload as EventMap["unified:run-complete"];
-			return `${data.gameId ?? "unknown"} ${data.success ? "完成" : "失败"}${formatTraceTag(data.traceId)}: ${data.summary} / total-blocking ${data.timings.totalBlockingMs.toFixed(0)}ms / nonblocking ${data.timings.totalNonBlockingMs.toFixed(0)}ms`;
+			return `${data.gameId ?? "unknown"} ${data.success ? "complete" : "failed"}${formatTraceTag(data.traceId)}: ${data.summary} / total-blocking ${data.timings.totalBlockingMs.toFixed(0)}ms / nonblocking ${data.timings.totalNonBlockingMs.toFixed(0)}ms`;
 		}
 		case "unified:voice-input": {
 			const data = payload as EventMap["unified:voice-input"];
@@ -457,7 +457,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "companion-runtime:frame-described": {
 			const data = payload as EventMap["companion-runtime:frame-described"];
-			return `${data.record.source === "unchanged" ? "静止" : "视觉"}: ${truncate(data.record.description, 96)}`;
+			return `${data.record.source === "unchanged" ? "unchanged" : "vision"}: ${truncate(data.record.description, 96)}`;
 		}
 		case "companion-runtime:summary-complete": {
 			const data = payload as EventMap["companion-runtime:summary-complete"];
@@ -473,7 +473,7 @@ function formatSummary(event: EventName, payload: unknown): string {
 		}
 		case "companion-runtime:benchmark-state-change": {
 			const data = payload as EventMap["companion-runtime:benchmark-state-change"];
-			return `active=${data.state.activeBenchmarkId ?? "none"}, 历史=${data.state.history.length}`;
+			return `active=${data.state.activeBenchmarkId ?? "none"}, history=${data.state.history.length}`;
 		}
 		default:
 			return serializePayload(payload);

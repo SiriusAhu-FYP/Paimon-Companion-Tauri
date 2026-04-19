@@ -342,7 +342,7 @@ export function EventLog() {
 										{selectedEntry.event}
 									</div>
 									<div className="event-log-detail-meta">
-										{selectedEntry.timestampLabel} · {selectedEntry.category}
+										{selectedEntry.timestampLabel} · {translateCategoryLabel(selectedEntry.category, t)}
 									</div>
 								</div>
 								<div className="event-log-actions">
