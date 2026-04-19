@@ -13,7 +13,7 @@ import {
 } from "@mui/material";
 import StopIcon from "@mui/icons-material/Stop";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import { useRuntime, useCharacter, useCompanionMode, useDelegationMemory } from "@/hooks";
+import { useRuntime, useCharacter, useCompanionMode, useDebugCaptureState, useDelegationMemory } from "@/hooks";
 import { useI18n } from "@/contexts/I18nProvider";
 import { getServices } from "@/services";
 import { updateConfig, getConfig } from "@/services/config";
@@ -37,6 +37,7 @@ export function ControlPanel() {
 	const { mode, stop, resume } = useRuntime();
 	const { emotion, isSpeaking } = useCharacter();
 	const companionMode = useCompanionMode();
+	const debugCapture = useDebugCaptureState();
 	const delegationMemory = useDelegationMemory();
 	const [profiles, setProfiles] = useState<CharacterProfile[]>([]);
 	const [selectedId, setSelectedId] = useState<string>("__manual__");
@@ -82,6 +83,11 @@ export function ControlPanel() {
 		const { companionMode: companionModeService } = getServices();
 		companionModeService.setMode(nextMode, "control-panel-toggle", "manual");
 	}, []);
+
+	const handleToggleDebugCapture = useCallback(async () => {
+		const { debugCapture: debugCaptureService } = getServices();
+		await debugCaptureService.setEnabled(!debugCapture.enabled);
+	}, [debugCapture.enabled]);
 	return (
 		<PanelRoot title={t("陪伴面板", "Companion Panel")}>
 			<PanelCard>
@@ -176,6 +182,30 @@ export function ControlPanel() {
 					<Typography variant="body2">{t("当前表情", "Current Emotion")}：{emotion}</Typography>
 					<Typography variant="body2">{t("语音状态", "Speech State")}：{isSpeaking ? t("说话中", "Speaking") : t("空闲", "Idle")}</Typography>
 				</Box>
+			</PanelCard>
+
+			<Divider />
+
+			<PanelCard>
+				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
+					{t("日志记录", "Debug Capture")}
+				</Typography>
+				<Button
+					variant={debugCapture.enabled ? "contained" : "outlined"}
+					size="small"
+					color={debugCapture.enabled ? "warning" : "inherit"}
+					onClick={() => { void handleToggleDebugCapture(); }}
+					sx={{ alignSelf: "flex-start", mb: 1 }}
+				>
+					{debugCapture.enabled ? t("停止日志写入", "Stop Capture") : t("开始日志写入", "Start Capture")}
+				</Button>
+				<Stack spacing={0.25}>
+					<Typography variant="body2">{t("当前会话", "Current Session")}：{debugCapture.sessionId ?? t("无", "None")}</Typography>
+					<Typography variant="body2">{t("写入目录", "Capture Directory")}：{debugCapture.sessionDirectory ?? t("无", "None")}</Typography>
+					<Typography variant="body2">{t("已记录事件", "Captured Events")}：{debugCapture.capturedEventCount}</Typography>
+					<Typography variant="body2">{t("已记录图片", "Captured Images")}：{debugCapture.capturedImageCount}</Typography>
+					<Typography variant="body2">{t("最近错误", "Last Error")}：{debugCapture.lastError ?? t("无", "None")}</Typography>
+				</Stack>
 			</PanelCard>
 
 			<Divider />

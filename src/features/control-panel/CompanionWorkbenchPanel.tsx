@@ -6,7 +6,7 @@ import {
 	TextField,
 	Typography,
 } from "@mui/material";
-import { useAffectState, useCharacter, useCompanionMode, useDebugCaptureState, useDelegationMemory, useProactiveState } from "@/hooks";
+import { useAffectState, useCharacter, useCompanionMode, useDelegationMemory, useProactiveState } from "@/hooks";
 import { HelpTooltip } from "@/components";
 import { useI18n } from "@/contexts/I18nProvider";
 import { getServices } from "@/services";
@@ -21,7 +21,6 @@ export function CompanionWorkbenchPanel() {
 	const companionMode = useCompanionMode();
 	const delegationMemory = useDelegationMemory();
 	const proactive = useProactiveState();
-	const debugCapture = useDebugCaptureState();
 	const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
 	const [referenceText, setReferenceText] = useState("");
 	const [taskContextText, setTaskContextText] = useState("");
@@ -84,11 +83,6 @@ export function CompanionWorkbenchPanel() {
 		proactiveCompanion.setRuntimeSummarySilenceSeconds(config.companionRuntime.proactiveRuntimeSummarySilenceSeconds);
 		await updateConfig({ companionRuntime: { ...config.companionRuntime } });
 	}, [config.companionRuntime]);
-
-	const handleToggleDebugCapture = useCallback(async () => {
-		const { debugCapture: debugCaptureService } = getServices();
-		await debugCaptureService.setEnabled(!debugCapture.enabled);
-	}, [debugCapture.enabled]);
 
 	const handleAddReference = useCallback(() => {
 		const text = referenceText.trim();
@@ -220,30 +214,6 @@ export function CompanionWorkbenchPanel() {
 				) : (
 					<Typography variant="body2">{t("尚无托管记录", "No delegated records yet")}</Typography>
 				)}
-			</PanelCard>
-
-			<Divider />
-
-			<PanelCard>
-				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
-					{t("Debug Capture", "Debug Capture")}
-				</Typography>
-				<Button
-					variant={debugCapture.enabled ? "contained" : "outlined"}
-					size="small"
-					color={debugCapture.enabled ? "warning" : "inherit"}
-					onClick={() => { void handleToggleDebugCapture(); }}
-					sx={{ alignSelf: "flex-start", mb: 1 }}
-				>
-					{debugCapture.enabled ? t("停止日志写入", "Stop Capture") : t("开始日志写入", "Start Capture")}
-				</Button>
-				<Stack spacing={0.25}>
-					<Typography variant="body2">{t("当前会话", "Current Session")}：{debugCapture.sessionId ?? t("无", "None")}</Typography>
-					<Typography variant="body2">{t("写入目录", "Capture Directory")}：{debugCapture.sessionDirectory ?? t("无", "None")}</Typography>
-					<Typography variant="body2">{t("已记录事件", "Captured Events")}：{debugCapture.capturedEventCount}</Typography>
-					<Typography variant="body2">{t("已记录图片", "Captured Images")}：{debugCapture.capturedImageCount}</Typography>
-					<Typography variant="body2">{t("最近错误", "Last Error")}：{debugCapture.lastError ?? t("无", "None")}</Typography>
-				</Stack>
 			</PanelCard>
 
 			<Divider />
