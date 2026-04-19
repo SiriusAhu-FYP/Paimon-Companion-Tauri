@@ -168,44 +168,37 @@ export class Game2048Service {
 			});
 			await this.orchestrator.runFocusTask(target);
 
-			let referenceSnapshot = baselineSnapshot;
+			const move = analysis.preferredMoves[0];
+			await callLocalMcpToolJson<SemanticActionExecutionResult<Game2048Move>>("game.perform_action", {
+				gameId: "2048",
+				actionId: move,
+				targetHandle: target.handle,
+				targetTitle: target.title,
+			}, {
+				traceId: options?.traceId ?? run.id,
+				timeoutMs: 60_000,
+			});
+			const latestTask = this.orchestrator.getState().latestTask;
+			const beforeSnapshot = latestTask?.beforeSnapshot ?? baselineSnapshot;
+			const afterSnapshot = latestTask?.afterSnapshot;
 
-			for (const move of analysis.preferredMoves) {
-				await callLocalMcpToolJson<SemanticActionExecutionResult<Game2048Move>>("game.perform_action", {
-					gameId: "2048",
-					actionId: move,
-					targetHandle: target.handle,
-					targetTitle: target.title,
-				}, {
-					traceId: options?.traceId ?? run.id,
-					timeoutMs: 60_000,
-				});
-				const latestTask = this.orchestrator.getState().latestTask;
-				const beforeSnapshot = latestTask?.beforeSnapshot ?? referenceSnapshot;
-				const afterSnapshot = latestTask?.afterSnapshot;
+			if (!afterSnapshot) {
+				throw new Error(`missing post-action snapshot for move ${move}`);
+			}
 
-				if (!afterSnapshot) {
-					throw new Error(`missing post-action snapshot for move ${move}`);
-				}
+			const attempt = await this.evaluateAttempt(move, beforeSnapshot, afterSnapshot);
+			run.attempts.push(attempt);
+			this.bus.emit("game2048:attempt", {
+				runId: run.id,
+				move: attempt.move,
+				changed: attempt.changed,
+				changeRatio: attempt.changeRatio,
+				traceId: options?.traceId ?? run.id,
+			});
 
-				const attempt = await this.evaluateAttempt(move, beforeSnapshot, afterSnapshot);
-				run.attempts.push(attempt);
-				this.bus.emit("game2048:attempt", {
-					runId: run.id,
-					move: attempt.move,
-					changed: attempt.changed,
-					changeRatio: attempt.changeRatio,
-					traceId: options?.traceId ?? run.id,
-				});
-
-				if (attempt.changed) {
-					run.selectedMove = move;
-					run.boardChanged = true;
-					referenceSnapshot = afterSnapshot;
-					break;
-				}
-
-				referenceSnapshot = afterSnapshot;
+			if (attempt.changed) {
+				run.selectedMove = move;
+				run.boardChanged = true;
 			}
 
 			run.status = "completed";
@@ -382,6 +375,7 @@ function buildObservationDecisionPrompt(
 		observationContext,
 		"Return strict JSON with keys: reflection, strategy, reasoning, decisionSummary, preferredMoves.",
 		"preferredMoves must be an ordered array containing only these ids: move_up, move_left, move_right, move_down.",
+		"The first move in preferredMoves is the only move that will be executed this turn; the rest are fallback ranking for logging and future turns.",
 		"Return at least one move and do not include markdown fences or extra keys.",
 	].join("\n\n");
 }

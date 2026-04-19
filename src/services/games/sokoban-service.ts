@@ -39,6 +39,7 @@ import type { SemanticActionExecutionResult } from "@/types";
 const log = createLogger("sokoban");
 const MAX_RUN_HISTORY = 10;
 const MAX_DECISION_HISTORY = 8;
+const MAX_PLANNED_MOVES = 8;
 const DEFAULT_MOVE_ORDER: SokobanActionId[] = [...SOKOBAN_DEFAULT_ACTION_ORDER];
 const TARGET_KEYWORDS = ["sokoban", "push box", "boxoban", "推箱子", "仓库番"];
 
@@ -379,8 +380,8 @@ function buildObservationDecisionPrompt(
 		"Observation context from the local vision runtime:",
 		observationContext,
 		"Return strict JSON with keys: reflection, strategy, reasoning, decisionSummary, plannedMoves.",
-		"plannedMoves must be an ordered array containing only these ids: move_up, move_left, move_right, move_down.",
-		"Return at least one move and do not include markdown fences or extra keys.",
+		`plannedMoves must be an ordered array containing only these ids: move_up, move_left, move_right, move_down, and must contain between 1 and ${MAX_PLANNED_MOVES} moves.`,
+		"Use a bounded short plan, not an open-ended full walkthrough, and do not include markdown fences or extra keys.",
 	].join("\n\n");
 }
 
@@ -417,17 +418,15 @@ function normalizePlannedMoves(value: unknown): SokobanActionId[] {
 		throw new Error("plannedMoves must be an array");
 	}
 	const allowed = new Set<SokobanActionId>(DEFAULT_MOVE_ORDER);
-	const seen = new Set<SokobanActionId>();
 	const plannedMoves = value.flatMap((entry) => {
 		const move = String(entry) as SokobanActionId;
-		if (!allowed.has(move) || seen.has(move)) return [];
-		seen.add(move);
+		if (!allowed.has(move)) return [];
 		return [move];
 	});
 	if (!plannedMoves.length) {
 		throw new Error("plannedMoves must contain at least one valid move");
 	}
-	return plannedMoves;
+	return plannedMoves.slice(0, MAX_PLANNED_MOVES);
 }
 
 function cloneRun(run: SokobanRunRecord): SokobanRunRecord {
