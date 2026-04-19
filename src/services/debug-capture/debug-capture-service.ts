@@ -44,6 +44,7 @@ function stringifyJsonl(payload: unknown) {
 export class DebugCaptureService {
 	private bus: EventBus;
 	private state: DebugCaptureState = makeInitialState();
+	private nextLabel = "manual";
 	private lastEventSequence = 0;
 	private pendingWrites = new Map<string, string[]>();
 	private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -65,10 +66,15 @@ export class DebugCaptureService {
 		return { ...this.state };
 	}
 
+	setNextLabel(label: string | null | undefined) {
+		const trimmed = label?.trim();
+		this.nextLabel = trimmed || "manual";
+	}
+
 	async setEnabled(enabled: boolean): Promise<void> {
 		if (enabled === this.state.enabled) return;
 		if (enabled) {
-			const session = await startDebugCapture("p4-debug");
+			const session = await startDebugCapture(this.nextLabel);
 			this.state = {
 				...this.state,
 				enabled: true,

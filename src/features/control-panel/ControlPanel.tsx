@@ -41,6 +41,7 @@ export function ControlPanel() {
 	const delegationMemory = useDelegationMemory();
 	const [profiles, setProfiles] = useState<CharacterProfile[]>([]);
 	const [selectedId, setSelectedId] = useState<string>("__manual__");
+	const [captureLabel, setCaptureLabel] = useState("p5-manual");
 
 	useEffect(() => {
 		const { character } = getServices();
@@ -86,8 +87,11 @@ export function ControlPanel() {
 
 	const handleToggleDebugCapture = useCallback(async () => {
 		const { debugCapture: debugCaptureService } = getServices();
+		if (!debugCapture.enabled) {
+			debugCaptureService.setNextLabel(captureLabel);
+		}
 		await debugCaptureService.setEnabled(!debugCapture.enabled);
-	}, [debugCapture.enabled]);
+	}, [captureLabel, debugCapture.enabled]);
 	return (
 		<PanelRoot title={t("陪伴面板", "Companion Panel")}>
 			<PanelCard>
@@ -190,6 +194,23 @@ export function ControlPanel() {
 				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
 					{t("日志记录", "Debug Capture")}
 				</Typography>
+				<Box sx={{ mb: 1 }}>
+					<Select
+						size="small"
+						fullWidth
+						value={captureLabel}
+						onChange={(event) => setCaptureLabel(event.target.value)}
+						disabled={debugCapture.enabled}
+						displayEmpty
+						sx={{ fontSize: 13 }}
+					>
+						<MenuItem value="p5-exp-1">{t("P5 实验 1", "P5 Experiment 1")}</MenuItem>
+						<MenuItem value="p5-exp-2">{t("P5 实验 2", "P5 Experiment 2")}</MenuItem>
+						<MenuItem value="p5-exp-3">{t("P5 实验 3", "P5 Experiment 3")}</MenuItem>
+						<MenuItem value="p5-exp-4">{t("P5 实验 4", "P5 Experiment 4")}</MenuItem>
+						<MenuItem value="p5-manual">{t("P5 手动记录", "P5 Manual Capture")}</MenuItem>
+					</Select>
+				</Box>
 				<Button
 					variant={debugCapture.enabled ? "contained" : "outlined"}
 					size="small"
