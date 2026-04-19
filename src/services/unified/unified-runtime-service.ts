@@ -165,7 +165,7 @@ export class UnifiedRuntimeService {
 				const actionStartedAt = Date.now();
 				const result = await this.game2048.runSingleStep(undefined, { traceId: run.id });
 				run.timings.actionMs = Date.now() - actionStartedAt;
-				run.timings.runtimeRefreshMs = await this.refreshCompanionContextForTarget(result.target);
+				run.timings.runtimeRefreshMs = await this.waitForPostActionObservationForTarget(result.target, Date.now());
 				run.status = "completed";
 				run.phase = this.state.speechEnabled ? "speaking" : "idle";
 				run.summary = result.summary;
@@ -210,7 +210,7 @@ export class UnifiedRuntimeService {
 				const actionStartedAt = Date.now();
 				const result = await this.sokoban.runValidationRound(undefined, { traceId: run.id });
 				run.timings.actionMs = Date.now() - actionStartedAt;
-				run.timings.runtimeRefreshMs = await this.refreshCompanionContextForTarget(result.target);
+				run.timings.runtimeRefreshMs = await this.waitForPostActionObservationForTarget(result.target, Date.now());
 				run.status = "completed";
 				run.phase = this.state.speechEnabled ? "speaking" : "idle";
 				run.summary = result.summary;
@@ -466,26 +466,16 @@ export class UnifiedRuntimeService {
 		}
 	}
 
-	private async refreshCompanionContextForTarget(target: { handle: string; title: string }): Promise<number> {
-		const runtimeState = this.companionRuntime.getState();
-		if (!runtimeState.running) return 0;
-		if (runtimeState.target?.handle !== target.handle) return 0;
-		const hasSummary = Boolean(runtimeState.lastSummary);
-		const summaryStale = hasSummary
-			? (Date.now() - (runtimeState.lastSummary?.createdAt ?? 0)) > runtimeState.summaryWindowMs
-			: false;
+	private async waitForPostActionObservationForTarget(target: { handle: string; title: string }, afterTimestamp: number): Promise<number> {
 		const startedAt = Date.now();
 		try {
-			// Keep per-round refresh latency stable: only block for summary generation when there is
-			// no summary at all yet; stale-summary refresh is done in background.
-			await this.companionRuntime.refreshNow({ summarize: !hasSummary });
-			if (summaryStale) {
-				void this.companionRuntime.runSummaryNow().catch((err) => {
-					log.warn("background companion summary refresh failed", err);
-				});
-			}
+			await this.companionRuntime.waitForPostActionObservation(target, {
+				afterTimestamp,
+				timeoutMs: 5_000,
+				requireChanged: true,
+			});
 		} catch (err) {
-			log.warn("companion context refresh after unified run failed", err);
+			log.warn("post-action companion observation wait failed", err);
 		}
 		return Date.now() - startedAt;
 	}

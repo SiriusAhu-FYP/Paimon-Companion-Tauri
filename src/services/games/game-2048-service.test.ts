@@ -3,6 +3,7 @@ import { EventBus } from "@/services/event-bus";
 import { Game2048Service } from "./game-2048-service";
 import { requestActiveTextDecision } from "./cloud-decision";
 import { callLocalMcpToolJson } from "@/services/mcp/local-mcp-client";
+import { estimateSnapshotChange } from "./game-utils";
 
 vi.mock("@/services/system", () => ({
 	listWindows: vi.fn(),
@@ -22,18 +23,22 @@ vi.mock("./game-utils", () => ({
 	isSnapshotLowConfidence: vi.fn(() => false),
 }));
 
-function createService(requireObservationContext: () => { promptContext: string; latestTimestamp: number } | never) {
+function createService(ensureObservationContext: () => Promise<{ promptContext: string; latestTimestamp: number }> | never) {
 	return new Game2048Service({
 		bus: new EventBus(),
 		orchestrator: {
 			getState: vi.fn(() => ({
 				selectedTarget: { handle: "target-2048", title: "2048" },
+				latestTask: {
+					beforeSnapshot: { dataUrl: "before" },
+					afterSnapshot: { dataUrl: "after" },
+				},
 			})),
 			setTarget: vi.fn(),
+			runFocusTask: vi.fn().mockResolvedValue(undefined),
 		} as never,
 		companionRuntime: {
-			refreshNow: vi.fn().mockResolvedValue(undefined),
-			requireObservationContext: vi.fn(requireObservationContext),
+			ensureObservationContext: vi.fn(ensureObservationContext),
 		} as never,
 	});
 }
@@ -53,18 +58,19 @@ describe("Game2048Service local observation guard", () => {
 		vi.mocked(callLocalMcpToolJson).mockResolvedValue({} as never);
 	});
 
-	it("fails when companion runtime is not running", async () => {
-		const service = createService(() => {
-			throw new Error("companion runtime is not running; start local observation before delegated actions");
-		});
+	it("auto-starts local observation context before running", async () => {
+		const service = createService(async () => ({
+			promptContext: "board summary",
+			latestTimestamp: Date.now(),
+		}));
 
-		await expect(service.runSingleStep()).rejects.toThrow(
-			"companion runtime is not running; start local observation before delegated actions",
-		);
+		await service.runSingleStep();
+
+		expect(vi.mocked(requestActiveTextDecision)).toHaveBeenCalled();
 	});
 
 	it("fails when companion runtime target does not match the selected target", async () => {
-		const service = createService(() => {
+		const service = createService(async () => {
 			throw new Error("companion runtime target does not match the selected functional target");
 		});
 
@@ -89,8 +95,7 @@ describe("Game2048Service local observation guard", () => {
 				runFocusTask: vi.fn().mockResolvedValue(undefined),
 			} as never,
 			companionRuntime: {
-				refreshNow: vi.fn().mockResolvedValue(undefined),
-				requireObservationContext: vi.fn(() => ({ promptContext: "board summary", latestTimestamp: Date.now() })),
+				ensureObservationContext: vi.fn(async () => ({ promptContext: "board summary", latestTimestamp: Date.now() })),
 			} as never,
 		});
 
@@ -100,5 +105,30 @@ describe("Game2048Service local observation guard", () => {
 		expect(vi.mocked(callLocalMcpToolJson).mock.calls[0]?.[1]).toMatchObject({
 			actionId: "move_left",
 		});
+	});
+
+	it("treats local 2048 movement as changed under the relaxed threshold", async () => {
+		vi.mocked(estimateSnapshotChange).mockResolvedValueOnce(0.0065);
+		const service = new Game2048Service({
+			bus: new EventBus(),
+			orchestrator: {
+				getState: vi.fn(() => ({
+					selectedTarget: { handle: "target-2048", title: "2048" },
+					latestTask: {
+						beforeSnapshot: { dataUrl: "before" },
+						afterSnapshot: { dataUrl: "after" },
+					},
+				})),
+				setTarget: vi.fn(),
+				runFocusTask: vi.fn().mockResolvedValue(undefined),
+			} as never,
+			companionRuntime: {
+				ensureObservationContext: vi.fn(async () => ({ promptContext: "board summary", latestTimestamp: Date.now() })),
+			} as never,
+		});
+
+		const result = await service.runSingleStep();
+
+		expect(result.boardChanged).toBe(true);
 	});
 });

@@ -9,6 +9,7 @@ import type {
 	CompanionFrameDescriptionRecord,
 	CompanionRuntimeMetrics,
 	CompanionRuntimeState,
+	CompanionRuntimeDiagnosticCode,
 	CompanionSummaryRecord,
 	FunctionalTarget,
 	PerceptionSnapshot,
@@ -17,11 +18,15 @@ import type { CompanionRuntimeStateChangePayload } from "@/types/events";
 import { normalizeCompatibleOpenAIBaseUrl } from "@/services/games/game-utils";
 
 const log = createLogger("companion-runtime");
-const MIN_MEANINGFUL_CHANGE_RATIO = 0.02;
+const MIN_MEANINGFUL_CHANGE_RATIO = 0.0045;
+const LOW_DIFF_SKIP_FRAME_QUEUE_LIMIT = 6;
 const UNCHANGED_FRAME_DESCRIPTION = "画面变化很小，当前画面与上一帧基本一致，没有明显新变化。";
 const LOCAL_VISION_READY_TIMEOUT_MS = 120_000;
 const LOCAL_VISION_READY_POLL_MS = 3_000;
 const STATE_CHANGE_MIN_INTERVAL_MS = 250;
+const OBSERVATION_READY_WAIT_TIMEOUT_MS = 15_000;
+const OBSERVATION_READY_POLL_MS = 300;
+const POST_ACTION_OBSERVATION_TIMEOUT_MS = 5_000;
 
 interface OpenAIChatCompletionResponse {
 	choices?: Array<{
@@ -62,6 +67,10 @@ function makeInitialState(): CompanionRuntimeState {
 		frameQueue: [],
 		summaryHistory: [],
 		metrics: makeInitialMetrics(),
+		observationReady: false,
+		lastObservationAt: null,
+		diagnosticCode: null,
+		diagnosticMessage: null,
 		lastError: null,
 	};
 }
@@ -179,7 +188,20 @@ export class CompanionRuntimeService {
 			frameQueue: this.state.frameQueue.map(cloneFrameRecord),
 			summaryHistory: this.state.summaryHistory.map(cloneSummaryRecord),
 			metrics: { ...this.state.metrics },
+			observationReady: this.state.observationReady,
+			lastObservationAt: this.state.lastObservationAt,
+			diagnosticCode: this.state.diagnosticCode,
+			diagnosticMessage: this.state.diagnosticMessage,
 		};
+	}
+
+	private setDiagnostic(code: CompanionRuntimeDiagnosticCode | null, message: string | null) {
+		this.state.diagnosticCode = code;
+		this.state.diagnosticMessage = message;
+	}
+
+	private clearDiagnostic() {
+		this.setDiagnostic(null, null);
 	}
 
 	getPromptContext(): string {
@@ -236,33 +258,140 @@ export class CompanionRuntimeService {
 		options?: { maxAgeMs?: number },
 	): { promptContext: string; latestTimestamp: number } {
 		if (!this.state.running) {
+			this.setDiagnostic("runtime-not-running", "Companion runtime is not running.");
 			throw new Error("companion runtime is not running; start local observation before delegated actions");
 		}
 		if (!this.state.target) {
+			this.setDiagnostic("runtime-not-running", "Companion runtime has no active target.");
 			throw new Error("companion runtime has no active target");
 		}
 		if (this.state.target.handle !== target.handle) {
+			this.setDiagnostic("target-mismatch", "Companion runtime target does not match the selected functional target.");
 			throw new Error("companion runtime target does not match the selected functional target");
 		}
 
 		const latestTimestamp = this.state.lastSummary?.createdAt ?? this.state.lastFrame?.capturedAt ?? 0;
 		if (!latestTimestamp) {
+			this.setDiagnostic("observation-not-ready", "Companion runtime has not produced any local observation yet.");
 			throw new Error("companion runtime has no recent local observation yet");
 		}
 
 		const maxAgeMs = options?.maxAgeMs ?? Math.max(this.state.summaryWindowMs * 2, this.state.captureIntervalMs * 4, 15_000);
 		if (Date.now() - latestTimestamp > maxAgeMs) {
+			this.setDiagnostic("observation-not-ready", "Companion runtime observation is stale.");
 			throw new Error("companion runtime observation is stale; refresh local observation before delegated actions");
 		}
 
 		const promptContext = this.getPromptContext();
 		if (!promptContext) {
+			this.setDiagnostic("observation-not-ready", "Companion runtime did not produce usable observation context.");
 			throw new Error("companion runtime did not produce usable observation context");
 		}
+
+		this.state.observationReady = true;
+		this.state.lastObservationAt = latestTimestamp;
+		this.clearDiagnostic();
 
 		return {
 			promptContext,
 			latestTimestamp,
+		};
+	}
+
+	async ensureObservationContext(
+		target: FunctionalTarget,
+		options?: { autoStart?: boolean; timeoutMs?: number; maxAgeMs?: number },
+	): Promise<{ promptContext: string; latestTimestamp: number }> {
+		const timeoutMs = options?.timeoutMs ?? OBSERVATION_READY_WAIT_TIMEOUT_MS;
+		const deadline = Date.now() + timeoutMs;
+		let lastError: Error | null = null;
+
+		if (!this.state.running || this.state.target?.handle !== target.handle) {
+			if (!options?.autoStart) {
+				return this.requireObservationContext(target, { maxAgeMs: options?.maxAgeMs });
+			}
+			this.setDiagnostic("runtime-auto-starting", `Starting local observation for ${target.title}.`);
+			await this.start(target);
+		}
+
+		while (Date.now() <= deadline) {
+			try {
+				await this.refreshNow({ summarize: true });
+				return this.requireObservationContext(target, { maxAgeMs: options?.maxAgeMs });
+			} catch (err) {
+				lastError = err instanceof Error ? err : new Error(String(err));
+				this.state.observationReady = false;
+				if (lastError.message.includes("target does not match")) {
+					this.setDiagnostic("target-mismatch", "Companion runtime target does not match the selected functional target.");
+				} else {
+					this.setDiagnostic("observation-not-ready", "Waiting for the first usable local observation.");
+				}
+				await delay(OBSERVATION_READY_POLL_MS);
+			}
+		}
+
+		throw lastError ?? new Error("companion runtime observation is not ready");
+	}
+
+	async waitForPostActionObservation(
+		target: FunctionalTarget,
+		options: {
+			afterTimestamp: number;
+			timeoutMs?: number;
+			requireChanged?: boolean;
+		},
+	): Promise<{ promptContext: string; latestTimestamp: number; changedObservation: boolean; timedOut: boolean }> {
+		const timeoutMs = options.timeoutMs ?? POST_ACTION_OBSERVATION_TIMEOUT_MS;
+		const deadline = Date.now() + timeoutMs;
+		let lastKnownContext = this.getPromptContext();
+		let lastKnownTimestamp = this.state.lastSummary?.createdAt ?? this.state.lastFrame?.capturedAt ?? 0;
+		let sawBelowThresholdChange = false;
+
+		while (Date.now() <= deadline) {
+			try {
+				await this.refreshNow({ summarize: true });
+				const context = this.requireObservationContext(target);
+				lastKnownContext = context.promptContext;
+				lastKnownTimestamp = context.latestTimestamp;
+				const latestFrame = this.state.lastFrame;
+				const latestSummary = this.state.lastSummary;
+				const hasFreshFrame = Boolean(latestFrame && latestFrame.capturedAt > options.afterTimestamp);
+				const hasFreshSummary = Boolean(latestSummary && latestSummary.createdAt > options.afterTimestamp);
+				const changedObservation = Boolean(hasFreshFrame && latestFrame?.source === "vision");
+
+				if (latestFrame && hasFreshFrame && latestFrame.changeRatio !== null && latestFrame.changeRatio > 0 && !changedObservation) {
+					sawBelowThresholdChange = true;
+				}
+
+				if ((hasFreshSummary || hasFreshFrame) && (!options.requireChanged || changedObservation)) {
+					this.clearDiagnostic();
+					return {
+						promptContext: context.promptContext,
+						latestTimestamp: context.latestTimestamp,
+						changedObservation,
+						timedOut: false,
+					};
+				}
+
+				if (sawBelowThresholdChange) {
+					this.setDiagnostic("below-threshold-change", "A new frame arrived, but the visible change is still below the current threshold.");
+				} else {
+					this.setDiagnostic("observation-not-ready", "Waiting for a fresh post-action local observation.");
+				}
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				this.setDiagnostic("observation-not-ready", message);
+			}
+
+			await delay(OBSERVATION_READY_POLL_MS);
+		}
+
+		this.setDiagnostic("post-action-timeout", "Timed out while waiting for a changed post-action observation.");
+		return {
+			promptContext: lastKnownContext,
+			latestTimestamp: lastKnownTimestamp,
+			changedObservation: false,
+			timedOut: true,
 		};
 	}
 
@@ -284,21 +413,38 @@ export class CompanionRuntimeService {
 			...makeInitialMetrics(),
 			sessionStartedAt: Date.now(),
 		};
+		this.state.observationReady = false;
+		this.state.lastObservationAt = null;
 		this.state.lastError = null;
+		this.clearDiagnostic();
 		this.state.phase = "connecting";
 		this.emitState();
 
-		await this.waitForLocalVisionReady();
-		await this.runCaptureTick();
-		this.scheduleCaptureTick();
-		this.scheduleSummaryTick();
+		try {
+			await this.waitForLocalVisionReady();
+			await this.runCaptureTick();
+			if (!this.state.lastFrame && this.state.lastError) {
+				throw new Error(this.state.lastError ?? "companion runtime failed to capture the first local observation");
+			}
+			this.scheduleCaptureTick();
+			this.scheduleSummaryTick();
 
-		log.info("companion runtime started", {
-			target: target.title,
-			captureIntervalMs: this.state.captureIntervalMs,
-			summaryWindowMs: this.state.summaryWindowMs,
-			historyRetentionMs: this.state.historyRetentionMs,
-		});
+			log.info("companion runtime started", {
+				target: target.title,
+				captureIntervalMs: this.state.captureIntervalMs,
+				summaryWindowMs: this.state.summaryWindowMs,
+				historyRetentionMs: this.state.historyRetentionMs,
+			});
+		} catch (err) {
+			this.stopTimers();
+			this.captureInFlight = false;
+			this.summaryInFlight = false;
+			this.lastSnapshotForDiff = null;
+			this.state.running = false;
+			this.state.observationReady = false;
+			this.emitState(true);
+			throw err;
+		}
 	}
 
 	stop(): void {
@@ -308,6 +454,9 @@ export class CompanionRuntimeService {
 		this.lastSnapshotForDiff = null;
 		this.state.running = false;
 		this.state.phase = "idle";
+		this.state.observationReady = false;
+		this.state.lastObservationAt = null;
+		this.clearDiagnostic();
 		this.emitState();
 		log.info("companion runtime stopped");
 	}
@@ -318,6 +467,9 @@ export class CompanionRuntimeService {
 		this.state.frameQueue = [];
 		this.state.summaryHistory = [];
 		this.state.metrics = makeInitialMetrics();
+		this.state.observationReady = false;
+		this.state.lastObservationAt = null;
+		this.clearDiagnostic();
 		this.state.lastError = null;
 		this.lastSnapshotForDiff = null;
 		this.emitState();
@@ -369,13 +521,16 @@ export class CompanionRuntimeService {
 		const deadline = Date.now() + LOCAL_VISION_READY_TIMEOUT_MS;
 		let lastError: unknown = null;
 		this.state.phase = "connecting";
+		this.state.observationReady = false;
 		this.state.lastError = null;
+		this.clearDiagnostic();
 		this.emitState();
 
 		while (Date.now() < deadline) {
 			try {
 				await this.probeLocalVisionConnection();
 				this.state.lastError = null;
+				this.clearDiagnostic();
 				if (this.state.phase === "connecting") {
 					this.state.phase = "idle";
 				}
@@ -398,6 +553,7 @@ export class CompanionRuntimeService {
 
 		this.state.phase = "error";
 		this.state.lastError = message;
+		this.setDiagnostic("local-vision-unavailable", message);
 		this.bus.emit("system:error", {
 			module: "companion-runtime",
 			error: message,
@@ -498,8 +654,13 @@ export class CompanionRuntimeService {
 			const snapshot = await this.perception.captureTarget(this.state.target);
 			this.state.phase = "describing";
 			const changeRatio = await this.measureChange(snapshot);
+			const recentFrames = this.state.frameQueue.filter((frame) => frame.capturedAt >= snapshot.capturedAt - this.state.summaryWindowMs);
+			const shouldSkipLowDiff =
+				changeRatio !== null
+				&& changeRatio < MIN_MEANINGFUL_CHANGE_RATIO
+				&& recentFrames.length >= LOW_DIFF_SKIP_FRAME_QUEUE_LIMIT;
 			const description =
-				changeRatio !== null && changeRatio < MIN_MEANINGFUL_CHANGE_RATIO
+				shouldSkipLowDiff
 					? UNCHANGED_FRAME_DESCRIPTION
 					: await this.describeSnapshot(snapshot);
 			const record: CompanionFrameDescriptionRecord = {
@@ -507,7 +668,7 @@ export class CompanionRuntimeService {
 				targetTitle: snapshot.targetTitle,
 				capturedAt: snapshot.capturedAt,
 				description,
-				source: changeRatio !== null && changeRatio < MIN_MEANINGFUL_CHANGE_RATIO ? "unchanged" : "vision",
+				source: shouldSkipLowDiff ? "unchanged" : "vision",
 				captureMethod: snapshot.captureMethod,
 				qualityScore: snapshot.qualityScore,
 				changeRatio,
@@ -534,12 +695,20 @@ export class CompanionRuntimeService {
 			};
 			this.bus.emit("companion-runtime:frame-described", { record: cloneFrameRecord(record) });
 			this.lastSnapshotForDiff = snapshot;
+			this.state.lastObservationAt = record.capturedAt;
+			this.state.observationReady = true;
+			if (record.source === "vision") {
+				this.clearDiagnostic();
+			} else if (changeRatio !== null && changeRatio > 0) {
+				this.setDiagnostic("below-threshold-change", "A new frame arrived, but the visible change is below the current threshold.");
+			}
 			this.state.phase = "idle";
 			this.emitState();
 		} catch (err) {
 			const message = formatRuntimeError("frame", this.state.localVisionBaseUrl, err);
 			this.state.phase = "error";
 			this.state.lastError = message;
+			this.setDiagnostic("local-vision-unavailable", message);
 			this.bus.emit("system:error", {
 				module: "companion-runtime",
 				error: message,
@@ -601,12 +770,16 @@ export class CompanionRuntimeService {
 				),
 			};
 			this.bus.emit("companion-runtime:summary-complete", { record: cloneSummaryRecord(record) });
+			this.state.lastObservationAt = record.createdAt;
+			this.state.observationReady = true;
+			this.clearDiagnostic();
 			this.state.phase = "idle";
 			this.emitState();
 		} catch (err) {
 			const message = formatRuntimeError("summary", this.state.localVisionBaseUrl, err);
 			this.state.phase = "error";
 			this.state.lastError = message;
+			this.setDiagnostic("local-vision-unavailable", message);
 			this.bus.emit("system:error", {
 				module: "companion-runtime",
 				error: message,
@@ -789,6 +962,10 @@ export class CompanionRuntimeService {
 			lastSummaryId: this.state.lastSummary?.id ?? null,
 			captureTicks: this.state.metrics.captureTicks,
 			summariesGenerated: this.state.metrics.summariesGenerated,
+			observationReady: this.state.observationReady,
+			lastObservationAt: this.state.lastObservationAt,
+			diagnosticCode: this.state.diagnosticCode,
+			diagnosticMessage: this.state.diagnosticMessage,
 			lastError: this.state.lastError,
 		};
 		const payloadKey = [
@@ -801,6 +978,10 @@ export class CompanionRuntimeService {
 			payload.lastSummaryId ?? "",
 			String(payload.captureTicks),
 			String(payload.summariesGenerated),
+			payload.observationReady ? "1" : "0",
+			String(payload.lastObservationAt ?? 0),
+			payload.diagnosticCode ?? "",
+			payload.diagnosticMessage ?? "",
 			payload.lastError ?? "",
 		].join("|");
 		if (payloadKey === this.lastStateChangePayloadKey) {

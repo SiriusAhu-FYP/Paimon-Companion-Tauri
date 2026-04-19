@@ -52,6 +52,7 @@ export type {
 	CompanionRuntimeBenchmarkMetrics,
 	CompanionRuntimeBenchmarkResult,
 	CompanionRuntimeBenchmarkState,
+	CompanionRuntimeDiagnosticCode,
 	CompanionFrameDescriptionRecord,
 	CompanionRuntimeMetrics,
 	CompanionRuntimePhase,

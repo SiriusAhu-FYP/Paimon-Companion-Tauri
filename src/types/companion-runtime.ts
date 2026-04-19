@@ -1,6 +1,14 @@
 import type { FunctionalTarget } from "./functional";
 
 export type CompanionRuntimePhase = "idle" | "connecting" | "capturing" | "describing" | "summarizing" | "error";
+export type CompanionRuntimeDiagnosticCode =
+	| "runtime-not-running"
+	| "runtime-auto-starting"
+	| "observation-not-ready"
+	| "local-vision-unavailable"
+	| "target-mismatch"
+	| "post-action-timeout"
+	| "below-threshold-change";
 
 export interface CompanionFrameDescriptionRecord {
 	id: string;
@@ -90,5 +98,9 @@ export interface CompanionRuntimeState {
 	frameQueue: CompanionFrameDescriptionRecord[];
 	summaryHistory: CompanionSummaryRecord[];
 	metrics: CompanionRuntimeMetrics;
+	observationReady: boolean;
+	lastObservationAt: number | null;
+	diagnosticCode: CompanionRuntimeDiagnosticCode | null;
+	diagnosticMessage: string | null;
 	lastError: string | null;
 }
