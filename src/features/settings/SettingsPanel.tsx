@@ -44,7 +44,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 	const [ttsTestResult, setTtsTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 	const [asrTestResult, setAsrTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 	const [testing, setTesting] = useState<"llm" | "tts" | "asr" | null>(null);
-	const [ttsTestText, setTtsTestText] = useState("你好，我是测试文本");
+	const [ttsTestText, setTtsTestText] = useState(() => t("你好，我是测试文本", "Hello, this is a test sample."));
 	const [ttsTesting, setTtsTesting] = useState(false);
 
 	useEffect(() => {

@@ -15,7 +15,7 @@ export function UnifiedRunSection(props: {
 }) {
 	const { t } = useI18n();
 	const companionMode = useCompanionMode();
-	const [voiceText, setVoiceText] = useState("帮我看一下下一步");
+	const [voiceText, setVoiceText] = useState(() => t("帮我看一下下一步", "Help me review the next step"));
 	const [error, setError] = useState<string | null>(null);
 
 	return (
