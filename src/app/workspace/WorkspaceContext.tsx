@@ -4,6 +4,7 @@ import type { DockPanelId } from "./workspace-layout";
 const OPEN_PANEL_EVENT = "paimon:workspace-open-panel";
 const CLOSE_PANEL_EVENT = "paimon:workspace-close-panel";
 const RESET_LAYOUT_EVENT = "paimon:workspace-reset-layout";
+const LAYOUT_CHANGED_EVENT = "paimon:workspace-layout-changed";
 
 export interface WorkspaceContextValue {
 	openPanels: Set<DockPanelId>;
@@ -54,4 +55,13 @@ export function requestResetWorkspaceLayout() {
 export function subscribeWorkspaceResetLayout(handler: () => void) {
 	window.addEventListener(RESET_LAYOUT_EVENT, handler);
 	return () => window.removeEventListener(RESET_LAYOUT_EVENT, handler);
+}
+
+export function notifyWorkspaceLayoutChanged() {
+	window.dispatchEvent(new Event(LAYOUT_CHANGED_EVENT));
+}
+
+export function subscribeWorkspaceLayoutChanged(handler: () => void) {
+	window.addEventListener(LAYOUT_CHANGED_EVENT, handler);
+	return () => window.removeEventListener(LAYOUT_CHANGED_EVENT, handler);
 }

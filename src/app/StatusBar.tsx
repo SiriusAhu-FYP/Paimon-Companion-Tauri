@@ -9,6 +9,7 @@ import {
 	requestCloseWorkspacePanel,
 	requestOpenWorkspacePanel,
 	subscribeWorkspaceClosePanel,
+	subscribeWorkspaceLayoutChanged,
 	subscribeWorkspaceOpenPanel,
 	subscribeWorkspaceResetLayout,
 } from "@/app/workspace/WorkspaceContext";
@@ -52,11 +53,13 @@ export function StatusBar({
 			}
 		});
 		const unsubReset = subscribeWorkspaceResetLayout(syncFromStorage);
+		const unsubChanged = subscribeWorkspaceLayoutChanged(syncFromStorage);
 
 		return () => {
 			unsubOpen();
 			unsubClose();
 			unsubReset();
+			unsubChanged();
 		};
 	}, []);
 
