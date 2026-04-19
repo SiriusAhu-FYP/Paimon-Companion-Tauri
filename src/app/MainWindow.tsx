@@ -38,6 +38,7 @@ export function MainWindow() {
 	const stageModeRef = useRef(stageMode);
 	const stageVisibleRef = useRef(stageVisible);
 	const syncDebounceRef = useRef(0);
+	const lastDockedBoundsRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
 
 	stageModeRef.current = stageMode;
 	stageVisibleRef.current = stageVisible;
@@ -71,14 +72,52 @@ export function MainWindow() {
 			const stageWin = await Window.getByLabel("stage");
 			if (!mainWin || !stageWin) return;
 
+			const outerPosition = await mainWin.outerPosition();
 			const innerPosition = await mainWin.innerPosition();
 			const scaleFactor = await mainWin.scaleFactor();
-			const logicalPosition = innerPosition.toLogical(scaleFactor);
+			const outerLogicalPosition = outerPosition.toLogical(scaleFactor);
+			const innerLogicalPosition = innerPosition.toLogical(scaleFactor);
+			const contentOffsetX = innerLogicalPosition.x - outerLogicalPosition.x;
+			const contentOffsetY = innerLogicalPosition.y - outerLogicalPosition.y;
+			const nextBounds = {
+				x: outerLogicalPosition.x + contentOffsetX + rect.left,
+				y: outerLogicalPosition.y + contentOffsetY + rect.top,
+				width: rect.width,
+				height: rect.height,
+			};
+			const previousBounds = lastDockedBoundsRef.current;
 
-			await stageWin.setPosition(new LogicalPosition(logicalPosition.x + rect.left, logicalPosition.y + rect.top));
-			if (rect.width > 50 && rect.height > 50) {
-				await stageWin.setSize(new LogicalSize(rect.width, rect.height));
+			if (
+				previousBounds
+				&& Math.abs(previousBounds.x - nextBounds.x) < 0.5
+				&& Math.abs(previousBounds.y - nextBounds.y) < 0.5
+				&& Math.abs(previousBounds.width - nextBounds.width) < 0.5
+				&& Math.abs(previousBounds.height - nextBounds.height) < 0.5
+			) {
+				return;
 			}
+
+			if (
+				!previousBounds
+				|| Math.abs(previousBounds.x - nextBounds.x) >= 0.5
+				|| Math.abs(previousBounds.y - nextBounds.y) >= 0.5
+			) {
+				await stageWin.setPosition(new LogicalPosition(nextBounds.x, nextBounds.y));
+			}
+
+			if (
+				rect.width > 50
+				&& rect.height > 50
+				&& (
+					!previousBounds
+					|| Math.abs(previousBounds.width - nextBounds.width) >= 0.5
+					|| Math.abs(previousBounds.height - nextBounds.height) >= 0.5
+				)
+			) {
+				await stageWin.setSize(new LogicalSize(nextBounds.width, nextBounds.height));
+			}
+
+			lastDockedBoundsRef.current = nextBounds;
 		} catch (err) {
 			log.warn("sync docked stage bounds failed", err);
 		}
@@ -105,6 +144,12 @@ export function MainWindow() {
 			return nextMode;
 		});
 	}, [stageSlotOpen]);
+
+	useEffect(() => {
+		if (stageMode !== "docked") {
+			lastDockedBoundsRef.current = null;
+		}
+	}, [stageMode]);
 
 	useEffect(() => {
 		if (stageMode !== "docked") return;
