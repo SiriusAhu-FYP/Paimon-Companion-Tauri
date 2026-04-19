@@ -24,6 +24,7 @@ import {
 	getSecret,
 	setSecret,
 } from "@/services/config";
+import { useI18n } from "@/contexts/I18nProvider";
 
 interface AsrProfilesSectionProps {
 	profiles: ASRProfile[];
@@ -35,13 +36,6 @@ interface AsrProfilesSectionProps {
 	onPersist: (newProfiles: ASRProfile[], newActiveId: string) => Promise<unknown>;
 }
 
-const providerLabels: Record<ASRProviderType, string> = {
-	mock: "Mock（模拟）",
-	"local-sherpa": "本地离线 ASR（sherpa-onnx）",
-	volcengine: "火山引擎 ASR",
-	aliyun: "阿里云 ASR",
-};
-
 export function AsrProfilesSection({
 	profiles,
 	activeId,
@@ -51,6 +45,13 @@ export function AsrProfilesSection({
 	onSelect,
 	onPersist,
 }: AsrProfilesSectionProps) {
+	const { t } = useI18n();
+	const providerLabels: Record<ASRProviderType, string> = {
+		mock: t("Mock（模拟）", "Mock"),
+		"local-sherpa": t("本地离线 ASR（sherpa-onnx）", "Local Offline ASR (sherpa-onnx)"),
+		volcengine: t("火山引擎 ASR", "Volcengine ASR"),
+		aliyun: t("阿里云 ASR", "Aliyun ASR"),
+	};
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingProfile, setEditingProfile] = useState<ASRProfile | null>(null);
 	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
@@ -158,12 +159,12 @@ export function AsrProfilesSection({
 					displayEmpty
 					sx={{ flex: 1, fontSize: 13 }}
 				>
-					<MenuItem value=""><em>无（使用手动配置）</em></MenuItem>
+					<MenuItem value=""><em>{t("无（使用手动配置）", "None (use manual config)")}</em></MenuItem>
 					{profiles.map((profile) => (
-						<MenuItem key={profile.id} value={profile.id}>{profile.name || "(未命名)"}</MenuItem>
+						<MenuItem key={profile.id} value={profile.id}>{profile.name || t("(未命名)", "(Unnamed)")}</MenuItem>
 					))}
 				</Select>
-				<Tooltip title="编辑档案">
+				<Tooltip title={t("编辑档案", "Edit profile")}>
 					<IconButton
 						size="small"
 						onClick={handleEdit}
@@ -173,7 +174,7 @@ export function AsrProfilesSection({
 						<EditIcon sx={{ fontSize: 14 }} />
 					</IconButton>
 				</Tooltip>
-				<Tooltip title="新增档案">
+				<Tooltip title={t("新增档案", "Add profile")}>
 					<IconButton size="small" onClick={handleNew} sx={{ color: "primary.main" }}>
 						<AddIcon sx={{ fontSize: 14 }} />
 					</IconButton>
@@ -181,7 +182,7 @@ export function AsrProfilesSection({
 			</Stack>
 
 			<Alert severity="info" sx={{ py: 0, mt: 0.75 }}>
-				ASR 当前只保留三类路线：内置本地 sherpa-onnx、火山引擎、阿里云。
+				{t("ASR 当前只保留三类路线：内置本地 sherpa-onnx、火山引擎、阿里云。", "ASR currently supports three routes only: built-in local sherpa-onnx, Volcengine, and Aliyun.")}
 			</Alert>
 
 			<Popover
@@ -193,13 +194,13 @@ export function AsrProfilesSection({
 				slotProps={{ paper: { sx: { width: 380, maxHeight: 560, overflowY: "auto" } } }}
 			>
 				<Box sx={{ p: 1.5 }}>
-					<Typography variant="subtitle2" sx={{ mb: 1 }}>ASR 配置档案</Typography>
+					<Typography variant="subtitle2" sx={{ mb: 1 }}>{t("ASR 配置档案", "ASR Profile")}</Typography>
 					{editingProfile && (
 						<Stack spacing={1}>
 							<TextField
 								size="small"
 								fullWidth
-								label="档案名称"
+								label={t("档案名称", "Profile Name")}
 								value={editingProfile.name}
 								onChange={(event) => setEditingProfile({ ...editingProfile, name: event.target.value })}
 							/>
@@ -222,11 +223,11 @@ export function AsrProfilesSection({
 								<TextField
 									size="small"
 									fullWidth
-									label="API Key / Token"
+									label={t("API Key / Token", "API Key / Token")}
 									type="password"
 									value={editingProfile.apiKey ?? ""}
 									onChange={(event) => setEditingProfile({ ...editingProfile, apiKey: event.target.value })}
-									helperText="敏感凭证会写入系统钥匙串"
+									helperText={t("敏感凭证会写入系统钥匙串", "Sensitive credentials are stored in the system keychain")}
 								/>
 							)}
 
@@ -234,20 +235,20 @@ export function AsrProfilesSection({
 								<TextField
 									size="small"
 									fullWidth
-									label="服务地址"
+									label={t("服务地址", "Service URL")}
 									value={editingProfile.baseUrl}
 									onChange={(event) => setEditingProfile({ ...editingProfile, baseUrl: event.target.value })}
-									helperText="云端 ASR 接口地址"
+									helperText={t("云端 ASR 接口地址", "Cloud ASR endpoint URL")}
 								/>
 							)}
 
 							<TextField
 								size="small"
 								fullWidth
-								label="模型名"
+								label={t("模型名", "Model Name")}
 								value={editingProfile.model}
 								onChange={(event) => setEditingProfile({ ...editingProfile, model: event.target.value })}
-								helperText={isLocalProvider ? "当前内置模型固定为 sherpa-onnx bilingual zipformer；此字段主要用于标识和显示。" : undefined}
+								helperText={isLocalProvider ? t("当前内置模型固定为 sherpa-onnx bilingual zipformer；此字段主要用于标识和显示。", "The built-in local model is fixed to sherpa-onnx bilingual zipformer; this field is mainly for labeling and display.") : undefined}
 							/>
 
 							{isCloudProvider ? (
@@ -255,10 +256,10 @@ export function AsrProfilesSection({
 									<TextField
 										size="small"
 										fullWidth
-										label="语言"
+										label={t("语言", "Language")}
 										value={editingProfile.language}
 										onChange={(event) => setEditingProfile({ ...editingProfile, language: event.target.value })}
-										helperText="例如 zh / en / auto"
+										helperText={t("例如 zh / en / auto", "For example: zh / en / auto")}
 									/>
 									<Select
 										size="small"
@@ -269,19 +270,19 @@ export function AsrProfilesSection({
 											autoDetectLanguage: event.target.value === "auto",
 										})}
 									>
-										<MenuItem value="fixed">固定语言</MenuItem>
-										<MenuItem value="auto">自动识别</MenuItem>
+										<MenuItem value="fixed">{t("固定语言", "Fixed Language")}</MenuItem>
+										<MenuItem value="auto">{t("自动识别", "Auto Detect")}</MenuItem>
 									</Select>
 								</Stack>
 							) : (
 								<Alert severity="info" sx={{ py: 0 }}>
-									内置本地 ASR 使用应用内置的 `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16`，默认支持中英双语，不再要求手动提供服务地址、下载地址或模型路径。
+									{t("内置本地 ASR 使用应用内置的 `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16`，默认支持中英双语，不再要求手动提供服务地址、下载地址或模型路径。", "Built-in local ASR uses the bundled `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16`, supports Chinese and English by default, and no longer requires manual service URLs, download URLs, or model paths.")}
 								</Alert>
 							)}
 
 							{isLocalProvider && (
 								<Alert severity="warning" sx={{ py: 0 }}>
-									当前本地 ASR 为应用内置模型，仓库侧由固定脚本准备资源；设置页不再暴露 locate/download 入口。
+									{t("当前本地 ASR 为应用内置模型，仓库侧由固定脚本准备资源；设置页不再暴露 locate/download 入口。", "The current local ASR uses a bundled model prepared by fixed scripts; the settings page no longer exposes locate/download controls.")}
 								</Alert>
 							)}
 
@@ -289,10 +290,10 @@ export function AsrProfilesSection({
 								<TextField
 									size="small"
 									fullWidth
-									label="语言"
+									label={t("语言", "Language")}
 									value={editingProfile.language}
 									onChange={(event) => setEditingProfile({ ...editingProfile, language: event.target.value })}
-									helperText="例如 zh / en / ja"
+									helperText={t("例如 zh / en / ja", "For example: zh / en / ja")}
 								/>
 							)}
 
@@ -305,15 +306,15 @@ export function AsrProfilesSection({
 									vadEnabled: event.target.value === "enabled",
 								})}
 							>
-								<MenuItem value="enabled">启用 VAD 分段</MenuItem>
-								<MenuItem value="disabled">关闭 VAD 分段</MenuItem>
+								<MenuItem value="enabled">{t("启用 VAD 分段", "Enable VAD Segmentation")}</MenuItem>
+								<MenuItem value="disabled">{t("关闭 VAD 分段", "Disable VAD Segmentation")}</MenuItem>
 							</Select>
 
 							<Stack direction="row" spacing={0.5}>
 								<TextField
 									size="small"
 									fullWidth
-									label="VAD 激进度"
+									label={t("VAD 激进度", "VAD Aggressiveness")}
 									type="number"
 									slotProps={{ htmlInput: { min: 0, max: 3, step: 1 } }}
 									value={editingProfile.vadAggressiveness}
@@ -325,7 +326,7 @@ export function AsrProfilesSection({
 								<TextField
 									size="small"
 									fullWidth
-									label="静音阈值(ms)"
+									label={t("静音阈值(ms)", "Silence Threshold (ms)")}
 									type="number"
 									slotProps={{ htmlInput: { min: 200, max: 5000, step: 100 } }}
 									value={editingProfile.silenceThresholdMs}
@@ -339,7 +340,7 @@ export function AsrProfilesSection({
 							<TextField
 								size="small"
 								fullWidth
-								label="最短语音段(ms)"
+								label={t("最短语音段(ms)", "Minimum Speech (ms)")}
 								type="number"
 								slotProps={{ htmlInput: { min: 200, max: 10000, step: 100 } }}
 								value={editingProfile.minSpeechMs}
@@ -350,7 +351,7 @@ export function AsrProfilesSection({
 							/>
 
 							<Alert severity="warning" sx={{ py: 0 }}>
-								Tauri 主应用负责 UI、设置、麦克风状态和编排；本地离线 ASR 当前固定为内置 sherpa-onnx，云端则保留火山与阿里云两条接口。
+								{t("Tauri 主应用负责 UI、设置、麦克风状态和编排；本地离线 ASR 当前固定为内置 sherpa-onnx，云端则保留火山与阿里云两条接口。", "The Tauri app handles UI, settings, microphone state, and orchestration; local offline ASR is currently fixed to the bundled sherpa-onnx model, while cloud routes remain Volcengine and Aliyun.")}
 							</Alert>
 
 							<Stack direction="row" spacing={0.5} justifyContent="space-between" alignItems="center">
@@ -363,12 +364,12 @@ export function AsrProfilesSection({
 											setDeleteCountdown(2);
 										}}
 									>
-										删除档案
+										{t("删除档案", "Delete Profile")}
 									</Button>
 								) : <Box />}
 								<Stack direction="row" spacing={0.5}>
-									<Button size="small" onClick={handleDialogClose}>取消</Button>
-									<Button size="small" variant="contained" onClick={handleDialogSave}>保存</Button>
+									<Button size="small" onClick={handleDialogClose}>{t("取消", "Cancel")}</Button>
+									<Button size="small" variant="contained" onClick={handleDialogSave}>{t("保存", "Save")}</Button>
 								</Stack>
 							</Stack>
 
@@ -376,7 +377,7 @@ export function AsrProfilesSection({
 								<Box sx={{ bgcolor: "background.default", border: "1px solid", borderColor: "error.main", borderRadius: 1, p: 1.5 }}>
 									<Stack direction="row" spacing={0.5} alignItems="center">
 										<WarningIcon sx={{ fontSize: 14, color: "error.main" }} />
-										<Typography variant="subtitle2" sx={{ color: "error.main" }}>删除此档案将无法恢复</Typography>
+										<Typography variant="subtitle2" sx={{ color: "error.main" }}>{t("删除此档案将无法恢复", "Deleting this profile cannot be undone")}</Typography>
 									</Stack>
 									<Stack direction="row" spacing={0.5} justifyContent="flex-end">
 										<Button
@@ -386,9 +387,9 @@ export function AsrProfilesSection({
 											disabled={deleteCountdown > 0}
 											onClick={() => void handleDelete(editingProfile.id)}
 										>
-											{deleteCountdown > 0 ? `确认删除 (${deleteCountdown}s)` : "确认删除"}
+											{deleteCountdown > 0 ? t(`确认删除 (${deleteCountdown}s)`, `Confirm Delete (${deleteCountdown}s)`) : t("确认删除", "Confirm Delete")}
 										</Button>
-										<Button size="small" onClick={() => setConfirmDeleteOpen(false)}>取消</Button>
+										<Button size="small" onClick={() => setConfirmDeleteOpen(false)}>{t("取消", "Cancel")}</Button>
 									</Stack>
 								</Box>
 							)}

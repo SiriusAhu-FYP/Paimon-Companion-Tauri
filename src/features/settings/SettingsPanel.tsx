@@ -104,7 +104,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 			const llmCfg = getActiveLlmConfig();
 			let base = (llmCfg.baseUrl || "").replace(/\/+$/, "");
 			if (!base) {
-				setLlmTestResult({ ok: false, text: "请先在档案中配置 Base URL" });
+				setLlmTestResult({ ok: false, text: t("请先在档案中配置 Base URL", "Please configure Base URL in the profile first") });
 				return;
 			}
 			// 兼容有无 /v1 后缀
@@ -119,7 +119,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 				timeoutMs: 10000,
 			});
 			if (resp.status >= 200 && resp.status < 400) {
-				setLlmTestResult({ ok: true, text: `连接成功 (HTTP ${resp.status})` });
+				setLlmTestResult({ ok: true, text: t(`连接成功 (HTTP ${resp.status})`, `Connected successfully (HTTP ${resp.status})`) });
 				log.info("LLM connection test passed", { status: resp.status });
 			} else {
 				setLlmTestResult({ ok: false, text: `HTTP ${resp.status}: ${resp.body.slice(0, 100)}` });
@@ -139,7 +139,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		try {
 			const ttsCfg = getActiveTtsConfig();
 			if (!ttsCfg.baseUrl || !ttsCfg.baseUrl.trim()) {
-				setTtsTestResult({ ok: false, text: "请先在档案中配置服务地址" });
+				setTtsTestResult({ ok: false, text: t("请先在档案中配置服务地址", "Please configure service URL in the profile first") });
 				return;
 			}
 			const base = ttsCfg.baseUrl.replace(/\/+$/, "");
@@ -149,7 +149,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 				method: "GET",
 				timeoutMs: 8000,
 			});
-			setTtsTestResult({ ok: true, text: `服务可达 (HTTP ${resp.status})` });
+			setTtsTestResult({ ok: true, text: t(`服务可达 (HTTP ${resp.status})`, `Service reachable (HTTP ${resp.status})`) });
 			log.info("TTS connection test passed", { status: resp.status });
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
@@ -168,7 +168,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		try {
 			const ttsCfg = getActiveTtsConfig();
 			if (!ttsCfg.baseUrl || !ttsCfg.baseUrl.trim()) {
-				setMessage({ type: "error", text: "请先在档案中配置服务地址" });
+				setMessage({ type: "error", text: t("请先在档案中配置服务地址", "Please configure service URL in the profile first") });
 				return;
 			}
 			let ttsService: GptSovitsTTSService | MockTTSService;
@@ -180,7 +180,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 			const player = new AudioPlayer();
 			const queue = new SpeechQueue(ttsService, player, (speaking) => {
 				if (speaking) {
-					setMessage({ type: "info", text: "正在播放语音..." });
+					setMessage({ type: "info", text: t("正在播放语音...", "Playing audio...") });
 				}
 			});
 
@@ -194,30 +194,30 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 			});
 
 			if (!segments.length) {
-				setMessage({ type: "error", text: "切片结果为空，请检查输入文本" });
+				setMessage({ type: "error", text: t("切片结果为空，请检查输入文本", "No speech segments produced. Please check the input text.") });
 				return;
 			}
 
 			const preview = segments
 				.map((s) => `[${s.lang}]${s.text.slice(0, 15)}${s.text.length > 15 ? "…" : ""}`)
 				.join(" | ");
-			setMessage({ type: "success", text: `切片完成：${segments.length} 段，正在合成... — ${preview}` });
+			setMessage({ type: "success", text: t(`切片完成：${segments.length} 段，正在合成... — ${preview}`, `Segmentation complete: ${segments.length} parts, synthesizing... — ${preview}`) });
 
 			const result = await queue.speakAll(segments);
 
 			if (result.stopped) {
-				setMessage({ type: "warning", text: "播放已中断" });
+				setMessage({ type: "warning", text: t("播放已中断", "Playback interrupted") });
 			} else if (result.playedSegments > 0) {
-				setMessage({ type: "success", text: `播放完成 (${result.playedSegments}/${result.totalSegments} 段)` });
+				setMessage({ type: "success", text: t(`播放完成 (${result.playedSegments}/${result.totalSegments} 段)`, `Playback finished (${result.playedSegments}/${result.totalSegments} segments)`) });
 			} else if (result.errors.length > 0) {
 				const firstErr = result.errors[0].length > 120 ? result.errors[0].slice(0, 120) + "…" : result.errors[0];
-				setMessage({ type: "error", text: `合成失败: ${firstErr}` });
+				setMessage({ type: "error", text: t(`合成失败: ${firstErr}`, `Synthesis failed: ${firstErr}`) });
 			} else {
-				setMessage({ type: "warning", text: "合成完成但未能播放任何段落，请检查 TTS 配置" });
+				setMessage({ type: "warning", text: t("合成完成但未能播放任何段落，请检查 TTS 配置", "Synthesis completed but nothing played. Please check the TTS configuration.") });
 			}
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
-			setMessage({ type: "error", text: `TTS 测试失败: ${msg}` });
+			setMessage({ type: "error", text: t(`TTS 测试失败: ${msg}`, `TTS test failed: ${msg}`) });
 			log.error("TTS direct test failed", err);
 		} finally {
 			setTtsTesting(false);
@@ -230,21 +230,21 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		try {
 			const asrCfg = getActiveAsrConfig();
 			if (asrCfg.provider === "mock") {
-				setAsrTestResult({ ok: true, text: "Mock ASR 始终可用" });
+				setAsrTestResult({ ok: true, text: t("Mock ASR 始终可用", "Mock ASR is always available") });
 				return;
 			}
 			if (asrCfg.provider === "local-sherpa") {
 				const health = await checkLocalSherpaHealth();
 				setAsrTestResult({
 					ok: true,
-					text: `本地模型已就绪：${health.modelName} @ ${health.modelDir}`,
+					text: t(`本地模型已就绪：${health.modelName} @ ${health.modelDir}`, `Local model is ready: ${health.modelName} @ ${health.modelDir}`),
 				});
 				log.info("local sherpa healthcheck passed", health);
 				return;
 			}
 			const baseUrl = (asrCfg.baseUrl || "").trim().replace(/\/+$/, "");
 			if (!baseUrl) {
-				setAsrTestResult({ ok: false, text: "请先在档案中配置服务地址" });
+				setAsrTestResult({ ok: false, text: t("请先在档案中配置服务地址", "Please configure service URL in the profile first") });
 				return;
 			}
 
@@ -260,7 +260,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 			if (resp.status < 500) {
 				setAsrTestResult({
 					ok: true,
-					text: `服务可达 (HTTP ${resp.status})。这是连通性测试，不代表识别链路已完成验证。`,
+					text: t(`服务可达 (HTTP ${resp.status})。这是连通性测试，不代表识别链路已完成验证。`, `Service reachable (HTTP ${resp.status}). This only verifies connectivity, not the full recognition pipeline.`),
 				});
 				log.info("ASR connection test passed", { status: resp.status, provider: asrCfg.provider });
 				return;
@@ -268,7 +268,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 
 			setAsrTestResult({
 				ok: false,
-				text: `服务返回异常 (HTTP ${resp.status}): ${resp.body.slice(0, 120)}`,
+				text: t(`服务返回异常 (HTTP ${resp.status}): ${resp.body.slice(0, 120)}`, `Service returned an error (HTTP ${resp.status}): ${resp.body.slice(0, 120)}`),
 			});
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
@@ -303,7 +303,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		{/* ═══ 第一级：配置档案 ═══ */}
 
 		{/* ── LLM 配置档案 ── */}
-		<SectionTitle>LLM 配置</SectionTitle>
+		<SectionTitle>{t("LLM 配置", "LLM Configuration")}</SectionTitle>
 		<LLMProfilesSection
 			profiles={config.llmProfiles}
 			activeId={config.activeLlmProfileId}
@@ -317,7 +317,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		<Divider />
 
 		{/* ── TTS 配置档案 ── */}
-		<SectionTitle>TTS 配置</SectionTitle>
+		<SectionTitle>{t("TTS 配置", "TTS Configuration")}</SectionTitle>
 		<TTSProfilesSection
 			profiles={config.ttsProfiles}
 			activeId={config.activeTtsProfileId}
@@ -331,8 +331,8 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		<Divider />
 
 		<SectionTitle>
-			ASR 配置
-			<HelpTooltip title="ASR 会作为独立 provider/profile 管理。本地默认路线是应用内置的 sherpa-onnx 双语模型；云端保留火山和阿里云。" />
+			{t("ASR 配置", "ASR Configuration")}
+			<HelpTooltip title={t("ASR 会作为独立 provider/profile 管理。本地默认路线是应用内置的 sherpa-onnx 双语模型；云端保留火山和阿里云。", "ASR is managed as independent providers/profiles. The default local route uses the bundled sherpa-onnx bilingual model; cloud routes remain Volcengine and Aliyun.")} />
 		</SectionTitle>
 		<AsrProfilesSection
 			profiles={config.asrProfiles}
@@ -361,20 +361,20 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		{/* ═══ 第二级：连接测试 ═══ */}
 		<Box sx={{ mt: 1, pt: 1, borderTop: 2, borderColor: "divider" }}>
 			<Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ textTransform: "uppercase", letterSpacing: 0.5, mb: 0.5, display: "block" }}>
-				连接测试
+				{t("连接测试", "Connection Tests")}
 			</Typography>
 		</Box>
 
 		{/* ── LLM 测试 ── */}
 		<SectionTitle>
-			ASR 测试
-			<HelpTooltip title="本地 sherpa 会验证内置模型是否已加载；云端 provider 会验证接口可达性。真正的麦克风 -> 识别链路仍需在聊天区手测。" />
+			{t("ASR 测试", "ASR Test")}
+			<HelpTooltip title={t("本地 sherpa 会验证内置模型是否已加载；云端 provider 会验证接口可达性。真正的麦克风 -> 识别链路仍需在聊天区手测。", "Local sherpa verifies the bundled model is ready; cloud providers only verify endpoint reachability. The real microphone-to-ASR path still needs manual testing in chat.")} />
 		</SectionTitle>
 		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
 			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-				当前读取：{config.activeAsrProfileId
-					? `档案「${config.asrProfiles.find((p) => p.id === config.activeAsrProfileId)?.name || "(未命名)"}」`
-					: "根配置（无激活档案）"}
+				{t("当前读取", "Using")}: {config.activeAsrProfileId
+					? t(`档案「${config.asrProfiles.find((p) => p.id === config.activeAsrProfileId)?.name || "(未命名)"}」`, `Profile "${config.asrProfiles.find((p) => p.id === config.activeAsrProfileId)?.name || "(Unnamed)"}"`)
+					: t("根配置（无激活档案）", "Root config (no active profile)")}
 				· {getActiveAsrConfig().provider}
 			</Typography>
 			<Button
@@ -383,7 +383,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 				onClick={handleTestASR}
 				disabled={testing === "asr"}
 			>
-				{testing === "asr" ? "测试中..." : "测试连接"}
+				{testing === "asr" ? t("测试中...", "Testing...") : t("测试连接", "Test Connection")}
 			</Button>
 			{asrTestResult && (
 				<Alert severity={asrTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
@@ -396,14 +396,14 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 
 		{/* ── LLM 测试 ── */}
 		<SectionTitle>
-			LLM 测试
-			<HelpTooltip title="选择或新建 LLM 档案并保存后，点击测试连接是否可达。" />
+			{t("LLM 测试", "LLM Test")}
+			<HelpTooltip title={t("选择或新建 LLM 档案并保存后，点击测试连接是否可达。", "Select or create an LLM profile, save it, then test connectivity.")} />
 		</SectionTitle>
 		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
 			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-				当前读取：{config.activeLlmProfileId
-					? `档案「${config.llmProfiles.find((p) => p.id === config.activeLlmProfileId)?.name || "(未命名)"}」`
-					: "根配置（无激活档案）"}
+				{t("当前读取", "Using")}: {config.activeLlmProfileId
+					? t(`档案「${config.llmProfiles.find((p) => p.id === config.activeLlmProfileId)?.name || "(未命名)"}」`, `Profile "${config.llmProfiles.find((p) => p.id === config.activeLlmProfileId)?.name || "(Unnamed)"}"`)
+					: t("根配置（无激活档案）", "Root config (no active profile)")}
 				· {getActiveLlmConfig().model || getActiveLlmConfig().provider}
 			</Typography>
 			<Button
@@ -412,7 +412,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 				onClick={handleTestLLM}
 				disabled={testing === "llm"}
 			>
-				{testing === "llm" ? "测试中..." : "测试连接"}
+				{testing === "llm" ? t("测试中...", "Testing...") : t("测试连接", "Test Connection")}
 			</Button>
 			{llmTestResult && (
 				<Alert severity={llmTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
@@ -425,14 +425,14 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 
 		{/* ── TTS 测试 ── */}
 		<SectionTitle>
-			TTS 测试
-			<HelpTooltip title="选择或新建 TTS 档案并保存后，点击测试连接是否可达。" />
+			{t("TTS 测试", "TTS Test")}
+			<HelpTooltip title={t("选择或新建 TTS 档案并保存后，点击测试连接是否可达。", "Select or create a TTS profile, save it, then test connectivity.")} />
 		</SectionTitle>
 		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
 			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-				当前读取：{config.activeTtsProfileId
-					? `档案「${config.ttsProfiles.find((p) => p.id === config.activeTtsProfileId)?.name || "(未命名)"}」`
-					: "根配置（无激活档案）"}
+				{t("当前读取", "Using")}: {config.activeTtsProfileId
+					? t(`档案「${config.ttsProfiles.find((p) => p.id === config.activeTtsProfileId)?.name || "(未命名)"}」`, `Profile "${config.ttsProfiles.find((p) => p.id === config.activeTtsProfileId)?.name || "(Unnamed)"}"`)
+					: t("根配置（无激活档案）", "Root config (no active profile)")}
 				· {getActiveTtsConfig().provider}
 			</Typography>
 			<Button
@@ -441,7 +441,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 				onClick={handleTestTTS}
 				disabled={testing === "tts"}
 			>
-				{testing === "tts" ? "测试中..." : "测试连接"}
+				{testing === "tts" ? t("测试中...", "Testing...") : t("测试连接", "Test Connection")}
 			</Button>
 			{ttsTestResult && (
 				<Alert severity={ttsTestResult.ok ? "success" : "error"} sx={{ py: 0, fontSize: 11 }}>
@@ -451,10 +451,10 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 
 			<Divider sx={{ my: 0.5 }} />
 
-			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>TTS 直测（合成并播放）</Typography>
+			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{t("TTS 直测（合成并播放）", "Direct TTS Test (synthesize and play)")}</Typography>
 			<TextField
 				size="small" fullWidth
-				placeholder="输入测试文本"
+				placeholder={t("输入测试文本", "Enter test text")}
 				value={ttsTestText}
 				onChange={(e) => setTtsTestText(e.target.value)}
 			/>
@@ -464,7 +464,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 				onClick={handleTestTTSDirect}
 				disabled={ttsTesting}
 			>
-				{ttsTesting ? "合成中..." : "合成并播放"}
+				{ttsTesting ? t("合成中...", "Synthesizing...") : t("合成并播放", "Synthesize and Play")}
 			</Button>
 		</Box>
 
@@ -494,6 +494,7 @@ interface LLMProfilesSectionProps {
 }
 
 function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onSelect, onPersist }: LLMProfilesSectionProps) {
+	const { t } = useI18n();
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingProfile, setEditingProfile] = useState<LLMProfile | null>(null);
 	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
@@ -607,12 +608,12 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 					displayEmpty
 					sx={{ flex: 1, fontSize: 13 }}
 				>
-					<MenuItem value=""><em>无（使用手动配置）</em></MenuItem>
+					<MenuItem value=""><em>{t("无（使用手动配置）", "None (use manual config)")}</em></MenuItem>
 					{profiles.map((p) => (
-						<MenuItem key={p.id} value={p.id}>{p.name || "(未命名)"}</MenuItem>
+						<MenuItem key={p.id} value={p.id}>{p.name || t("(未命名)", "(Unnamed)")}</MenuItem>
 					))}
 				</Select>
-				<Tooltip title="编辑档案">
+				<Tooltip title={t("编辑档案", "Edit profile")}>
 					<IconButton
 						size="small"
 						onClick={handleEdit}
@@ -622,7 +623,7 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 						<EditIcon sx={{ fontSize: 14 }} />
 					</IconButton>
 				</Tooltip>
-				<Tooltip title="新增档案">
+				<Tooltip title={t("新增档案", "Add profile")}>
 					<IconButton size="small" onClick={handleNew} sx={{ color: "primary.main" }}>
 						<AddIcon sx={{ fontSize: 14 }} />
 					</IconButton>
@@ -638,36 +639,36 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 				slotProps={{ paper: { sx: { width: 360, maxHeight: 480, overflowY: "auto" } } }}
 			>
 				<Box sx={{ p: 1.5 }}>
-					<Typography variant="subtitle2" sx={{ mb: 1 }}>LLM 配置档案</Typography>
+					<Typography variant="subtitle2" sx={{ mb: 1 }}>{t("LLM 配置档案", "LLM Profile")}</Typography>
 					{editingProfile && (
 						<Stack spacing={1}>
 							<TextField
-								size="small" fullWidth label="档案名称"
+								size="small" fullWidth label={t("档案名称", "Profile Name")}
 								value={editingProfile.name}
 								onChange={(e) => setEditingProfile({ ...editingProfile, name: e.target.value })}
 							/>
 							<Select
-								size="small" fullWidth label="Provider"
+								size="small" fullWidth label={t("Provider", "Provider")}
 								value={editingProfile.provider}
 								onChange={(e: SelectChangeEvent) => setEditingProfile({ ...editingProfile, provider: e.target.value as LLMProviderType })}
 							>
-								<MenuItem value="mock">Mock（模拟）</MenuItem>
-								<MenuItem value="openai-compatible">OpenAI 兼容 API</MenuItem>
+								<MenuItem value="mock">{t("Mock（模拟）", "Mock")}</MenuItem>
+								<MenuItem value="openai-compatible">{t("OpenAI 兼容 API", "OpenAI-compatible API")}</MenuItem>
 							</Select>
-							<TextField size="small" fullWidth label="API Key" type="password" value={editingProfile.apiKey ?? ""}
+							<TextField size="small" fullWidth label={t("API Key", "API Key")} type="password" value={editingProfile.apiKey ?? ""}
 								onChange={(e) => setEditingProfile({ ...editingProfile, apiKey: e.target.value })}
-								helperText="密钥将安全存储在系统钥匙串中" />
-							<TextField size="small" fullWidth label="Base URL" value={editingProfile.baseUrl}
+								helperText={t("密钥将安全存储在系统钥匙串中", "Secrets are stored securely in the system keychain")} />
+							<TextField size="small" fullWidth label={t("Base URL", "Base URL")} value={editingProfile.baseUrl}
 								onChange={(e) => setEditingProfile({ ...editingProfile, baseUrl: e.target.value })}
-								helperText="支持是否带 /v1 后缀" />
-							<TextField size="small" fullWidth label="模型名称" value={editingProfile.model}
+								helperText={t("支持是否带 /v1 后缀", "Supports URLs with or without /v1")} />
+							<TextField size="small" fullWidth label={t("模型名称", "Model Name")} value={editingProfile.model}
 								onChange={(e) => setEditingProfile({ ...editingProfile, model: e.target.value })} />
 							<Stack direction="row" spacing={0.5}>
-								<TextField size="small" fullWidth label="Temperature" type="number"
+								<TextField size="small" fullWidth label={t("Temperature", "Temperature")} type="number"
 									slotProps={{ htmlInput: { min: 0, max: 2, step: 0.1 } }}
 									value={editingProfile.temperature}
 									onChange={(e) => setEditingProfile({ ...editingProfile, temperature: parseFloat(e.target.value) || 0.7 })} />
-								<TextField size="small" fullWidth label="Max Tokens" type="number"
+								<TextField size="small" fullWidth label={t("Max Tokens", "Max Tokens")} type="number"
 									slotProps={{ htmlInput: { min: 100, max: 16384, step: 256 } }}
 									value={editingProfile.maxTokens}
 									onChange={(e) => setEditingProfile({ ...editingProfile, maxTokens: parseInt(e.target.value) || 2048 })} />
@@ -676,12 +677,12 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 							<Stack direction="row" spacing={0.5} justifyContent="space-between" alignItems="center">
 								{profiles.length > 1 ? (
 									<Button size="small" color="error" onClick={() => { setConfirmDeleteOpen(true); setDeleteCountdown(2); }}>
-										删除档案
+										{t("删除档案", "Delete Profile")}
 									</Button>
 								) : <Box />}
 								<Stack direction="row" spacing={0.5}>
-									<Button size="small" onClick={handleDialogClose}>取消</Button>
-									<Button size="small" variant="contained" onClick={handleDialogSave}>保存</Button>
+									<Button size="small" onClick={handleDialogClose}>{t("取消", "Cancel")}</Button>
+									<Button size="small" variant="contained" onClick={handleDialogSave}>{t("保存", "Save")}</Button>
 								</Stack>
 							</Stack>
 
@@ -689,7 +690,7 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 								<Box sx={{ bgcolor: "background.default", border: "1px solid", borderColor: "error.main", borderRadius: 1, p: 1.5, mt: 0.5 }}>
 									<Stack direction="row" spacing={0.5} alignItems="center">
 										<WarningIcon sx={{ fontSize: 14, color: "error.main" }} />
-										<Typography variant="subtitle2" sx={{ color: "error.main" }}>删除此档案将无法恢复</Typography>
+										<Typography variant="subtitle2" sx={{ color: "error.main" }}>{t("删除此档案将无法恢复", "Deleting this profile cannot be undone")}</Typography>
 									</Stack>
 									<Stack direction="row" spacing={0.5} justifyContent="flex-end">
 										<Button
@@ -697,9 +698,9 @@ function LLMProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 											disabled={deleteCountdown > 0}
 											onClick={() => { setConfirmDeleteOpen(false); handleDelete(editingProfile.id); }}
 										>
-											{deleteCountdown > 0 ? `确认删除 (${deleteCountdown}s)` : "确认删除"}
+											{deleteCountdown > 0 ? t(`确认删除 (${deleteCountdown}s)`, `Confirm Delete (${deleteCountdown}s)`) : t("确认删除", "Confirm Delete")}
 										</Button>
-										<Button size="small" onClick={() => setConfirmDeleteOpen(false)}>取消</Button>
+										<Button size="small" onClick={() => setConfirmDeleteOpen(false)}>{t("取消", "Cancel")}</Button>
 									</Stack>
 								</Box>
 							)}
@@ -725,6 +726,7 @@ interface TTSProfilesSectionProps {
 }
 
 function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onSelect, onPersist }: TTSProfilesSectionProps) {
+	const { t } = useI18n();
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingProfile, setEditingProfile] = useState<TTSProfile | null>(null);
 	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
@@ -817,12 +819,12 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 					displayEmpty
 					sx={{ flex: 1, fontSize: 13 }}
 				>
-					<MenuItem value=""><em>无（使用手动配置）</em></MenuItem>
+					<MenuItem value=""><em>{t("无（使用手动配置）", "None (use manual config)")}</em></MenuItem>
 					{profiles.map((p) => (
-						<MenuItem key={p.id} value={p.id}>{p.name || "(未命名)"}</MenuItem>
+						<MenuItem key={p.id} value={p.id}>{p.name || t("(未命名)", "(Unnamed)")}</MenuItem>
 					))}
 				</Select>
-				<Tooltip title="编辑档案">
+				<Tooltip title={t("编辑档案", "Edit profile")}>
 					<IconButton
 						size="small"
 						onClick={handleEdit}
@@ -832,7 +834,7 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 						<EditIcon sx={{ fontSize: 14 }} />
 					</IconButton>
 				</Tooltip>
-				<Tooltip title="新增档案">
+				<Tooltip title={t("新增档案", "Add profile")}>
 					<IconButton size="small" onClick={handleNew} sx={{ color: "primary.main" }}>
 						<AddIcon sx={{ fontSize: 14 }} />
 					</IconButton>
@@ -848,54 +850,54 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 				slotProps={{ paper: { sx: { width: 360, maxHeight: 480, overflowY: "auto" } } }}
 			>
 				<Box sx={{ p: 1.5 }}>
-					<Typography variant="subtitle2" sx={{ mb: 1 }}>TTS 配置档案</Typography>
+					<Typography variant="subtitle2" sx={{ mb: 1 }}>{t("TTS 配置档案", "TTS Profile")}</Typography>
 					{editingProfile && (
 						<Stack spacing={1}>
-							<TextField size="small" fullWidth label="档案名称"
+							<TextField size="small" fullWidth label={t("档案名称", "Profile Name")}
 								value={editingProfile.name}
 								onChange={(e) => setEditingProfile({ ...editingProfile, name: e.target.value })} />
-							<Select size="small" fullWidth label="Provider"
+							<Select size="small" fullWidth label={t("Provider", "Provider")}
 								value={editingProfile.provider}
 								onChange={(e: SelectChangeEvent) => setEditingProfile({ ...editingProfile, provider: e.target.value as TTSProviderType })}>
-								<MenuItem value="mock">Mock（模拟）</MenuItem>
+								<MenuItem value="mock">{t("Mock（模拟）", "Mock")}</MenuItem>
 								<MenuItem value="gpt-sovits">GPT-SoVITS</MenuItem>
 							</Select>
-							<TextField size="small" fullWidth label="服务地址"
+							<TextField size="small" fullWidth label={t("服务地址", "Service URL")}
 								value={editingProfile.baseUrl}
 								onChange={(e) => setEditingProfile({ ...editingProfile, baseUrl: e.target.value })} />
 
 							{isGptSovits && (
 								<>
-									<TextField size="small" fullWidth label="GPT 权重路径"
+									<TextField size="small" fullWidth label={t("GPT 权重路径", "GPT Weights Path")}
 										value={editingProfile.gptWeightsPath}
 										onChange={(e) => setEditingProfile({ ...editingProfile, gptWeightsPath: e.target.value })} />
-									<TextField size="small" fullWidth label="SoVITS 权重路径"
+									<TextField size="small" fullWidth label={t("SoVITS 权重路径", "SoVITS Weights Path")}
 										value={editingProfile.sovitsWeightsPath}
 										onChange={(e) => setEditingProfile({ ...editingProfile, sovitsWeightsPath: e.target.value })} />
-									<TextField size="small" fullWidth label="参考音频路径"
+									<TextField size="small" fullWidth label={t("参考音频路径", "Reference Audio Path")}
 										value={editingProfile.refAudioPath}
 										onChange={(e) => setEditingProfile({ ...editingProfile, refAudioPath: e.target.value })} />
-									<TextField size="small" fullWidth label="参考音频文本"
+									<TextField size="small" fullWidth label={t("参考音频文本", "Reference Audio Text")}
 										value={editingProfile.promptText}
 										onChange={(e) => setEditingProfile({ ...editingProfile, promptText: e.target.value })} />
 									<Stack direction="row" spacing={0.5}>
-										<Select size="small" sx={{ flex: 1 }} label="参考语言"
+										<Select size="small" sx={{ flex: 1 }} label={t("参考语言", "Reference Language")}
 											value={editingProfile.promptLang}
 											onChange={(e: SelectChangeEvent) => setEditingProfile({ ...editingProfile, promptLang: e.target.value })}>
-											<MenuItem value="zh">中文</MenuItem>
+											<MenuItem value="zh">{t("中文", "Chinese")}</MenuItem>
 											<MenuItem value="en">English</MenuItem>
-											<MenuItem value="ja">日本語</MenuItem>
+											<MenuItem value="ja">{t("日语", "Japanese")}</MenuItem>
 										</Select>
-										<Select size="small" sx={{ flex: 1 }} label="合成语言"
+										<Select size="small" sx={{ flex: 1 }} label={t("合成语言", "Synthesis Language")}
 											value={editingProfile.textLang}
 											onChange={(e: SelectChangeEvent) => setEditingProfile({ ...editingProfile, textLang: e.target.value })}>
-											<MenuItem value="zh">中文</MenuItem>
+											<MenuItem value="zh">{t("中文", "Chinese")}</MenuItem>
 											<MenuItem value="en">English</MenuItem>
-											<MenuItem value="ja">日本語</MenuItem>
+											<MenuItem value="ja">{t("日语", "Japanese")}</MenuItem>
 										</Select>
 									</Stack>
 									<Alert severity="info" sx={{ py: 0 }}>
-										TTS 当前只接受 GPT-SoVITS 路线。
+										{t("TTS 当前只接受 GPT-SoVITS 路线。", "TTS currently only supports the GPT-SoVITS route.")}
 									</Alert>
 								</>
 							)}
@@ -903,12 +905,12 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 							<Stack direction="row" spacing={0.5} justifyContent="space-between" alignItems="center">
 								{profiles.length > 1 ? (
 									<Button size="small" color="error" onClick={() => { setConfirmDeleteOpen(true); setDeleteCountdown(2); }}>
-										删除档案
+										{t("删除档案", "Delete Profile")}
 									</Button>
 								) : <Box />}
 								<Stack direction="row" spacing={0.5}>
-									<Button size="small" onClick={handleDialogClose}>取消</Button>
-									<Button size="small" variant="contained" onClick={handleDialogSave}>保存</Button>
+									<Button size="small" onClick={handleDialogClose}>{t("取消", "Cancel")}</Button>
+									<Button size="small" variant="contained" onClick={handleDialogSave}>{t("保存", "Save")}</Button>
 								</Stack>
 							</Stack>
 
@@ -916,7 +918,7 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 								<Box sx={{ bgcolor: "background.default", border: "1px solid", borderColor: "error.main", borderRadius: 1, p: 1.5, mt: 0.5 }}>
 									<Stack direction="row" spacing={0.5} alignItems="center">
 										<WarningIcon sx={{ fontSize: 14, color: "error.main" }} />
-										<Typography variant="subtitle2" sx={{ color: "error.main" }}>删除此档案将无法恢复</Typography>
+										<Typography variant="subtitle2" sx={{ color: "error.main" }}>{t("删除此档案将无法恢复", "Deleting this profile cannot be undone")}</Typography>
 									</Stack>
 									<Stack direction="row" spacing={0.5} justifyContent="flex-end">
 										<Button
@@ -924,9 +926,9 @@ function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDelete, onS
 											disabled={deleteCountdown > 0}
 											onClick={() => { setConfirmDeleteOpen(false); handleDelete(editingProfile.id); }}
 										>
-											{deleteCountdown > 0 ? `确认删除 (${deleteCountdown}s)` : "确认删除"}
+											{deleteCountdown > 0 ? t(`确认删除 (${deleteCountdown}s)`, `Confirm Delete (${deleteCountdown}s)`) : t("确认删除", "Confirm Delete")}
 										</Button>
-										<Button size="small" onClick={() => setConfirmDeleteOpen(false)}>取消</Button>
+										<Button size="small" onClick={() => setConfirmDeleteOpen(false)}>{t("取消", "Cancel")}</Button>
 									</Stack>
 								</Box>
 							)}
