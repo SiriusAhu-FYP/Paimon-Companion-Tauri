@@ -77,22 +77,26 @@ export function initServices(): ServiceContainer {
 	const knowledge = new KnowledgeService(eventBus);
 	const perception = new PerceptionService(eventBus, debugCapture);
 	const safety = new SafetyService(eventBus, runtime);
+	const companionRuntime = new CompanionRuntimeService({
+		bus: eventBus,
+		perception,
+	});
 	const orchestrator = new OrchestratorService({
 		bus: eventBus,
 		safety,
 		perception,
 	});
+	const llmProvider = resolveLLMProvider(config);
+	const llm = new LLMService(eventBus, runtime, llmProvider, affect, character, knowledge, companionRuntime, companionMode, delegationMemory, debugCapture);
 	const game2048 = new Game2048Service({
 		bus: eventBus,
 		orchestrator,
+		companionRuntime,
 	});
 	const sokoban = new SokobanService({
 		bus: eventBus,
 		orchestrator,
-	});
-	const companionRuntime = new CompanionRuntimeService({
-		bus: eventBus,
-		perception,
+		companionRuntime,
 	});
 	const companionRuntimeBenchmark = new CompanionRuntimeBenchmarkService({
 		bus: eventBus,
@@ -106,8 +110,6 @@ export function initServices(): ServiceContainer {
 		log.error("knowledge initialization failed", err);
 	});
 
-	const llmProvider = resolveLLMProvider(config);
-	const llm = new LLMService(eventBus, runtime, llmProvider, affect, character, knowledge, companionRuntime, companionMode, delegationMemory, debugCapture);
 	const asr = resolveASRProvider(config);
 	const ttsProvider = resolveTTSProvider(config);
 	const player = new AudioPlayer();

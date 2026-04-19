@@ -29,7 +29,7 @@ export function SokobanSection(props: {
 			/>
 
 			<InfoLine mb={0.5}>
-				{t("策略", "Strategy")}：{props.sokobanState.lastRun?.analysis.strategy ?? t("先验证短动作序列是否能稳定地产生可见棋盘变化，再继续收紧规则。", "First verify that short move sequences can produce visible board changes consistently, then tighten planning rules.") }
+				{t("策略", "Strategy")}：{props.sokobanState.lastRun?.analysis.strategy ?? t("依赖 companion runtime 的本地观察，再交给云端做短序列决策与解释。", "Depend on companion runtime local observation, then ask the cloud model for a short grounded sequence and explanation.") }
 			</InfoLine>
 
 			<Stack direction="row" spacing={0.5} sx={{ mb: 0.75, flexWrap: "wrap" }}>

@@ -29,7 +29,7 @@ export function Game2048Section(props: {
 			/>
 
 			<InfoLine mb={0.5}>
-				{t("策略", "Strategy")}：{props.game2048State.lastRun?.analysis.strategy ?? t("默认优先 Up -> Left -> Right -> Down；支持图像模型时优先用截图排序。", "Default priority is Up -> Left -> Right -> Down. If vision is available, use screenshot-based ordering.")}
+				{t("策略", "Strategy")}：{props.game2048State.lastRun?.analysis.strategy ?? t("依赖 companion runtime 的本地观察，再交给云端做一步 grounded 决策。", "Depend on companion runtime local observation, then ask the cloud model for one grounded next-step decision.")}
 			</InfoLine>
 
 			<Stack direction="row" spacing={0.5} sx={{ mb: 0.75, flexWrap: "wrap" }}>
