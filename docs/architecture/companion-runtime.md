@@ -30,6 +30,16 @@ The preferred mechanism is:
 
 In other words, structured control should live in the tool layer, not in the visible reply text.
 
+This applies to both user-facing modes:
+
+- `companion`
+- `delegated`
+
+Both modes should share the same local-vision primary perception path. The difference between them is not which visual stack is used, but how the cloud layer consumes the same observation context:
+
+- `companion`: reply / proactive / emotional support
+- `delegated`: task plan / action decision / grounded follow-up
+
 ## Runtime Layers
 
 ### 1. Local Fast Vision Layer
@@ -86,8 +96,11 @@ Its job is to produce:
 - companion-facing natural language
 - MCP tool calls when emotion or gameplay actions are needed
 - higher-level temporal understanding of what is happening
+- delegated-mode planning / action decisions based on the same local observation context
 
 This layer should own the higher-cost reasoning, not the local VLM.
+
+The cloud layer should not become the default raw-image reader for gameplay experiments. In the intended `P5` shape, functional task buttons should also depend on the same local companion-runtime observation chain.
 
 ### 4. MCP Control Layer
 
