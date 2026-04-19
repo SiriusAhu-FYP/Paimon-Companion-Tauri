@@ -211,11 +211,13 @@ P3/P4 close-out:
   Goal: after the companion-side emotional baseline is usable, harden the actual task/delegation stack so the system is not expressive but unreliable.
   This phase narrows functional work to the existing validated targets first, with clearer companion-first boundaries before any broader expansion.
   It is also the right place to formalize the heavier reflection loop instead of forcing that complexity into `P4`.
+  The accepted target architecture for this phase is now explicit: `companion` and `delegated` must share the same local-vision primary perception chain, and cloud models should consume that observation context for summary, planning, reply, and follow-up instead of directly reading raw gameplay screenshots as the default functional path.
   - [ ] raise `2048` from accepted loop validation to a more repeatable stable solving baseline
   - [ ] raise `Sokoban` from minimum semantic-action skeleton to real simple-level solving
   - [ ] land an explicit companion mode / delegated mode state with clear entry and exit conditions instead of relying on temporary unified-run style control flow
   - [ ] make companion-first and delegated-execution boundaries explicit in runtime/orchestration behavior
   - [ ] structure delegated-task follow-up around explicit verification plus memory update rather than treating action execution as the end of the loop
+  - [ ] correct the current functional-path perception mismatch so `Unified Run`, `2048`, and `Sokoban` all depend on the local companion runtime observation chain rather than direct cloud screenshot analysis
   - [ ] decide which task/game capabilities stay in core MCP tools and which should become pluginized phase-by-phase
   - [-] keep broader new-game transfer outside the acceptance bar until the existing functional pair is stable
 
