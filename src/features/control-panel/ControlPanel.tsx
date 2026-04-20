@@ -1,18 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import {
-	Box,
-	Button,
-	Chip,
-	Divider,
-	MenuItem,
-	Paper,
-	Select,
-	Stack,
-	type SelectChangeEvent,
-	Typography,
-} from "@mui/material";
-import StopIcon from "@mui/icons-material/Stop";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import { Divider, type SelectChangeEvent } from "@mui/material";
 import { useRuntime, useCharacter, useCompanionMode, useDebugCaptureState, useDelegationMemory } from "@/hooks";
 import { useI18n } from "@/contexts/I18nProvider";
 import { getServices } from "@/services";
@@ -20,7 +7,14 @@ import { updateConfig, getConfig } from "@/services/config";
 import { MOCK_CHARACTER_PROFILE } from "@/utils/mock";
 import type { CharacterProfile } from "@/types";
 import { createLogger } from "@/services/logger";
-import { PanelCard, PanelRoot } from "./panel-shell";
+import { PanelRoot } from "./panel-shell";
+import {
+	CharacterSwitcherCard,
+	DebugCaptureCard,
+	InteractionModeCard,
+	LatestDelegatedRecordCard,
+	RuntimeStateCard,
+} from "./control-panel-cards";
 
 const log = createLogger("control-panel");
 
@@ -90,166 +84,35 @@ export function ControlPanel() {
 	}, [debugCapture.enabled]);
 	return (
 		<PanelRoot title={t("陪伴面板", "Companion Panel")}>
-			<PanelCard>
-				<Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>
-						{t("运行状态", "Runtime State")}
-					</Typography>
-					{mode === "stopped" && (
-						<Chip label="STOPPED" size="small" color="error" sx={{ height: 18, fontSize: 10 }} />
-					)}
-				</Stack>
-				<Typography variant="body2" sx={{ mb: 0.75 }}>
-					{t("模式", "Mode")}：<strong>{mode}</strong>
-				</Typography>
-				<Stack direction="row" spacing={0.5}>
-					<Button
-						variant="outlined"
-						size="small"
-						onClick={stop}
-						disabled={mode === "stopped"}
-						startIcon={<StopIcon />}
-						color="error"
-					>
-						{t("急停", "Stop")}
-					</Button>
-					<Button
-						variant="outlined"
-						size="small"
-						onClick={resume}
-						disabled={mode === "auto"}
-						startIcon={<PlayArrowIcon />}
-					>
-						{t("恢复", "Resume")}
-					</Button>
-				</Stack>
-			</PanelCard>
+			<RuntimeStateCard mode={mode} onStop={stop} onResume={resume} />
 
 			<Divider />
 
-			<PanelCard>
-				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.75, display: "block" }}>
-					{t("交互模式", "Interaction Mode")}
-				</Typography>
-				<Stack direction="row" spacing={0.75} sx={{ mb: 0.75 }}>
-					<Button
-						variant={companionMode.mode === "companion" ? "contained" : "outlined"}
-						size="small"
-						onClick={() => handleModeChange("companion")}
-					>
-						{t("陪伴", "Companion")}
-					</Button>
-					<Button
-						variant={companionMode.mode === "delegated" ? "contained" : "outlined"}
-						size="small"
-						onClick={() => handleModeChange("delegated")}
-					>
-						{t("托管", "Delegated")}
-					</Button>
-				</Stack>
-				<Stack spacing={0.25}>
-					<Typography variant="body2">{t("当前模式", "Current Mode")}：{companionMode.mode}</Typography>
-					<Typography variant="body2">{t("用户偏好", "Preferred Mode")}：{companionMode.preferredMode}</Typography>
-					<Typography variant="body2">{t("最近切换", "Latest Reason")}：{companionMode.lastReason}</Typography>
-				</Stack>
-			</PanelCard>
+			<InteractionModeCard
+				mode={companionMode.mode}
+				preferredMode={companionMode.preferredMode}
+				lastReason={companionMode.lastReason}
+				onModeChange={handleModeChange}
+			/>
 
 			<Divider />
 
-			<PanelCard>
-				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
-					{t("当前角色", "Current Character")}：{currentProfileName}
-				</Typography>
-				<Select
-					size="small"
-					fullWidth
-					value={selectedId}
-					onChange={handleCharacterSwitch}
-					displayEmpty
-					sx={{ fontSize: 13, mb: 1 }}
-				>
-					<MenuItem value="__manual__">
-						<em>{t("手动人设", "Manual Persona")}</em>
-					</MenuItem>
-					{profiles.map((profile) => (
-						<MenuItem key={profile.id} value={profile.id}>
-							{profile.name}
-						</MenuItem>
-					))}
-				</Select>
-
-				<Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-					<Typography variant="body2">{t("当前表情", "Current Emotion")}：{emotion}</Typography>
-					<Typography variant="body2">{t("语音状态", "Speech State")}：{isSpeaking ? t("说话中", "Speaking") : t("空闲", "Idle")}</Typography>
-				</Box>
-			</PanelCard>
+			<CharacterSwitcherCard
+				selectedId={selectedId}
+				profiles={profiles}
+				currentProfileName={currentProfileName}
+				emotion={emotion}
+				isSpeaking={isSpeaking}
+				onChange={handleCharacterSwitch}
+			/>
 
 			<Divider />
 
-			<PanelCard>
-				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
-					{t("日志记录", "Debug Capture")}
-				</Typography>
-				<Button
-					variant={debugCapture.enabled ? "contained" : "outlined"}
-					size="small"
-					color={debugCapture.enabled ? "warning" : "inherit"}
-					onClick={() => { void handleToggleDebugCapture(); }}
-					sx={{ alignSelf: "flex-start", mb: 1 }}
-				>
-					{debugCapture.enabled ? t("停止日志写入", "Stop Capture") : t("开始日志写入", "Start Capture")}
-				</Button>
-				<Stack spacing={0.25}>
-					<Typography variant="body2">{t("当前会话", "Current Session")}：{debugCapture.sessionId ?? t("无", "None")}</Typography>
-					<Typography variant="body2">{t("写入目录", "Capture Directory")}：{debugCapture.sessionDirectory ?? t("无", "None")}</Typography>
-					<Typography variant="body2">{t("已记录事件", "Captured Events")}：{debugCapture.capturedEventCount}</Typography>
-					<Typography variant="body2">{t("已记录图片", "Captured Images")}：{debugCapture.capturedImageCount}</Typography>
-					<Typography variant="body2">{t("最近错误", "Last Error")}：{debugCapture.lastError ?? t("无", "None")}</Typography>
-				</Stack>
-			</PanelCard>
+			<DebugCaptureCard state={debugCapture} onToggle={handleToggleDebugCapture} />
 
 			<Divider />
 
-			<PanelCard>
-				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
-					{t("最近托管记录", "Latest Delegated Record")}
-				</Typography>
-				{latestDelegatedRecord ? (
-					<Stack spacing={0.5}>
-						<Stack direction="row" spacing={0.5}>
-							<Chip
-								label={latestDelegatedRecord.verificationResult.success ? t("成功", "Success") : t("失败", "Failed")}
-								size="small"
-								color={latestDelegatedRecord.verificationResult.success ? "success" : "error"}
-								sx={{ height: 18, fontSize: 10 }}
-							/>
-							<Chip
-								label={latestDelegatedRecord.sourceGame ?? "—"}
-								size="small"
-								variant="outlined"
-								sx={{ height: 18, fontSize: 10 }}
-							/>
-						</Stack>
-						<Typography variant="body2">{t("执行结果", "Execution Summary")}：{latestDelegatedRecord.executionSummary}</Typography>
-						<Typography variant="body2">{t("决策来源", "Decision Source")}：{latestDelegatedRecord.analysisSource ?? t("无", "None")}</Typography>
-						<Typography variant="body2">{t("决策摘要", "Decision Summary")}：{latestDelegatedRecord.decisionSummary ?? t("无", "None")}</Typography>
-						<Typography variant="body2">{t("计划动作", "Planned Actions")}：{latestDelegatedRecord.plannedActions.length ? latestDelegatedRecord.plannedActions.join(" -> ") : t("无", "None")}</Typography>
-						<Typography variant="body2">{t("尝试动作", "Attempted Actions")}：{latestDelegatedRecord.attemptedActions.length ? latestDelegatedRecord.attemptedActions.join(" -> ") : t("无", "None")}</Typography>
-						<Typography variant="body2">{t("下一步线索", "Next Step Hint")}：{latestDelegatedRecord.nextStepHint ?? t("无", "None")}</Typography>
-						{latestDelegatedRecord.verificationResult.error ? (
-							<Paper variant="outlined" sx={{ p: 0.75, bgcolor: "background.default" }}>
-								<Typography variant="caption" color="error.main">
-									{latestDelegatedRecord.verificationResult.error}
-								</Typography>
-							</Paper>
-						) : null}
-					</Stack>
-				) : (
-					<Typography variant="body2" color="text.secondary">
-						{t("尚无托管记录", "No delegated records yet")}
-					</Typography>
-				)}
-			</PanelCard>
+			<LatestDelegatedRecordCard record={latestDelegatedRecord} />
 		</PanelRoot>
 	);
 }
