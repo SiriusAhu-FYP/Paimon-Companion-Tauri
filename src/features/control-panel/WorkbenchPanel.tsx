@@ -28,19 +28,24 @@ export function WorkbenchPanel() {
 	return (
 		<Box sx={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
 			<PanelRoot title={t("开发工作台", "Developer Workbench")}>
-				<CompanionRuntimeSection
-					functionalState={functionalState}
-					companionRuntimeState={companionRuntimeState}
-					companionRuntimeBenchmarkState={companionRuntimeBenchmarkState}
-					onStart={startCompanionRuntime}
-					onStop={stopCompanionRuntime}
-					onClearHistory={clearCompanionRuntimeHistory}
-					onRunSummaryNow={runSummaryNow}
-					onTestConnection={testLocalVisionConnection}
-					onRunBenchmark={runCompanionRuntimeBenchmark}
-					onUpdateConfig={updateRuntimeConfig}
-				/>
-				<ButtonGroup size="small" fullWidth sx={{ mb: 1 }}>
+				<Box sx={{ maxHeight: 340, overflowY: "auto", pr: 0.5 }}>
+					<CompanionRuntimeSection
+						functionalState={functionalState}
+						companionRuntimeState={companionRuntimeState}
+						companionRuntimeBenchmarkState={companionRuntimeBenchmarkState}
+						onStart={startCompanionRuntime}
+						onStop={stopCompanionRuntime}
+						onClearHistory={clearCompanionRuntimeHistory}
+						onRunSummaryNow={runSummaryNow}
+						onTestConnection={testLocalVisionConnection}
+						onRunBenchmark={runCompanionRuntimeBenchmark}
+						onUpdateConfig={updateRuntimeConfig}
+					/>
+				</Box>
+			</PanelRoot>
+
+			<Box sx={{ px: 1.5, pb: 1, flexShrink: 0 }}>
+				<ButtonGroup size="small" fullWidth>
 					<Button variant={section === "companion" ? "contained" : "outlined"} onClick={() => setSection("companion")}>
 						{t("陪伴", "Companion")}
 					</Button>
@@ -48,7 +53,7 @@ export function WorkbenchPanel() {
 						{t("功能", "Functional")}
 					</Button>
 				</ButtonGroup>
-			</PanelRoot>
+			</Box>
 
 			<Box
 				sx={{
