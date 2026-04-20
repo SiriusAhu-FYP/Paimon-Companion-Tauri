@@ -8,6 +8,8 @@ import { InfoLine, PanelCard, SectionHeader, SectionStatusChip } from "./panel-s
 export function UnifiedRunSection(props: {
 	unifiedState: UnifiedRuntimeState;
 	onRunUnifiedGame: () => Promise<unknown>;
+	onQuickTarget2048: () => Promise<unknown>;
+	onQuickTargetSokoban: () => Promise<unknown>;
 	onSubmitVoiceText: (text: string) => Promise<unknown>;
 	onSetSpeechEnabled: (enabled: boolean) => void;
 	onSetVoiceInputEnabled: (enabled: boolean) => void;
@@ -32,6 +34,36 @@ export function UnifiedRunSection(props: {
 			/>
 
 			<Stack direction="row" spacing={0.5} sx={{ mb: 0.75, flexWrap: "wrap" }}>
+				<Button
+					size="small"
+					variant="outlined"
+					onClick={async () => {
+						setError(null);
+						try {
+							await props.onQuickTarget2048();
+						} catch (err) {
+							setError(err instanceof Error ? err.message : String(err));
+						}
+					}}
+					disabled={props.busy}
+				>
+					{t("选中 2048 窗口", "Target 2048")}
+				</Button>
+				<Button
+					size="small"
+					variant="outlined"
+					onClick={async () => {
+						setError(null);
+						try {
+							await props.onQuickTargetSokoban();
+						} catch (err) {
+							setError(err instanceof Error ? err.message : String(err));
+						}
+					}}
+					disabled={props.busy}
+				>
+					{t("选中推箱子窗口", "Target Sokoban")}
+				</Button>
 				<Button
 					size="small"
 					variant="contained"

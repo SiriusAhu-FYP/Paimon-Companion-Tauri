@@ -34,11 +34,14 @@ export function FunctionalPanel() {
 
 	const handleDetect2048Target = useCallback(async () => {
 		try {
-			await detectTarget();
+			const target = await detectTarget();
+			if (target) {
+				await runFocus(target);
+			}
 		} catch (err) {
 			log.error("failed to detect 2048 target", err);
 		}
-	}, [detectTarget]);
+	}, [detectTarget, runFocus]);
 
 	const handleRunEvaluationCase = useCallback(async (caseId: string) => {
 		try {
@@ -58,11 +61,14 @@ export function FunctionalPanel() {
 
 	const handleDetectSokobanTarget = useCallback(async () => {
 		try {
-			await detectSokobanTarget();
+			const target = await detectSokobanTarget();
+			if (target) {
+				await runFocus(target);
+			}
 		} catch (err) {
 			log.error("failed to detect sokoban target", err);
 		}
-	}, [detectSokobanTarget]);
+	}, [detectSokobanTarget, runFocus]);
 
 	const handleRunSokobanValidationRound = useCallback(async () => {
 		try {
@@ -83,6 +89,8 @@ export function FunctionalPanel() {
 			<UnifiedRunSection
 				unifiedState={unifiedState}
 				onRunUnifiedGame={runUnifiedGameStep}
+				onQuickTarget2048={handleDetect2048Target}
+				onQuickTargetSokoban={handleDetectSokobanTarget}
 				onSubmitVoiceText={submitVoiceText}
 				onSetSpeechEnabled={setSpeechEnabled}
 				onSetVoiceInputEnabled={setVoiceInputEnabled}
