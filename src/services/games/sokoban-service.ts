@@ -363,7 +363,9 @@ function buildObservationDecisionPrompt(
 		stateCues: [
 			...(SOKOBAN_PLUGIN.observationFocus ?? []),
 			"Identify the player, boxes, walls, and targets only from the provided local observation context.",
+			"Prefer a bounded short plan of 2-4 moves when the current board is static and legible enough to support it.",
 			"Prefer moves that either reposition the player productively or make visible progress toward a target.",
+			"Explain progress in concrete puzzle terms: player position, the box just approached or pushed, and whether target alignment or access improved.",
 			"Avoid repeating the same failed probe pattern without a new justification.",
 			discouragedOpeningMoves.length
 				? `Recent failed opening moves to avoid unless the local observation clearly changed: ${discouragedOpeningMoves.map((move) => formatSokobanAction(move)).join(", ")}.`

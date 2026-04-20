@@ -26,6 +26,14 @@ describe("UnifiedRuntimeService affect application", () => {
 			reflection?: string;
 			reasoning?: string;
 		};
+		gameResults?: Array<{
+			summary: string;
+			boardChanged: boolean;
+			selectedMove: "move_up" | "move_left" | "move_right" | "move_down" | null;
+			companionText: string;
+			reflection?: string;
+			reasoning?: string;
+		}>;
 		gameError?: Error;
 		reply?: string;
 	}) {
@@ -54,6 +62,31 @@ describe("UnifiedRuntimeService affect application", () => {
 			reflection: "继续沿着当前方向推进。",
 			reasoning: "上移能合并更稳定。",
 		};
+		const queuedGameResults = [...(options?.gameResults ?? [gameResult])];
+		const game2048 = {
+			runSingleStep: options?.gameError
+				? vi.fn().mockRejectedValue(options.gameError)
+				: vi.fn().mockImplementation(async () => {
+					const nextResult = queuedGameResults.shift() ?? gameResult;
+					return {
+						target: { handle: "target-1", title: "2048" },
+						summary: nextResult.summary,
+						selectedMove: nextResult.selectedMove,
+						boardChanged: nextResult.boardChanged,
+						companionText: nextResult.companionText,
+						analysis: {
+							source: "cloud-decision",
+							decisionSummary: "cloud chose move_left first from local observation context",
+							reflection: nextResult.reflection ?? "",
+							reasoning: nextResult.reasoning ?? "",
+							preferredMoves: ["move_left", "move_up", "move_right", "move_down"],
+						},
+						attempts: nextResult.boardChanged
+							? [{ move: nextResult.selectedMove ?? "move_up", changed: true, changeRatio: 0.12 }]
+							: [{ move: nextResult.selectedMove ?? "move_up", changed: false, changeRatio: 0.001 }],
+					};
+				}),
+		};
 		const service = new UnifiedRuntimeService({
 			bus,
 			runtime,
@@ -64,27 +97,7 @@ describe("UnifiedRuntimeService affect application", () => {
 					selectedTarget: { handle: "target-1", title: "2048" },
 				})),
 			} as never,
-			game2048: {
-				runSingleStep: options?.gameError
-					? vi.fn().mockRejectedValue(options.gameError)
-					: vi.fn().mockResolvedValue({
-						target: { handle: "target-1", title: "2048" },
-						summary: gameResult.summary,
-						selectedMove: gameResult.selectedMove,
-						boardChanged: gameResult.boardChanged,
-						companionText: gameResult.companionText,
-						analysis: {
-							source: "cloud-decision",
-							decisionSummary: "cloud chose move_left first from local observation context",
-							reflection: gameResult.reflection ?? "",
-							reasoning: gameResult.reasoning ?? "",
-							preferredMoves: ["move_left", "move_up", "move_right", "move_down"],
-						},
-						attempts: gameResult.boardChanged
-							? [{ move: gameResult.selectedMove ?? "move_up", changed: true, changeRatio: 0.12 }]
-							: [{ move: "move_up", changed: false, changeRatio: 0 }],
-					}),
-			} as never,
+			game2048: game2048 as never,
 			sokoban: {} as never,
 			llm: llm as never,
 			pipeline: {
@@ -95,7 +108,7 @@ describe("UnifiedRuntimeService affect application", () => {
 			delegationMemory,
 		});
 
-		return { bus, affect, runtime, companionMode, delegationMemory, companionRuntime, llm, service };
+		return { bus, affect, runtime, companionMode, delegationMemory, companionRuntime, llm, game2048, service };
 	}
 
 	it("keeps using the MCP companion emotion contract", async () => {
@@ -177,11 +190,27 @@ describe("UnifiedRuntimeService affect application", () => {
 	});
 
 	it("keeps delegated mode after a unified run when the user preference is delegated", async () => {
-		const { companionMode, service } = createService();
+		const { companionMode, game2048, service } = createService({
+			gameResults: [
+				{
+					summary: "no visible progress",
+					boardChanged: false,
+					selectedMove: "move_left",
+					companionText: "fallback reply",
+				},
+				{
+					summary: "still no visible progress",
+					boardChanged: false,
+					selectedMove: "move_up",
+					companionText: "fallback reply",
+				},
+			],
+		});
 		companionMode.setMode("delegated", "manual-toggle", "manual");
 
 		await service.runUnifiedGameStep("manual", "继续");
 
+		expect(game2048.runSingleStep).toHaveBeenCalledTimes(2);
 		expect(companionMode.getState()).toMatchObject({
 			mode: "delegated",
 			preferredMode: "delegated",
@@ -250,7 +279,7 @@ describe("UnifiedRuntimeService affect application", () => {
 	});
 
 	it("waits for a fresh post-action observation before grounded follow-up", async () => {
-		const { companionRuntime, service } = createService();
+		const { companionRuntime, llm, service } = createService();
 
 		await service.runUnifiedGameStep("manual", "帮我走一步");
 
@@ -262,6 +291,40 @@ describe("UnifiedRuntimeService affect application", () => {
 				requireChanged: true,
 			}),
 		);
+		expect(llm.generateCompanionReply.mock.calls[0]?.[0]).toContain("【动作后观察状态】fresh-changed");
+		expect(llm.generateCompanionReply.mock.calls[0]?.[0]).toContain("fresh observation");
+	});
+
+	it("auto-stops a delegated loop after repeated no-progress", async () => {
+		const { bus, companionMode, game2048, service } = createService({
+			gameResults: [
+				{
+					summary: "no visible progress",
+					boardChanged: false,
+					selectedMove: "move_left",
+					companionText: "fallback reply",
+				},
+				{
+					summary: "still no visible progress",
+					boardChanged: false,
+					selectedMove: "move_up",
+					companionText: "fallback reply",
+				},
+			],
+		});
+		companionMode.setMode("delegated", "manual-toggle", "manual");
+		const systemErrors: Array<{ module: string; error: string }> = [];
+		bus.on("system:error", (payload) => {
+			systemErrors.push(payload as { module: string; error: string });
+		});
+
+		await service.runUnifiedGameStep("manual", "继续托管");
+
+		expect(game2048.runSingleStep).toHaveBeenCalledTimes(2);
+		expect(systemErrors[systemErrors.length - 1]).toMatchObject({
+			module: "unified-runtime",
+			error: "delegated loop auto-stopped: repeated-no-progress",
+		});
 	});
 
 	it("uses focused delegation memory when analyzing without acting", async () => {

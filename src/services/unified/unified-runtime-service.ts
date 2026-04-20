@@ -15,6 +15,8 @@ import { callLocalMcpTool } from "@/services/mcp/local-mcp-client";
 
 const log = createLogger("unified-runtime");
 const MAX_HISTORY = 10;
+const DELEGATED_LOOP_STUCK_LIMIT = 2;
+const DELEGATED_LOOP_STEP_DELAY_MS = 250;
 
 type SupportedUnifiedGameId = "2048" | "sokoban";
 
@@ -57,6 +59,7 @@ export class UnifiedRuntimeService {
 	private companionMode: CompanionModeService;
 	private delegationMemory: DelegationMemoryService;
 	private state: UnifiedRuntimeState = makeInitialState();
+	private activeLoopId: string | null = null;
 
 	constructor(deps: {
 		bus: EventBus;
@@ -112,235 +115,52 @@ export class UnifiedRuntimeService {
 		if (!this.runtime.isAllowed()) {
 			throw new Error(`unified run blocked: runtime mode is ${this.runtime.getMode()}`);
 		}
+		if (this.activeLoopId || this.state.activeRunId) {
+			throw new Error("unified run already in progress");
+		}
 		const targetGame = this.resolveTargetGame(requestText);
 		if (!targetGame) {
 			throw new Error("unified run requires a selected 2048 or Sokoban target window");
 		}
 
-		const run: UnifiedRunRecord = {
-			id: options?.traceId ?? `unified-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-			gameId: targetGame,
-			trigger,
-			requestText,
-			startedAt: Date.now(),
-			endedAt: null,
-			status: "running",
-			phase: "acting",
-			summary: "",
-			companionText: "",
-			companionTextSource: "none",
-			emotion: "neutral",
-			selectedAction: null,
-			spoke: false,
-			error: null,
-			timings: {
-				actionMs: 0,
-				runtimeRefreshMs: 0,
-				llmReplyMs: 0,
-				speechMs: 0,
-				totalMs: 0,
-				totalBlockingMs: 0,
-				totalNonBlockingMs: 0,
-			},
-		};
-
-		this.state.activeRunId = run.id;
-		this.state.phase = "acting";
-		this.state.lastCommand = `${targetGame}-step`;
-		this.state.lastRun = cloneRun(run);
 		this.companionMode.setMode("delegated", "unified:run-start", "system");
-		await this.applyEmotion("neutral", run.id);
-		this.bus.emit("unified:run-start", {
-			runId: run.id,
-			trigger,
-			requestText,
-			traceId: run.id,
-		});
-		this.emitState();
+		const delegatedLoopEnabled = this.companionMode.getPreferredMode() === "delegated";
+		const loopId = `delegated-loop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+		this.activeLoopId = loopId;
+
+		let lastRun: UnifiedRunRecord | null = null;
+		let consecutiveStuckRounds = 0;
 
 		try {
-			let companionText = "";
-			let delegatedRecord: DelegatedExecutionRecord | null = null;
-			if (targetGame === "2048") {
-				const actionStartedAt = Date.now();
-				const result = await this.game2048.runSingleStep(undefined, { traceId: run.id });
-				run.timings.actionMs = Date.now() - actionStartedAt;
-				run.timings.runtimeRefreshMs = await this.waitForPostActionObservationForTarget(result.target, Date.now());
-				run.status = "completed";
-				run.phase = this.state.speechEnabled ? "speaking" : "idle";
-				run.summary = result.summary;
-				run.selectedAction = result.selectedMove;
-				run.emotion = result.boardChanged ? "happy" : "dazed";
-				delegatedRecord = this.delegationMemory.appendRecord({
-					createdAt: Date.now(),
-					mode: this.companionMode.getState().mode,
-					sourceGame: "2048",
-					trigger,
-					requestText,
-					analysisSource: result.analysis.source,
-					decisionSummary: result.analysis.decisionSummary ?? result.analysis.strategy,
-					plannedActions: [...result.analysis.preferredMoves],
-					attemptedActions: result.attempts.map((attempt) => attempt.move),
-					selectedAction: result.selectedMove,
-					executionSummary: result.summary,
-					verificationResult: {
-						success: result.boardChanged,
-						boardChanged: result.boardChanged,
-						error: null,
-					},
-					followUpSummary: "",
-					emotion: run.emotion,
-					nextStepHint: extractNextStepHint(result.analysis.reflection, result.analysis.reasoning, result.selectedMove),
-					traceId: run.id,
-				});
-				const llmReplyStartedAt = Date.now();
-				const generatedReply = await this.generateGroundedCompanionReply({
-					traceId: run.id,
-					delegationRecord: delegatedRecord,
-					fallbackText: result.companionText,
-				});
-				run.timings.llmReplyMs = Date.now() - llmReplyStartedAt;
-				run.companionText = generatedReply.text;
-				run.companionTextSource = generatedReply.source;
-				companionText = generatedReply.text;
-				this.delegationMemory.updateRecord(delegatedRecord.id, {
-					followUpSummary: generatedReply.text,
-				});
-			} else {
-				const actionStartedAt = Date.now();
-				const result = await this.sokoban.runValidationRound(undefined, { traceId: run.id });
-				run.timings.actionMs = Date.now() - actionStartedAt;
-				run.timings.runtimeRefreshMs = await this.waitForPostActionObservationForTarget(result.target, Date.now());
-				run.status = "completed";
-				run.phase = this.state.speechEnabled ? "speaking" : "idle";
-				run.summary = result.summary;
-				run.selectedAction = result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null;
-				run.emotion = result.boardChanged ? "delighted" : "alarmed";
-				delegatedRecord = this.delegationMemory.appendRecord({
-					createdAt: Date.now(),
-					mode: this.companionMode.getState().mode,
-					sourceGame: "sokoban",
-					trigger,
-					requestText,
-					analysisSource: result.analysis.source,
-					decisionSummary: result.analysis.decisionSummary ?? result.analysis.strategy,
-					plannedActions: [...result.analysis.plannedMoves],
-					attemptedActions: result.attempts.map((attempt) => attempt.move),
-					selectedAction: result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null,
-					executionSummary: result.summary,
-					verificationResult: {
-						success: result.boardChanged,
-						boardChanged: result.boardChanged,
-						error: null,
-					},
-					followUpSummary: "",
-					emotion: run.emotion,
-					nextStepHint: extractNextStepHint(
-						result.analysis.reflection,
-						result.analysis.reasoning,
-						result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null,
-					),
-					traceId: run.id,
-				});
-				const llmReplyStartedAt = Date.now();
-				const generatedReply = await this.generateGroundedCompanionReply({
-					traceId: run.id,
-					delegationRecord: delegatedRecord,
-					fallbackText: result.companionText,
-				});
-				run.timings.llmReplyMs = Date.now() - llmReplyStartedAt;
-				run.companionText = generatedReply.text;
-				run.companionTextSource = generatedReply.source;
-				companionText = generatedReply.text;
-				this.delegationMemory.updateRecord(delegatedRecord.id, {
-					followUpSummary: generatedReply.text,
-				});
+			do {
+				const run = await this.executeSingleUnifiedGameRound(targetGame, trigger, requestText, options);
+				lastRun = run;
+				consecutiveStuckRounds = shouldCountAsStuck(run) ? consecutiveStuckRounds + 1 : 0;
+
+				if (!delegatedLoopEnabled || !this.shouldContinueDelegatedLoop(loopId)) {
+					break;
+				}
+
+				if (consecutiveStuckRounds >= DELEGATED_LOOP_STUCK_LIMIT) {
+					await this.stopDelegatedLoop(targetGame, loopId, "repeated-no-progress");
+					break;
+				}
+
+				await sleep(DELEGATED_LOOP_STEP_DELAY_MS);
+			} while (this.shouldContinueDelegatedLoop(loopId));
+
+			if (!lastRun) {
+				throw new Error("unified run did not execute a delegated round");
 			}
-			this.state.lastCompanionText = companionText;
-			await this.applyEmotion(run.emotion, run.id);
-			const beforeSpeechAt = Date.now();
-			run.timings.totalNonBlockingMs = Math.max(0, beforeSpeechAt - run.startedAt);
 
-			if (this.state.speechEnabled && companionText) {
-				this.state.phase = "speaking";
-				this.emitState();
-				const speechStartedAt = Date.now();
-				run.spoke = await this.safeSpeak(companionText);
-				run.timings.speechMs = Date.now() - speechStartedAt;
+			return cloneRun(lastRun);
+		} finally {
+			if (this.activeLoopId === loopId) {
+				this.activeLoopId = null;
 			}
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			run.status = "failed";
-			run.phase = "failed";
-			run.error = message;
-			run.summary = `unified run failed: ${message}`;
-			run.companionText = "这轮统一运行没成功，我先停下来，等你检查目标窗口或当前画面。";
-			run.companionTextSource = "fallback";
-			run.emotion = "sad";
-			this.state.lastCompanionText = run.companionText;
-			this.delegationMemory.appendRecord({
-				createdAt: Date.now(),
-				mode: this.companionMode.getState().mode,
-				sourceGame: run.gameId,
-				trigger,
-				requestText,
-				analysisSource: null,
-				decisionSummary: null,
-				plannedActions: [],
-				attemptedActions: [],
-				selectedAction: run.selectedAction,
-				executionSummary: run.summary,
-				verificationResult: {
-					success: false,
-					boardChanged: false,
-					error: message,
-				},
-				followUpSummary: run.companionText,
-				emotion: run.emotion,
-				nextStepHint: null,
-				traceId: run.id,
-			});
-			await this.applyEmotion(run.emotion, run.id);
-			const beforeSpeechAt = Date.now();
-			run.timings.totalNonBlockingMs = Math.max(0, beforeSpeechAt - run.startedAt);
-
-			if (this.state.speechEnabled) {
-				this.state.phase = "speaking";
-				this.emitState();
-				const speechStartedAt = Date.now();
-				run.spoke = await this.safeSpeak(run.companionText);
-				run.timings.speechMs = Date.now() - speechStartedAt;
-			}
+			this.companionMode.setMode(this.companionMode.getPreferredMode(), "unified:run-complete", "system");
+			this.emitState();
 		}
-
-		run.endedAt = Date.now();
-		run.timings.totalBlockingMs = Math.max(0, run.endedAt - run.startedAt);
-		run.timings.totalMs = run.timings.totalBlockingMs;
-		if (run.timings.totalNonBlockingMs <= 0) {
-			run.timings.totalNonBlockingMs = run.timings.totalBlockingMs;
-		}
-		this.state.activeRunId = null;
-		this.state.phase = run.status === "failed" ? "failed" : "idle";
-		this.state.lastRun = cloneRun(run);
-		this.state.history = [cloneRun(run), ...this.state.history].slice(0, MAX_HISTORY);
-		this.companionMode.setMode(this.companionMode.getPreferredMode(), "unified:run-complete", "system");
-		this.bus.emit("unified:run-complete", {
-			runId: run.id,
-			gameId: run.gameId,
-			success: run.status === "completed",
-			summary: run.summary,
-			emotion: run.emotion,
-			spoke: run.spoke,
-			timings: { ...run.timings },
-			traceId: run.id,
-		});
-		this.emitState();
-
-		if (run.status === "failed") {
-			throw new Error(run.error ?? run.summary);
-		}
-
-		return cloneRun(run);
 	}
 
 	async submitVoiceText(text: string): Promise<void> {
@@ -423,6 +243,246 @@ export class UnifiedRuntimeService {
 		this.bus.emit("unified:state-change", { state: this.getState() });
 	}
 
+	private async executeSingleUnifiedGameRound(
+		targetGame: SupportedUnifiedGameId,
+		trigger: "manual" | "voice",
+		requestText: string | null,
+		options?: { traceId?: string },
+	): Promise<UnifiedRunRecord> {
+		const run: UnifiedRunRecord = {
+			id: options?.traceId ?? `unified-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+			gameId: targetGame,
+			trigger,
+			requestText,
+			startedAt: Date.now(),
+			endedAt: null,
+			status: "running",
+			phase: "acting",
+			summary: "",
+			companionText: "",
+			companionTextSource: "none",
+			emotion: "neutral",
+			selectedAction: null,
+			spoke: false,
+			error: null,
+			timings: {
+				actionMs: 0,
+				runtimeRefreshMs: 0,
+				llmReplyMs: 0,
+				speechMs: 0,
+				totalMs: 0,
+				totalBlockingMs: 0,
+				totalNonBlockingMs: 0,
+			},
+		};
+
+		this.state.activeRunId = run.id;
+		this.state.phase = "acting";
+		this.state.lastCommand = `${targetGame}-step`;
+		this.state.lastRun = cloneRun(run);
+		await this.applyEmotion("neutral", run.id);
+		this.bus.emit("unified:run-start", {
+			runId: run.id,
+			trigger,
+			requestText,
+			traceId: run.id,
+		});
+		this.emitState();
+
+		try {
+			let companionText = "";
+			let delegatedRecord: DelegatedExecutionRecord | null = null;
+			if (targetGame === "2048") {
+				const actionStartedAt = Date.now();
+				const result = await this.game2048.runSingleStep(undefined, { traceId: run.id });
+				run.timings.actionMs = Date.now() - actionStartedAt;
+				const postActionObservation = await this.waitForPostActionObservationForTarget(result.target, Date.now());
+				run.timings.runtimeRefreshMs = postActionObservation.waitedMs;
+				run.status = "completed";
+				run.phase = this.state.speechEnabled ? "speaking" : "idle";
+				run.summary = result.summary;
+				run.selectedAction = result.selectedMove;
+				run.emotion = result.boardChanged ? "happy" : "dazed";
+				delegatedRecord = this.delegationMemory.appendRecord({
+					createdAt: Date.now(),
+					mode: this.companionMode.getState().mode,
+					sourceGame: "2048",
+					trigger,
+					requestText,
+					analysisSource: result.analysis.source,
+					decisionSummary: result.analysis.decisionSummary ?? result.analysis.strategy,
+					plannedActions: [...result.analysis.preferredMoves],
+					attemptedActions: result.attempts.map((attempt) => attempt.move),
+					selectedAction: result.selectedMove,
+					executionSummary: result.summary,
+					verificationResult: {
+						success: result.boardChanged,
+						boardChanged: result.boardChanged,
+						error: null,
+					},
+					postActionObservationStatus: resolvePostObservationStatus(postActionObservation),
+					postActionObservationSummary: truncateObservationContext(postActionObservation.promptContext),
+					followUpSummary: "",
+					emotion: run.emotion,
+					nextStepHint: extractNextStepHint(result.analysis.reflection, result.analysis.reasoning, result.selectedMove),
+					traceId: run.id,
+				});
+				const llmReplyStartedAt = Date.now();
+				const generatedReply = await this.generateGroundedCompanionReply({
+					traceId: run.id,
+					delegationRecord: delegatedRecord,
+					fallbackText: result.companionText,
+					postActionObservation,
+				});
+				run.timings.llmReplyMs = Date.now() - llmReplyStartedAt;
+				run.companionText = generatedReply.text;
+				run.companionTextSource = generatedReply.source;
+				companionText = generatedReply.text;
+				this.delegationMemory.updateRecord(delegatedRecord.id, {
+					followUpSummary: generatedReply.text,
+				});
+			} else {
+				const actionStartedAt = Date.now();
+				const result = await this.sokoban.runValidationRound(undefined, { traceId: run.id });
+				run.timings.actionMs = Date.now() - actionStartedAt;
+				const postActionObservation = await this.waitForPostActionObservationForTarget(result.target, Date.now());
+				run.timings.runtimeRefreshMs = postActionObservation.waitedMs;
+				run.status = "completed";
+				run.phase = this.state.speechEnabled ? "speaking" : "idle";
+				run.summary = result.summary;
+				run.selectedAction = result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null;
+				run.emotion = result.boardChanged ? "delighted" : "alarmed";
+				delegatedRecord = this.delegationMemory.appendRecord({
+					createdAt: Date.now(),
+					mode: this.companionMode.getState().mode,
+					sourceGame: "sokoban",
+					trigger,
+					requestText,
+					analysisSource: result.analysis.source,
+					decisionSummary: result.analysis.decisionSummary ?? result.analysis.strategy,
+					plannedActions: [...result.analysis.plannedMoves],
+					attemptedActions: result.attempts.map((attempt) => attempt.move),
+					selectedAction: result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null,
+					executionSummary: result.summary,
+					verificationResult: {
+						success: result.boardChanged,
+						boardChanged: result.boardChanged,
+						error: null,
+					},
+					postActionObservationStatus: resolvePostObservationStatus(postActionObservation),
+					postActionObservationSummary: truncateObservationContext(postActionObservation.promptContext),
+					followUpSummary: "",
+					emotion: run.emotion,
+					nextStepHint: extractNextStepHint(
+						result.analysis.reflection,
+						result.analysis.reasoning,
+						result.executedMoves[0] ?? result.analysis.plannedMoves[0] ?? null,
+					),
+					traceId: run.id,
+				});
+				const llmReplyStartedAt = Date.now();
+				const generatedReply = await this.generateGroundedCompanionReply({
+					traceId: run.id,
+					delegationRecord: delegatedRecord,
+					fallbackText: result.companionText,
+					postActionObservation,
+				});
+				run.timings.llmReplyMs = Date.now() - llmReplyStartedAt;
+				run.companionText = generatedReply.text;
+				run.companionTextSource = generatedReply.source;
+				companionText = generatedReply.text;
+				this.delegationMemory.updateRecord(delegatedRecord.id, {
+					followUpSummary: generatedReply.text,
+				});
+			}
+			this.state.lastCompanionText = companionText;
+			await this.applyEmotion(run.emotion, run.id);
+			const beforeSpeechAt = Date.now();
+			run.timings.totalNonBlockingMs = Math.max(0, beforeSpeechAt - run.startedAt);
+
+			if (this.state.speechEnabled && companionText) {
+				this.state.phase = "speaking";
+				this.emitState();
+				const speechStartedAt = Date.now();
+				run.spoke = await this.safeSpeak(companionText);
+				run.timings.speechMs = Date.now() - speechStartedAt;
+			}
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			run.status = "failed";
+			run.phase = "failed";
+			run.error = message;
+			run.summary = `unified run failed: ${message}`;
+			run.companionText = "这轮统一运行没成功，我先停下来，等你检查目标窗口或当前画面。";
+			run.companionTextSource = "fallback";
+			run.emotion = "sad";
+			this.state.lastCompanionText = run.companionText;
+			this.delegationMemory.appendRecord({
+				createdAt: Date.now(),
+				mode: this.companionMode.getState().mode,
+				sourceGame: run.gameId,
+				trigger,
+				requestText,
+				analysisSource: null,
+				decisionSummary: null,
+				plannedActions: [],
+				attemptedActions: [],
+				selectedAction: run.selectedAction,
+				executionSummary: run.summary,
+				verificationResult: {
+					success: false,
+					boardChanged: false,
+					error: message,
+				},
+				postActionObservationStatus: undefined,
+				postActionObservationSummary: null,
+				followUpSummary: run.companionText,
+				emotion: run.emotion,
+				nextStepHint: null,
+				traceId: run.id,
+			});
+			await this.applyEmotion(run.emotion, run.id);
+			const beforeSpeechAt = Date.now();
+			run.timings.totalNonBlockingMs = Math.max(0, beforeSpeechAt - run.startedAt);
+
+			if (this.state.speechEnabled) {
+				this.state.phase = "speaking";
+				this.emitState();
+				const speechStartedAt = Date.now();
+				run.spoke = await this.safeSpeak(run.companionText);
+				run.timings.speechMs = Date.now() - speechStartedAt;
+			}
+		}
+
+		run.endedAt = Date.now();
+		run.timings.totalBlockingMs = Math.max(0, run.endedAt - run.startedAt);
+		run.timings.totalMs = run.timings.totalBlockingMs;
+		if (run.timings.totalNonBlockingMs <= 0) {
+			run.timings.totalNonBlockingMs = run.timings.totalBlockingMs;
+		}
+		this.state.activeRunId = null;
+		this.state.phase = run.status === "failed" ? "failed" : "idle";
+		this.state.lastRun = cloneRun(run);
+		this.state.history = [cloneRun(run), ...this.state.history].slice(0, MAX_HISTORY);
+		this.bus.emit("unified:run-complete", {
+			runId: run.id,
+			gameId: run.gameId,
+			success: run.status === "completed",
+			summary: run.summary,
+			emotion: run.emotion,
+			spoke: run.spoke,
+			timings: { ...run.timings },
+			traceId: run.id,
+		});
+		this.emitState();
+
+		if (run.status === "failed") {
+			throw new Error(run.error ?? run.summary);
+		}
+
+		return cloneRun(run);
+	}
+
 	private async runUnifiedGameAnalysis(requestText: string): Promise<void> {
 		const targetGame = this.resolveTargetGame(requestText);
 		if (!targetGame) {
@@ -466,24 +526,46 @@ export class UnifiedRuntimeService {
 		}
 	}
 
-	private async waitForPostActionObservationForTarget(target: { handle: string; title: string }, afterTimestamp: number): Promise<number> {
+	private async waitForPostActionObservationForTarget(target: { handle: string; title: string }, afterTimestamp: number): Promise<{
+		promptContext: string;
+		latestTimestamp: number;
+		changedObservation: boolean;
+		timedOut: boolean;
+		waitedMs: number;
+	}> {
 		const startedAt = Date.now();
 		try {
-			await this.companionRuntime.waitForPostActionObservation(target, {
+			const result = await this.companionRuntime.waitForPostActionObservation(target, {
 				afterTimestamp,
 				timeoutMs: 5_000,
 				requireChanged: true,
 			});
+			return {
+				...result,
+				waitedMs: Date.now() - startedAt,
+			};
 		} catch (err) {
 			log.warn("post-action companion observation wait failed", err);
+			return {
+				promptContext: "",
+				latestTimestamp: 0,
+				changedObservation: false,
+				timedOut: true,
+				waitedMs: Date.now() - startedAt,
+			};
 		}
-		return Date.now() - startedAt;
 	}
 
 	private async generateGroundedCompanionReply(input: {
 		traceId: string;
 		delegationRecord: DelegatedExecutionRecord;
 		fallbackText: string;
+		postActionObservation: {
+			promptContext: string;
+			latestTimestamp: number;
+			changedObservation: boolean;
+			timedOut: boolean;
+		};
 	}): Promise<{ text: string; source: "llm" | "fallback" }> {
 		try {
 			const reply = await this.llm.generateCompanionReply(
@@ -495,6 +577,12 @@ export class UnifiedRuntimeService {
 					"3. 不要暴露实现细节，如 API、模型、截图链路。",
 					"4. 如果本轮没有明显进展，就直接说没有明显进展，并给出很短的下一步建议。",
 					"5. 优先使用本轮验证结果、同游戏最近成功记录和最近下一步提示，不要只复述笼统结果。",
+					"6. 动态棋盘类游戏必须以动作后的新观察为准；如果你只知道棋盘确实变化了，但还不能确认新的具体格子值或合并结果，就明确说状态还在解析，不要编造一个错误的新盘面。",
+					"7. 推箱子类反馈必须具体说明玩家位置、靠近/影响到的箱子，以及为什么下一步方向有用；不要只说“可以继续移动”。",
+					`【动作后观察状态】${describePostObservation(input.postActionObservation)}`,
+					input.postActionObservation.promptContext
+						? `【动作后观察】\n${truncateObservationContext(input.postActionObservation.promptContext, 900)}`
+						: "",
 					`【记录引用】${input.delegationRecord.id}`,
 				].filter(Boolean).join("\n"),
 				{
@@ -515,6 +603,47 @@ export class UnifiedRuntimeService {
 			return { text: input.fallbackText, source: "fallback" };
 		}
 	}
+
+	private shouldContinueDelegatedLoop(loopId: string): boolean {
+		if (this.activeLoopId !== loopId) {
+			return false;
+		}
+		if (this.companionMode.getPreferredMode() !== "delegated") {
+			return false;
+		}
+		if (this.companionMode.getState().mode !== "delegated") {
+			return false;
+		}
+		if (!this.runtime.isAllowed()) {
+			return false;
+		}
+		return true;
+	}
+
+	private async stopDelegatedLoop(
+		gameId: SupportedUnifiedGameId,
+		loopId: string,
+		reason: "repeated-no-progress",
+	): Promise<void> {
+		if (this.activeLoopId !== loopId) {
+			return;
+		}
+		const text = buildDelegatedLoopStopMessage(gameId, reason);
+		log.info("delegated loop auto-stopped", {
+			gameId,
+			reason,
+		});
+		this.bus.emit("system:error", {
+			module: "unified-runtime",
+			error: `delegated loop auto-stopped: ${reason}`,
+		});
+		this.state.lastCompanionText = text;
+		this.state.phase = this.state.speechEnabled ? "speaking" : "idle";
+		this.emitState();
+		if (this.state.speechEnabled) {
+			await this.safeSpeak(text);
+		}
+	}
 }
 
 function extractNextStepHint(reflection: string, reasoning: string, selectedAction: string | null): string | null {
@@ -525,6 +654,68 @@ function extractNextStepHint(reflection: string, reasoning: string, selectedActi
 		return null;
 	}
 	return candidate.length <= 120 ? candidate : `${candidate.slice(0, 119)}…`;
+}
+
+function shouldCountAsStuck(run: UnifiedRunRecord): boolean {
+	return run.status !== "completed" || !run.summary.includes("verified");
+}
+
+function resolvePostObservationStatus(input: {
+	promptContext: string;
+	changedObservation: boolean;
+	timedOut: boolean;
+}): "fresh-changed" | "fresh-ambiguous" | "timeout" {
+	if (input.timedOut) {
+		return "timeout";
+	}
+	return input.changedObservation ? "fresh-changed" : "fresh-ambiguous";
+}
+
+function truncateObservationContext(value: string, limit = 400): string | null {
+	const trimmed = value.trim();
+	if (!trimmed) {
+		return null;
+	}
+	if (trimmed.length <= limit) {
+		return trimmed;
+	}
+	return `${trimmed.slice(0, limit - 1)}…`;
+}
+
+function describePostObservation(input: {
+	changedObservation: boolean;
+	timedOut: boolean;
+	promptContext: string;
+}): string {
+	if (input.timedOut) {
+		return "timed-out";
+	}
+	if (input.changedObservation) {
+		return "fresh-changed";
+	}
+	if (input.promptContext.trim()) {
+		return "fresh-but-ambiguous";
+	}
+	return "no-post-action-observation";
+}
+
+function buildDelegatedLoopStopMessage(
+	gameId: SupportedUnifiedGameId,
+	reason: "repeated-no-progress",
+): string {
+	if (reason === "repeated-no-progress" && gameId === "sokoban") {
+		return "我先停一下，这几轮推箱子都没有确认到新的有效进展。等你调整一下局面，我们再继续。";
+	}
+	if (reason === "repeated-no-progress" && gameId === "2048") {
+		return "我先停一下，这几轮 2048 都没有确认到新的有效进展。等局面更清楚一点，我再继续。";
+	}
+	return "我先停一下，这几轮没有确认到新的有效进展。";
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => {
+		setTimeout(resolve, ms);
+	});
 }
 
 function resolveUnifiedEmotion(value: string): "neutral" | "happy" | "angry" | "sad" | "delighted" | "alarmed" | "dazed" {

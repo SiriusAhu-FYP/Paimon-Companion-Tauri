@@ -360,7 +360,8 @@ function buildObservationDecisionPrompt(
 			previousMove
 				? `Last verified successful move: ${formatGame2048Action(previousMove)}. Reuse it only if the current board still supports it.`
 				: "No verified successful move is available from the previous turn.",
-			"Use the local observation summary to infer board stability, merge opportunities, and whether one side is becoming fragmented.",
+			"Use the local observation summary to infer board stability, merge opportunities, empty-cell creation, and whether one side is becoming fragmented.",
+			"When the observation is legible, explicitly reason about which tile values can merge and where a new tile is likely to appear after the move.",
 			"Avoid recommending a move ordering that merely repeats a failed pattern without a new reason.",
 			discouragedOpeningMoves.length
 				? `Recent failed opening moves to avoid unless the observation is clearly different: ${discouragedOpeningMoves.map((move) => formatGame2048Action(move)).join(", ")}.`

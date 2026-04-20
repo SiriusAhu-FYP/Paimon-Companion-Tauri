@@ -4,9 +4,12 @@ export type CompanionRuntimePhase = "idle" | "connecting" | "capturing" | "descr
 export type CompanionRuntimeDiagnosticCode =
 	| "runtime-not-running"
 	| "runtime-auto-starting"
+	| "warmup-waiting"
+	| "warmup-timeout"
 	| "observation-not-ready"
 	| "local-vision-unavailable"
 	| "target-mismatch"
+	| "post-action-waiting"
 	| "post-action-timeout"
 	| "below-threshold-change";
 
