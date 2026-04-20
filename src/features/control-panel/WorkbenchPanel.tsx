@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Box, Button, ButtonGroup } from "@mui/material";
 import { useI18n } from "@/contexts/I18nProvider";
-import { useCompanionRuntime, useCompanionRuntimeBenchmark, useFunctional } from "@/hooks";
+import { useCompanionRuntime, useFunctional } from "@/hooks";
 import { CompanionRuntimeSection } from "./CompanionRuntimeSection";
 import { FunctionalPanel } from "./FunctionalPanel";
 import { CompanionWorkbenchPanel } from "./CompanionWorkbenchPanel";
@@ -16,35 +16,20 @@ export function WorkbenchPanel() {
 		stop: stopCompanionRuntime,
 		clearHistory: clearCompanionRuntimeHistory,
 		runSummaryNow,
-		testLocalVisionConnection,
-		updateRuntimeConfig,
 	} = useCompanionRuntime();
-	const {
-		state: companionRuntimeBenchmarkState,
-		runBenchmark: runCompanionRuntimeBenchmark,
-	} = useCompanionRuntimeBenchmark();
 	const [section, setSection] = useState<"companion" | "functional">("companion");
 
 	return (
 		<Box sx={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
 			<PanelRoot title={t("开发工作台", "Developer Workbench")}>
-				<Box sx={{ maxHeight: 340, overflowY: "auto", pr: 0.5 }}>
-					<CompanionRuntimeSection
-						functionalState={functionalState}
-						companionRuntimeState={companionRuntimeState}
-						companionRuntimeBenchmarkState={companionRuntimeBenchmarkState}
-						onStart={startCompanionRuntime}
-						onStop={stopCompanionRuntime}
-						onClearHistory={clearCompanionRuntimeHistory}
-						onRunSummaryNow={runSummaryNow}
-						onTestConnection={testLocalVisionConnection}
-						onRunBenchmark={runCompanionRuntimeBenchmark}
-						onUpdateConfig={updateRuntimeConfig}
-					/>
-				</Box>
-			</PanelRoot>
-
-			<Box sx={{ px: 1.5, pb: 1, flexShrink: 0 }}>
+				<CompanionRuntimeSection
+					functionalState={functionalState}
+					companionRuntimeState={companionRuntimeState}
+					onStart={startCompanionRuntime}
+					onStop={stopCompanionRuntime}
+					onClearHistory={clearCompanionRuntimeHistory}
+					onRunSummaryNow={runSummaryNow}
+				/>
 				<ButtonGroup size="small" fullWidth>
 					<Button variant={section === "companion" ? "contained" : "outlined"} onClick={() => setSection("companion")}>
 						{t("陪伴", "Companion")}
@@ -53,7 +38,7 @@ export function WorkbenchPanel() {
 						{t("功能", "Functional")}
 					</Button>
 				</ButtonGroup>
-			</Box>
+			</PanelRoot>
 
 			<Box
 				sx={{
