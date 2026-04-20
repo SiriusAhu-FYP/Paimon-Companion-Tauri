@@ -24,7 +24,7 @@ const UNCHANGED_FRAME_DESCRIPTION = "画面变化很小，当前画面与上一�
 const LOCAL_VISION_READY_TIMEOUT_MS = 120_000;
 const LOCAL_VISION_READY_POLL_MS = 3_000;
 const STATE_CHANGE_MIN_INTERVAL_MS = 250;
-const OBSERVATION_READY_WAIT_TIMEOUT_MS = 15_000;
+const OBSERVATION_READY_WAIT_TIMEOUT_MS = 30_000;
 const OBSERVATION_READY_POLL_MS = 300;
 const POST_ACTION_OBSERVATION_TIMEOUT_MS = 5_000;
 
@@ -311,26 +311,45 @@ export class CompanionRuntimeService {
 				return this.requireObservationContext(target, { maxAgeMs: options?.maxAgeMs });
 			}
 			this.setDiagnostic("runtime-auto-starting", `Starting local observation for ${target.title}.`);
+			log.info("companion runtime auto-start requested", {
+				target: target.title,
+				timeoutMs,
+			});
 			await this.start(target);
 		}
 
 		while (Date.now() <= deadline) {
 			try {
+				this.setDiagnostic("warmup-waiting", "Waiting for the first fresh local observation.");
 				await this.refreshNow({ summarize: true });
-				return this.requireObservationContext(target, { maxAgeMs: options?.maxAgeMs });
+				const context = this.requireObservationContext(target, { maxAgeMs: options?.maxAgeMs });
+				log.info("companion runtime warmup ready", {
+					target: target.title,
+					latestTimestamp: context.latestTimestamp,
+				});
+				return context;
 			} catch (err) {
 				lastError = err instanceof Error ? err : new Error(String(err));
 				this.state.observationReady = false;
 				if (lastError.message.includes("target does not match")) {
 					this.setDiagnostic("target-mismatch", "Companion runtime target does not match the selected functional target.");
+				} else if (lastError.message.includes("local vision")) {
+					this.setDiagnostic("local-vision-unavailable", lastError.message);
 				} else {
-					this.setDiagnostic("observation-not-ready", "Waiting for the first usable local observation.");
+					this.setDiagnostic("warmup-waiting", "Waiting for the first usable local observation.");
 				}
 				await delay(OBSERVATION_READY_POLL_MS);
 			}
 		}
 
-		throw lastError ?? new Error("companion runtime observation is not ready");
+		const timeoutMessage = lastError?.message ?? "companion runtime observation is not ready";
+		this.setDiagnostic("warmup-timeout", `Timed out while waiting for local observation readiness: ${timeoutMessage}`);
+		log.warn("companion runtime warmup timed out", {
+			target: target.title,
+			timeoutMs,
+			lastError: timeoutMessage,
+		});
+		throw new Error(`companion runtime warmup timed out after ${Math.round(timeoutMs / 1000)}s: ${timeoutMessage}`);
 	}
 
 	async waitForPostActionObservation(
@@ -376,11 +395,11 @@ export class CompanionRuntimeService {
 				if (sawBelowThresholdChange) {
 					this.setDiagnostic("below-threshold-change", "A new frame arrived, but the visible change is still below the current threshold.");
 				} else {
-					this.setDiagnostic("observation-not-ready", "Waiting for a fresh post-action local observation.");
+					this.setDiagnostic("post-action-waiting", "Waiting for a fresh post-action local observation.");
 				}
 			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err);
-				this.setDiagnostic("observation-not-ready", message);
+				this.setDiagnostic("post-action-waiting", message);
 			}
 
 			await delay(OBSERVATION_READY_POLL_MS);

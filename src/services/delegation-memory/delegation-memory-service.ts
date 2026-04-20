@@ -94,6 +94,8 @@ export class DelegationMemoryService {
 				`verified=${record.verificationResult.success ? "success" : "failed"}`,
 				`boardChanged=${record.verificationResult.boardChanged ? "yes" : "no"}`,
 				record.verificationResult.error ? `error=${record.verificationResult.error}` : "",
+				record.postActionObservationStatus ? `postObservation=${record.postActionObservationStatus}` : "",
+				record.postActionObservationSummary ? `postObservationSummary=${record.postActionObservationSummary}` : "",
 				record.followUpSummary ? `followUp=${record.followUpSummary}` : "",
 				record.nextStepHint ? `nextStep=${record.nextStepHint}` : "",
 				`emotion=${record.emotion}`,

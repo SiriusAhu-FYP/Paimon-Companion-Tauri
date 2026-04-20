@@ -21,6 +21,8 @@ export interface DelegatedExecutionRecord {
 	selectedAction: string | null;
 	executionSummary: string;
 	verificationResult: DelegatedExecutionVerificationResult;
+	postActionObservationStatus?: "fresh-changed" | "fresh-ambiguous" | "timeout";
+	postActionObservationSummary?: string | null;
 	followUpSummary: string;
 	emotion: string;
 	nextStepHint: string | null;

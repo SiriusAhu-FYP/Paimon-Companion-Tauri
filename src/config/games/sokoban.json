@@ -8,6 +8,8 @@
 		"Treat the pale beige floor as walkable space and the dark stone pattern as solid wall / non-walkable area.",
 		"Treat the pink dots as targets, the orange or brown crates as boxes, and the human sprite as the player.",
 		"Before proposing a move, verify the immediate next tile in that direction: if it is a wall or blocked box chain, do not choose that move.",
+		"When the board is static and legible, prefer a bounded plan of 2-4 grounded moves instead of a single vague nudge.",
+		"Explain progress in concrete puzzle terms: player position, box access, target alignment, and whether a path just opened or closed.",
 		"Describe the puzzle layout and movement consequences instead of generic scene narration."
 	],
 	"defaultActionOrder": ["move_up", "move_left", "move_right", "move_down"],
@@ -15,7 +17,8 @@
 		"You can only push boxes, never pull them.",
 		"Avoid pushing boxes into unrecoverable corners.",
 		"If the very next tile in the chosen direction is a wall, that move is invalid and should not be selected.",
-		"Prefer moves that create visible progress or better positioning over moves that simply bump into walls."
+		"Prefer moves that create visible progress or better positioning over moves that simply bump into walls.",
+		"When a short sequence is clearly available, choose it and keep each step grounded in the current board layout."
 	],
 	"actions": [
 		{
