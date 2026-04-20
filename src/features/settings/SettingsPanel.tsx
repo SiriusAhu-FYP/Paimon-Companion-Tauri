@@ -88,15 +88,6 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		return config.tts;
 	}, [config]);
 
-	/** 从激活的 ASR 档案或根配置中获取当前 ASR 配置 */
-	const getActiveAsrConfig = useCallback(() => {
-		if (config.activeAsrProfileId) {
-			const profile = config.asrProfiles.find((p) => p.id === config.activeAsrProfileId);
-			if (profile) return profile;
-		}
-		return config.asr;
-	}, [config]);
-
 	const handleTestLLM = useCallback(async () => {
 		setTesting("llm");
 		setLlmTestResult(null);
@@ -228,48 +219,12 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		setTesting("asr");
 		setAsrTestResult(null);
 		try {
-			const asrCfg = getActiveAsrConfig();
-			if (asrCfg.provider === "mock") {
-				setAsrTestResult({ ok: true, text: t("Mock ASR 始终可用", "Mock ASR is always available") });
-				return;
-			}
-			if (asrCfg.provider === "local-sherpa") {
-				const health = await checkLocalSherpaHealth();
-				setAsrTestResult({
-					ok: true,
-					text: t(`本地模型已就绪：${health.modelName} @ ${health.modelDir}`, `Local model is ready: ${health.modelName} @ ${health.modelDir}`),
-				});
-				log.info("local sherpa healthcheck passed", health);
-				return;
-			}
-			const baseUrl = (asrCfg.baseUrl || "").trim().replace(/\/+$/, "");
-			if (!baseUrl) {
-				setAsrTestResult({ ok: false, text: t("请先在档案中配置服务地址", "Please configure service URL in the profile first") });
-				return;
-			}
-
-			const profileId = config.activeAsrProfileId || null;
-			const secretKey = profileId ? SECRET_KEYS.ASR_API_KEY(profileId) : undefined;
-			const resp = await proxyRequest({
-				url: baseUrl,
-				method: "GET",
-				secretKey,
-				timeoutMs: 8000,
-			});
-
-			if (resp.status < 500) {
-				setAsrTestResult({
-					ok: true,
-					text: t(`服务可达 (HTTP ${resp.status})。这是连通性测试，不代表识别链路已完成验证。`, `Service reachable (HTTP ${resp.status}). This only verifies connectivity, not the full recognition pipeline.`),
-				});
-				log.info("ASR connection test passed", { status: resp.status, provider: asrCfg.provider });
-				return;
-			}
-
+			const health = await checkLocalSherpaHealth();
 			setAsrTestResult({
-				ok: false,
-				text: t(`服务返回异常 (HTTP ${resp.status}): ${resp.body.slice(0, 120)}`, `Service returned an error (HTTP ${resp.status}): ${resp.body.slice(0, 120)}`),
+				ok: true,
+				text: t(`本地模型已就绪：${health.modelName} @ ${health.modelDir}`, `Local model is ready: ${health.modelName} @ ${health.modelDir}`),
 			});
+			log.info("local sherpa healthcheck passed", health);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			setAsrTestResult({ ok: false, text: msg });
@@ -277,7 +232,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		} finally {
 			setTesting(null);
 		}
-	}, [config.activeAsrProfileId, getActiveAsrConfig]);
+	}, [t]);
 
 	const handleRuntimeConfigChange = useCallback(<K extends keyof AppConfig["companionRuntime"]>(
 		key: K,
@@ -355,7 +310,7 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 
 		<SectionTitle>
 			{t("ASR 配置", "ASR Configuration")}
-			<HelpTooltip title={t("ASR 会作为独立 provider/profile 管理。本地默认路线是应用内置的 sherpa-onnx 双语模型；云端保留火山和阿里云。", "ASR is managed as independent providers/profiles. The default local route uses the bundled sherpa-onnx bilingual model; cloud routes remain Volcengine and Aliyun.")} />
+			<HelpTooltip title={t("ASR 当前固定为应用内置的 sherpa-onnx 双语模型；设置页只保留本地路线。", "ASR is fixed to the bundled sherpa-onnx bilingual model; settings now expose the local route only.")} />
 		</SectionTitle>
 		<AsrProfilesSection
 			profiles={config.asrProfiles}
@@ -445,14 +400,11 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		{/* ── LLM 测试 ── */}
 		<SectionTitle>
 			{t("ASR 测试", "ASR Test")}
-			<HelpTooltip title={t("本地 sherpa 会验证内置模型是否已加载；云端 provider 会验证接口可达性。真正的麦克风 -> 识别链路仍需在聊天区手测。", "Local sherpa verifies the bundled model is ready; cloud providers only verify endpoint reachability. The real microphone-to-ASR path still needs manual testing in chat.")} />
+			<HelpTooltip title={t("这里只做内置本地 sherpa-onnx 的健康检查。真正的麦克风 -> 识别链路仍需在聊天区手测。", "This only performs a health check for the bundled local sherpa-onnx route. The real microphone-to-ASR path still needs manual testing in chat.")} />
 		</SectionTitle>
 		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
 			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-				{t("当前读取", "Using")}: {config.activeAsrProfileId
-					? t(`档案「${config.asrProfiles.find((p) => p.id === config.activeAsrProfileId)?.name || "(未命名)"}」`, `Profile "${config.asrProfiles.find((p) => p.id === config.activeAsrProfileId)?.name || "(Unnamed)"}"`)
-					: t("根配置（无激活档案）", "Root config (no active profile)")}
-				· {getActiveAsrConfig().provider}
+				{t("内置本地 sherpa-onnx 健康检查", "Built-in local sherpa-onnx health check")}
 			</Typography>
 			<Button
 				size="small" variant="outlined"
