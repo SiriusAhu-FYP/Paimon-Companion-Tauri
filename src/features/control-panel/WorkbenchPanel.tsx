@@ -18,6 +18,7 @@ export function WorkbenchPanel() {
 		runSummaryNow,
 	} = useCompanionRuntime();
 	const [section, setSection] = useState<"companion" | "functional">("companion");
+	const [runtimeCollapsed, setRuntimeCollapsed] = useState(true);
 
 	return (
 		<Box sx={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
@@ -29,6 +30,8 @@ export function WorkbenchPanel() {
 					onStop={stopCompanionRuntime}
 					onClearHistory={clearCompanionRuntimeHistory}
 					onRunSummaryNow={runSummaryNow}
+					collapsed={runtimeCollapsed}
+					onToggleCollapsed={() => setRuntimeCollapsed((current) => !current)}
 				/>
 				<ButtonGroup size="small" fullWidth>
 					<Button variant={section === "companion" ? "contained" : "outlined"} onClick={() => setSection("companion")}>
