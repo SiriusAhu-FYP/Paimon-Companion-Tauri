@@ -213,6 +213,7 @@ P3/P4 close-out:
   It is also the right place to formalize the heavier reflection loop instead of forcing that complexity into `P4`.
   The accepted target architecture for this phase is now explicit: `companion` and `delegated` must share the same local-vision primary perception chain, and cloud models should consume that observation context for summary, planning, reply, and follow-up instead of directly reading raw gameplay screenshots as the default functional path.
   Delegated action planning should also adapt to task type: dynamic / stochastic tasks should default to single-step observe-decide-act loops, while static / deterministic tasks may use bounded short action sequences with per-step verification and replan on mismatch.
+  This phase should only complete the short-horizon memory loop, not the final long-horizon companion memory system: recent frame descriptions, rolling summaries, delegated verification records, and short next-step carry-over should all be coherent, but true summary-of-summaries and file-backed pseudo-long-term memory belong to the final convergence phase.
   - [ ] raise `2048` from accepted loop validation to a more repeatable stable solving baseline
   - [ ] raise `Sokoban` from minimum semantic-action skeleton to real simple-level solving
   - [ ] land an explicit companion mode / delegated mode state with clear entry and exit conditions instead of relying on temporary unified-run style control flow
@@ -222,17 +223,40 @@ P3/P4 close-out:
   - [ ] decide which task/game capabilities stay in core MCP tools and which should become pluginized phase-by-phase
   - [-] keep broader new-game transfer outside the acceptance bar until the existing functional pair is stable
 
-- [ ] P6: Final Convergence And FYP Packaging
-  Goal: converge the now-separate emotion, runtime, and functional decisions into one final product definition that is defensible for the FYP.
-  This phase is for final architecture closure, validation packaging, and write-up quality rather than opening another large implementation frontier.
+P5 close-out note:
+
+- code close-out work is now in place for the remaining quality issues that dominated Round 2 / Round 3 validation:
+  - delegated runs auto-start the local observation chain and wait through warmup instead of failing immediately
+  - `2048` follow-up consumes post-action observation and avoids inventing stale board conclusions
+  - `Sokoban` stays on bounded short plans and now asks for more grounded, position-aware follow-up
+  - delegated looping can continue autonomously without overlapping runs or duplicate speech
+- the remaining `P5` gate is no longer missing architecture; it is final manual close-out validation
+- `P5` should only be marked done after the final short validation pass confirms:
+  - one-click warmup is stable
+  - `2048` follow-up stays grounded
+  - `Sokoban` single-round and delegated-loop commentary are concrete enough to count as continuous thought
+- if those checks pass, all remaining larger concerns move to `P6/P7`, especially:
+  - layered memory / summary-of-summaries / file-backed pseudo-long-term memory
+  - long-horizon companion recall
+  - product packaging / thesis / release cleanup
+
+- [ ] P6: Memory And Final Runtime Convergence
+  Goal: finish the last round of core product work so the system has a defensible final runtime shape rather than only a collection of working subsystems.
+  This phase is still a core implementation phase, focused on memory, orchestration, and the final local-small / cloud-big split, not on packaging and write-up.
   - [ ] finalize the local-small / cloud-big split for perception, reasoning, and reply paths
+  - [ ] complete the layered-memory design so both companion and delegated modes can retain short-horizon context during play and compress multiple rolling summaries into larger session summaries, then into file-backed pseudo-long-term memory
+  - [ ] validate the final long-horizon companion bar: after an extended session, the companion should still be able to recall and narrate earlier salient events from the same play session instead of only the most recent few summaries
   - [ ] decide whether a fast local reaction layer is needed for speech/short companion reactions while keeping richer cloud replies where appropriate, or explicitly justify not implementing it
   - [ ] tighten bounded GCC scope, mode-aware orchestration, and layered memory into the final explicit product definition
+  - [-] if time remains, land one bounded large-game micro-task demo rather than reopening broad autonomous gameplay
+  - [-] treat larger-scale game transfer as optional stretch work rather than the default `P6` acceptance bar
+
+- [ ] P7: Product Close-Out And FYP Packaging
+  Goal: package the now-converged system into a clean, defensible, and directly usable FYP deliverable.
+  This phase should avoid opening new core implementation frontiers and instead focus on cleanup, validation packaging, and presentation quality.
   - [ ] remove stale UI buttons, debug controls, and other low-value surface actions before final acceptance
   - [ ] fix build artifacts and release packaging so generated outputs are directly usable without local dev-only adjustments
   - [ ] complete the final write-up, user study, and release packaging polish
-  - [-] if time remains, land one bounded large-game micro-task demo rather than reopening broad autonomous gameplay
-  - [-] treat larger-scale game transfer as optional stretch work rather than the default `P6` acceptance bar
 
 ## Appendix: P2 Historical Notes
 

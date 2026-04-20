@@ -111,9 +111,13 @@ export class DelegationMemoryService {
 		const currentRecord = input.currentRecordId
 			? this.state.recentRecords.find((record) => record.id === input.currentRecordId) ?? null
 			: this.state.latestRecord;
-		const sameGameLatestSuccess = input.sourceGame
-			? this.state.recentRecords.find((record) => record.sourceGame === input.sourceGame && record.verificationResult.success)
-			: null;
+		const sameGameRecords = input.sourceGame
+			? this.state.recentRecords.filter((record) => record.sourceGame === input.sourceGame)
+			: [];
+		const sameGameLatestSuccess = sameGameRecords.find((record) => record.verificationResult.success) ?? null;
+		const recentSameGameRecords = sameGameRecords
+			.filter((record) => record.id !== currentRecord?.id)
+			.slice(0, 2);
 		const nextStepHints = this.state.recentRecords
 			.filter((record) => record.nextStepHint)
 			.slice(0, 3)
@@ -121,6 +125,9 @@ export class DelegationMemoryService {
 
 		if (currentRecord) {
 			sections.push(`【本轮托管记录】\n${this.buildPromptContext([currentRecord])}`);
+		}
+		if (recentSameGameRecords.length) {
+			sections.push(`【同游戏最近两轮】\n${this.buildPromptContext(recentSameGameRecords)}`);
 		}
 		if (sameGameLatestSuccess && sameGameLatestSuccess.id !== currentRecord?.id) {
 			sections.push(`【同游戏最近成功记录】\n${this.buildPromptContext([sameGameLatestSuccess])}`);

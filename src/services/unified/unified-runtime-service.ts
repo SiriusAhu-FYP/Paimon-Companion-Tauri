@@ -579,6 +579,9 @@ export class UnifiedRuntimeService {
 					"5. 优先使用本轮验证结果、同游戏最近成功记录和最近下一步提示，不要只复述笼统结果。",
 					"6. 动态棋盘类游戏必须以动作后的新观察为准；如果你只知道棋盘确实变化了，但还不能确认新的具体格子值或合并结果，就明确说状态还在解析，不要编造一个错误的新盘面。",
 					"7. 推箱子类反馈必须具体说明玩家位置、靠近/影响到的箱子，以及为什么下一步方向有用；不要只说“可以继续移动”。",
+					"8. 连续托管时必须承接上一轮结果：说明这轮是在延续上一次的推进，还是因为刚才无进展所以换了个思路。",
+					"9. 不要把回复写成重新播报当前画面；避免模板化开头，尤其不要反复以“派蒙看到你在……”开头。",
+					"10. 如果最新记录显示连续多轮仍在同一局面打转，要明确点出“刚才那条思路没有推进，所以这轮在改试另一侧/另一条路径”。",
 					`【动作后观察状态】${describePostObservation(input.postActionObservation)}`,
 					input.postActionObservation.promptContext
 						? `【动作后观察】\n${truncateObservationContext(input.postActionObservation.promptContext, 900)}`

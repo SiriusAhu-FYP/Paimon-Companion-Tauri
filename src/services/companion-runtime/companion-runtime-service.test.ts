@@ -141,4 +141,46 @@ describe("CompanionRuntimeService", () => {
 			diagnosticCode: "warmup-timeout",
 		});
 	});
+
+	it("accepts an observation that becomes ready on the final warmup boundary check", async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal("window", {});
+		const { CompanionRuntimeService } = await import("./companion-runtime-service");
+		const bus = new EventBus();
+		const service = new CompanionRuntimeService({
+			bus,
+			perception: {} as never,
+		});
+		const internal = service as unknown as {
+			start: (target: { handle: string; title: string }) => Promise<void>;
+			refreshNow: (options?: { summarize?: boolean }) => Promise<void>;
+			requireObservationContext: (target: { handle: string; title: string }, options?: { maxAgeMs?: number }) => { promptContext: string; latestTimestamp: number };
+		};
+		let attempts = 0;
+
+		vi.spyOn(internal, "start").mockResolvedValue(undefined);
+		vi.spyOn(internal, "refreshNow").mockResolvedValue(undefined);
+		vi.spyOn(internal, "requireObservationContext").mockImplementation(() => {
+			attempts += 1;
+			if (attempts < 4) {
+				throw new Error("companion runtime has no recent local observation yet");
+			}
+			return {
+				promptContext: "final-boundary observation",
+				latestTimestamp: Date.now(),
+			};
+		});
+
+		const promise = service.ensureObservationContext(
+			{ handle: "target-1", title: "2048" },
+			{ autoStart: true, timeoutMs: 600 },
+		);
+		await vi.advanceTimersByTimeAsync(2_000);
+		await expect(promise).resolves.toMatchObject({
+			promptContext: "final-boundary observation",
+		});
+		expect(service.getState()).toMatchObject({
+			diagnosticCode: null,
+		});
+	});
 });
