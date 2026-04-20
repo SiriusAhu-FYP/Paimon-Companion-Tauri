@@ -26,7 +26,7 @@ export function WorkbenchPanel() {
 	const [section, setSection] = useState<"companion" | "functional">("companion");
 
 	return (
-		<Box sx={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
+		<Box sx={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
 			<PanelRoot title={t("开发工作台", "Developer Workbench")}>
 				<CompanionRuntimeSection
 					functionalState={functionalState}
@@ -50,9 +50,21 @@ export function WorkbenchPanel() {
 				</ButtonGroup>
 			</PanelRoot>
 
-			<Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-				{section === "companion" && <CompanionWorkbenchPanel />}
-				{section === "functional" && <FunctionalPanel />}
+			<Box
+				sx={{
+					flex: 1,
+					minHeight: 0,
+					display: "flex",
+					flexDirection: "column",
+					overflow: "hidden",
+					borderTop: "1px solid",
+					borderColor: "divider",
+				}}
+			>
+				<Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+					{section === "companion" && <CompanionWorkbenchPanel />}
+					{section === "functional" && <FunctionalPanel />}
+				</Box>
 			</Box>
 		</Box>
 	);
