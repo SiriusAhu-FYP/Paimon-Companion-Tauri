@@ -279,6 +279,29 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		}
 	}, [config.activeAsrProfileId, getActiveAsrConfig]);
 
+	const handleRuntimeConfigChange = useCallback(<K extends keyof AppConfig["companionRuntime"]>(
+		key: K,
+		value: AppConfig["companionRuntime"][K],
+	) => {
+		setConfig((current) => ({
+			...current,
+			companionRuntime: {
+				...current.companionRuntime,
+				[key]: value,
+			},
+		}));
+	}, []);
+
+	const handleSaveRuntimeConfig = useCallback(async () => {
+		try {
+			await updateConfig({ companionRuntime: { ...config.companionRuntime } });
+			setMessage({ type: "success", text: t("运行时配置已保存。", "Runtime settings saved.") });
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			setMessage({ type: "error", text: msg });
+		}
+	}, [config.companionRuntime, t]);
+
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1, height: "100%", overflowY: "auto" }}>
 			<Stack direction="row" alignItems="center" spacing={1}>
@@ -357,6 +380,60 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 				refreshProviders();
 			}}
 		/>
+
+		<Divider />
+
+		<SectionTitle>
+			{t("Companion Runtime", "Companion Runtime")}
+			<HelpTooltip title={t("这里管理本地视觉观察链的地址、模型和时间窗口。日常实验里的启动/停止保留在 Workbench。", "Manage the local observation runtime address, model, and timing windows here. Day-to-day start/stop controls remain in Workbench.")} />
+		</SectionTitle>
+		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+			<Stack direction="row" spacing={0.5}>
+				<TextField
+					size="small"
+					fullWidth
+					label={t("本地视觉 Base URL", "Local Vision Base URL")}
+					value={config.companionRuntime.localVisionBaseUrl}
+					onChange={(event) => handleRuntimeConfigChange("localVisionBaseUrl", event.target.value)}
+				/>
+				<TextField
+					size="small"
+					fullWidth
+					label={t("本地视觉模型", "Local Vision Model")}
+					value={config.companionRuntime.localVisionModel}
+					onChange={(event) => handleRuntimeConfigChange("localVisionModel", event.target.value)}
+				/>
+			</Stack>
+			<Stack direction="row" spacing={0.5}>
+				<TextField
+					size="small"
+					fullWidth
+					type="number"
+					label={t("采样间隔(秒)", "Capture Interval (s)")}
+					value={Math.round(config.companionRuntime.captureIntervalMs / 1000)}
+					onChange={(event) => handleRuntimeConfigChange("captureIntervalMs", Math.max(1, Number(event.target.value) || 1) * 1000)}
+				/>
+				<TextField
+					size="small"
+					fullWidth
+					type="number"
+					label={t("总结窗口(秒)", "Summary Window (s)")}
+					value={Math.round(config.companionRuntime.summaryWindowMs / 1000)}
+					onChange={(event) => handleRuntimeConfigChange("summaryWindowMs", Math.max(1, Number(event.target.value) || 1) * 1000)}
+				/>
+				<TextField
+					size="small"
+					fullWidth
+					type="number"
+					label={t("历史保留(秒)", "History Retention (s)")}
+					value={Math.round(config.companionRuntime.historyRetentionMs / 1000)}
+					onChange={(event) => handleRuntimeConfigChange("historyRetentionMs", Math.max(1, Number(event.target.value) || 1) * 1000)}
+				/>
+			</Stack>
+			<Button size="small" variant="outlined" onClick={() => { void handleSaveRuntimeConfig(); }} sx={{ alignSelf: "flex-start" }}>
+				{t("保存运行时配置", "Save Runtime Settings")}
+			</Button>
+		</Box>
 
 		{/* ═══ 第二级：连接测试 ═══ */}
 		<Box sx={{ mt: 1, pt: 1, borderTop: 2, borderColor: "divider" }}>
