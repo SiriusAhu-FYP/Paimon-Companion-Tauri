@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import {
+	Box,
 	Button,
 	Divider,
 	Stack,
@@ -12,7 +13,7 @@ import { useI18n } from "@/contexts/I18nProvider";
 import { getServices } from "@/services";
 import { type AppConfig, DEFAULT_CONFIG, loadConfig, updateConfig } from "@/services/config";
 import { mockVoicePipeline } from "@/utils/mock";
-import { PanelCard, PanelRoot } from "./panel-shell";
+import { PanelCard } from "./panel-shell";
 
 export function CompanionWorkbenchPanel() {
 	const { t } = useI18n();
@@ -121,7 +122,7 @@ export function CompanionWorkbenchPanel() {
 	}, []);
 
 	return (
-		<PanelRoot title={t("陪伴调试", "Companion Workbench")}>
+		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
 			<PanelCard>
 				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
 					{t("即时状态", "Live State")}
@@ -355,6 +356,6 @@ export function CompanionWorkbenchPanel() {
 					{t("模拟语音链路", "Simulate Voice Pipeline")}
 				</Button>
 			</PanelCard>
-		</PanelRoot>
+		</Box>
 	);
 }
