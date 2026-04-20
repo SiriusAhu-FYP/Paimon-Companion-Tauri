@@ -3,8 +3,10 @@
 	"displayName": "2048",
 	"windowTitleHints": ["2048"],
 	"observationFocus": [
-		"Focus on the board state, tile positions, empty spaces, merges, and whether a move changed the board.",
+		"Ignore non-board UI such as the mode tabs, score panels, best-score panel, and new-game button unless they help confirm the score changed.",
+		"Focus on the 4x4 board state, tile positions, empty spaces, merges, and whether a move changed the board.",
 		"When legible, explicitly describe which rows or columns contain tiles, which values are adjacent, and whether a merge or a newly spawned tile appeared after the move.",
+		"Track whether the score changed, but do not let the score panel replace direct board understanding.",
 		"If the post-move board is still visually ambiguous, say that the board changed but the exact tile layout is still resolving.",
 		"Ignore cinematic interpretation and describe the puzzle state directly."
 	],
@@ -12,7 +14,9 @@
 	"notes": [
 		"Keep the highest tile anchored in one corner when possible.",
 		"Treat each semantic action as a single board shift.",
-		"Dynamic/random board updates should be handled one move at a time with a fresh observation after every move."
+		"Dynamic/random board updates should be handled one move at a time with a fresh observation after every move.",
+		"If a move was verified as successful but the new board is still semantically fuzzy, admit the ambiguity instead of inventing a merge result or a new tile position.",
+		"Describe progress in board terms: merge created, new empty cell opened, new tile spawned, or board changed without a fully resolved layout."
 	],
 	"actions": [
 		{

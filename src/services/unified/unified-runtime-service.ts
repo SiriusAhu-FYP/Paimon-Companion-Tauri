@@ -567,6 +567,9 @@ export class UnifiedRuntimeService {
 			timedOut: boolean;
 		};
 	}): Promise<{ text: string; source: "llm" | "fallback" }> {
+		const previousSameGameRecord = this.delegationMemory.getState().recentRecords.find((record) => (
+			record.sourceGame === input.delegationRecord.sourceGame && record.id !== input.delegationRecord.id
+		)) ?? null;
 		try {
 			const reply = await this.llm.generateCompanionReply(
 				[
@@ -575,14 +578,18 @@ export class UnifiedRuntimeService {
 					"1. 严格依据最近托管执行记录，不要脑补未给出的 Boss 战、血量、奖励或别的游戏剧情。",
 					"2. 语气保持陪伴感和轻度支持感，但不要夸张。",
 					"3. 不要暴露实现细节，如 API、模型、截图链路。",
-					"4. 如果本轮没有明显进展，就直接说没有明显进展，并给出很短的下一步建议。",
-					"5. 优先使用本轮验证结果、同游戏最近成功记录和最近下一步提示，不要只复述笼统结果。",
-					"6. 动态棋盘类游戏必须以动作后的新观察为准；如果你只知道棋盘确实变化了，但还不能确认新的具体格子值或合并结果，就明确说状态还在解析，不要编造一个错误的新盘面。",
-					"7. 推箱子类反馈必须具体说明玩家位置、靠近/影响到的箱子，以及为什么下一步方向有用；不要只说“可以继续移动”。",
-					"8. 连续托管时必须承接上一轮结果：说明这轮是在延续上一次的推进，还是因为刚才无进展所以换了个思路。",
-					"9. 不要把回复写成重新播报当前画面；避免模板化开头，尤其不要反复以“派蒙看到你在……”开头。",
-					"10. 如果最新记录显示连续多轮仍在同一局面打转，要明确点出“刚才那条思路没有推进，所以这轮在改试另一侧/另一条路径”。",
+					"4. 优先以【本轮验证事实】为准，再参考动作后观察和上一轮记录；不要让旧 summary 覆盖本轮结果。",
+					"5. 只有当本轮 verification 未确认变化，并且动作后观察也没有支持变化时，才能说“没有明显进展”“撞墙”或类似结论。",
+					"6. 如果本轮 verification 已确认局面变化，就不能再说“这轮没有推进”；要区分这轮是明确推进、走位/开路，还是已确认变化但细节仍在解析。",
+					"7. 动态棋盘类游戏必须以动作后的新观察为准；如果你只知道棋盘确实变化了，但还不能确认新的具体格子值或合并结果，就明确说状态还在解析，不要编造一个错误的新盘面。",
+					"8. 推箱子类反馈必须具体说明玩家位置、靠近/影响到的箱子、阻塞点，以及为什么下一步方向有用；不要只说“可以继续移动”。",
+					"9. 连续托管时必须承接上一轮结果：说明这轮是在延续上一次的推进，还是因为刚才无进展所以换了个思路。",
+					"10. 不要把回复写成重新播报当前画面；避免模板化开头，尤其不要反复以“派蒙看到你在……”开头。",
 					`【动作后观察状态】${describePostObservation(input.postActionObservation)}`,
+					`【本轮验证事实】\n${buildCurrentTurnFacts(input.delegationRecord, input.postActionObservation).join("\n")}`,
+					previousSameGameRecord
+						? `【上一轮对照】\n${buildContinuityFacts(input.delegationRecord, previousSameGameRecord).join("\n")}`
+						: "",
 					input.postActionObservation.promptContext
 						? `【动作后观察】\n${truncateObservationContext(input.postActionObservation.promptContext, 900)}`
 						: "",
@@ -700,6 +707,72 @@ function describePostObservation(input: {
 		return "fresh-but-ambiguous";
 	}
 	return "no-post-action-observation";
+}
+
+function buildCurrentTurnFacts(
+	record: DelegatedExecutionRecord,
+	postActionObservation: {
+		promptContext: string;
+		changedObservation: boolean;
+		timedOut: boolean;
+	},
+): string[] {
+	const lines: string[] = [
+		`- 游戏：${record.sourceGame ?? "none"}`,
+		`- 计划动作：${record.plannedActions.length ? record.plannedActions.join(" -> ") : "none"}`,
+		`- 实际尝试：${record.attemptedActions.length ? record.attemptedActions.join(" -> ") : "none"}`,
+		`- verification：${record.verificationResult.success ? "已确认局面变化" : "未确认局面变化"}`,
+	];
+
+	if (record.verificationResult.error) {
+		lines.push(`- 错误：${record.verificationResult.error}`);
+	}
+
+	if (record.verificationResult.boardChanged) {
+		lines.push("- 这轮至少发生了真实变化，不能把它说成“完全没有推进”。");
+		if (record.sourceGame === "2048") {
+			lines.push("- 2048 若新盘面细节仍不清楚，只能承认棋盘变化与解析歧义，不能编造新的格值或合并结果。");
+		}
+		if (record.sourceGame === "sokoban") {
+			lines.push("- Sokoban 若这轮更像 reposition 或开路，要明确说是走位/开路，而不是假装已经完成明显推箱推进。");
+		}
+	} else {
+		lines.push("- 只有当动作后观察也没有支持变化时，才可以说“没有推进”或“撞墙”。");
+	}
+
+	if (postActionObservation.timedOut) {
+		lines.push("- 动作后观察等待超时：不能把动作前旧画面当作本轮结果。");
+	} else if (postActionObservation.changedObservation) {
+		lines.push("- 动作后观察已检测到新变化：优先据此说明这轮结果。");
+	} else if (postActionObservation.promptContext.trim()) {
+		lines.push("- 动作后观察有新内容但细节仍有歧义：可以承认变化有限或细节仍在解析，但不要编造。");
+	} else {
+		lines.push("- 动作后没有拿到新的可用观察：描述要保守。");
+	}
+
+	return lines;
+}
+
+function buildContinuityFacts(
+	currentRecord: DelegatedExecutionRecord,
+	previousRecord: DelegatedExecutionRecord,
+): string[] {
+	const lines: string[] = [
+		`- 上一轮 verification：${previousRecord.verificationResult.success ? "已确认变化" : "未确认变化"}`,
+		previousRecord.nextStepHint ? `- 上一轮下一步线索：${previousRecord.nextStepHint}` : "- 上一轮下一步线索：无",
+	];
+
+	if (previousRecord.verificationResult.boardChanged && currentRecord.verificationResult.boardChanged) {
+		lines.push("- 这轮属于延续上一轮的推进，要说清推进是继续扩大、重排，还是只是局部调整。");
+	} else if (!previousRecord.verificationResult.boardChanged && currentRecord.verificationResult.boardChanged) {
+		lines.push("- 这轮相对上一轮有改进：要点出这轮为什么比上一轮更有效。");
+	} else if (previousRecord.verificationResult.boardChanged && !currentRecord.verificationResult.boardChanged) {
+		lines.push("- 上一轮有推进，这一轮没延续成功：要说明是在试探另一侧、被阻塞，还是路线没接上。");
+	} else {
+		lines.push("- 连续两轮都没有确认推进：要明确说在换思路，而不是重复旁白。");
+	}
+
+	return lines;
 }
 
 function buildDelegatedLoopStopMessage(

@@ -78,6 +78,10 @@ describe("SokobanService local observation guard", () => {
 		await service.runValidationRound();
 
 		expect(vi.mocked(requestActiveTextDecision)).toHaveBeenCalled();
+		const prompt = vi.mocked(requestActiveTextDecision).mock.calls[0]?.[0]?.userPrompt ?? "";
+		expect(prompt).toContain("Ignore top-page UI such as the Level label");
+		expect(prompt).toContain("Before choosing a short plan, identify the nearest actionable box");
+		expect(prompt).toContain("Do not call a move 'progress' just because the player sprite moved");
 	});
 
 	it("fails when companion runtime target does not match the selected target", async () => {

@@ -295,6 +295,10 @@ describe("UnifiedRuntimeService affect application", () => {
 		await service.runUnifiedGameStep("manual", "帮我走一步");
 
 		expect(llm.generateCompanionReply).toHaveBeenCalled();
+		const prompt = llm.generateCompanionReply.mock.calls[0]?.[0] ?? "";
+		expect(prompt).toContain("【本轮验证事实】");
+		expect(prompt).toContain("【上一轮对照】");
+		expect(prompt).toContain("只有当本轮 verification 未确认变化");
 		const options = llm.generateCompanionReply.mock.calls[0]?.[1];
 		expect(options?.delegationMemoryContext).toContain("【本轮托管记录】");
 		expect(options?.delegationMemoryContext).toContain("【同游戏最近两轮】");

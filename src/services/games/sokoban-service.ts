@@ -367,6 +367,9 @@ function buildObservationDecisionPrompt(
 			"Prefer moves that either reposition the player productively or make visible progress toward a target.",
 			"Explain progress in concrete puzzle terms: player position, the box just approached or pushed, and whether target alignment or access improved.",
 			"Describe the player's location relative to the nearest wall, corridor, or box cluster so the next step sounds grounded in the current board.",
+			"Before choosing a short plan, identify the nearest actionable box and explain whether the first move is for repositioning, opening a route, or pushing.",
+			"If the first move only repositions the player, say that explicitly and explain what box, corridor, or target setup it improves.",
+			"Do not call a move 'progress' just because the player sprite moved; distinguish between useful repositioning, a real push, better target alignment, and completely hitting a wall.",
 			"Avoid repeating the same failed probe pattern without a new justification.",
 			discouragedOpeningMoves.length
 				? `Recent failed opening moves to avoid unless the local observation clearly changed: ${discouragedOpeningMoves.map((move) => formatSokobanAction(move)).join(", ")}.`

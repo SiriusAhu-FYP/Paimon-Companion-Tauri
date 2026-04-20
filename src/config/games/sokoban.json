@@ -3,14 +3,18 @@
 	"displayName": "Sokoban",
 	"windowTitleHints": ["sokoban", "push box", "pushbox"],
 	"observationFocus": [
-		"Ignore top-page UI such as level selectors, buttons, login text, and menu icons; focus only on the puzzle board.",
-		"Focus on the player, boxes, targets, walls, blocked paths, and whether a push creates or avoids deadlocks.",
+		"Ignore top-page UI such as the Level label, level dropdown, Go to Level button, Space to restart text, Login text, and hamburger/menu icon; focus only on the puzzle board below.",
+		"Focus on the player, boxes, targets, walls, blocked paths, corridors, and whether a push creates or avoids deadlocks.",
 		"Treat the pale beige floor as walkable space and the dark stone pattern as solid wall / non-walkable area.",
 		"Treat the pink dots as targets, the orange or brown crates as boxes, and the human sprite as the player.",
+		"Describe the player's location relative to the nearest corridor, wall edge, or box cluster instead of narrating the whole scene.",
+		"Identify the nearest relevant box and target relationship before proposing the next move.",
 		"Before proposing a move, verify the immediate next tile in that direction: if it is a wall or blocked box chain, do not choose that move.",
 		"When the board is static and legible, prefer a bounded plan of 2-4 grounded moves instead of a single vague nudge.",
 		"Explain progress in concrete puzzle terms: player position, box access, target alignment, and whether a path just opened or closed.",
-		"Describe the puzzle layout and movement consequences instead of generic scene narration."
+		"Distinguish between pure player repositioning, opening a route, pushing a box, moving a box closer to a target, and completely failing to move.",
+		"Do not treat 'the player moved' as automatically meaning puzzle progress; explain whether that movement created a useful setup.",
+		"Do not say only 'keep moving' or 'try moving'; always tie the next move to a specific nearby box, lane, wall, or opening."
 	],
 	"defaultActionOrder": ["move_up", "move_left", "move_right", "move_down"],
 	"notes": [
@@ -18,7 +22,9 @@
 		"Avoid pushing boxes into unrecoverable corners.",
 		"If the very next tile in the chosen direction is a wall, that move is invalid and should not be selected.",
 		"Prefer moves that create visible progress or better positioning over moves that simply bump into walls.",
-		"When a short sequence is clearly available, choose it and keep each step grounded in the current board layout."
+		"When a short sequence is clearly available, choose it and keep each step grounded in the current board layout.",
+		"If a move only repositions the player, say so explicitly; do not overclaim box progress.",
+		"If a move changes the board but the exact box relation is still ambiguous, admit that the layout changed but the exact new setup is still resolving."
 	],
 	"actions": [
 		{
