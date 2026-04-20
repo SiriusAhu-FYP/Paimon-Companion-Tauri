@@ -1,19 +1,17 @@
+import { Box } from "@mui/material";
 import { useCallback } from "react";
 import { useEvaluation, useFunctional, useGame2048, useSokoban, useUnifiedRuntime } from "@/hooks";
 import { createLogger } from "@/services/logger";
-import { useI18n } from "@/contexts/I18nProvider";
 import { EvaluationSection } from "./EvaluationSection";
 import { FunctionalDebugPanel } from "./FunctionalDebugPanel";
 import { Game2048Section } from "./Game2048Section";
 import { HostToolsSection } from "./HostToolsSection";
-import { PanelRoot } from "./panel-shell";
 import { SokobanSection } from "./SokobanSection";
 import { UnifiedRunSection } from "./UnifiedRunSection";
 
 const log = createLogger("functional-panel");
 
 export function FunctionalPanel() {
-	const { t } = useI18n();
 	const {
 		state: functionalState,
 		setTarget,
@@ -81,7 +79,7 @@ export function FunctionalPanel() {
 		|| unifiedState.activeRunId !== null;
 
 	return (
-		<PanelRoot title={t("功能实验", "Functional Lab")}>
+		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
 			<UnifiedRunSection
 				unifiedState={unifiedState}
 				onRunUnifiedGame={runUnifiedGameStep}
@@ -126,6 +124,6 @@ export function FunctionalPanel() {
 				evaluationState={evaluationState}
 				onClearTaskHistory={clearHistory}
 			/>
-		</PanelRoot>
+		</Box>
 	);
 }
