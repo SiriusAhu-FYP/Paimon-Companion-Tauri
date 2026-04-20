@@ -12,7 +12,6 @@ import { HelpTooltip } from "@/components";
 import { useI18n } from "@/contexts/I18nProvider";
 import { getServices } from "@/services";
 import { type AppConfig, DEFAULT_CONFIG, loadConfig, updateConfig } from "@/services/config";
-import { mockVoicePipeline } from "@/utils/mock";
 import { PanelCard } from "./panel-shell";
 
 export function CompanionWorkbenchPanel() {
@@ -23,8 +22,6 @@ export function CompanionWorkbenchPanel() {
 	const delegationMemory = useDelegationMemory();
 	const proactive = useProactiveState();
 	const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
-	const [referenceText, setReferenceText] = useState("");
-	const [taskContextText, setTaskContextText] = useState("");
 
 	useEffect(() => {
 		let cancelled = false;
@@ -84,42 +81,6 @@ export function CompanionWorkbenchPanel() {
 		proactiveCompanion.setRuntimeSummarySilenceSeconds(config.companionRuntime.proactiveRuntimeSummarySilenceSeconds);
 		await updateConfig({ companionRuntime: { ...config.companionRuntime } });
 	}, [config.companionRuntime]);
-
-	const handleAddReference = useCallback(() => {
-		const text = referenceText.trim();
-		if (!text) return;
-		const { knowledge } = getServices();
-		knowledge.addLiveContext({
-			id: `reference-${Date.now()}`,
-			content: text,
-			priority: 1,
-			expiresAt: null,
-		});
-		setReferenceText("");
-	}, [referenceText]);
-
-	const handleAddTaskContext = useCallback(() => {
-		const text = taskContextText.trim();
-		if (!text) return;
-		const { knowledge } = getServices();
-		knowledge.addLiveContext({
-			id: `task-${Date.now()}`,
-			content: text,
-			priority: 10,
-			expiresAt: null,
-		});
-		setTaskContextText("");
-	}, [taskContextText]);
-
-	const handleClearContext = useCallback(() => {
-		const { knowledge } = getServices();
-		knowledge.clearLiveContext();
-	}, []);
-
-	const handleMockPipeline = useCallback(async () => {
-		const { bus, runtime } = getServices();
-		await mockVoicePipeline(bus, runtime);
-	}, []);
 
 	return (
 		<Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
@@ -303,58 +264,6 @@ export function CompanionWorkbenchPanel() {
 						</>
 					)}
 				</Stack>
-			</PanelCard>
-
-			<Divider />
-
-			<PanelCard>
-				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
-					{t("上下文注入", "Context Injection")}
-				</Typography>
-				<Stack spacing={0.75}>
-					<Stack direction="row" spacing={0.5}>
-						<TextField
-							size="small"
-							fullWidth
-							multiline
-							maxRows={3}
-							label={t("参考信息", "Reference Info")}
-							value={referenceText}
-							onChange={(event) => setReferenceText(event.target.value)}
-						/>
-						<Button variant="outlined" size="small" onClick={handleAddReference} disabled={!referenceText.trim()}>
-							{t("注入", "Inject")}
-						</Button>
-					</Stack>
-					<Stack direction="row" spacing={0.5}>
-						<TextField
-							size="small"
-							fullWidth
-							multiline
-							maxRows={3}
-							label={t("任务上下文", "Task Context")}
-							value={taskContextText}
-							onChange={(event) => setTaskContextText(event.target.value)}
-						/>
-						<Button variant="outlined" size="small" onClick={handleAddTaskContext} disabled={!taskContextText.trim()}>
-							{t("注入", "Inject")}
-						</Button>
-					</Stack>
-					<Button variant="text" size="small" color="warning" onClick={handleClearContext} sx={{ alignSelf: "flex-start" }}>
-						{t("清空手动上下文", "Clear Manual Context")}
-					</Button>
-				</Stack>
-			</PanelCard>
-
-			<Divider />
-
-			<PanelCard>
-				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
-					{t("Mock 测试", "Mock Test")}
-				</Typography>
-				<Button variant="outlined" size="small" onClick={() => { void handleMockPipeline(); }}>
-					{t("模拟语音链路", "Simulate Voice Pipeline")}
-				</Button>
 			</PanelCard>
 		</Box>
 	);
