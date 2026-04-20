@@ -454,6 +454,7 @@ export class ProactiveCompanionService {
 			"普通、平稳、无明显变化的观察，通常不需要主动说话。",
 			"如果只是重复已经说过的内容，或者当前没有新增价值，请输出不说话哨兵。",
 			"不要过度热情，不要频繁刷存在感，不要编造未观察到的事实。",
+			"不要把回复写成重新播报画面，也不要反复以“派蒙看到你在……”开头。",
 			"如果你选择不主动说话，不要调用任何工具。",
 			"如果你选择主动说话，并且需要同步表情/情绪，请调用现有 companion emotion 工具。",
 			`【当前内部模式】${this.state.mode}`,
@@ -491,6 +492,8 @@ export class ProactiveCompanionService {
 				`模式：${this.latestDelegatedRecord.mode}`,
 				`结果：${this.latestDelegatedRecord.executionSummary}`,
 				`验证：${this.latestDelegatedRecord.verificationResult.success ? "成功" : "失败"}`,
+				this.latestDelegatedRecord.decisionSummary ? `本轮思路：${this.latestDelegatedRecord.decisionSummary}` : "",
+				this.latestDelegatedRecord.postActionObservationSummary ? `动作后观察：${this.latestDelegatedRecord.postActionObservationSummary}` : "",
 				this.latestDelegatedRecord.nextStepHint ? `下一步线索：${this.latestDelegatedRecord.nextStepHint}` : "",
 			].filter(Boolean).join("\n"));
 		}

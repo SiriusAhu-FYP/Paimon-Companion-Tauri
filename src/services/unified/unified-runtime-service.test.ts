@@ -269,12 +269,35 @@ describe("UnifiedRuntimeService affect application", () => {
 			nextStepHint: "继续优先保持左上角稳定。",
 			traceId: "previous-trace",
 		});
+		delegationMemory.appendRecord({
+			createdAt: Date.now() - 500,
+			mode: "delegated",
+			sourceGame: "2048",
+			trigger: "manual",
+			requestText: "再试一次",
+			analysisSource: "cloud-decision",
+			decisionSummary: "上一步没有推进，改成横向合并尝试",
+			plannedActions: ["move_left", "move_down", "move_up", "move_right"],
+			attemptedActions: ["move_left"],
+			selectedAction: "move_left",
+			executionSummary: "no visible progress",
+			verificationResult: {
+				success: false,
+				boardChanged: false,
+				error: null,
+			},
+			followUpSummary: "刚才那条路没推进，这轮换到左侧试试。",
+			emotion: "dazed",
+			nextStepHint: "如果左侧也不通，再尝试向上重排。",
+			traceId: "previous-trace-2",
+		});
 
 		await service.runUnifiedGameStep("manual", "帮我走一步");
 
 		expect(llm.generateCompanionReply).toHaveBeenCalled();
 		const options = llm.generateCompanionReply.mock.calls[0]?.[1];
 		expect(options?.delegationMemoryContext).toContain("【本轮托管记录】");
+		expect(options?.delegationMemoryContext).toContain("【同游戏最近两轮】");
 		expect(options?.delegationMemoryContext).toContain("【最近下一步提示】");
 	});
 

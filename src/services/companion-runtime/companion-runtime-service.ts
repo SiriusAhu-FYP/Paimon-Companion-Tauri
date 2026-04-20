@@ -338,8 +338,26 @@ export class CompanionRuntimeService {
 				} else {
 					this.setDiagnostic("warmup-waiting", "Waiting for the first usable local observation.");
 				}
-				await delay(OBSERVATION_READY_POLL_MS);
+				const remainingMs = deadline - Date.now();
+				if (remainingMs <= 0) {
+					break;
+				}
+				await delay(Math.min(OBSERVATION_READY_POLL_MS, remainingMs));
 			}
+		}
+
+		try {
+			this.setDiagnostic("warmup-waiting", "Waiting for the first fresh local observation.");
+			await this.refreshNow({ summarize: true });
+			const context = this.requireObservationContext(target, { maxAgeMs: options?.maxAgeMs });
+			this.clearDiagnostic();
+			log.info("companion runtime warmup ready on final boundary check", {
+				target: target.title,
+				latestTimestamp: context.latestTimestamp,
+			});
+			return context;
+		} catch (err) {
+			lastError = err instanceof Error ? err : new Error(String(err));
 		}
 
 		const timeoutMessage = lastError?.message ?? "companion runtime observation is not ready";
