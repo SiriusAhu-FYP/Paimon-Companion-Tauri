@@ -339,7 +339,7 @@ export class EvaluationService {
 			});
 			let run;
 			try {
-				run = await this.unified.runUnifiedGameStep("manual", "evaluation fusion round", { traceId });
+				run = await this.unified.runDelegationTask("manual", "evaluation fusion round", { traceId });
 			} finally {
 				offStart();
 			}

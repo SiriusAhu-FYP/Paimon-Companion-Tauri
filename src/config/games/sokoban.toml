@@ -1,0 +1,107 @@
+gameId = "sokoban"
+displayName = "Sokoban"
+windowTitleHints = ["sokoban", "push box", "pushbox"]
+loadGuardPolicy = "force-disable"
+
+observationFocus = [
+	"Ignore top-page UI such as the Level label, level dropdown, Go to Level button, Space to restart text, Login text, and hamburger/menu icon; focus only on the puzzle board below.",
+	"Focus on the player, boxes, targets, walls, blocked paths, corridors, and whether a push creates or avoids deadlocks.",
+	"Treat the pale beige floor as walkable space and the dark stone pattern as solid wall / non-walkable area.",
+	"Treat the pink dots as targets, the orange or brown crates as boxes, and the human sprite as the player.",
+	"Describe the player's location relative to the nearest corridor, wall edge, or box cluster instead of narrating the whole scene.",
+	"Identify the nearest relevant box and target relationship before proposing the next move.",
+	"Before proposing a move, verify the immediate next tile in that direction: if it is a wall or blocked box chain, do not choose that move.",
+	"When the board is static and legible, prefer a bounded plan of 2-4 grounded moves instead of a single vague nudge.",
+	"Explain progress in concrete puzzle terms: player position, box access, target alignment, and whether a path just opened or closed.",
+	"Distinguish between pure player repositioning, opening a route, pushing a box, moving a box closer to a target, and completely failing to move.",
+	"Do not treat 'the player moved' as automatically meaning puzzle progress; explain whether that movement created a useful setup.",
+	"Do not say only 'keep moving' or 'try moving'; always tie the next move to a specific nearby box, lane, wall, or opening.",
+]
+
+defaultActionOrder = ["move_up", "move_left", "move_right", "move_down"]
+notes = [
+	"You can only push boxes, never pull them.",
+	"Avoid pushing boxes into unrecoverable corners.",
+	"If the very next tile in the chosen direction is a wall, that move is invalid and should not be selected.",
+	"Prefer moves that create visible progress or better positioning over moves that simply bump into walls.",
+	"When a short sequence is clearly available, choose it and keep each step grounded in the current board layout.",
+	"If a move only repositions the player, say so explicitly; do not overclaim box progress.",
+	"If a move changes the board but the exact box relation is still ambiguous, admit that the layout changed but the exact new setup is still resolving.",
+]
+
+[delegationProfile]
+profileId = "delegation"
+taskId = "delegation-generic"
+displayName = "Generic Delegation"
+maxRounds = 10
+maxActionsPerRound = 1
+afterActionWaitMs = 700
+allowedTools = [
+	"host.focus_window",
+	"host.capture_window",
+	"host.send_key",
+]
+
+[delegationProfile.locator]
+locatorRulesEnabled = true
+locatorCloudEnabled = false
+locatorLocalFallbackEnabled = true
+locatorMinConfidence = 0.6
+
+[delegationProfile.roles.missionAnalyst]
+missionAnalystTemperature = 0.1
+missionAnalystThinkingMode = "medium"
+missionAnalystRules = [
+	"如果任务是推箱子操作，必须标注 taskMode=game。",
+	"目标要聚焦当前关卡推进，不要输出与关卡无关回答。",
+]
+
+[delegationProfile.roles.operationsPlanner]
+operationsPlannerTemperature = 0.1
+operationsPlannerRules = [
+	"优先使用 game.perform_action；若不可用再考虑 host.send_key。",
+	"每轮最多 1 个动作，保持验证闭环。",
+]
+
+[delegationProfile.roles.progressEvaluator]
+progressEvaluatorTemperature = 0.1
+progressEvaluatorRules = [
+	"判断动作是否让角色或箱子状态发生了有效推进。",
+	"无法确认推进时，明确给出下一步纠偏建议。",
+]
+
+[[actions]]
+id = "move_up"
+label = "Up"
+description = "Move the player up once, pushing a box only if the path allows it."
+
+[[actions.steps]]
+kind = "send-key"
+key = "Up"
+
+[[actions]]
+id = "move_left"
+label = "Left"
+description = "Move the player left once, pushing a box only if the path allows it."
+
+[[actions.steps]]
+kind = "send-key"
+key = "Left"
+
+[[actions]]
+id = "move_right"
+label = "Right"
+description = "Move the player right once, pushing a box only if the path allows it."
+
+[[actions.steps]]
+kind = "send-key"
+key = "Right"
+
+[[actions]]
+id = "move_down"
+label = "Down"
+description = "Move the player down once, pushing a box only if the path allows it."
+
+[[actions.steps]]
+kind = "send-key"
+key = "Down"

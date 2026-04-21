@@ -1,0 +1,99 @@
+gameId = "2048"
+displayName = "2048"
+windowTitleHints = ["2048"]
+loadGuardPolicy = "force-disable"
+
+observationFocus = [
+	"Ignore non-board UI such as the mode tabs, score panels, best-score panel, and new-game button unless they help confirm the score changed.",
+	"Focus on the 4x4 board state, tile positions, empty spaces, merges, and whether a move changed the board.",
+	"When legible, explicitly describe which rows or columns contain tiles, which values are adjacent, and whether a merge or a newly spawned tile appeared after the move.",
+	"Track whether the score changed, but do not let the score panel replace direct board understanding.",
+	"If the post-move board is still visually ambiguous, say that the board changed but the exact tile layout is still resolving.",
+	"Ignore cinematic interpretation and describe the puzzle state directly.",
+]
+
+defaultActionOrder = ["move_up", "move_left", "move_right", "move_down"]
+notes = [
+	"Keep the highest tile anchored in one corner when possible.",
+	"Treat each semantic action as a single board shift.",
+	"Dynamic/random board updates should be handled one move at a time with a fresh observation after every move.",
+	"If a move was verified as successful but the new board is still semantically fuzzy, admit the ambiguity instead of inventing a merge result or a new tile position.",
+	"Describe progress in board terms: merge created, new empty cell opened, new tile spawned, or board changed without a fully resolved layout.",
+]
+
+[delegationProfile]
+profileId = "delegation"
+taskId = "delegation-generic"
+displayName = "Generic Delegation"
+maxRounds = 10
+maxActionsPerRound = 1
+afterActionWaitMs = 600
+allowedTools = [
+	"host.focus_window",
+	"host.capture_window",
+	"host.send_key",
+]
+
+[delegationProfile.locator]
+locatorRulesEnabled = true
+locatorCloudEnabled = false
+locatorLocalFallbackEnabled = true
+locatorMinConfidence = 0.6
+
+[delegationProfile.roles.missionAnalyst]
+missionAnalystTemperature = 0.1
+missionAnalystThinkingMode = "medium"
+missionAnalystRules = [
+	"如果任务是 2048 操作，必须标注 taskMode=game。",
+	"目标要聚焦棋盘推进，不要回答常识问答。",
+]
+
+[delegationProfile.roles.operationsPlanner]
+operationsPlannerTemperature = 0.1
+operationsPlannerRules = [
+	"优先使用 game.perform_action；若不可用再考虑 host.send_key。",
+	"每轮最多 1 个动作，避免多步连发导致不可追踪。",
+]
+
+[delegationProfile.roles.progressEvaluator]
+progressEvaluatorTemperature = 0.1
+progressEvaluatorRules = [
+	"先判断动作是否成功作用于棋盘，再判断是否更接近目标。",
+	"当没有可靠证据时，不要宣称完成。",
+]
+
+[[actions]]
+id = "move_up"
+label = "Up"
+description = "Shift the board upward once."
+
+[[actions.steps]]
+kind = "send-key"
+key = "Up"
+
+[[actions]]
+id = "move_left"
+label = "Left"
+description = "Shift the board left once."
+
+[[actions.steps]]
+kind = "send-key"
+key = "Left"
+
+[[actions]]
+id = "move_right"
+label = "Right"
+description = "Shift the board right once."
+
+[[actions.steps]]
+kind = "send-key"
+key = "Right"
+
+[[actions]]
+id = "move_down"
+label = "Down"
+description = "Shift the board downward once."
+
+[[actions.steps]]
+kind = "send-key"
+key = "Down"
