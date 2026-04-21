@@ -1,8 +1,21 @@
-import { Box, Button, Chip, MenuItem, Paper, Select, Stack, type SelectChangeEvent, Typography } from "@mui/material";
+import { useState } from "react";
+import {
+	Box,
+	Button,
+	Chip,
+	Collapse,
+	MenuItem,
+	Paper,
+	Select,
+	Stack,
+	TextField,
+	type SelectChangeEvent,
+	Typography,
+} from "@mui/material";
 import StopIcon from "@mui/icons-material/Stop";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import { useI18n } from "@/contexts/I18nProvider";
-import type { CharacterProfile } from "@/types";
+import type { CharacterProfile, HostWindowInfo } from "@/types";
 import { PanelCard } from "./panel-shell";
 
 type DebugCaptureStateLike = {
@@ -72,11 +85,41 @@ export function RuntimeStateCard(props: {
 
 export function InteractionModeCard(props: {
 	mode: "companion" | "delegated";
-	preferredMode: "companion" | "delegated";
-	lastReason: string;
 	onModeChange: (nextMode: "companion" | "delegated") => void;
+	companionRunning: boolean;
+	delegationRunning: boolean;
+	delegationTaskText: string;
+	delegationTaskPlaceholder: string;
+	windowList: HostWindowInfo[];
+	windowsLoading: boolean;
+	selectedTargetHandle: string | null;
+	onDelegationTaskTextChange: (text: string) => void;
+	onStartCompanion: () => Promise<void>;
+	onStopCompanion: () => void;
+	onExecuteDelegationTask: () => Promise<void>;
+	onStopDelegationTask: () => void;
+	onFocusFirefox: () => Promise<void>;
+	onEnumerateWindows: () => Promise<void>;
+	onFocusWindowFromList: (windowInfo: HostWindowInfo) => Promise<void>;
 }) {
 	const { t } = useI18n();
+	const [windowListExpanded, setWindowListExpanded] = useState(false);
+	const [windowQuery, setWindowQuery] = useState("");
+	const delegationButtonsDisabled = props.delegationRunning || props.windowsLoading;
+	const filteredWindowList = props.windowList.filter((windowInfo) => {
+		const query = windowQuery.trim().toLowerCase();
+		if (!query) {
+			return true;
+		}
+		const haystack = [
+			windowInfo.title,
+			windowInfo.processName,
+			windowInfo.className,
+			windowInfo.handle,
+			String(windowInfo.processId),
+		].join(" ").toLowerCase();
+		return haystack.includes(query);
+	});
 
 	return (
 		<PanelCard>
@@ -89,20 +132,161 @@ export function InteractionModeCard(props: {
 					size="small"
 					onClick={() => props.onModeChange("companion")}
 				>
-					{t("陪伴", "Companion")}
+					{t("陪伴模式", "Companion Mode")}
 				</Button>
 				<Button
 					variant={props.mode === "delegated" ? "contained" : "outlined"}
 					size="small"
 					onClick={() => props.onModeChange("delegated")}
 				>
-					{t("托管", "Delegated")}
+					{t("托管模式", "Delegation Mode")}
 				</Button>
 			</Stack>
-			<Stack spacing={0.25}>
-				<Typography variant="body2">{t("当前模式", "Current Mode")}：{props.mode}</Typography>
-				<Typography variant="body2">{t("用户偏好", "Preferred Mode")}：{props.preferredMode}</Typography>
-				<Typography variant="body2">{t("最近切换", "Latest Reason")}：{props.lastReason}</Typography>
+
+			<Stack spacing={0.75} sx={{ mb: 0.75 }}>
+				{props.mode === "companion" ? (
+					<Stack direction="row" spacing={0.75}>
+						{props.companionRunning ? (
+							<Button
+								variant="outlined"
+								size="small"
+								color="error"
+								onClick={props.onStopCompanion}
+								startIcon={<StopIcon />}
+							>
+								{t("停止", "Stop")}
+							</Button>
+						) : (
+							<Button
+								variant="contained"
+								size="small"
+								onClick={() => { void props.onStartCompanion(); }}
+								startIcon={<PlayArrowIcon />}
+							>
+								{t("启动", "Start")}
+							</Button>
+						)}
+					</Stack>
+				) : (
+					<>
+						<TextField
+							size="small"
+							fullWidth
+							value={props.delegationTaskText}
+							onChange={(event) => props.onDelegationTaskTextChange(event.target.value)}
+							placeholder={props.delegationTaskPlaceholder}
+							disabled={props.delegationRunning}
+							sx={{ "& .MuiInputBase-input": { fontSize: 12 } }}
+						/>
+						<Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+							{props.delegationRunning ? (
+								<Button
+									variant="outlined"
+									size="small"
+									color="error"
+									onClick={props.onStopDelegationTask}
+									startIcon={<StopIcon />}
+								>
+									{t("停止任务", "Stop Task")}
+								</Button>
+							) : (
+								<Button
+									variant="contained"
+									size="small"
+									onClick={() => { void props.onExecuteDelegationTask(); }}
+									disabled={!props.delegationTaskText.trim()}
+									startIcon={<PlayArrowIcon />}
+								>
+									{t("执行任务", "Execute Task")}
+								</Button>
+							)}
+						</Stack>
+					</>
+				)}
+			</Stack>
+
+			<Stack spacing={0.75}>
+				<Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+					<Button
+						variant="outlined"
+						size="small"
+						onClick={() => { void props.onFocusFirefox(); }}
+						disabled={delegationButtonsDisabled}
+					>
+						{t("聚焦 Firefox", "Focus Firefox")}
+					</Button>
+					<Button
+						variant="text"
+						size="small"
+						onClick={() => { void props.onEnumerateWindows().then(() => setWindowListExpanded(true)); }}
+						disabled={delegationButtonsDisabled}
+					>
+						{props.windowsLoading
+							? t("枚举中...", "Enumerating...")
+							: t("枚举窗口并聚焦", "Enumerate Window & Focus")}
+					</Button>
+					<Button
+						variant="text"
+						size="small"
+						onClick={() => setWindowListExpanded((prev) => !prev)}
+						disabled={props.windowList.length === 0}
+					>
+						{windowListExpanded ? t("收起列表", "Collapse List") : t("展开列表", "Expand List")}
+					</Button>
+					<Typography variant="caption" color="text.secondary" sx={{ alignSelf: "center" }}>
+						{props.windowList.length ? `${filteredWindowList.length}/${props.windowList.length}` : t("未枚举", "Not listed")}
+					</Typography>
+				</Stack>
+				<Collapse in={windowListExpanded} unmountOnExit>
+					<Stack spacing={0.5} sx={{ maxHeight: 180, overflowY: "auto", pr: 0.5 }}>
+						{props.windowList.length > 0 ? (
+							<>
+								<TextField
+									size="small"
+									value={windowQuery}
+									onChange={(event) => setWindowQuery(event.target.value)}
+									placeholder={t("过滤标题 / 进程 / PID", "Filter by title / process / PID")}
+								/>
+								{filteredWindowList.map((windowInfo) => (
+									<Paper
+										key={windowInfo.handle}
+										variant="outlined"
+										sx={{ p: 0.5, bgcolor: "background.default" }}
+									>
+										<Typography variant="caption" sx={{ display: "block" }}>
+											{windowInfo.title}
+										</Typography>
+										<Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+											{windowInfo.processName || "unknown"} · PID {windowInfo.processId}
+										</Typography>
+										<Stack direction="row" justifyContent="space-between" alignItems="center">
+											<Typography variant="caption" color="text.secondary">
+												{windowInfo.handle}
+											</Typography>
+											<Button
+												size="small"
+												variant={props.selectedTargetHandle === windowInfo.handle ? "contained" : "outlined"}
+												onClick={() => { void props.onFocusWindowFromList(windowInfo); }}
+												disabled={delegationButtonsDisabled}
+											>
+												{t("聚焦", "Focus")}
+											</Button>
+										</Stack>
+									</Paper>
+								))}
+								{filteredWindowList.length === 0 && (
+									<Typography variant="caption" color="text.secondary">
+										{t("没有匹配窗口。", "No windows matched.")}
+									</Typography>
+								)}
+							</>
+						) : (
+							<Typography variant="caption" color="text.secondary">
+								{t("还没有窗口列表，请先枚举。", "Window list is empty. Enumerate first.")}
+							</Typography>
+						)}
+					</Stack>
+				</Collapse>
 			</Stack>
 		</PanelCard>
 	);
@@ -188,7 +372,7 @@ export function LatestDelegatedRecordCard(props: {
 	return (
 		<PanelCard>
 			<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
-				{t("最近托管记录", "Latest Delegated Record")}
+				{t("最近托管记录", "Latest Delegation Record")}
 			</Typography>
 			{props.record ? (
 				<Stack spacing={0.5}>
@@ -222,7 +406,7 @@ export function LatestDelegatedRecordCard(props: {
 				</Stack>
 			) : (
 				<Typography variant="body2" color="text.secondary">
-					{t("尚无托管记录", "No delegated records yet")}
+					{t("尚无托管记录", "No delegation records yet")}
 				</Typography>
 			)}
 		</PanelCard>
