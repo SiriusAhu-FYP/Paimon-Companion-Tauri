@@ -6,36 +6,30 @@ import { CompanionModeService } from "@/services/companion-mode";
 import { DelegationMemoryService } from "@/services/delegation-memory";
 import { UnifiedRuntimeService } from "./unified-runtime-service";
 import { callLocalMcpTool } from "@/services/mcp/local-mcp-client";
+import { runDelegatedTaskLoop } from "./delegated-task-runner";
 
 vi.mock("@/services/mcp/local-mcp-client", () => ({
 	callLocalMcpTool: vi.fn(),
 }));
 
-describe("UnifiedRuntimeService affect application", () => {
+vi.mock("./delegated-task-runner", () => ({
+	runDelegatedTaskLoop: vi.fn(),
+}));
+
+describe("UnifiedRuntimeService delegation path", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.mocked(callLocalMcpTool).mockResolvedValue("{}");
+		vi.mocked(runDelegatedTaskLoop).mockResolvedValue({
+			status: "completed",
+			rounds: 1,
+			summary: "task completed",
+		});
 	});
 
 	function createService(options?: {
-		gameResult?: {
-			summary: string;
-			boardChanged: boolean;
-			selectedMove: "move_up" | "move_left" | "move_right" | "move_down" | null;
-			companionText: string;
-			reflection?: string;
-			reasoning?: string;
-		};
-		gameResults?: Array<{
-			summary: string;
-			boardChanged: boolean;
-			selectedMove: "move_up" | "move_left" | "move_right" | "move_down" | null;
-			companionText: string;
-			reflection?: string;
-			reasoning?: string;
-		}>;
-		gameError?: Error;
 		reply?: string;
+		selectedTargetTitle?: string;
 	}) {
 		const bus = new EventBus();
 		const affect = new AffectStateService(bus);
@@ -44,71 +38,53 @@ describe("UnifiedRuntimeService affect application", () => {
 		const delegationMemory = new DelegationMemoryService(bus);
 		const companionRuntime = {
 			getState: vi.fn(() => ({ running: false, target: null, lastSummary: null, summaryWindowMs: 60_000 })),
-			waitForPostActionObservation: vi.fn().mockResolvedValue({
-				promptContext: "fresh observation",
-				latestTimestamp: Date.now(),
-				changedObservation: true,
-				timedOut: false,
-			}),
+			testLocalVisionConnection: vi.fn().mockResolvedValue(undefined),
 		};
 		const llm = {
-			generateCompanionReply: vi.fn().mockResolvedValue(options?.reply ?? "grounded reply"),
+			generateCompanionReply: vi.fn().mockResolvedValue(options?.reply ?? "analysis reply"),
 		};
-		const gameResult = options?.gameResult ?? {
-			summary: "board changed",
-			boardChanged: true,
-			selectedMove: "move_up" as const,
-			companionText: "fallback reply",
-			reflection: "继续沿着当前方向推进。",
-			reasoning: "上移能合并更稳定。",
-		};
-		const queuedGameResults = [...(options?.gameResults ?? [gameResult])];
 		const game2048 = {
-			runSingleStep: options?.gameError
-				? vi.fn().mockRejectedValue(options.gameError)
-				: vi.fn().mockImplementation(async () => {
-					const nextResult = queuedGameResults.shift() ?? gameResult;
-					return {
-						target: { handle: "target-1", title: "2048" },
-						summary: nextResult.summary,
-						selectedMove: nextResult.selectedMove,
-						boardChanged: nextResult.boardChanged,
-						companionText: nextResult.companionText,
-						analysis: {
-							source: "cloud-decision",
-							decisionSummary: "cloud chose move_left first from local observation context",
-							reflection: nextResult.reflection ?? "",
-							reasoning: nextResult.reasoning ?? "",
-							preferredMoves: ["move_left", "move_up", "move_right", "move_down"],
-						},
-						attempts: nextResult.boardChanged
-							? [{ move: nextResult.selectedMove ?? "move_up", changed: true, changeRatio: 0.12 }]
-							: [{ move: nextResult.selectedMove ?? "move_up", changed: false, changeRatio: 0.001 }],
-					};
-				}),
+			runSingleStep: vi.fn(),
+		};
+		const orchestrator = {
+			getState: vi.fn(() => ({
+				selectedTarget: { handle: "target-1", title: options?.selectedTargetTitle ?? "2048" },
+			})),
+			runFocusTask: vi.fn().mockResolvedValue({
+				id: "focus-task",
+			}),
+		};
+		const pipeline = {
+			speakText: vi.fn().mockResolvedValue(undefined),
+			speakTextNonBlocking: vi.fn().mockReturnValue(true),
+			stopSpeechQueue: vi.fn(),
+			run: vi.fn().mockResolvedValue(undefined),
 		};
 		const service = new UnifiedRuntimeService({
 			bus,
 			runtime,
 			affect,
 			companionRuntime: companionRuntime as never,
-			orchestrator: {
-				getState: vi.fn(() => ({
-					selectedTarget: { handle: "target-1", title: "2048" },
-				})),
-			} as never,
+			orchestrator: orchestrator as never,
 			game2048: game2048 as never,
 			sokoban: {} as never,
 			llm: llm as never,
-			pipeline: {
-				speakText: vi.fn().mockResolvedValue(undefined),
-				run: vi.fn(),
-			} as never,
+			pipeline: pipeline as never,
 			companionMode,
 			delegationMemory,
 		});
-
-		return { bus, affect, runtime, companionMode, delegationMemory, companionRuntime, llm, game2048, service };
+		return {
+			bus,
+			affect,
+			companionMode,
+			companionRuntime,
+			delegationMemory,
+			game2048,
+			orchestrator,
+			pipeline,
+			llm,
+			service,
+		};
 	}
 
 	it("keeps using the MCP companion emotion contract", async () => {
@@ -136,7 +112,7 @@ describe("UnifiedRuntimeService affect application", () => {
 		expect(callLocalMcpTool).toHaveBeenCalledWith("companion.set_emotion", { emotion: "happy" }, { timeoutMs: 45_000, traceId: "trace-1" });
 	});
 
-	it("falls back into affect state when the MCP call fails", async () => {
+	it("falls back into affect state when MCP call fails", async () => {
 		vi.mocked(callLocalMcpTool).mockRejectedValueOnce(new Error("mcp failed"));
 		const bus = new EventBus();
 		const affect = new AffectStateService(bus);
@@ -167,223 +143,73 @@ describe("UnifiedRuntimeService affect application", () => {
 		});
 	});
 
-	it("returns to companion mode after a unified run when companion is the preferred mode", async () => {
-		const { companionMode, delegationMemory, service } = createService();
+	it("runs delegation task through the three-role loop", async () => {
+		const { companionMode, game2048, service } = createService();
 
-		await service.runUnifiedGameStep("manual", "帮我走一步");
+		await service.runDelegationTask("manual", "继续");
 
+		expect(runDelegatedTaskLoop).toHaveBeenCalledTimes(1);
+		expect(game2048.runSingleStep).not.toHaveBeenCalled();
 		expect(companionMode.getState()).toMatchObject({
 			mode: "companion",
 			preferredMode: "companion",
 			lastReason: "unified:run-complete",
 		});
-		expect(delegationMemory.getLatestRecord()).toMatchObject({
-			sourceGame: "2048",
-			trigger: "manual",
-			verificationResult: {
-				success: true,
-				boardChanged: true,
-				error: null,
-			},
-			followUpSummary: "grounded reply",
-		});
 	});
 
-	it("keeps delegated mode after a unified run when the user preference is delegated", async () => {
-		const { companionMode, game2048, service } = createService({
-			gameResults: [
-				{
-					summary: "no visible progress",
-					boardChanged: false,
-					selectedMove: "move_left",
-					companionText: "fallback reply",
-				},
-				{
-					summary: "still no visible progress",
-					boardChanged: false,
-					selectedMove: "move_up",
-					companionText: "fallback reply",
-				},
-			],
-		});
-		companionMode.setMode("delegated", "manual-toggle", "manual");
+	it("does not fallback to legacy game service when delegation loop fails", async () => {
+		vi.mocked(runDelegatedTaskLoop).mockRejectedValueOnce(new Error("delegation failed"));
+		const { game2048, service } = createService();
 
-		await service.runUnifiedGameStep("manual", "继续");
-
-		expect(game2048.runSingleStep).toHaveBeenCalledTimes(2);
-		expect(companionMode.getState()).toMatchObject({
-			mode: "delegated",
-			preferredMode: "delegated",
-			lastReason: "unified:run-complete",
-		});
+		await expect(service.runDelegationTask("manual", "帮我走一步")).rejects.toThrow("delegation failed");
+		expect(game2048.runSingleStep).not.toHaveBeenCalled();
 	});
 
-	it("records failed unified runs into delegation memory", async () => {
-		const { delegationMemory, service } = createService({
-			gameError: new Error("capture failed"),
+	it("runs browser delegation task through the shared loop API", async () => {
+		vi.mocked(runDelegatedTaskLoop).mockImplementationOnce(async ({ onAssistantReply }) => {
+			await onAssistantReply?.("我先确认了一下当前页面。", "planner");
+			return {
+				status: "completed",
+				rounds: 1,
+				summary: "任务完成",
+			};
+		});
+		const { bus, orchestrator, pipeline, service } = createService({
+			selectedTargetTitle: "Mozilla Firefox",
+		});
+		const visibleReplies: string[] = [];
+		bus.on("llm:response-end", (payload) => {
+			visibleReplies.push(payload.fullText);
 		});
 
-		await expect(service.runUnifiedGameStep("manual", "帮我走一步")).rejects.toThrow("capture failed");
+		await service.submitDelegationTaskInstruction("请在当前页面完成浏览器任务");
 
-		expect(delegationMemory.getLatestRecord()).toMatchObject({
-			sourceGame: "2048",
-			verificationResult: {
-				success: false,
-				boardChanged: false,
-				error: "capture failed",
-			},
-			followUpSummary: "这轮统一运行没成功，我先停下来，等你检查目标窗口或当前画面。",
-		});
+		expect(orchestrator.runFocusTask).toHaveBeenCalledTimes(1);
+		expect(runDelegatedTaskLoop).toHaveBeenCalledWith(expect.objectContaining({
+			taskText: "请在当前页面完成浏览器任务",
+			target: { handle: "target-1", title: "Mozilla Firefox" },
+		}));
+		expect(pipeline.run).not.toHaveBeenCalled();
+		expect(visibleReplies).toContain("我先确认了一下当前页面。");
+		expect(service.getState().lastCompanionText).toBe("任务完成");
 	});
 
-	it("builds grounded follow-up from focused delegation memory context", async () => {
-		const { delegationMemory, llm, service } = createService({
-			gameResult: {
-				summary: "board changed",
-				boardChanged: true,
-				selectedMove: "move_left",
-				companionText: "fallback reply",
-				reflection: "继续保持左上角稳定。",
-				reasoning: "向左可以合并并保留更多空格。",
-			},
-		});
-		delegationMemory.appendRecord({
-			createdAt: Date.now() - 1000,
-			mode: "delegated",
-			sourceGame: "2048",
-			trigger: "manual",
-			requestText: "上一轮",
-			analysisSource: "cloud-decision",
-			decisionSummary: "cloud chose move_up first from local observation context",
-			plannedActions: ["move_up", "move_left", "move_right", "move_down"],
-			attemptedActions: ["move_up"],
-			selectedAction: "move_up",
-			executionSummary: "previous success",
-			verificationResult: {
-				success: true,
-				boardChanged: true,
-				error: null,
-			},
-			followUpSummary: "上一轮成功了。",
-			emotion: "happy",
-			nextStepHint: "继续优先保持左上角稳定。",
-			traceId: "previous-trace",
-		});
-		delegationMemory.appendRecord({
-			createdAt: Date.now() - 500,
-			mode: "delegated",
-			sourceGame: "2048",
-			trigger: "manual",
-			requestText: "再试一次",
-			analysisSource: "cloud-decision",
-			decisionSummary: "上一步没有推进，改成横向合并尝试",
-			plannedActions: ["move_left", "move_down", "move_up", "move_right"],
-			attemptedActions: ["move_left"],
-			selectedAction: "move_left",
-			executionSummary: "no visible progress",
-			verificationResult: {
-				success: false,
-				boardChanged: false,
-				error: null,
-			},
-			followUpSummary: "刚才那条路没推进，这轮换到左侧试试。",
-			emotion: "dazed",
-			nextStepHint: "如果左侧也不通，再尝试向上重排。",
-			traceId: "previous-trace-2",
-		});
+	it("voice input no longer triggers delegation execution", async () => {
+		const { pipeline, service } = createService();
 
-		await service.runUnifiedGameStep("manual", "帮我走一步");
+		await service.submitVoiceText("帮我走一步");
 
-		expect(llm.generateCompanionReply).toHaveBeenCalled();
-		const prompt = llm.generateCompanionReply.mock.calls[0]?.[0] ?? "";
-		expect(prompt).toContain("【本轮验证事实】");
-		expect(prompt).toContain("【上一轮对照】");
-		expect(prompt).toContain("只有当本轮 verification 未确认变化");
-		const options = llm.generateCompanionReply.mock.calls[0]?.[1];
-		expect(options?.delegationMemoryContext).toContain("【本轮托管记录】");
-		expect(options?.delegationMemoryContext).toContain("【同游戏最近两轮】");
-		expect(options?.delegationMemoryContext).toContain("【最近下一步提示】");
+		expect(runDelegatedTaskLoop).not.toHaveBeenCalled();
+		expect(pipeline.run).toHaveBeenCalledWith("帮我走一步", { inputSource: "voice" });
 	});
 
-	it("waits for a fresh post-action observation before grounded follow-up", async () => {
-		const { companionRuntime, llm, service } = createService();
-
-		await service.runUnifiedGameStep("manual", "帮我走一步");
-
-		expect(companionRuntime.waitForPostActionObservation).toHaveBeenCalledTimes(1);
-		expect(companionRuntime.waitForPostActionObservation).toHaveBeenCalledWith(
-			{ handle: "target-1", title: "2048" },
-			expect.objectContaining({
-				timeoutMs: 5_000,
-				requireChanged: true,
-			}),
-		);
-		expect(llm.generateCompanionReply.mock.calls[0]?.[0]).toContain("【动作后观察状态】fresh-changed");
-		expect(llm.generateCompanionReply.mock.calls[0]?.[0]).toContain("fresh observation");
-	});
-
-	it("auto-stops a delegated loop after repeated no-progress", async () => {
-		const { bus, companionMode, game2048, service } = createService({
-			gameResults: [
-				{
-					summary: "no visible progress",
-					boardChanged: false,
-					selectedMove: "move_left",
-					companionText: "fallback reply",
-				},
-				{
-					summary: "still no visible progress",
-					boardChanged: false,
-					selectedMove: "move_up",
-					companionText: "fallback reply",
-				},
-			],
-		});
-		companionMode.setMode("delegated", "manual-toggle", "manual");
-		const systemErrors: Array<{ module: string; error: string }> = [];
-		bus.on("system:error", (payload) => {
-			systemErrors.push(payload as { module: string; error: string });
-		});
-
-		await service.runUnifiedGameStep("manual", "继续托管");
-
-		expect(game2048.runSingleStep).toHaveBeenCalledTimes(2);
-		expect(systemErrors[systemErrors.length - 1]).toMatchObject({
-			module: "unified-runtime",
-			error: "delegated loop auto-stopped: repeated-no-progress",
-		});
-	});
-
-	it("uses focused delegation memory when analyzing without acting", async () => {
-		const { delegationMemory, llm, service } = createService();
-		delegationMemory.appendRecord({
-			createdAt: Date.now(),
-			mode: "delegated",
-			sourceGame: "2048",
-			trigger: "manual",
-			requestText: "帮我走一步",
-			analysisSource: "cloud-decision",
-			decisionSummary: "cloud chose move_left first from local observation context",
-			plannedActions: ["move_left", "move_up", "move_right", "move_down"],
-			attemptedActions: ["move_left"],
-			selectedAction: "move_left",
-			executionSummary: "board changed",
-			verificationResult: {
-				success: true,
-				boardChanged: true,
-				error: null,
-			},
-			followUpSummary: "这一步已经有效。",
-			emotion: "happy",
-			nextStepHint: "如果局面没变差，可以继续左移或上移。",
-			traceId: "trace-ctx",
-		});
+	it("voice analyze command still goes through analyze path without delegation loop", async () => {
+		const { llm, pipeline, service } = createService({ selectedTargetTitle: "Sokoban" });
 
 		await service.submitVoiceText("帮我看看下一步建议");
 
+		expect(runDelegatedTaskLoop).not.toHaveBeenCalled();
 		expect(llm.generateCompanionReply).toHaveBeenCalled();
-		const options = llm.generateCompanionReply.mock.calls[0]?.[1];
-		expect(options?.delegationMemoryContext).toContain("【本轮托管记录】");
-		expect(options?.delegationMemoryContext).toContain("如果局面没变差，可以继续左移或上移。");
+		expect(pipeline.run).not.toHaveBeenCalled();
 	});
 });
