@@ -553,7 +553,7 @@ fn resolve_virtual_key(
 		return Ok((vk, Vec::new()));
 	}
 
-	let mut chars = key.chars();
+	let mut chars = normalized.chars();
 	let ch = chars.next().ok_or_else(|| "key cannot be empty".to_string())?;
 	if chars.next().is_some() {
 		return Err(format!("unsupported key token: {key}"));
