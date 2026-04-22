@@ -6,6 +6,13 @@ export interface DebugCaptureSessionInfo {
 	directory: string;
 }
 
+export interface DebugCaptureExportInfo {
+	exportId: string;
+	directory: string;
+	fileCount: number;
+	totalBytes: number;
+}
+
 export async function startDebugCapture(label?: string): Promise<DebugCaptureSessionInfo> {
 	if (!isTauriEnvironment()) {
 		throw new Error("debug capture requires Tauri environment");
@@ -42,6 +49,19 @@ export async function writeDebugCaptureImage(sessionId: string, fileName: string
 			sessionId,
 			fileName,
 			dataUrl,
+		},
+	});
+}
+
+export async function exportDebugCaptureSession(sessionId: string, label?: string): Promise<DebugCaptureExportInfo> {
+	if (!isTauriEnvironment()) {
+		throw new Error("debug capture requires Tauri environment");
+	}
+
+	return invoke<DebugCaptureExportInfo>("export_debug_capture_session", {
+		request: {
+			sessionId,
+			label: label ?? null,
 		},
 	});
 }

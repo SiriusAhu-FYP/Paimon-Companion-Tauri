@@ -19,10 +19,6 @@ const WRITEBACK_DIR = "writeback-pending";
 const MAX_ENTRIES = 200;
 const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
 
-const DEBUG_CAPTURE_TTL_DAYS = 7;
-const SCRATCHPAD_TTL_DAYS = 1;
-const MAX_DEBUG_CAPTURES_BYTES = 2 * 1024 * 1024 * 1024; // 2GB
-
 export interface LongTermMemoryServiceDeps {
 	bus: EventBus;
 }
@@ -48,7 +44,6 @@ export class LongTermMemoryService {
 			await mkdir(`${this.basePath}/${WRITEBACK_DIR}`, { recursive: true });
 			await this.loadIndex();
 			await this.retryPendingWritebacks();
-			await this.cleanupDebugAndScratchpad();
 			this.initialized = true;
 			log.info("long-term memory initialized", {
 				entries: this.index.entries.length,
@@ -348,106 +343,6 @@ export class LongTermMemoryService {
 			return s.size;
 		} catch {
 			return 0;
-		}
-	}
-
-	// --- Debug/scratchpad cleanup (retained from old service) ---
-
-	private async cleanupDebugAndScratchpad(): Promise<void> {
-		const now = Date.now();
-		try {
-			const appDir = await appDataDir();
-			await this.cleanupDebugCaptures(`${appDir}logs/debug-captures`, now);
-		} catch {
-			// may not exist
-		}
-		try {
-			const appDir = await appDataDir();
-			await this.cleanupScratchpads(`${appDir}logs/delegation-scratchpads`, now);
-		} catch {
-			// may not exist
-		}
-	}
-
-	private async cleanupDebugCaptures(debugDir: string, now: number): Promise<void> {
-		const debugTtl = DEBUG_CAPTURE_TTL_DAYS * 24 * 60 * 60 * 1000;
-		const entries = await readDir(debugDir);
-		const dirs: { name: string; date: number }[] = [];
-
-		for (const entry of entries) {
-			if (!entry.isDirectory) continue;
-			const match = entry.name.match(/^(\d{8})-(\d{6})/);
-			if (!match) continue;
-			const dateStr = match[1]!;
-			const year = parseInt(dateStr.slice(0, 4), 10);
-			const month = parseInt(dateStr.slice(4, 6), 10) - 1;
-			const day = parseInt(dateStr.slice(6, 8), 10);
-			const dirDate = new Date(year, month, day).getTime();
-
-			if (now - dirDate > debugTtl) {
-				try {
-					await remove(`${debugDir}/${entry.name}`, { recursive: true });
-					log.info("removed expired debug capture", { name: entry.name });
-				} catch { /* best-effort */ }
-			} else {
-				dirs.push({ name: entry.name, date: dirDate });
-			}
-		}
-
-		dirs.sort((a, b) => a.date - b.date);
-		let totalSize = 0;
-		const dirSizes: { name: string; size: number }[] = [];
-		for (const d of dirs) {
-			try {
-				const dirPath = `${debugDir}/${d.name}`;
-				const files = await readDir(dirPath);
-				let dirSize = 0;
-				for (const f of files) {
-					if (f.isDirectory) continue;
-					try {
-						const s = await stat(`${dirPath}/${f.name}`);
-						dirSize += s.size;
-					} catch { /* ignore */ }
-				}
-				totalSize += dirSize;
-				dirSizes.push({ name: d.name, size: dirSize });
-			} catch { /* ignore */ }
-		}
-
-		if (totalSize > MAX_DEBUG_CAPTURES_BYTES) {
-			for (const d of dirSizes) {
-				if (totalSize <= MAX_DEBUG_CAPTURES_BYTES) break;
-				try {
-					await remove(`${debugDir}/${d.name}`, { recursive: true });
-					totalSize -= d.size;
-					log.info("removed debug capture (LRU)", { name: d.name });
-				} catch { /* best-effort */ }
-			}
-		}
-	}
-
-	private async cleanupScratchpads(scratchpadDir: string, now: number): Promise<void> {
-		const ttl = SCRATCHPAD_TTL_DAYS * 24 * 60 * 60 * 1000;
-		try {
-			const entries = await readDir(scratchpadDir);
-			for (const entry of entries) {
-				if (!entry.isDirectory) continue;
-				const match = entry.name.match(/^(\d{8})-(\d{6})/);
-				if (!match) continue;
-				const dateStr = match[1]!;
-				const year = parseInt(dateStr.slice(0, 4), 10);
-				const month = parseInt(dateStr.slice(4, 6), 10) - 1;
-				const day = parseInt(dateStr.slice(6, 8), 10);
-				const dirDate = new Date(year, month, day).getTime();
-				if (now - dirDate > ttl) {
-					try {
-						await remove(`${scratchpadDir}/${entry.name}`, { recursive: true });
-						log.info("removed expired scratchpad", { name: entry.name });
-					} catch { /* best-effort */ }
-				}
-			}
-		} catch {
-			// directory may not exist
 		}
 	}
 

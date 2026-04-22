@@ -245,15 +245,19 @@ P5 close-out:
 - [ ] P6: Memory, Stability, And Final Runtime Convergence
   Goal: finish the last round of core product work so the system has a defensible final runtime shape rather than only a collection of working subsystems.
   This phase is a core implementation phase, focused on memory, stability hardening, and the final local-small / cloud-big split.
-  - [ ] finalize the local-small / cloud-big split for perception, reasoning, and reply paths
+  - [x] finalize the local-small / cloud-big split for the current product scope
+    - Companion Mode: local observation first, cloud temporal summary/reply second
+    - Delegation Mode: screenshot-driven cloud mission/planner/evaluator as the primary path; local vision stays as locator fallback
   - [ ] complete the Companion Mode short-term memory loop for video understanding (rolling frame batches -> cloud summaries -> summary carry-over across later requests)
   - [ ] deliver a file-backed pseudo-long-term memory prototype: session-end compression with timestamped structured entries (scene/task, key entities, event result, summary)
   - [ ] keep Delegation Mode memory scope bounded in P6: one async memory retrieval after mission confirmation + event-level writeback (what/when/result/optional attempts), without per-round auto-recall
   - [ ] support explicit long-term recall in P6 (user asks for past events, optional light session-start pre-read), while deferring fully automatic trigger-based recall to future work
-  - [ ] decide whether a fast local reaction layer is needed for speech/short companion reactions while keeping richer cloud replies where appropriate, or explicitly justify not implementing it
+  - [-] keep local fast-reaction language layer in Future Work for now; do not block P6 acceptance on this optional path
   - [ ] complete events.jsonl image reference-only storage (eliminate remaining base64 in event payloads)
-  - [ ] add common popup/cookie auto-bypass mechanism for browser delegation
-  - [ ] add log lifecycle management (TTL, size caps, session export)
+  - [-] do not add site-specific cookie/popup bypass logic in P6; keep GCC boundary and rely on generic host.* flow
+  - [x] add browser cookie-handling policy into generic delegation profile (prefer reject, else essential/necessary, never accept-all unless explicitly requested)
+  - [x] add unified log lifecycle management (TTL, size caps, session export baseline)
+  - [ ] finish Delegation Mode continuity quality close-out (grounded follow-up, cross-round reasoning continuity, and stable position/state narration)
   - [ ] tighten bounded GCC scope, mode-aware orchestration, and layered memory into the final explicit product definition
   - [-] keep complex dynamic game delegation (for example PVZ-like scenarios) in Future Work rather than the `P6` acceptance bar
 

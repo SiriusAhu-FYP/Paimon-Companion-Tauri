@@ -31,6 +31,7 @@ missionAnalystThinkingMode = "off"
 missionAnalystRules = [
 	"先提取明确任务完成目标，不要混入常识问答。",
 	"识别用户显式约束（如指定网站 Google、指定窗口、指定禁忌动作）并固化为 hardConstraints。",
+	"如果遇到 cookie 同意弹窗，默认策略是优先拒绝；若没有拒绝选项，只选 essential/necessary；不要选择 accept all，除非用户明确要求。",
 	"给出可执行的子任务链，每步都应能被截图/动作结果验证。",
 	"如果任务语义偏浏览器操作，明确标注 taskMode 为 browser。",
 ]
@@ -40,6 +41,7 @@ operationsPlannerTemperature = 0.1
 operationsPlannerRules = [
 	"你只能规划 allowedTools 内的动作，不要编造新工具。",
 	"一次规划最多 maxActionsPerRound 个动作，动作要最小且可验证。",
+	"处理 cookie 弹窗时遵循默认策略：reject > essential/necessary > accept all（仅用户明确要求时可选）。",
 	"如果任务已完成，goalReached 设为 true 并给出简短结论。",
 ]
 

@@ -1,7 +1,13 @@
 import type { EventBus, EventHistoryEntry } from "@/services/event-bus/event-bus";
 import { registerLogSink } from "@/services/logger/logger-service";
 import type { DebugCaptureState } from "@/types";
-import { appendDebugCaptureText, startDebugCapture, writeDebugCaptureImage } from "./client";
+import {
+	appendDebugCaptureText,
+	exportDebugCaptureSession,
+	type DebugCaptureExportInfo,
+	startDebugCapture,
+	writeDebugCaptureImage,
+} from "./client";
 
 function makeInitialState(): DebugCaptureState {
 	return {
@@ -23,9 +29,42 @@ function isDataUrl(value: string): boolean {
 	return value.startsWith(DATA_URL_PREFIX);
 }
 
-function truncateString(value: string): string | { _truncated: true; length: number; preview: string } {
+function summarizeDataUrl(value: string): {
+	_redactedDataUrl: true;
+	mimeType: string;
+	charLength: number;
+	estimatedBytes: number | null;
+} {
+	const commaIndex = value.indexOf(",");
+	const header = commaIndex >= 0 ? value.slice(0, commaIndex) : "";
+	const match = header.match(/^data:([^;,\s]+)/i);
+	const mimeType = match?.[1] ?? "image/unknown";
+	if (commaIndex < 0) {
+		return {
+			_redactedDataUrl: true,
+			mimeType,
+			charLength: value.length,
+			estimatedBytes: null,
+		};
+	}
+	const encoded = value.slice(commaIndex + 1);
+	const padding = encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0;
+	const estimatedBytes = Math.max(0, Math.floor((encoded.length * 3) / 4) - padding);
+	return {
+		_redactedDataUrl: true,
+		mimeType,
+		charLength: value.length,
+		estimatedBytes,
+	};
+}
+
+function truncateString(
+	value: string,
+): string
+	| { _truncated: true; length: number; preview: string }
+	| { _redactedDataUrl: true; mimeType: string; charLength: number; estimatedBytes: number | null } {
 	if (isDataUrl(value)) {
-		return { _truncated: true, length: value.length, preview: value.slice(0, 40) + "..." };
+		return summarizeDataUrl(value);
 	}
 	if (value.length <= STRING_SOFT_LIMIT) return value;
 	return { _truncated: true, length: value.length, preview: value.slice(0, STRING_SOFT_LIMIT) + "..." };
@@ -79,6 +118,7 @@ export class DebugCaptureService {
 	private flushTimer: ReturnType<typeof setTimeout> | null = null;
 	private flushInFlight = false;
 	private lastThrottledWriteAt = new Map<string, number>();
+	private lastSessionId: string | null = null;
 
 	constructor(bus: EventBus) {
 		this.bus = bus;
@@ -101,23 +141,24 @@ export class DebugCaptureService {
 		this.nextLabel = trimmed || "manual";
 	}
 
-	async setEnabled(enabled: boolean): Promise<void> {
-		if (enabled === this.state.enabled) return;
-		if (enabled) {
-			const session = await startDebugCapture(this.nextLabel);
-			this.state = {
-				...this.state,
-				enabled: true,
-				sessionId: session.sessionId,
-				sessionDirectory: session.directory,
-				capturedEventCount: 0,
-				capturedImageCount: 0,
-				lastWriteAt: null,
-				lastError: null,
-			};
-			const history = this.bus.getHistory();
-			this.lastEventSequence = history.length ? history[history.length - 1].sequence : 0;
-			this.emitState();
+		async setEnabled(enabled: boolean): Promise<void> {
+			if (enabled === this.state.enabled) return;
+			if (enabled) {
+				const session = await startDebugCapture(this.nextLabel);
+				this.state = {
+					...this.state,
+					enabled: true,
+					sessionId: session.sessionId,
+					sessionDirectory: session.directory,
+					capturedEventCount: 0,
+					capturedImageCount: 0,
+					lastWriteAt: null,
+					lastError: null,
+				};
+				const history = this.bus.getHistory();
+				this.lastEventSequence = history.length ? history[history.length - 1].sequence : 0;
+				this.lastSessionId = session.sessionId;
+				this.emitState();
 			this.enqueueWrite("session.jsonl", stringifyJsonl({
 				timestamp: new Date().toISOString(),
 				type: "session-start",
@@ -140,6 +181,14 @@ export class DebugCaptureService {
 			sessionDirectory: null,
 		};
 		this.emitState();
+	}
+
+	async exportSession(label?: string): Promise<DebugCaptureExportInfo> {
+		const sessionId = this.state.sessionId ?? this.lastSessionId;
+		if (!sessionId) {
+			throw new Error("no debug capture session available for export");
+		}
+		return exportDebugCaptureSession(sessionId, label);
 	}
 
 	recordLlmExchange(kind: "request" | "response" | "error", payload: Record<string, unknown>) {
