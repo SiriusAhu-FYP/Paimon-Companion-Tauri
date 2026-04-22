@@ -21,6 +21,7 @@
     "@mui/material": "^7.3.9",
     "@orama/orama": "^3.1.18",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-fs": "^2.5.0",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-store": "^2.4.2",
     "flexlayout-react": "^0.8.19",

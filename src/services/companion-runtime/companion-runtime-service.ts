@@ -583,6 +583,7 @@ export class CompanionRuntimeService {
 				browserLoadTimeoutMs: getConfig().companionRuntime.browserLoadTimeoutMs,
 				browserLoadChangeThreshold: getConfig().companionRuntime.browserLoadChangeThreshold,
 				browserLoadCropScale: getConfig().companionRuntime.browserLoadCropScale,
+				digestWindowSize: getConfig().companionRuntime.digestWindowSize,
 			},
 		});
 

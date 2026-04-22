@@ -16,8 +16,9 @@ import { LLMService } from "./llm";
 import { ProactiveCompanionService } from "./proactive-companion";
 import { CompanionModeService } from "./companion-mode";
 import { DelegationMemoryService } from "./delegation-memory";
-import { SessionDigestService } from "./memory/session-digest-service";
-import { PersistentMemoryService } from "./memory/persistent-memory-service";
+import { L2RollingContextService } from "./memory/l2-rolling-context-service";
+import { LongTermMemoryService } from "./memory/long-term-memory-service";
+import { installSessionWritebackHook } from "./memory/session-writeback-hook";
 import { AudioPlayer } from "./audio";
 import type { IASRService } from "./asr";
 import { PipelineService } from "./pipeline";
@@ -54,8 +55,8 @@ export interface ServiceContainer {
 	voiceInput: VoiceInputService;
 	companionMode: CompanionModeService;
 	delegationMemory: DelegationMemoryService;
-	sessionDigest: SessionDigestService;
-	persistentMemory: PersistentMemoryService;
+	l2RollingContext: L2RollingContextService;
+	longTermMemory: LongTermMemoryService;
 }
 
 let services: ServiceContainer | null = null;
@@ -92,15 +93,15 @@ export function initServices(): ServiceContainer {
 	});
 	const llmProvider = resolveLLMProvider(config);
 	const llm = new LLMService(eventBus, runtime, llmProvider, affect, character, knowledge, companionRuntime, companionMode, delegationMemory, debugCapture);
-	const sessionDigest = new SessionDigestService({
+	const l2RollingContext = new L2RollingContextService({
 		bus: eventBus,
 		llmProvider,
-		digestWindowSize: config.companionRuntime.digestWindowSize,
+		windowSize: config.companionRuntime.digestWindowSize,
 	});
-	const persistentMemory = new PersistentMemoryService({ bus: eventBus });
-	llm.setMemoryServices(sessionDigest, persistentMemory);
-	persistentMemory.initialize().catch((err) => {
-		log.error("persistent memory initialization failed", err);
+	const longTermMemory = new LongTermMemoryService({ bus: eventBus });
+	llm.setMemoryServices(l2RollingContext, longTermMemory);
+	longTermMemory.initialize().catch((err) => {
+		log.error("long-term memory initialization failed", err);
 	});
 	const game2048 = new Game2048Service({
 		bus: eventBus,
@@ -154,6 +155,13 @@ export function initServices(): ServiceContainer {
 		delegationMemory,
 		debugCapture,
 	});
+	unified.setLongTermMemory(longTermMemory);
+	installSessionWritebackHook({
+		bus: eventBus,
+		llmProvider,
+		l2Service: l2RollingContext,
+		ltmService: longTermMemory,
+	});
 	const proactiveCompanion = new ProactiveCompanionService({
 		bus: eventBus,
 		llm,
@@ -197,8 +205,8 @@ export function initServices(): ServiceContainer {
 		voiceInput,
 		companionMode,
 		delegationMemory,
-		sessionDigest,
-		persistentMemory,
+		l2RollingContext,
+		longTermMemory,
 	};
 
 	log.info("all services initialized", {

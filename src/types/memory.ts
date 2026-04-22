@@ -1,13 +1,7 @@
-export interface SessionDigestRecord {
-	id: string;
-	createdAt: number;
-	windowStart: number;
-	windowEnd: number;
-	summaryCount: number;
-	digest: string;
-	salientEvents: string[];
-	emotionArc: string;
-}
+// P6 记忆系统类型定义
+// 遵循 04-P6-记忆实施细则.md 规范
+
+// --- Salient Events (retained for proactive companion) ---
 
 export type SalientEventType = "danger" | "achievement" | "discovery" | "error" | "turning-point";
 export type SalientEventSource = "vision" | "delegation" | "user" | "system";
@@ -20,46 +14,75 @@ export interface SalientEvent {
 	source: SalientEventSource;
 }
 
-export interface PersistentSessionSummary {
-	sessionId: string;
-	startedAt: number;
-	endedAt: number;
-	targetTitle: string;
-	totalDigests: number;
-	finalDigest: string;
-	salientEvents: SalientEvent[];
-	tags: string[];
+// --- L2 Rolling Context ---
+
+export interface L2RollingContext {
+	lastUpdatedAt: number;
+	compressedSummary: string;
+	windowSummaryIds: string[];
 }
 
-export interface CrossSessionIndexEntry {
-	sessionId: string;
-	startedAt: number;
-	endedAt: number;
-	targetTitle: string;
+// --- L3 Long-Term Memory ---
+
+export type LongTermMemorySource = "companion" | "delegation";
+export type LongTermMemoryEventResult = "success" | "failure" | "interrupted" | "unknown";
+export type WritebackState = "pending" | "processing" | "committed";
+
+export interface LongTermMemoryEntry {
+	memory_id: string;
+	source: LongTermMemorySource;
+	time_start: number;
+	time_end: number;
+	scene_or_task: string;
+	entities: string[];
+	event_result: LongTermMemoryEventResult;
+	summary: string;
 	tags: string[];
-	digestPreview: string;
+	committed_at: number;
 }
 
-export interface CrossSessionIndex {
+export interface WritebackTask {
+	id: string;
+	state: WritebackState;
+	entry: LongTermMemoryEntry;
+	createdAt: number;
+	lastAttemptAt?: number;
+}
+
+export interface MemoryCandidate {
+	entry: LongTermMemoryEntry;
+	relevanceScore: number;
+}
+
+export interface LongTermMemoryIndexEntry {
+	memory_id: string;
+	source: LongTermMemorySource;
+	time_start: number;
+	scene_or_task: string;
+	tags: string[];
+	summaryPreview: string;
+}
+
+export interface LongTermMemoryIndex {
 	version: number;
-	entries: CrossSessionIndexEntry[];
+	entries: LongTermMemoryIndexEntry[];
 }
 
-export interface SessionDigestState {
-	digestHistory: SessionDigestRecord[];
-	pendingSummaryCount: number;
-	salientEvents: SalientEvent[];
-}
+// --- Event Payloads ---
 
-export interface MemoryDigestCompletePayload {
-	digest: SessionDigestRecord;
+export interface MemoryL2UpdatedPayload {
+	context: L2RollingContext;
 }
 
 export interface MemorySalientEventPayload {
 	event: SalientEvent;
 }
 
-export interface MemorySessionPersistedPayload {
-	sessionId: string;
-	filePath: string;
+export interface MemoryCommittedPayload {
+	entry: LongTermMemoryEntry;
+}
+
+export interface MemoryRecallCompletePayload {
+	query: string;
+	candidates: MemoryCandidate[];
 }

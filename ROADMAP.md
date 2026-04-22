@@ -246,15 +246,16 @@ P5 close-out:
   Goal: finish the last round of core product work so the system has a defensible final runtime shape rather than only a collection of working subsystems.
   This phase is a core implementation phase, focused on memory, stability hardening, and the final local-small / cloud-big split.
   - [ ] finalize the local-small / cloud-big split for perception, reasoning, and reply paths
-  - [ ] complete the layered-memory design so both Companion Mode and Delegation Mode can retain short-horizon context during play and compress multiple rolling summaries into larger session summaries, then into file-backed pseudo-long-term memory
-  - [ ] validate the final long-horizon companion bar: after an extended session, the companion should still be able to recall and narrate earlier salient events from the same play session instead of only the most recent few summaries
+  - [ ] complete the Companion Mode short-term memory loop for video understanding (rolling frame batches -> cloud summaries -> summary carry-over across later requests)
+  - [ ] deliver a file-backed pseudo-long-term memory prototype: session-end compression with timestamped structured entries (scene/task, key entities, event result, summary)
+  - [ ] keep Delegation Mode memory scope bounded in P6: one async memory retrieval after mission confirmation + event-level writeback (what/when/result/optional attempts), without per-round auto-recall
+  - [ ] support explicit long-term recall in P6 (user asks for past events, optional light session-start pre-read), while deferring fully automatic trigger-based recall to future work
   - [ ] decide whether a fast local reaction layer is needed for speech/short companion reactions while keeping richer cloud replies where appropriate, or explicitly justify not implementing it
   - [ ] complete events.jsonl image reference-only storage (eliminate remaining base64 in event payloads)
   - [ ] add common popup/cookie auto-bypass mechanism for browser delegation
   - [ ] add log lifecycle management (TTL, size caps, session export)
   - [ ] tighten bounded GCC scope, mode-aware orchestration, and layered memory into the final explicit product definition
-  - [-] if time remains, land one bounded large-game micro-task demo rather than reopening broad autonomous gameplay
-  - [-] treat larger-scale game transfer as optional stretch work rather than the default `P6` acceptance bar
+  - [-] keep complex dynamic game delegation (for example PVZ-like scenarios) in Future Work rather than the `P6` acceptance bar
 
 - [ ] P7: Product Close-Out And FYP Packaging
   Goal: package the now-converged system into a clean, defensible, and directly usable FYP deliverable.

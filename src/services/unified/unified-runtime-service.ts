@@ -10,6 +10,8 @@ import type { RuntimeService } from "@/services/runtime";
 import type { CompanionModeService } from "@/services/companion-mode";
 import type { DelegationMemoryService } from "@/services/delegation-memory";
 import type { DebugCaptureService } from "@/services/debug-capture";
+import type { LongTermMemoryService } from "@/services/memory/long-term-memory-service";
+import type { LongTermMemoryEntry, LongTermMemoryEventResult } from "@/types/memory";
 import { createLogger } from "@/services/logger";
 import type { DelegatedExecutionRecord, FunctionalTarget, SokobanChangeType, UnifiedRunRecord, UnifiedRuntimeState } from "@/types";
 import { callLocalMcpTool } from "@/services/mcp/local-mcp-client";
@@ -75,6 +77,7 @@ export class UnifiedRuntimeService {
 	private companionMode: CompanionModeService;
 	private delegationMemory: DelegationMemoryService;
 	private debugCapture?: DebugCaptureService;
+	private ltmService?: LongTermMemoryService;
 	private state: UnifiedRuntimeState = makeInitialState();
 	private activeLoopId: string | null = null;
 	private preflightCueLastSpokenAt = new Map<PreflightCueKey, number>();
@@ -106,6 +109,10 @@ export class UnifiedRuntimeService {
 		this.companionMode = deps.companionMode;
 		this.delegationMemory = deps.delegationMemory;
 		this.debugCapture = deps.debugCapture;
+	}
+
+	setLongTermMemory(ltm: LongTermMemoryService): void {
+		this.ltmService = ltm;
 	}
 
 	getState(): Readonly<UnifiedRuntimeState> {
@@ -538,12 +545,30 @@ export class UnifiedRuntimeService {
 
 		try {
 			this.emitDelegationWarmupCue(input.taskText);
+
 			await this.orchestrator.runFocusTask(input.target, { applyDelegatedViewport: true });
 			const scratchpad = await this.createDelegationScratchpadRuntime({
 				label: "delegation-task",
 				taskText: input.taskText,
 				target: input.target,
 			});
+
+			// One-shot async recall after task confirmation (focus + scratchpad ready)
+			if (this.ltmService) {
+				try {
+					const candidates = await this.ltmService.recall(input.taskText, 3);
+					if (candidates.length > 0) {
+						log.info("delegation recall completed", { count: candidates.length });
+						const recallBlock = candidates.map((c, i) => {
+							const e = c.entry;
+							return `[记忆 ${i + 1}] ${e.scene_or_task} | ${e.summary} (${e.event_result})`;
+						}).join("\n");
+						scratchpad?.append("memory-recall.md", `# 历史记忆召回\n${recallBlock}\n`);
+					}
+				} catch (err) {
+					log.warn("delegation async recall failed", err);
+				}
+			}
 			const actionStartedAt = Date.now();
 			const result = await runDelegatedTaskLoop({
 				taskText: input.taskText,
@@ -643,6 +668,32 @@ export class UnifiedRuntimeService {
 			this.state.loopActive = this.activeLoopId !== null;
 			this.companionMode.setMode(this.companionMode.getPreferredMode(), "unified:run-complete", "system");
 			this.emitState();
+
+			// Delegation event writeback to long-term memory
+			if (this.ltmService) {
+				const eventResult: LongTermMemoryEventResult =
+					run.status === "completed" ? "success"
+					: run.status === "failed" ? "failure"
+					: "interrupted";
+				const entities = extractEntitiesFromText(
+					`${input.taskText} ${run.summary || ""}`,
+				);
+				const entry: LongTermMemoryEntry = {
+					memory_id: `delegation-${run.id}`,
+					source: "delegation",
+					time_start: run.startedAt,
+					time_end: run.endedAt ?? Date.now(),
+					scene_or_task: input.taskText.slice(0, 80),
+					entities,
+					event_result: eventResult,
+					summary: run.summary || input.taskText,
+					tags: ["delegation", input.taskTag],
+					committed_at: 0,
+				};
+				this.ltmService.commit(entry).catch((err) => {
+					log.warn("delegation event writeback failed", err);
+				});
+			}
 		}
 
 		if (run.status === "failed") {
@@ -1540,4 +1591,41 @@ function isLikelyEnglishTask(text: string): boolean {
 	const latinMatches = trimmed.match(/[A-Za-z]/g)?.length ?? 0;
 	const cjkMatches = trimmed.match(/[\u4E00-\u9FFF]/g)?.length ?? 0;
 	return latinMatches > 0 && latinMatches >= cjkMatches * 2;
+}
+
+/**
+ * Extract entity-like nouns from task text + summary for delegation writeback.
+ * Simple heuristic: URLs → domain, quoted strings, capitalized words, CJK proper nouns.
+ */
+function extractEntitiesFromText(text: string): string[] {
+	const entities = new Set<string>();
+
+	const urls = text.match(/https?:\/\/[^\s,，]+/g);
+	if (urls) {
+		for (const u of urls) {
+			try {
+				entities.add(new URL(u).hostname.replace(/^www\./, ""));
+			} catch {
+				entities.add(u.slice(0, 30));
+			}
+		}
+	}
+
+	const quoted = text.match(/[""「」『』]([^""「」『』]{1,20})[""「」『』]/g);
+	if (quoted) {
+		for (const q of quoted) {
+			entities.add(q.replace(/[""「」『』]/g, ""));
+		}
+	}
+
+	const capitalized = text.match(/\b[A-Z][a-z]{2,}\b/g);
+	if (capitalized) {
+		for (const c of capitalized) {
+			if (!["The", "This", "That", "For", "And", "But"].includes(c)) {
+				entities.add(c);
+			}
+		}
+	}
+
+	return [...entities].slice(0, 8);
 }

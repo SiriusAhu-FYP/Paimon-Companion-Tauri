@@ -30,9 +30,10 @@ import type { CompanionInteractionMode, CompanionModeSource, CompanionModeState 
 import type { DelegatedExecutionRecord, DelegationMemoryState } from "./delegation-memory";
 import type { DebugCaptureState } from "./debug-capture";
 import type {
-	MemoryDigestCompletePayload,
+	MemoryL2UpdatedPayload,
 	MemorySalientEventPayload,
-	MemorySessionPersistedPayload,
+	MemoryCommittedPayload,
+	MemoryRecallCompletePayload,
 } from "./memory";
 
 export interface RuntimeModeChangePayload {
@@ -435,9 +436,10 @@ export interface EventMap {
 	"delegation-memory:state-change": DelegationMemoryStateChangePayload;
 	"delegation-memory:record-added": DelegationMemoryRecordAddedPayload;
 	"debug-capture:state-change": DebugCaptureStateChangePayload;
-	"memory:digest-complete": MemoryDigestCompletePayload;
+	"memory:l2-updated": MemoryL2UpdatedPayload;
 	"memory:salient-event": MemorySalientEventPayload;
-	"memory:session-persisted": MemorySessionPersistedPayload;
+	"memory:committed": MemoryCommittedPayload;
+	"memory:recall-complete": MemoryRecallCompletePayload;
 }
 
 export type EventName = keyof EventMap;

@@ -7,8 +7,9 @@ import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { DebugCaptureService } from "@/services/debug-capture";
 import type { CompanionModeService } from "@/services/companion-mode";
 import type { DelegationMemoryService } from "@/services/delegation-memory";
-import type { SessionDigestService } from "@/services/memory/session-digest-service";
-import type { PersistentMemoryService } from "@/services/memory/persistent-memory-service";
+import type { L2RollingContextService } from "@/services/memory/l2-rolling-context-service";
+import type { LongTermMemoryService } from "@/services/memory/long-term-memory-service";
+import type { MemoryCandidate } from "@/types/memory";
 import { getConfig } from "@/services/config";
 import type { ILLMService, ChatMessage } from "./types";
 import { buildSystemMessage, summarizePromptContext } from "./prompt-builder";
@@ -34,8 +35,8 @@ export class LLMService {
 	private companionMode: CompanionModeService;
 	private delegationMemory: DelegationMemoryService;
 	private debugCapture?: DebugCaptureService;
-	private sessionDigest?: SessionDigestService;
-	private persistentMemory?: PersistentMemoryService;
+	private l2Service?: L2RollingContextService;
+	private ltmService?: LongTermMemoryService;
 	private history: ChatMessage[] = [];
 	private processing = false;
 
@@ -63,9 +64,9 @@ export class LLMService {
 		this.debugCapture = debugCapture;
 	}
 
-	setMemoryServices(sessionDigest: SessionDigestService, persistentMemory: PersistentMemoryService): void {
-		this.sessionDigest = sessionDigest;
-		this.persistentMemory = persistentMemory;
+	setMemoryServices(l2Service: L2RollingContextService, ltmService: LongTermMemoryService): void {
+		this.l2Service = l2Service;
+		this.ltmService = ltmService;
 	}
 
 	isProcessing(): boolean {
@@ -259,6 +260,7 @@ export class LLMService {
 			companionRuntimeContext?: string;
 			delegationMemoryContext?: string;
 			knowledgeContext?: string;
+			memoryCandidates?: MemoryCandidate[];
 			traceId?: string;
 			source?: "companion-reply" | "proactive-reply";
 		},
@@ -276,8 +278,8 @@ export class LLMService {
 			knowledgeContext: options?.knowledgeContext ?? "",
 			companionRuntimeContext: options?.companionRuntimeContext ?? this.companionRuntime.getPromptContext(),
 			delegationMemoryContext: options?.delegationMemoryContext ?? this.delegationMemory.buildPromptContext(),
-			sessionDigestContext: this.sessionDigest?.getSessionDigestContext() ?? "",
-			crossSessionContext: this.persistentMemory?.getCrossSessionContext() ?? "",
+			rollingContext: this.l2Service?.getRollingContext() ?? "",
+			memoryCandidates: options?.memoryCandidates ?? [],
 			recentInteractionContext: summarizeRecentInteraction(this.history),
 			inputSource: "system" as const,
 			customPersona: appCharacter.customPersona,
@@ -382,6 +384,18 @@ export class LLMService {
 			knowledgeContextLength: knowledgeContext.length,
 		});
 
+		let memoryCandidates: MemoryCandidate[] = [];
+		if (this.ltmService && looksLikeHistoryRecall(userText)) {
+			try {
+				memoryCandidates = await this.ltmService.recall(userText, 3);
+				if (memoryCandidates.length > 0) {
+					log.info("explicit recall triggered for chat", { count: memoryCandidates.length });
+				}
+			} catch (err) {
+				log.warn("explicit recall failed", err);
+			}
+		}
+
 		const promptCtx = {
 			characterProfile: this.character.getProfile(),
 			affectState: this.affect.getState(),
@@ -389,8 +403,8 @@ export class LLMService {
 			knowledgeContext,
 			companionRuntimeContext,
 			delegationMemoryContext,
-			sessionDigestContext: this.sessionDigest?.getSessionDigestContext() ?? "",
-			crossSessionContext: this.persistentMemory?.getCrossSessionContext() ?? "",
+			rollingContext: this.l2Service?.getRollingContext() ?? "",
+			memoryCandidates,
 			recentInteractionContext: summarizeRecentInteraction(this.history),
 			inputSource,
 			customPersona: appCharacter.customPersona,
@@ -453,6 +467,12 @@ export class LLMService {
 	clearHistory() {
 		this.history = [];
 	}
+}
+
+const HISTORY_RECALL_PATTERNS = /还记得|之前|那次|以前|上次|记不记得|记得吗|有没有.*过|do you remember|last time|previously/i;
+
+function looksLikeHistoryRecall(text: string): boolean {
+	return HISTORY_RECALL_PATTERNS.test(text);
 }
 
 function summarizeRecentInteraction(history: readonly ChatMessage[]): string {
