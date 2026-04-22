@@ -7,6 +7,8 @@ import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { DebugCaptureService } from "@/services/debug-capture";
 import type { CompanionModeService } from "@/services/companion-mode";
 import type { DelegationMemoryService } from "@/services/delegation-memory";
+import type { SessionDigestService } from "@/services/memory/session-digest-service";
+import type { PersistentMemoryService } from "@/services/memory/persistent-memory-service";
 import { getConfig } from "@/services/config";
 import type { ILLMService, ChatMessage } from "./types";
 import { buildSystemMessage, summarizePromptContext } from "./prompt-builder";
@@ -32,6 +34,8 @@ export class LLMService {
 	private companionMode: CompanionModeService;
 	private delegationMemory: DelegationMemoryService;
 	private debugCapture?: DebugCaptureService;
+	private sessionDigest?: SessionDigestService;
+	private persistentMemory?: PersistentMemoryService;
 	private history: ChatMessage[] = [];
 	private processing = false;
 
@@ -57,6 +61,11 @@ export class LLMService {
 		this.companionMode = companionMode;
 		this.delegationMemory = delegationMemory;
 		this.debugCapture = debugCapture;
+	}
+
+	setMemoryServices(sessionDigest: SessionDigestService, persistentMemory: PersistentMemoryService): void {
+		this.sessionDigest = sessionDigest;
+		this.persistentMemory = persistentMemory;
 	}
 
 	isProcessing(): boolean {
@@ -267,6 +276,8 @@ export class LLMService {
 			knowledgeContext: options?.knowledgeContext ?? "",
 			companionRuntimeContext: options?.companionRuntimeContext ?? this.companionRuntime.getPromptContext(),
 			delegationMemoryContext: options?.delegationMemoryContext ?? this.delegationMemory.buildPromptContext(),
+			sessionDigestContext: this.sessionDigest?.getSessionDigestContext() ?? "",
+			crossSessionContext: this.persistentMemory?.getCrossSessionContext() ?? "",
 			recentInteractionContext: summarizeRecentInteraction(this.history),
 			inputSource: "system" as const,
 			customPersona: appCharacter.customPersona,
@@ -378,6 +389,8 @@ export class LLMService {
 			knowledgeContext,
 			companionRuntimeContext,
 			delegationMemoryContext,
+			sessionDigestContext: this.sessionDigest?.getSessionDigestContext() ?? "",
+			crossSessionContext: this.persistentMemory?.getCrossSessionContext() ?? "",
 			recentInteractionContext: summarizeRecentInteraction(this.history),
 			inputSource,
 			customPersona: appCharacter.customPersona,

@@ -132,6 +132,7 @@ export interface CompanionRuntimeConfig {
 	browserLoadTimeoutMs: number;
 	browserLoadChangeThreshold: number;
 	browserLoadCropScale: number;
+	digestWindowSize: number;
 }
 
 // ── Knowledge（知识库配置，独立于 LLM / TTS） ──
@@ -229,6 +230,7 @@ export const DEFAULT_CONFIG: AppConfig = {
 		browserLoadTimeoutMs: 30000,
 		browserLoadChangeThreshold: 0.0025,
 		browserLoadCropScale: 0.9,
+		digestWindowSize: 6,
 	},
 	llmProfiles: [],
 	ttsProfiles: [],

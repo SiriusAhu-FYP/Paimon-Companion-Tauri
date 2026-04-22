@@ -29,6 +29,11 @@ import type { ProactiveState, ProactiveTriggerSource } from "./proactive";
 import type { CompanionInteractionMode, CompanionModeSource, CompanionModeState } from "./companion-mode";
 import type { DelegatedExecutionRecord, DelegationMemoryState } from "./delegation-memory";
 import type { DebugCaptureState } from "./debug-capture";
+import type {
+	MemoryDigestCompletePayload,
+	MemorySalientEventPayload,
+	MemorySessionPersistedPayload,
+} from "./memory";
 
 export interface RuntimeModeChangePayload {
 	mode: RuntimeMode;
@@ -430,6 +435,9 @@ export interface EventMap {
 	"delegation-memory:state-change": DelegationMemoryStateChangePayload;
 	"delegation-memory:record-added": DelegationMemoryRecordAddedPayload;
 	"debug-capture:state-change": DebugCaptureStateChangePayload;
+	"memory:digest-complete": MemoryDigestCompletePayload;
+	"memory:salient-event": MemorySalientEventPayload;
+	"memory:session-persisted": MemorySessionPersistedPayload;
 }
 
 export type EventName = keyof EventMap;

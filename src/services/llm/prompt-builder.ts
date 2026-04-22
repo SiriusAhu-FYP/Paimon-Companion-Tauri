@@ -11,6 +11,8 @@ export interface PromptContext {
 	knowledgeContext: string;
 	companionRuntimeContext: string;
 	delegationMemoryContext: string;
+	sessionDigestContext: string;
+	crossSessionContext: string;
 	recentInteractionContext: string;
 	inputSource?: UserInputSource;
 	customPersona: string;
@@ -129,6 +131,16 @@ export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 		sections.push(`【最近托管执行记录】\n${delegationMemory}`);
 	}
 
+	const sessionDigest = (ctx.sessionDigestContext ?? "").trim();
+	if (sessionDigest) {
+		sections.push(`【会话记忆摘要】\n${sessionDigest}`);
+	}
+
+	const crossSession = (ctx.crossSessionContext ?? "").trim();
+	if (crossSession) {
+		sections.push(`【历史会话回忆】\n${crossSession}`);
+	}
+
 	sections.push(`【当前情感与表达引导】\n${buildAffectPromptSummary(ctx.affectState, {
 		inputSource: ctx.inputSource,
 		recentInteractionContext: ctx.recentInteractionContext,
@@ -171,6 +183,8 @@ export function summarizePromptContext(ctx: PromptContext): Record<string, unkno
 		customPersonaLen: (ctx.customPersona ?? "").length,
 		companionRuntimeLen: (ctx.companionRuntimeContext ?? "").length,
 		delegationMemoryLen: (ctx.delegationMemoryContext ?? "").length,
+		sessionDigestLen: (ctx.sessionDigestContext ?? "").length,
+		crossSessionLen: (ctx.crossSessionContext ?? "").length,
 		knowledgeLen: (ctx.knowledgeContext ?? "").length,
 		behaviorConstraintsEnabled: ctx.behaviorConstraints?.enabled ?? false,
 	};

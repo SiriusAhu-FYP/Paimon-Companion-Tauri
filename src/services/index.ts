@@ -16,6 +16,8 @@ import { LLMService } from "./llm";
 import { ProactiveCompanionService } from "./proactive-companion";
 import { CompanionModeService } from "./companion-mode";
 import { DelegationMemoryService } from "./delegation-memory";
+import { SessionDigestService } from "./memory/session-digest-service";
+import { PersistentMemoryService } from "./memory/persistent-memory-service";
 import { AudioPlayer } from "./audio";
 import type { IASRService } from "./asr";
 import { PipelineService } from "./pipeline";
@@ -52,6 +54,8 @@ export interface ServiceContainer {
 	voiceInput: VoiceInputService;
 	companionMode: CompanionModeService;
 	delegationMemory: DelegationMemoryService;
+	sessionDigest: SessionDigestService;
+	persistentMemory: PersistentMemoryService;
 }
 
 let services: ServiceContainer | null = null;
@@ -88,6 +92,16 @@ export function initServices(): ServiceContainer {
 	});
 	const llmProvider = resolveLLMProvider(config);
 	const llm = new LLMService(eventBus, runtime, llmProvider, affect, character, knowledge, companionRuntime, companionMode, delegationMemory, debugCapture);
+	const sessionDigest = new SessionDigestService({
+		bus: eventBus,
+		llmProvider,
+		digestWindowSize: config.companionRuntime.digestWindowSize,
+	});
+	const persistentMemory = new PersistentMemoryService({ bus: eventBus });
+	llm.setMemoryServices(sessionDigest, persistentMemory);
+	persistentMemory.initialize().catch((err) => {
+		log.error("persistent memory initialization failed", err);
+	});
 	const game2048 = new Game2048Service({
 		bus: eventBus,
 		orchestrator,
@@ -183,6 +197,8 @@ export function initServices(): ServiceContainer {
 		voiceInput,
 		companionMode,
 		delegationMemory,
+		sessionDigest,
+		persistentMemory,
 	};
 
 	log.info("all services initialized", {

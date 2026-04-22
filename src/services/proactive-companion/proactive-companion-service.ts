@@ -39,6 +39,7 @@ interface ProactiveCandidate {
 	traceId?: string;
 	isEntrance?: boolean;
 	forceSpeak?: boolean;
+	skipSilenceWindow?: boolean;
 }
 
 function makeInitialState(): ProactiveState {
@@ -117,6 +118,9 @@ export class ProactiveCompanionService {
 		});
 		this.bus.on("system:error", (payload) => {
 			this.handleSystemError(payload);
+		});
+		this.bus.on("memory:salient-event", (payload) => {
+			this.handleSalientEvent(payload);
 		});
 		this.bus.on("companion-runtime:state-change", (payload) => {
 			this.handleCompanionRuntimeStateChange(payload);
@@ -287,6 +291,24 @@ export class ProactiveCompanionService {
 				`【触发源】system error`,
 				`【模块】${payload.module}`,
 				`【错误】${payload.error}`,
+			],
+		};
+		void this.processCandidate(candidate);
+	}
+
+	private handleSalientEvent(payload: EventMap["memory:salient-event"]) {
+		const { event } = payload;
+		const candidate: ProactiveCandidate = {
+			source: "salient-event",
+			priority: 3,
+			preview: truncate(`${event.type}: ${event.description}`),
+			dedupeKey: `salient-event:${event.type}:${event.timestamp}`,
+			skipSilenceWindow: true,
+			facts: [
+				`【触发源】记忆系统关键事件`,
+				`【类型】${event.type}`,
+				`【严重度】${event.severity}/5`,
+				`【描述】${event.description}`,
 			],
 		};
 		void this.processCandidate(candidate);

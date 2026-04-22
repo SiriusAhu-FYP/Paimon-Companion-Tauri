@@ -107,6 +107,19 @@ export type {
 	SokobanState,
 } from "./sokoban";
 export type {
+	SessionDigestRecord,
+	SalientEvent,
+	SalientEventType,
+	SalientEventSource,
+	PersistentSessionSummary,
+	CrossSessionIndex,
+	CrossSessionIndexEntry,
+	SessionDigestState,
+	MemoryDigestCompletePayload,
+	MemorySalientEventPayload,
+	MemorySessionPersistedPayload,
+} from "./memory";
+export type {
 	KnowledgeDocument,
 	KnowledgeChunk,
 	RetrievalResult,
