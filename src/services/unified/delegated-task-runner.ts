@@ -155,14 +155,9 @@ export async function runDelegatedTaskLoop(input: {
 		gameContext: gameContext?.gameId ?? null,
 		allowedTools,
 	});
-	const missionAnalysisReply = resolveMissionAnalysisReply(mission);
 	const missionAckReply = resolveMissionAckReply(mission, input.taskText);
-	const openingReplies = resolveMissionOpeningReplies({
-		analysisReply: missionAnalysisReply,
-		ackReply: missionAckReply,
-	});
-	for (const openingReply of openingReplies) {
-		await input.onAssistantReply?.(openingReply, "planner");
+	if (missionAckReply) {
+		await input.onAssistantReply?.(missionAckReply, "reflection");
 	}
 	await persistScratchpadText(
 		input.scratchpad,
@@ -1699,17 +1694,6 @@ function resolveOperationsNarration(planner: OperationsPlannerDecision, canPlann
 	}
 }
 
-function resolveMissionAnalysisReply(mission: MissionAnalysisDecision): string {
-	const raw = mission.analysisReply || mission.reply;
-	if (!raw) {
-		return "";
-	}
-	if (looksLikePrematureCompletion(raw)) {
-		return "派蒙先把任务拆成可验证的小步骤，再马上开始执行。";
-	}
-	return normalizeDelegatedCompanionReply(raw, "planner");
-}
-
 function resolveMissionAckReply(mission: MissionAnalysisDecision, taskText: string): string {
 	const fallback = `派蒙知道啦！你要我帮忙“${truncateTaskForAck(taskText)}”，派蒙这就去做。`;
 	const raw = mission.ackReply || fallback;
@@ -1718,79 +1702,6 @@ function resolveMissionAckReply(mission: MissionAnalysisDecision, taskText: stri
 	}
 	const normalized = normalizeDelegatedCompanionReply(raw, "planner");
 	return normalized || fallback;
-}
-
-function resolveMissionOpeningReplies(input: {
-	analysisReply: string;
-	ackReply: string;
-}): string[] {
-	const analysis = input.analysisReply.trim();
-	const ack = input.ackReply.trim();
-	if (!analysis && !ack) {
-		return [];
-	}
-	if (!analysis) {
-		return [ack];
-	}
-	if (!ack) {
-		return [analysis];
-	}
-	if (!areRepliesHighlySimilar(analysis, ack)) {
-		return [analysis, ack];
-	}
-	const distinctAnalysis = normalizeDelegatedCompanionReply(
-		"派蒙先复盘任务链：先确认状态，再推进到目标结果。",
-		"planner",
-	);
-	if (distinctAnalysis && !areRepliesHighlySimilar(distinctAnalysis, ack)) {
-		return [distinctAnalysis, ack];
-	}
-	return [ack];
-}
-
-function areRepliesHighlySimilar(left: string, right: string): boolean {
-	const normalizedLeft = normalizeReplyForSimilarity(left);
-	const normalizedRight = normalizeReplyForSimilarity(right);
-	if (!normalizedLeft || !normalizedRight) {
-		return false;
-	}
-	if (normalizedLeft === normalizedRight) {
-		return true;
-	}
-	if (normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft)) {
-		return true;
-	}
-	const leftBigrams = buildReplyBigrams(normalizedLeft);
-	const rightBigrams = buildReplyBigrams(normalizedRight);
-	if (!leftBigrams.size || !rightBigrams.size) {
-		return false;
-	}
-	let overlap = 0;
-	for (const token of leftBigrams) {
-		if (rightBigrams.has(token)) {
-			overlap += 1;
-		}
-	}
-	const minSize = Math.min(leftBigrams.size, rightBigrams.size);
-	return minSize > 0 && overlap / minSize >= 0.62;
-}
-
-function normalizeReplyForSimilarity(value: string): string {
-	return value
-		.toLowerCase()
-		.replace(/[，。！？、,.!?\s:：；;（）()]/g, "")
-		.trim();
-}
-
-function buildReplyBigrams(value: string): Set<string> {
-	const tokens = new Set<string>();
-	if (value.length < 2) {
-		return tokens;
-	}
-	for (let index = 0; index < value.length - 1; index += 1) {
-		tokens.add(value.slice(index, index + 2));
-	}
-	return tokens;
 }
 
 function normalizeDelegatedCompanionReply(reply: string, source: "planner" | "reflection"): string {
@@ -1817,10 +1728,6 @@ function normalizeDelegatedCompanionReply(reply: string, source: "planner" | "re
 	}
 	text = text.replace(/\s+/g, " ").trim();
 	return text;
-}
-
-function looksLikePrematureCompletion(text: string): boolean {
-	return /(已按要求|已完成|已经完成|已打开|已经打开|我已完成|任务完成)/.test(text);
 }
 
 function truncateTaskForAck(taskText: string): string {

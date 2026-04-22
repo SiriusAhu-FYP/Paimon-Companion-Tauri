@@ -478,7 +478,7 @@ export class UnifiedRuntimeService {
 		}
 		this.state.phase = "speaking";
 		this.emitState();
-		this.safeSpeak(reasonText, { interruptQueue: true });
+		this.safeSpeak(reasonText, { interruptQueue: false });
 	}
 
 	private emitState() {
@@ -605,7 +605,7 @@ export class UnifiedRuntimeService {
 				this.state.phase = "speaking";
 				this.emitState();
 				const speechStartedAt = Date.now();
-				run.spoke = this.safeSpeak(run.companionText, { interruptQueue: true });
+				run.spoke = this.safeSpeak(run.companionText, { interruptQueue: false });
 				run.timings.speechMs = Date.now() - speechStartedAt;
 			}
 		} finally {

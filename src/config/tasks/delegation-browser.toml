@@ -6,7 +6,7 @@ defaultProfileId = "delegation"
 [profile]
 taskId = "delegation-generic"
 displayName = "Generic Delegation"
-maxRounds = 8
+maxRounds = 12
 maxActionsPerRound = 2
 afterActionWaitMs = 1000
 allowedTools = [

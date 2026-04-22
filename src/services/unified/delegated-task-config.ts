@@ -65,7 +65,7 @@ const DEFAULT_PROFILE_ID: DelegatedTaskProfileId = "delegation";
 const DEFAULT_PROFILE_CONFIG: DelegatedTaskProfileConfig = {
 	taskId: "delegation-generic",
 	displayName: "Generic Delegation",
-	maxRounds: 8,
+	maxRounds: 12,
 	maxActionsPerRound: 2,
 	afterActionWaitMs: 1000,
 	locatorRulesEnabled: true,

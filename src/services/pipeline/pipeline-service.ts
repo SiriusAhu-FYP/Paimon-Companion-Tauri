@@ -83,6 +83,7 @@ export class PipelineService {
 		this.currentSpeechText = "";
 		this.speechQueue.stop();
 		this.lastQueuedSpeech = null;
+		this.speechChain = Promise.resolve();
 	}
 
 	/** 执行完整主链路：文本 → LLM → 分段合成+播放 */
