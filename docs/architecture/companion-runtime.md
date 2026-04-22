@@ -35,10 +35,13 @@ This applies to both user-facing modes:
 - `companion`
 - `delegation`
 
-Both modes should share the same local-vision primary perception path. The difference between them is not which visual stack is used, but how the cloud layer consumes the same observation context:
+The modes share local vision readiness requirements, but not the same primary decision input:
 
-- `companion`: reply / proactive / emotional support
-- `delegation`: task plan / action decision / grounded follow-up
+- `companion`: local-vision observation context is the primary input, then cloud reply/proactive/emotional reasoning
+- `delegation`: per-round screenshot evidence is the primary input for task plan / action decision / grounded follow-up
+
+Both modes still require preflight checks that local vision service is reachable before entering active runtime.
+In delegation mode, local vision also remains available for bounded locator-assist scenarios (for example, mouse coordinate localization), even when core round decisions are cloud-screenshot-driven.
 
 Delegation Mode planning should not be one-size-fits-all. The cloud layer should adapt action granularity to the task:
 
@@ -101,11 +104,12 @@ Its job is to produce:
 - companion-facing natural language
 - MCP tool calls when emotion or gameplay actions are needed
 - higher-level temporal understanding of what is happening
-- Delegation Mode planning / action decisions based on the same local observation context
+- companion-facing planning based on local observation context
+- Delegation Mode planning / action decisions based on screenshot evidence and round verification context
 
 This layer should own the higher-cost reasoning, not the local VLM.
 
-The cloud layer should not become the default raw-image reader for gameplay experiments. In the intended `P5` shape, functional task buttons should also depend on the same local companion-runtime observation chain.
+For delegation loops, cloud screenshot reading is an accepted primary path in the current `P5`/Neo shape.
 
 ### 4. MCP Control Layer
 

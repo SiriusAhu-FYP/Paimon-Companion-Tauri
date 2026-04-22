@@ -4,12 +4,12 @@ This note records the corrected `P5` target after the functional-path mismatch w
 
 ## Target Shape
 
-Both interaction modes must share the same primary perception path:
+The accepted runtime now uses two explicit paths with clear role boundaries:
 
-- `companion`
-- `delegation`
+- `companion` path (default): local observation first, then cloud expression/reasoning
+- `delegation` path (authorized task execution): screenshot evidence to cloud decision chain
 
-That shared path is:
+Companion path:
 
 1. local companion runtime continuously watches the selected target
 2. local fast vision produces short frame descriptions
@@ -17,10 +17,16 @@ That shared path is:
 4. cloud models consume that observation context for:
    - periodic summary-driven companion replies
    - proactive comments
-   - Delegation Mode planning / action decisions
-   - Delegation Mode follow-up and next-step hints
+   - emotional support and narration continuity
 
-The cloud layer is not the default raw-image reader for gameplay experiments.
+Delegation path:
+
+1. per-round capture provides direct screenshot evidence (`before` / `after`)
+2. cloud vision drives `Mission Analyst -> Operations Planner -> Progress Evaluator`
+3. follow-up and next-step hints are generated from grounded round evidence
+
+In delegation mode, local observation summaries are not the required primary decision input.
+However, local vision service availability is still required at mode preflight, and local vision can still be used for locator-assisted mouse operations.
 
 ## Action Granularity Rule
 
@@ -45,22 +51,18 @@ For bounded short plans:
 The repository historically drifted into a split state:
 
 - companion runtime used local vision plus cloud summarization
-- functional gameplay experiments still used direct cloud screenshot analysis
+- delegation/runtime tasks used direct cloud screenshot analysis
 
-That split is no longer accepted as the intended architecture.
+That split is now the accepted architecture, but with explicit constraints:
 
-`Unified Run`, `2048`, and `Sokoban` should all require:
-
-- a selected target
-- the companion runtime running
-- the companion runtime observing the same target
-- fresh local observation context
-
-If those conditions are not met, the functional path should fail clearly instead of silently falling back to a separate cloud-image path.
+- companion remains local-observation-first
+- delegation remains screenshot-evidence-first
+- both modes require selected target + local vision connectivity preflight
+- locator-sensitive actions may use local vision as bounded assistance
 
 ## Planner / Solver Role
 
-`planner` / `solver` remain useful Delegation Mode concepts, but the main path should treat them as cloud-side reasoning behavior over local observation context, not as a separate local decision engine that bypasses the shared perception chain.
+`planner` / `solver` remain useful Delegation Mode concepts, but the main path should treat them as cloud-side reasoning behavior over screenshot evidence and verification context, not as a separate local decision engine.
 
 Existing local planner / solver code may remain in the repository as:
 
