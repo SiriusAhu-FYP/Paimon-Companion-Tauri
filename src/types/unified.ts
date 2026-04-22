@@ -12,6 +12,31 @@ export interface UnifiedRunTimings {
 	totalNonBlockingMs: number;
 }
 
+export interface DelegationRoundEntry {
+	round: number;
+	timestamp: number;
+	plannerReasoning: string;
+	plannerExpectedOutcome: string;
+	plannerGoalReached: boolean;
+	actionTool: string;
+	actionSummary: string;
+	evaluatorSucceeded: boolean;
+	evaluatorCorrect: boolean;
+	evaluatorExpectedMet: boolean;
+	evaluatorAlignment: string;
+	evaluatorProgress: string;
+	evaluatorReply: string;
+	evaluatorHint: string;
+	snapshotBeforeUrl?: string;
+	snapshotAfterUrl?: string;
+}
+
+export interface DelegationTimeline {
+	taskText: string;
+	missionGoal: string;
+	rounds: DelegationRoundEntry[];
+}
+
 export interface UnifiedRunRecord {
 	id: string;
 	gameId: string | null;
@@ -29,6 +54,7 @@ export interface UnifiedRunRecord {
 	spoke: boolean;
 	error: string | null;
 	timings: UnifiedRunTimings;
+	delegationTimeline?: DelegationTimeline | null;
 }
 
 export interface UnifiedRuntimeState {

@@ -91,6 +91,7 @@ export interface DelegatedTaskRunnerResult {
 	status: "completed" | "stopped" | "failed";
 	rounds: number;
 	summary: string;
+	timeline: import("@/types/unified").DelegationTimeline;
 }
 
 export async function runDelegatedTaskLoop(input: {
@@ -108,6 +109,7 @@ export async function runDelegatedTaskLoop(input: {
 	const plannerNotes: string[] = [];
 	const evaluatorNotes: string[] = [];
 	const recentActionOutcomes: ActionOutcomeRecord[] = [];
+	const timelineRounds: import("@/types/unified").DelegationRoundEntry[] = [];
 	let latestHint = "";
 	let latestExpectedOutcome = "";
 	let latestExpectedMet: boolean | null = null;
@@ -182,12 +184,19 @@ export async function runDelegatedTaskLoop(input: {
 		{ append: false },
 	);
 
+	const buildTimeline = (): import("@/types/unified").DelegationTimeline => ({
+		taskText: input.taskText,
+		missionGoal: mission.missionGoal,
+		rounds: timelineRounds,
+	});
+
 	for (let round = 1; round <= config.maxRounds; round += 1) {
 		if (input.shouldStop()) {
 			return {
 				status: "stopped",
 				rounds: round - 1,
 				summary: "任务被手动停止。",
+				timeline: buildTimeline(),
 			};
 		}
 
@@ -341,6 +350,7 @@ export async function runDelegatedTaskLoop(input: {
 				status: "completed",
 				rounds: round,
 				summary: planner.reasoning || "规划器判定任务已完成。",
+				timeline: buildTimeline(),
 			};
 		}
 		if (!effectivePlannerActions.length) {
@@ -373,6 +383,7 @@ export async function runDelegatedTaskLoop(input: {
 					status: "stopped",
 					rounds: round,
 					summary: "任务在动作执行前被停止。",
+					timeline: buildTimeline(),
 				};
 			}
 
@@ -507,6 +518,22 @@ export async function runDelegatedTaskLoop(input: {
 			history.push(
 				`round ${round} ${executionPlan.actionForEvaluation.tool}: expected=${planner.expectedOutcome || "(none)"} expectedMet=${reflection.expectedMet} success=${reflection.actionSucceeded} correct=${reflection.wasActionCorrect} alignment=${reflection.goalAlignment} progress=${reflection.goalProgress} hint=${latestHint}`,
 			);
+			timelineRounds.push({
+				round,
+				timestamp: Date.now(),
+				plannerReasoning: planner.reasoning,
+				plannerExpectedOutcome: planner.expectedOutcome,
+				plannerGoalReached: planner.goalReached,
+				actionTool: executionPlan.actionForEvaluation.tool,
+				actionSummary: JSON.stringify(executionPlan.actionForEvaluation.args),
+				evaluatorSucceeded: reflection.actionSucceeded,
+				evaluatorCorrect: reflection.wasActionCorrect,
+				evaluatorExpectedMet: reflection.expectedMet,
+				evaluatorAlignment: reflection.goalAlignment,
+				evaluatorProgress: reflection.goalProgress,
+				evaluatorReply: reflection.reply,
+				evaluatorHint: latestHint,
+			});
 			if (history.length > 6) {
 				history.splice(0, history.length - 6);
 			}
@@ -531,6 +558,7 @@ export async function runDelegatedTaskLoop(input: {
 					status: "completed",
 					rounds: round,
 					summary: reflection.nextHint || "Progress Evaluator 判定任务完成。",
+					timeline: buildTimeline(),
 				};
 			}
 		}
@@ -544,6 +572,7 @@ export async function runDelegatedTaskLoop(input: {
 			latestHint,
 			recentActionOutcomes,
 		}),
+		timeline: buildTimeline(),
 	};
 }
 

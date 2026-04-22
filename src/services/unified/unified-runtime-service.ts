@@ -517,6 +517,7 @@ export class UnifiedRuntimeService {
 				totalBlockingMs: 0,
 				totalNonBlockingMs: 0,
 			},
+			delegationTimeline: null,
 		};
 
 		const loopId = `delegation-task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -574,6 +575,7 @@ export class UnifiedRuntimeService {
 			run.status = "completed";
 			run.phase = this.state.speechEnabled ? "speaking" : "idle";
 			run.summary = result.summary;
+			run.delegationTimeline = result.timeline ?? null;
 			if (result.status === "completed") {
 				const completionText = `搞定啦！${result.summary}`;
 				run.companionText = completionText;
@@ -681,6 +683,7 @@ export class UnifiedRuntimeService {
 				totalBlockingMs: 0,
 				totalNonBlockingMs: 0,
 			},
+			delegationTimeline: null,
 		};
 
 		this.state.activeRunId = run.id;

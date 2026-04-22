@@ -24,6 +24,7 @@ describe("UnifiedRuntimeService delegation path", () => {
 			status: "completed",
 			rounds: 1,
 			summary: "task completed",
+			timeline: { taskText: "", missionGoal: "", rounds: [] },
 		});
 	});
 
@@ -172,6 +173,7 @@ describe("UnifiedRuntimeService delegation path", () => {
 				status: "completed",
 				rounds: 1,
 				summary: "任务完成",
+				timeline: { taskText: "", missionGoal: "", rounds: [] },
 			};
 		});
 		const { bus, orchestrator, pipeline, service } = createService({
