@@ -253,7 +253,7 @@ P5 close-out:
   - [ ] keep Delegation Mode memory scope bounded in P6: one async memory retrieval after mission confirmation + event-level writeback (what/when/result/optional attempts), without per-round auto-recall
   - [ ] support explicit long-term recall in P6 (user asks for past events, optional light session-start pre-read), while deferring fully automatic trigger-based recall to future work
   - [-] keep local fast-reaction language layer in Future Work for now; do not block P6 acceptance on this optional path
-  - [ ] complete events.jsonl image reference-only storage (eliminate remaining base64 in event payloads)
+  - [x] complete events.jsonl image reference-only storage (event payload data URLs are persisted as file refs, base64 removed from JSONL)
   - [-] do not add site-specific cookie/popup bypass logic in P6; keep GCC boundary and rely on generic host.* flow
   - [x] add browser cookie-handling policy into generic delegation profile (prefer reject, else essential/necessary, never accept-all unless explicitly requested)
   - [x] add unified log lifecycle management (TTL, size caps, session export baseline)
