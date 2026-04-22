@@ -1,5 +1,4 @@
 import type { EventBus } from "@/services/event-bus";
-import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { OrchestratorService } from "@/services/orchestrator";
 import { createLogger } from "@/services/logger";
 import { listWindows } from "@/services/system";
@@ -32,7 +31,7 @@ import {
 	countRepeatedFailures,
 } from "./decision-history";
 import { buildSharedGamePrompt } from "./game-prompt-template";
-import { requestActiveTextDecision } from "./cloud-decision";
+import { requestActiveVisionDecision } from "./cloud-decision";
 import { callLocalMcpToolJson } from "@/services/mcp/local-mcp-client";
 import type { SemanticActionExecutionResult } from "@/types";
 
@@ -41,6 +40,9 @@ const MAX_RUN_HISTORY = 10;
 const MAX_DECISION_HISTORY = 8;
 const DEFAULT_MOVE_ORDER: Game2048Move[] = [...GAME_2048_DEFAULT_ACTION_ORDER];
 const TARGET_KEYWORDS = ["2048", "play 2048", "gabriele cirulli", "threes"];
+// 2048 的真实变化常发生在局部，阈值过高会把有效移动误判成未变化。
+const BOARD_CHANGE_RATIO_THRESHOLD = 0.005;
+const BOARD_CHANGE_CROP_SCALE = 0.7;
 
 function makeInitialState(): Game2048State {
 	return {
@@ -56,17 +58,14 @@ function makeInitialState(): Game2048State {
 export class Game2048Service {
 	private bus: EventBus;
 	private orchestrator: OrchestratorService;
-	private companionRuntime: CompanionRuntimeService;
 	private state: Game2048State = makeInitialState();
 
 	constructor(deps: {
 		bus: EventBus;
 		orchestrator: OrchestratorService;
-		companionRuntime: CompanionRuntimeService;
 	}) {
 		this.bus = deps.bus;
 		this.orchestrator = deps.orchestrator;
-		this.companionRuntime = deps.companionRuntime;
 	}
 
 	getState(): Readonly<Game2048State> {
@@ -140,7 +139,6 @@ export class Game2048Service {
 		this.emitState();
 
 		try {
-			const observationContext = await this.prepareObservationContext(target);
 			const baselineSnapshot = await ensureReferenceSnapshot(
 				this.orchestrator,
 				target,
@@ -151,7 +149,7 @@ export class Game2048Service {
 					`2048 baseline capture looks invalid (${describeSnapshotQuality(baselineSnapshot)}). Check browser/game capture first.`,
 				);
 			}
-			const analysis = await this.buildAnalysis(target, observationContext);
+			const analysis = await this.buildAnalysis(target, baselineSnapshot);
 			run = {
 				...run,
 				analysis,
@@ -242,14 +240,7 @@ export class Game2048Service {
 		return cloneRun(run);
 	}
 
-	private async prepareObservationContext(target: FunctionalTarget): Promise<string> {
-		const context = await this.companionRuntime.ensureObservationContext(target, {
-			autoStart: true,
-		});
-		return context.promptContext;
-	}
-
-	private async buildAnalysis(target: FunctionalTarget, observationContext: string): Promise<Game2048Analysis> {
+	private async buildAnalysis(target: FunctionalTarget, referenceSnapshot: PerceptionSnapshot): Promise<Game2048Analysis> {
 		const previousMove = this.state.lastRun?.boardChanged ? this.state.lastRun.selectedMove : null;
 		const recentDecisionSummary = buildRecentDecisionSummary(this.state.decisionHistory);
 		const lastDecision = this.state.decisionHistory[0] ?? null;
@@ -257,7 +248,7 @@ export class Game2048Service {
 		const discouragedOpeningMoves = collectRecentFailedOpeningMoves(this.state.decisionHistory);
 		return this.requestObservationDrivenAnalysis(
 			target,
-			observationContext,
+			referenceSnapshot,
 			previousMove,
 			recentDecisionSummary,
 			repeatedFailureHint,
@@ -267,27 +258,35 @@ export class Game2048Service {
 
 	private async requestObservationDrivenAnalysis(
 		target: FunctionalTarget,
-		observationContext: string,
+		referenceSnapshot: PerceptionSnapshot,
 		previousMove: Game2048Move | null,
 		recentDecisionSummary: string[],
 		repeatedFailureHint: string | null,
 		discouragedOpeningMoves: Game2048Move[] = [],
 	): Promise<Game2048Analysis> {
-		const content = await requestActiveTextDecision({
+		log.info("2048 decision input prepared", {
+			target: target.title,
+			decisionInput: "screenshot-cloud-vision",
+			imageCount: 1,
+			recentDecisionCount: recentDecisionSummary.length,
+			discouragedOpeningMoves,
+			previousMove,
+		});
+		const content = await requestActiveVisionDecision({
 			systemPrompt: [
-				"You make one-step 2048 decisions from local observation summaries.",
-				"Treat the provided observation context as the only source of truth.",
-				"Do not assume access to the raw screenshot and do not claim to see exact tiles unless the local observation already described them.",
+				"You make one-step 2048 decisions from screenshot evidence.",
+				"You will receive the current board screenshot as the only source of truth.",
+				"Do not fabricate tile values that are not visible in the image.",
 				"Return strict JSON only.",
 			].join("\n"),
 			userPrompt: buildObservationDecisionPrompt(
 				target.title,
-				observationContext,
 				previousMove,
 				recentDecisionSummary,
 				repeatedFailureHint,
 				discouragedOpeningMoves,
 			),
+			imageDataUrls: [referenceSnapshot.dataUrl],
 			maxTokens: 260,
 			temperature: 0.1,
 			timeoutMs: 30_000,
@@ -315,10 +314,42 @@ export class Game2048Service {
 				`capture invalid during ${move}: before=${describeSnapshotQuality(beforeSnapshot)}, after=${describeSnapshotQuality(afterSnapshot)}`,
 			);
 		}
-		const changeRatio = await estimateSnapshotChange(beforeSnapshot, afterSnapshot, { cropScale: 0.7 });
+		const changeRatio = await estimateSnapshotChange(beforeSnapshot, afterSnapshot, { cropScale: BOARD_CHANGE_CROP_SCALE });
+		let cloudChanged: boolean | null = null;
+		try {
+			const content = await requestActiveVisionDecision({
+				systemPrompt: [
+					"You compare two consecutive 2048 screenshots.",
+					"Image #1 is before the move, image #2 is after the move.",
+					"Decide whether the board state has visibly changed.",
+					"Ignore tiny rendering noise and browser UI flicker.",
+					"Return strict JSON: {\"changed\": boolean, \"reason\": string}.",
+				].join("\n"),
+				userPrompt: `Executed move: ${formatGame2048Action(move)}. Determine whether the board changed.`,
+				imageDataUrls: [beforeSnapshot.dataUrl, afterSnapshot.dataUrl],
+				maxTokens: 140,
+				temperature: 0,
+				timeoutMs: 30_000,
+				jsonResponse: true,
+			});
+			cloudChanged = parseVisionChangedFlag(content);
+		} catch (err) {
+			log.warn("2048 cloud vision verification failed, fallback to pixel threshold", {
+				move,
+				error: err instanceof Error ? err.message : String(err),
+			});
+		}
+		log.info("2048 verification verdict", {
+			move,
+			verificationInput: "before-after-screenshots",
+			cloudChanged,
+			changeRatio,
+			threshold: BOARD_CHANGE_RATIO_THRESHOLD,
+			fallbackUsed: cloudChanged === null,
+		});
 		return {
 			move,
-			changed: changeRatio >= 0.006,
+			changed: cloudChanged ?? changeRatio >= BOARD_CHANGE_RATIO_THRESHOLD,
 			changeRatio,
 		};
 	}
@@ -331,16 +362,15 @@ export class Game2048Service {
 function buildPendingAnalysis(): Game2048Analysis {
 	return {
 		source: "cloud-decision",
-		reflection: "Preparing the next 2048 step from local observation context.",
-		strategy: "refresh local observation, ask the cloud model for one grounded move ordering, then verify the result",
-		reasoning: "The runtime is still refreshing the shared local observation context.",
+		reflection: "Preparing the next 2048 step from screenshot evidence.",
+		strategy: "capture the current board screenshot, ask the cloud vision model for one grounded move ordering, then verify pre/post change",
+		reasoning: "The runtime is still preparing screenshot evidence for the next decision.",
 		preferredMoves: [...DEFAULT_MOVE_ORDER],
 	};
 }
 
 function buildObservationDecisionPrompt(
 	targetTitle: string,
-	observationContext: string,
 	previousMove: Game2048Move | null,
 	recentDecisionSummary: string[],
 	repeatedFailureHint: string | null,
@@ -360,9 +390,9 @@ function buildObservationDecisionPrompt(
 			previousMove
 				? `Last verified successful move: ${formatGame2048Action(previousMove)}. Reuse it only if the current board still supports it.`
 				: "No verified successful move is available from the previous turn.",
-			"Use the local observation summary to infer board stability, merge opportunities, empty-cell creation, and whether one side is becoming fragmented.",
-			"When the observation is legible, explicitly reason about which tile values can merge and where a new tile is likely to appear after the move.",
-			"If verification confirms that the board changed but the fresh observation still cannot resolve the exact tile values, do not invent a merge result; say the board changed and the new layout is still resolving.",
+			"Use the provided screenshot to infer board stability, merge opportunities, empty-cell creation, and whether one side is becoming fragmented.",
+			"When the screenshot is legible, explicitly reason about which tile values can merge and where a new tile is likely to appear after the move.",
+			"If a tile value is unclear, say it is unclear instead of inventing one.",
 			"Avoid recommending a move ordering that merely repeats a failed pattern without a new reason.",
 			discouragedOpeningMoves.length
 				? `Recent failed opening moves to avoid unless the observation is clearly different: ${discouragedOpeningMoves.map((move) => formatGame2048Action(move)).join(", ")}.`
@@ -375,13 +405,65 @@ function buildObservationDecisionPrompt(
 
 	return [
 		promptBody,
-		"Observation context from the local vision runtime:",
-		observationContext,
+		"You will receive one screenshot image showing the current 2048 board.",
 		"Return strict JSON with keys: reflection, strategy, reasoning, decisionSummary, preferredMoves.",
 		"preferredMoves must be an ordered array containing only these ids: move_up, move_left, move_right, move_down.",
 		"The first move in preferredMoves is the only move that will be executed this turn; the rest are fallback ranking for logging and future turns.",
 		"Return at least one move and do not include markdown fences or extra keys.",
 	].join("\n\n");
+}
+
+function parseVisionChangedFlag(content: string): boolean {
+	const jsonText = extractJsonObject(content);
+	const parsed = JSON.parse(jsonText) as {
+		changed?: unknown;
+		boardChanged?: unknown;
+		hasChange?: unknown;
+	};
+	const candidate = parsed.changed ?? parsed.boardChanged ?? parsed.hasChange;
+	const normalized = normalizeVisionBoolean(candidate);
+	if (normalized === null) {
+		throw new Error("vision verification response missing boolean changed flag");
+	}
+	return normalized;
+}
+
+function normalizeVisionBoolean(value: unknown): boolean | null {
+	if (typeof value === "boolean") {
+		return value;
+	}
+	if (typeof value === "number") {
+		return value !== 0;
+	}
+	if (typeof value !== "string") {
+		return null;
+	}
+
+	const normalized = value.trim().toLowerCase();
+	if (!normalized) {
+		return null;
+	}
+	if (
+		normalized === "true"
+		|| normalized === "yes"
+		|| normalized === "1"
+		|| normalized.includes("有变化")
+		|| normalized.includes("发生变化")
+		|| normalized.includes("changed")
+	) {
+		return true;
+	}
+	if (
+		normalized === "false"
+		|| normalized === "no"
+		|| normalized === "0"
+		|| normalized.includes("无变化")
+		|| normalized.includes("没有变化")
+		|| normalized.includes("unchanged")
+	) {
+		return false;
+	}
+	return null;
 }
 
 function parseObservationDecisionResponse(content: string): {
@@ -523,7 +605,7 @@ function buildRunSummary(run: Game2048RunRecord): string {
 
 function buildCompanionText(run: Game2048RunRecord): string {
 	if (run.boardChanged && run.selectedMove) {
-		const sourceLabel = run.analysis.source === "cloud-decision" ? "本地观察加云端决策" : "保守启发式";
+		const sourceLabel = run.analysis.source === "cloud-decision" ? "截图对照加云端视觉决策" : "保守启发式";
 		return `我先根据${sourceLabel}判断应该尝试 ${formatGame2048Action(run.selectedMove)}，然后我已经确认棋盘真的变化了。`;
 	}
 

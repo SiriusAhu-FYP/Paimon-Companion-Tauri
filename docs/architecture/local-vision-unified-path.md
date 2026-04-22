@@ -7,7 +7,7 @@ This note records the corrected `P5` target after the functional-path mismatch w
 Both interaction modes must share the same primary perception path:
 
 - `companion`
-- `delegated`
+- `delegation`
 
 That shared path is:
 
@@ -17,8 +17,8 @@ That shared path is:
 4. cloud models consume that observation context for:
    - periodic summary-driven companion replies
    - proactive comments
-   - delegated planning / action decisions
-   - delegated follow-up and next-step hints
+   - Delegation Mode planning / action decisions
+   - Delegation Mode follow-up and next-step hints
 
 The cloud layer is not the default raw-image reader for gameplay experiments.
 
@@ -26,7 +26,7 @@ The cloud layer is not the default raw-image reader for gameplay experiments.
 
 Shared local perception does not imply a single planning style for every task.
 
-- dynamic or stochastic tasks should use single-step delegated decisions by default
+- dynamic or stochastic tasks should use single-step Delegation Mode decisions by default
 - static or deterministic tasks may use bounded short plans
 
 Current intended examples:
@@ -60,7 +60,7 @@ If those conditions are not met, the functional path should fail clearly instead
 
 ## Planner / Solver Role
 
-`planner` / `solver` remain useful delegated-mode concepts, but the main path should treat them as cloud-side reasoning behavior over local observation context, not as a separate local decision engine that bypasses the shared perception chain.
+`planner` / `solver` remain useful Delegation Mode concepts, but the main path should treat them as cloud-side reasoning behavior over local observation context, not as a separate local decision engine that bypasses the shared perception chain.
 
 Existing local planner / solver code may remain in the repository as:
 

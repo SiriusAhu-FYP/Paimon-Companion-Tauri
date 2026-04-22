@@ -35,6 +35,7 @@ export interface UnifiedRuntimeState {
 	speechEnabled: boolean;
 	voiceInputEnabled: boolean;
 	activeRunId: string | null;
+	loopActive: boolean;
 	phase: UnifiedRunPhase;
 	lastVoiceInput: string | null;
 	lastCommand: string | null;

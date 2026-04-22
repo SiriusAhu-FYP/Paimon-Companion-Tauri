@@ -1,5 +1,4 @@
 import type { EventBus } from "@/services/event-bus";
-import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { OrchestratorService } from "@/services/orchestrator";
 import { createLogger } from "@/services/logger";
 import { listWindows } from "@/services/system";
@@ -32,7 +31,7 @@ import {
 	countRepeatedFailures,
 } from "./decision-history";
 import { buildSharedGamePrompt } from "./game-prompt-template";
-import { requestActiveTextDecision } from "./cloud-decision";
+import { requestActiveVisionDecision } from "./cloud-decision";
 import { callLocalMcpToolJson } from "@/services/mcp/local-mcp-client";
 import type { SemanticActionExecutionResult } from "@/types";
 
@@ -57,17 +56,14 @@ function makeInitialState(): SokobanState {
 export class SokobanService {
 	private bus: EventBus;
 	private orchestrator: OrchestratorService;
-	private companionRuntime: CompanionRuntimeService;
 	private state: SokobanState = makeInitialState();
 
 	constructor(deps: {
 		bus: EventBus;
 		orchestrator: OrchestratorService;
-		companionRuntime: CompanionRuntimeService;
 	}) {
 		this.bus = deps.bus;
 		this.orchestrator = deps.orchestrator;
-		this.companionRuntime = deps.companionRuntime;
 	}
 
 	getState(): Readonly<SokobanState> {
@@ -141,7 +137,6 @@ export class SokobanService {
 		this.emitState();
 
 		try {
-			const observationContext = await this.prepareObservationContext(target);
 			const baselineSnapshot = await ensureReferenceSnapshot(
 				this.orchestrator,
 				target,
@@ -153,7 +148,7 @@ export class SokobanService {
 				);
 			}
 
-			const analysis = await this.buildAnalysis(target, observationContext);
+			const analysis = await this.buildAnalysis(target, baselineSnapshot);
 			run = {
 				...run,
 				analysis,
@@ -248,21 +243,14 @@ export class SokobanService {
 		return cloneRun(run);
 	}
 
-	private async prepareObservationContext(target: FunctionalTarget): Promise<string> {
-		const context = await this.companionRuntime.ensureObservationContext(target, {
-			autoStart: true,
-		});
-		return context.promptContext;
-	}
-
-	private async buildAnalysis(target: FunctionalTarget, observationContext: string): Promise<SokobanAnalysis> {
+	private async buildAnalysis(target: FunctionalTarget, referenceSnapshot: PerceptionSnapshot): Promise<SokobanAnalysis> {
 		const recentDecisionSummary = buildRecentDecisionSummary(this.state.decisionHistory);
 		const lastDecision = this.state.decisionHistory[0] ?? null;
 		const repeatedFailureHint = buildRepeatedFailureHint(lastDecision);
 		const discouragedOpeningMoves = collectRecentFailedOpeningMoves(this.state.decisionHistory);
 		return this.requestObservationDrivenAnalysis(
 			target,
-			observationContext,
+			referenceSnapshot,
 			recentDecisionSummary,
 			repeatedFailureHint,
 			discouragedOpeningMoves,
@@ -272,33 +260,80 @@ export class SokobanService {
 
 	private async requestObservationDrivenAnalysis(
 		target: FunctionalTarget,
-		observationContext: string,
+		referenceSnapshot: PerceptionSnapshot,
 		recentDecisionSummary: string[],
 		repeatedFailureHint: string | null,
 		discouragedOpeningMoves: SokobanActionId[] = [],
 		discouragedPlanSignature: string | null = null,
 	): Promise<SokobanAnalysis> {
-		const content = await requestActiveTextDecision({
+		log.info("sokoban decision input prepared", {
+			target: target.title,
+			decisionInput: "screenshot-cloud-vision",
+			imageCount: 1,
+			recentDecisionCount: recentDecisionSummary.length,
+			discouragedOpeningMoves,
+			blockedPlanSignature: discouragedPlanSignature,
+			observationFocus: [...(SOKOBAN_PLUGIN.observationFocus ?? [])],
+		});
+		const basePrompt = buildObservationDecisionPrompt(
+			target.title,
+			recentDecisionSummary,
+			repeatedFailureHint,
+			discouragedOpeningMoves,
+			discouragedPlanSignature,
+		);
+		const content = await requestActiveVisionDecision({
 			systemPrompt: [
-				"You plan short Sokoban action sequences from local observation summaries.",
-				"Treat the provided observation context as the only source of truth.",
-				"Do not assume access to the raw screenshot and do not claim exact tile certainty unless the local observation already supports it.",
+				"You plan short Sokoban action sequences from screenshot evidence.",
+				"You will receive the current board screenshot as the only source of truth.",
+				"Do not invent exact tile certainty when the screenshot is ambiguous.",
 				"Return strict JSON only.",
 			].join("\n"),
-			userPrompt: buildObservationDecisionPrompt(
-				target.title,
-				observationContext,
-				recentDecisionSummary,
-				repeatedFailureHint,
-				discouragedOpeningMoves,
-				discouragedPlanSignature,
-			),
+			userPrompt: basePrompt,
+			imageDataUrls: [referenceSnapshot.dataUrl],
 			maxTokens: 360,
 			temperature: 0.1,
 			timeoutMs: 30_000,
 			jsonResponse: true,
 		});
-		const parsed = parseObservationDecisionResponse(content);
+		let parsed = parseObservationDecisionResponse(content);
+		const discouragedOpeningMoveSet = new Set(discouragedOpeningMoves);
+		const openingMove = parsed.plannedMoves[0];
+		if (openingMove && discouragedOpeningMoveSet.has(openingMove)) {
+			const retryPrompt = [
+				basePrompt,
+				"Planner contract check (must follow):",
+				`- Your previous proposal starts with ${formatSokobanAction(openingMove)}, but this opening move is in the discouraged set: ${discouragedOpeningMoves.map((move) => formatSokobanAction(move)).join(", ")}.`,
+				"- Re-plan with a materially different opening move.",
+				"- You may keep the same opening move only when you can explicitly cite a concrete board change that made the previous failed opening valid again.",
+				"Return strict JSON with the same keys only.",
+			].join("\n\n");
+			const retriedContent = await requestActiveVisionDecision({
+				systemPrompt: [
+					"You revise Sokoban short plans to satisfy anti-repeat planning constraints.",
+					"Treat the provided screenshot as the only source of truth.",
+					"Return strict JSON only.",
+				].join("\n"),
+				userPrompt: retryPrompt,
+				imageDataUrls: [referenceSnapshot.dataUrl],
+				maxTokens: 360,
+				temperature: 0.05,
+				timeoutMs: 30_000,
+				jsonResponse: true,
+			});
+			const retriedParsed = parseObservationDecisionResponse(retriedContent);
+			const retriedOpeningMove = retriedParsed.plannedMoves[0];
+			if (retriedOpeningMove && !discouragedOpeningMoveSet.has(retriedOpeningMove)) {
+				parsed = retriedParsed;
+			} else {
+				log.warn("sokoban planner repeated discouraged opening move after retry", {
+					target: target.title,
+					discouragedOpeningMoves,
+					originalOpeningMove: openingMove,
+					retriedOpeningMove: retriedOpeningMove ?? null,
+				});
+			}
+		}
 
 		return {
 			source: "cloud-decision",
@@ -321,9 +356,41 @@ export class SokobanService {
 			);
 		}
 		const changeRatio = await estimateSnapshotChange(beforeSnapshot, afterSnapshot, { cropScale: 0.82 });
+		let cloudChanged: boolean | null = null;
+		try {
+			const content = await requestActiveVisionDecision({
+				systemPrompt: [
+					"You compare two consecutive Sokoban screenshots.",
+					"Image #1 is before the move, image #2 is after the move.",
+					"Decide whether the board state has visibly changed.",
+					"Ignore tiny rendering noise and browser UI flicker.",
+					"Return strict JSON: {\"changed\": boolean, \"reason\": string}.",
+				].join("\n"),
+				userPrompt: `Executed move: ${formatSokobanAction(move)}. Determine whether the board changed.`,
+				imageDataUrls: [beforeSnapshot.dataUrl, afterSnapshot.dataUrl],
+				maxTokens: 140,
+				temperature: 0,
+				timeoutMs: 30_000,
+				jsonResponse: true,
+			});
+			cloudChanged = parseVisionChangedFlag(content);
+		} catch (err) {
+			log.warn("sokoban cloud vision verification failed, fallback to pixel threshold", {
+				move,
+				error: err instanceof Error ? err.message : String(err),
+			});
+		}
+		log.info("sokoban verification verdict", {
+			move,
+			verificationInput: "before-after-screenshots",
+			cloudChanged,
+			changeRatio,
+			threshold: 0.003,
+			fallbackUsed: cloudChanged === null,
+		});
 		return {
 			move,
-			changed: changeRatio >= 0.003,
+			changed: cloudChanged ?? changeRatio >= 0.003,
 			changeRatio,
 		};
 	}
@@ -336,16 +403,15 @@ export class SokobanService {
 function buildPendingAnalysis(): SokobanAnalysis {
 	return {
 		source: "cloud-decision",
-		reflection: "Preparing the next Sokoban validation round from local observation context.",
-		strategy: "refresh local observation, ask the cloud model for a short grounded move sequence, then verify per-step changes",
-		reasoning: "The runtime is still refreshing the shared local observation context.",
+		reflection: "Preparing the next Sokoban validation round from screenshot evidence.",
+		strategy: "capture the current board screenshot, ask the cloud vision model for a short grounded move sequence, then verify per-step changes",
+		reasoning: "The runtime is still preparing screenshot evidence for the next sequence.",
 		plannedMoves: DEFAULT_MOVE_ORDER.slice(0, 2),
 	};
 }
 
 function buildObservationDecisionPrompt(
 	targetTitle: string,
-	observationContext: string,
 	recentDecisionSummary: string[],
 	repeatedFailureHint: string | null,
 	discouragedOpeningMoves: SokobanActionId[],
@@ -362,8 +428,8 @@ function buildObservationDecisionPrompt(
 		],
 		stateCues: [
 			...(SOKOBAN_PLUGIN.observationFocus ?? []),
-			"Identify the player, boxes, walls, and targets only from the provided local observation context.",
-			"When the board is static and legible enough, prefer a bounded short plan of 2-4 moves; only fall back to a single move if the local observation is genuinely too ambiguous.",
+			"Identify the player, boxes, walls, and targets only from the provided screenshot.",
+			"When the board is static and legible enough, prefer a bounded short plan of 2-4 moves; only fall back to a single move if the screenshot is genuinely too ambiguous.",
 			"Prefer moves that either reposition the player productively or make visible progress toward a target.",
 			"Explain progress in concrete puzzle terms: player position, the box just approached or pushed, and whether target alignment or access improved.",
 			"Describe the player's location relative to the nearest wall, corridor, or box cluster so the next step sounds grounded in the current board.",
@@ -372,7 +438,7 @@ function buildObservationDecisionPrompt(
 			"Do not call a move 'progress' just because the player sprite moved; distinguish between useful repositioning, a real push, better target alignment, and completely hitting a wall.",
 			"Avoid repeating the same failed probe pattern without a new justification.",
 			discouragedOpeningMoves.length
-				? `Recent failed opening moves to avoid unless the local observation clearly changed: ${discouragedOpeningMoves.map((move) => formatSokobanAction(move)).join(", ")}.`
+				? `Recent failed opening moves: ${discouragedOpeningMoves.map((move) => formatSokobanAction(move)).join(", ")}. The first move of your new plannedMoves must be different unless you can point to a concrete new board change that makes reusing the failed opening move valid.`
 				: "No discouraged opening move is currently recorded.",
 			discouragedPlanSignature
 				? `Do not repeat this exact failed short plan signature unless the local observation is clearly different: ${discouragedPlanSignature}.`
@@ -380,17 +446,69 @@ function buildObservationDecisionPrompt(
 			repeatedFailureHint ?? "If the last exact sequence already failed, choose a materially different short plan unless the board is clearly different now.",
 		],
 		recentDecisions: recentDecisionSummary,
-		goal: "Choose a short Sokoban move sequence that is most likely to produce visible progress without obvious deadlock risk, using only the provided local observation context.",
+		goal: "Choose a short Sokoban move sequence that is most likely to produce visible progress without obvious deadlock risk, using only the provided screenshot.",
 	});
 
 	return [
 		promptBody,
-		"Observation context from the local vision runtime:",
-		observationContext,
+		"You will receive one screenshot image showing the current Sokoban board.",
 		"Return strict JSON with keys: reflection, strategy, reasoning, decisionSummary, plannedMoves.",
 		`plannedMoves must be an ordered array containing only these ids: move_up, move_left, move_right, move_down, and must contain between 1 and ${MAX_PLANNED_MOVES} moves.`,
 		"Use a bounded short plan, not an open-ended full walkthrough, and do not include markdown fences or extra keys.",
 	].join("\n\n");
+}
+
+function parseVisionChangedFlag(content: string): boolean {
+	const jsonText = extractJsonObject(content);
+	const parsed = JSON.parse(jsonText) as {
+		changed?: unknown;
+		boardChanged?: unknown;
+		hasChange?: unknown;
+	};
+	const candidate = parsed.changed ?? parsed.boardChanged ?? parsed.hasChange;
+	const normalized = normalizeVisionBoolean(candidate);
+	if (normalized === null) {
+		throw new Error("vision verification response missing boolean changed flag");
+	}
+	return normalized;
+}
+
+function normalizeVisionBoolean(value: unknown): boolean | null {
+	if (typeof value === "boolean") {
+		return value;
+	}
+	if (typeof value === "number") {
+		return value !== 0;
+	}
+	if (typeof value !== "string") {
+		return null;
+	}
+
+	const normalized = value.trim().toLowerCase();
+	if (!normalized) {
+		return null;
+	}
+	if (
+		normalized === "true"
+		|| normalized === "yes"
+		|| normalized === "1"
+		|| normalized.includes("有变化")
+		|| normalized.includes("发生变化")
+		|| normalized.includes("changed")
+	) {
+		return true;
+	}
+	if (
+		normalized === "false"
+		|| normalized === "no"
+		|| normalized === "0"
+		|| normalized.includes("无变化")
+		|| normalized.includes("没有变化")
+		|| normalized.includes("unchanged")
+	) {
+		return false;
+	}
+	return null;
 }
 
 function parseObservationDecisionResponse(content: string): {
@@ -493,21 +611,29 @@ function buildRecentDecisionSummary(history: SokobanDecisionHistoryEntry[]): str
 		const planned = entry.plannedMoves.map((move) => formatSokobanAction(move)).join(" -> ") || "none";
 		const executed = entry.executedMoves.map((move) => formatSokobanAction(move)).join(" -> ") || "none";
 		const failed = entry.failedMoves.map((move) => formatSokobanAction(move)).join(" -> ") || "none";
+		const openingMove = entry.plannedMoves[0] ?? null;
+		const openingOutcome = openingMove && entry.failedMoves.includes(openingMove)
+			? "opening-failed"
+			: "opening-not-failed";
 		const outcome = entry.boardChanged ? "board changed during the sequence" : "no verified board change";
 		const repeatedFailureNote = entry.repeatedFailureCount > 0 ? ` repeatedFailureCount=${entry.repeatedFailureCount};` : "";
-		return `Turn ${index + 1}: planned=${planned}; executed=${executed}; failed=${failed}; outcome=${outcome};${repeatedFailureNote} reflection=${entry.reflection}`;
+		return `Turn ${index + 1}: planned=${planned}; executed=${executed}; failed=${failed}; openingOutcome=${openingOutcome}; outcome=${outcome};${repeatedFailureNote} reflection=${entry.reflection}`;
 	});
 }
 
 function collectRecentFailedOpeningMoves(history: SokobanDecisionHistoryEntry[]): SokobanActionId[] {
 	const moves: SokobanActionId[] = [];
 	for (const entry of history) {
-		if (entry.boardChanged) {
+		const openingMove = entry.plannedMoves[0];
+		if (!openingMove) {
 			continue;
 		}
-		const move = entry.plannedMoves[0];
-		if (move && !moves.includes(move)) {
-			moves.push(move);
+		const openingFailed = entry.failedMoves.includes(openingMove);
+		if (!openingFailed) {
+			continue;
+		}
+		if (!moves.includes(openingMove)) {
+			moves.push(openingMove);
 		}
 		if (moves.length >= 3) {
 			break;
@@ -527,7 +653,7 @@ function buildRunSummary(run: SokobanRunRecord): string {
 function buildCompanionText(run: SokobanRunRecord): string {
 	if (run.boardChanged) {
 		const sourceLabel = run.analysis.source === "cloud-decision"
-			? "本地观察加云端决策"
+			? "截图对照加云端视觉决策"
 			: "保守启发式";
 		return `我先按 ${sourceLabel} 规划了一小段推箱子动作，并确认至少有一步真的让棋盘状态发生了变化。`;
 	}

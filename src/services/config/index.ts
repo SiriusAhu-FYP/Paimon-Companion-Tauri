@@ -21,4 +21,6 @@ export { DEFAULT_CONFIG, SECRET_KEYS } from "./types";
 export { loadConfig, getConfig, updateConfig, resetConfig } from "./config-service";
 export { setSecret, getSecret, hasSecret, deleteSecret } from "./secret-store";
 export { proxyBinaryRequest, proxyMultipartRequest, proxyRequest, proxySSERequest } from "./http-proxy";
+export { readPlaybookTomlValues, updatePlaybookTomlValues } from "./playbook-toml-service";
 export type { ProxyMultipartRequestOptions, ProxyRequestOptions, ProxyResponse } from "./http-proxy";
+export type { PlaybookTomlPrimitive, PlaybookTomlValue, PlaybookTomlValueUpdate } from "./playbook-toml-service";

@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source /home/playerAhu/vLLM_server/.venv/bin/activate
-
+VENV_PATH="${HOME}/vLLM_server/.venv/bin/activate"
 MODEL_ROOT="${HOME}/.cache/huggingface/hub/models--Qwen--Qwen3-VL-2B-Instruct"
+PORT="32183"
+
+if [[ ! -f "${VENV_PATH}" ]]; then
+  echo "vLLM virtualenv not found: ${VENV_PATH}" >&2
+  exit 1
+fi
 
 if [[ ! -d "${MODEL_ROOT}/snapshots" ]]; then
-  echo "Model cache not found: ${MODEL_ROOT}" >&2
+  echo "Local model cache not found: ${MODEL_ROOT}" >&2
   exit 1
 fi
 
@@ -17,15 +22,22 @@ if [[ -z "${MODEL_SNAPSHOT}" ]]; then
   exit 1
 fi
 
+source "${VENV_PATH}"
+
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export VLLM_NO_USAGE_STATS=1
 
+echo "Starting local vision node from snapshot:"
+echo "  ${MODEL_SNAPSHOT}"
+echo "Serving as: Qwen/Qwen3-VL-2B-Instruct"
+echo "Listening on: http://0.0.0.0:${PORT}/v1"
+
 exec vllm serve "${MODEL_SNAPSHOT}" \
   --served-model-name "Qwen/Qwen3-VL-2B-Instruct" \
   --host 0.0.0.0 \
-  --port 8000 \
+  --port "${PORT}" \
   --max-model-len 8192 \
   --gpu-memory-utilization 0.5 \
   --enable-prefix-caching \

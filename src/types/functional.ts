@@ -16,7 +16,7 @@ export interface PerceptionSnapshot {
 }
 
 export type FunctionalTaskStatus = "running" | "completed" | "failed";
-export type FunctionalActionKind = "capture" | "focus" | "send-key" | "send-mouse";
+export type FunctionalActionKind = "capture" | "focus" | "send-key" | "send-mouse" | "send-text";
 export type FunctionalLogLevel = "info" | "warn" | "error";
 
 export interface FunctionalTaskLogEntry {

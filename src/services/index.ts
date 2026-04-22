@@ -91,12 +91,10 @@ export function initServices(): ServiceContainer {
 	const game2048 = new Game2048Service({
 		bus: eventBus,
 		orchestrator,
-		companionRuntime,
 	});
 	const sokoban = new SokobanService({
 		bus: eventBus,
 		orchestrator,
-		companionRuntime,
 	});
 	const companionRuntimeBenchmark = new CompanionRuntimeBenchmarkService({
 		bus: eventBus,
@@ -140,6 +138,7 @@ export function initServices(): ServiceContainer {
 		pipeline,
 		companionMode,
 		delegationMemory,
+		debugCapture,
 	});
 	const proactiveCompanion = new ProactiveCompanionService({
 		bus: eventBus,

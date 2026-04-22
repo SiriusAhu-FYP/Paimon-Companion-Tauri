@@ -64,17 +64,25 @@ export function ChatPanel() {
 		const shouldSuppressMessage = payload.source === "proactive-reply" && payload.fullText.trim() === PROACTIVE_NO_REPLY_SENTINEL;
 		setMessages((prev) => {
 			const copy = [...prev];
+			if (isProactive) {
+				// Proactive replies do not create streaming placeholders in this panel.
+				// Never mutate/remove an in-flight non-proactive streaming message here.
+				if (!shouldSuppressMessage && payload.fullText.trim()) {
+					copy.push({
+						role: "assistant",
+						content: payload.fullText,
+						timestamp: Date.now(),
+					});
+				}
+				return copy;
+			}
 			const last = copy[copy.length - 1];
 			if (last?.streaming) {
-				if (shouldSuppressMessage) {
-					copy.pop();
-					return copy;
-				}
 				const text = payload.fullText || t("[AI 未返回有效内容]", "[AI returned no usable content]");
 				copy[copy.length - 1] = { ...last, content: text, streaming: false };
 				return copy;
 			}
-			if (isProactive && !shouldSuppressMessage && payload.fullText.trim()) {
+			if (payload.fullText.trim()) {
 				copy.push({
 					role: "assistant",
 					content: payload.fullText,
@@ -209,9 +217,17 @@ export function ChatPanel() {
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100%", p: 1.5 }}>
-			<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, mb: 1 }}>
-				{t("对话", "Chat")}
-			</Typography>
+			<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+				<Typography variant="subtitle2" sx={{ color: "primary.main", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+					{t("对话", "Chat")}
+				</Typography>
+				{status !== "idle" && (
+					<Typography variant="caption" sx={{ color: "primary.main", animation: "pulse 1.5s ease-in-out infinite" }}>
+						{status === "thinking" && t("AI 正在思考...", "AI is thinking...")}
+						{status === "speaking" && t("正在播放语音...", "Playing speech...")}
+					</Typography>
+				)}
+			</Box>
 
 			{/* 消息列表 */}
 			<Box sx={{ flex: 1, overflowY: "auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 0.75 }}>
@@ -246,13 +262,6 @@ export function ChatPanel() {
 				)}
 				<div ref={messagesEndRef} />
 			</Box>
-
-			{status !== "idle" && (
-				<Typography variant="caption" sx={{ color: "primary.main", textAlign: "center", py: 0.5, animation: "pulse 1.5s ease-in-out infinite" }}>
-					{status === "thinking" && t("AI 正在思考...", "AI is thinking...")}
-					{status === "speaking" && t("正在播放语音...", "Playing speech...")}
-				</Typography>
-			)}
 
 			{showVoiceDiagnostics && (
 				<Box sx={{ py: 0.5 }}>

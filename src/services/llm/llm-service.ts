@@ -12,8 +12,8 @@ import type { ILLMService, ChatMessage } from "./types";
 import { buildSystemMessage, summarizePromptContext } from "./prompt-builder";
 import { formatRetrievalForPrompt, summarizeRetrieval } from "@/services/knowledge/knowledge-formatter";
 import { createLogger } from "@/services/logger";
-import { listLlmTools, resolveMcpToolName } from "@/services/mcp/tool-defs";
-import { callLocalMcpTool } from "@/services/mcp/local-mcp-client";
+import { listLlmTools, listLlmToolsFromRuntime, resolveMcpToolName } from "@/services/mcp/tool-defs";
+import { callLocalMcpTool, listLocalMcpTools } from "@/services/mcp/local-mcp-client";
 
 const log = createLogger("llm");
 
@@ -225,6 +225,25 @@ export class LLMService {
 		};
 	}
 
+	private async resolveCompanionTools(traceId?: string): Promise<ReturnType<typeof listLlmTools>> {
+		const fallbackTools = listLlmTools("companion");
+		try {
+			const runtimeTools = await listLocalMcpTools({
+				timeoutMs: 10_000,
+			});
+			return listLlmToolsFromRuntime(
+				"companion",
+				runtimeTools.map((tool) => tool.name),
+			);
+		} catch (error) {
+			log.warn("failed to list MCP tools, using static fallback", {
+				traceId: traceId ?? null,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return fallbackTools;
+		}
+	}
+
 	async generateCompanionReply(
 		userText: string,
 		options?: {
@@ -257,7 +276,7 @@ export class LLMService {
 		const messages: ChatMessage[] = systemMsg
 			? [systemMsg, { role: "user", content: userText }]
 			: [{ role: "user", content: userText }];
-		const tools = listLlmTools("companion");
+		const tools = await this.resolveCompanionTools(options?.traceId);
 		this.debugCapture?.recordLlmExchange("request", {
 			source: options?.source ?? "companion-reply",
 			traceId: options?.traceId ?? null,
@@ -368,7 +387,7 @@ export class LLMService {
 		const messages: ChatMessage[] = systemMsg
 			? [systemMsg, ...this.history]
 			: [...this.history];
-		const tools = listLlmTools("companion");
+		const tools = await this.resolveCompanionTools();
 		this.debugCapture?.recordLlmExchange("request", {
 			source: "chat",
 			traceId: null,

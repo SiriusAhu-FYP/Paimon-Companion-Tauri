@@ -412,7 +412,7 @@ export class ProactiveCompanionService {
 				const fallback = this.buildForcedRuntimeSummaryFallback();
 				this.state.lastEmittedAt = Date.now();
 				this.state.lastEmittedSource = candidate.source;
-				await this.pipeline.speakText(fallback);
+				this.pipeline.speakTextNonBlocking(fallback);
 				this.emitStateChange("emitted", candidate.source, "forced-runtime-summary-fallback");
 				log.info("proactive reply emitted via forced fallback", {
 					source: candidate.source,
@@ -427,7 +427,7 @@ export class ProactiveCompanionService {
 
 			this.state.lastEmittedAt = Date.now();
 			this.state.lastEmittedSource = candidate.source;
-			await this.pipeline.speakText(normalized);
+			this.pipeline.speakTextNonBlocking(normalized);
 			this.emitStateChange("emitted", candidate.source, null);
 			log.info("proactive reply emitted", {
 				source: candidate.source,

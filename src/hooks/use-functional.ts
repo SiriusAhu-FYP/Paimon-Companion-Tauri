@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { getServices } from "@/services";
-import type { FunctionalTarget, HostMouseAction, HostMouseButton } from "@/types";
+import type { FunctionalTarget, HostFocusOptions, HostMouseAction, HostMouseButton } from "@/types";
 import { useServiceState } from "./use-service-state";
 
 export function useFunctional() {
@@ -23,8 +23,8 @@ export function useFunctional() {
 		return orchestrator.runCaptureTask(target);
 	}, [orchestrator]);
 
-	const runFocus = useCallback((target?: FunctionalTarget) => {
-		return orchestrator.runFocusTask(target);
+	const runFocus = useCallback((target?: FunctionalTarget, options?: HostFocusOptions) => {
+		return orchestrator.runFocusTask(target, options);
 	}, [orchestrator]);
 
 	const runKey = useCallback((key: string, target?: FunctionalTarget) => {
@@ -38,6 +38,10 @@ export function useFunctional() {
 		return orchestrator.runSendMouseTask(options, target);
 	}, [orchestrator]);
 
+	const runText = useCallback((text: string, target?: FunctionalTarget) => {
+		return orchestrator.runSendTextTask(text, target);
+	}, [orchestrator]);
+
 	return {
 		state,
 		setTarget,
@@ -46,5 +50,6 @@ export function useFunctional() {
 		runFocus,
 		runKey,
 		runMouse,
+		runText,
 	};
 }

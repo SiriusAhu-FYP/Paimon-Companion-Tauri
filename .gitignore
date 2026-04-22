@@ -44,4 +44,6 @@ public/*
 
 # Owner-local working material
 .private/
+.workbench/
 .cursor/
+dev-reports/

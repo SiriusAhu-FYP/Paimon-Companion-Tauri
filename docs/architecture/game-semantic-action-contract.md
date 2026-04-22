@@ -121,8 +121,8 @@ The first implementation direction in the Tauri codebase is a lightweight manife
 
 Current manifests live under:
 
-- `src/config/games/2048.json`
-- `src/config/games/sokoban.json`
+- `src/config/games/2048.toml`
+- `src/config/games/sokoban.toml`
 
 These manifests are intentionally small and focused on semantic action vocabulary plus low-level execution translation.
 

@@ -4,6 +4,7 @@ import { useI18n } from "@/contexts/I18nProvider";
 import { FunctionalPanel } from "./FunctionalPanel";
 import { CompanionWorkbenchPanel } from "./CompanionWorkbenchPanel";
 import { PanelRoot } from "./panel-shell";
+import { WorkbenchMcpQuickActions } from "./WorkbenchMcpQuickActions";
 
 export function WorkbenchPanel() {
 	const { t } = useI18n();
@@ -20,6 +21,7 @@ export function WorkbenchPanel() {
 						{t("功能", "Functional")}
 					</Button>
 				</ButtonGroup>
+				<WorkbenchMcpQuickActions />
 			</PanelRoot>
 
 			<Box

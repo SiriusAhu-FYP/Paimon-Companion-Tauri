@@ -24,11 +24,34 @@ export interface SemanticGamePluginDefinition<ActionId extends string> {
 	actions: readonly SemanticGameActionDefinition<ActionId>[];
 }
 
+export interface SemanticDelegationProfileConfig {
+	profileId?: string;
+	taskId?: string;
+	displayName?: string;
+	maxRounds?: number;
+	maxActionsPerRound?: number;
+	afterActionWaitMs?: number;
+	locatorRulesEnabled?: boolean;
+	locatorCloudEnabled?: boolean;
+	locatorLocalFallbackEnabled?: boolean;
+	locatorMinConfidence?: number;
+	missionAnalystTemperature?: number;
+	missionAnalystThinkingMode?: "off" | "low" | "medium" | "high";
+	operationsPlannerTemperature?: number;
+	progressEvaluatorTemperature?: number;
+	allowedTools?: readonly string[];
+	missionAnalystRules?: readonly string[];
+	operationsPlannerRules?: readonly string[];
+	progressEvaluatorRules?: readonly string[];
+}
+
 export interface SemanticGameManifest<ActionId extends string> extends SemanticGamePluginDefinition<ActionId> {
 	defaultActionOrder: readonly ActionId[];
 	notes?: readonly string[];
 	windowTitleHints?: readonly string[];
 	observationFocus?: readonly string[];
+	loadGuardPolicy?: "auto" | "force-enable" | "force-disable";
+	delegationProfile?: SemanticDelegationProfileConfig;
 }
 
 export interface SemanticActionExecutionResult<ActionId extends string> {

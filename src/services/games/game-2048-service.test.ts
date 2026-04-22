@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "@/services/event-bus";
 import { Game2048Service } from "./game-2048-service";
-import { requestActiveTextDecision } from "./cloud-decision";
+import { requestActiveVisionDecision } from "./cloud-decision";
 import { callLocalMcpToolJson } from "@/services/mcp/local-mcp-client";
 import { estimateSnapshotChange } from "./game-utils";
 
@@ -9,7 +9,7 @@ vi.mock("@/services/system", () => ({
 	listWindows: vi.fn(),
 }));
 vi.mock("./cloud-decision", () => ({
-	requestActiveTextDecision: vi.fn(),
+	requestActiveVisionDecision: vi.fn(),
 }));
 vi.mock("@/services/mcp/local-mcp-client", () => ({
 	callLocalMcpToolJson: vi.fn(),
@@ -23,7 +23,7 @@ vi.mock("./game-utils", () => ({
 	isSnapshotLowConfidence: vi.fn(() => false),
 }));
 
-function createService(ensureObservationContext: () => Promise<{ promptContext: string; latestTimestamp: number }> | never) {
+function createService() {
 	return new Game2048Service({
 		bus: new EventBus(),
 		orchestrator: {
@@ -37,46 +37,50 @@ function createService(ensureObservationContext: () => Promise<{ promptContext: 
 			setTarget: vi.fn(),
 			runFocusTask: vi.fn().mockResolvedValue(undefined),
 		} as never,
-		companionRuntime: {
-			ensureObservationContext: vi.fn(ensureObservationContext),
-		} as never,
 	});
 }
 
-describe("Game2048Service local observation guard", () => {
+describe("Game2048Service cloud vision decision guard", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.mocked(requestActiveTextDecision).mockResolvedValue(
-			JSON.stringify({
-				reflection: "保持一手一步。",
-				strategy: "single-step 2048",
-				reasoning: "优先执行最高排序的一步。",
-				decisionSummary: "choose move_left first",
-				preferredMoves: ["move_left", "move_up", "move_right", "move_down"],
-			}),
-		);
+		vi.mocked(requestActiveVisionDecision).mockImplementation(async (input) => {
+			if (input.imageDataUrls.length === 1) {
+				return JSON.stringify({
+					reflection: "保持一手一步。",
+					strategy: "single-step 2048",
+					reasoning: "优先执行最高排序的一步。",
+					decisionSummary: "choose move_left first",
+					preferredMoves: ["move_left", "move_up", "move_right", "move_down"],
+				});
+			}
+			return JSON.stringify({
+				changed: true,
+				reason: "board changed",
+			});
+		});
 		vi.mocked(callLocalMcpToolJson).mockResolvedValue({} as never);
 	});
 
-	it("auto-starts local observation context before running", async () => {
-		const service = createService(async () => ({
-			promptContext: "board summary",
-			latestTimestamp: Date.now(),
-		}));
+	it("requests cloud vision decision using current snapshot", async () => {
+		const service = createService();
 
 		await service.runSingleStep();
 
-		expect(vi.mocked(requestActiveTextDecision)).toHaveBeenCalled();
+		expect(vi.mocked(requestActiveVisionDecision)).toHaveBeenCalled();
+		const firstCall = vi.mocked(requestActiveVisionDecision).mock.calls[0]?.[0];
+		expect(firstCall?.imageDataUrls).toHaveLength(1);
 	});
 
-	it("fails when companion runtime target does not match the selected target", async () => {
-		const service = createService(async () => {
-			throw new Error("companion runtime target does not match the selected functional target");
+	it("fails when cloud vision planning request throws", async () => {
+		const service = createService();
+		vi.mocked(requestActiveVisionDecision).mockImplementation(async (input) => {
+			if (input.imageDataUrls.length === 1) {
+				throw new Error("cloud vision unavailable");
+			}
+			return JSON.stringify({ changed: false, reason: "fallback" });
 		});
 
-		await expect(service.runSingleStep()).rejects.toThrow(
-			"companion runtime target does not match the selected functional target",
-		);
+		await expect(service.runSingleStep()).rejects.toThrow("cloud vision unavailable");
 	});
 
 	it("executes only the first ranked move for 2048", async () => {
@@ -94,9 +98,6 @@ describe("Game2048Service local observation guard", () => {
 				setTarget: vi.fn(),
 				runFocusTask: vi.fn().mockResolvedValue(undefined),
 			} as never,
-			companionRuntime: {
-				ensureObservationContext: vi.fn(async () => ({ promptContext: "board summary", latestTimestamp: Date.now() })),
-			} as never,
 		});
 
 		await service.runSingleStep();
@@ -107,8 +108,31 @@ describe("Game2048Service local observation guard", () => {
 		});
 	});
 
-	it("treats local 2048 movement as changed under the relaxed threshold", async () => {
-		vi.mocked(estimateSnapshotChange).mockResolvedValueOnce(0.0065);
+	it("prefers cloud changed verdict over tiny pixel delta", async () => {
+		vi.mocked(estimateSnapshotChange).mockResolvedValueOnce(0.0002);
+		const service = createService();
+
+		const result = await service.runSingleStep();
+
+		expect(result.boardChanged).toBe(true);
+	});
+
+	it("treats borderline 2048 movement as changed under tuned threshold", async () => {
+		vi.mocked(estimateSnapshotChange).mockResolvedValueOnce(0.0054);
+		let callIndex = 0;
+		vi.mocked(requestActiveVisionDecision).mockImplementation(async (input) => {
+			callIndex += 1;
+			if (callIndex === 1 && input.imageDataUrls.length === 1) {
+				return JSON.stringify({
+					reflection: "保持一手一步。",
+					strategy: "single-step 2048",
+					reasoning: "优先执行最高排序的一步。",
+					decisionSummary: "choose move_left first",
+					preferredMoves: ["move_left", "move_up", "move_right", "move_down"],
+				});
+			}
+			throw new Error("verification unavailable");
+		});
 		const service = new Game2048Service({
 			bus: new EventBus(),
 			orchestrator: {
@@ -122,13 +146,46 @@ describe("Game2048Service local observation guard", () => {
 				setTarget: vi.fn(),
 				runFocusTask: vi.fn().mockResolvedValue(undefined),
 			} as never,
-			companionRuntime: {
-				ensureObservationContext: vi.fn(async () => ({ promptContext: "board summary", latestTimestamp: Date.now() })),
-			} as never,
 		});
 
 		const result = await service.runSingleStep();
 
 		expect(result.boardChanged).toBe(true);
+	});
+
+	it("keeps very small visual deltas as unchanged in 2048 verification", async () => {
+		vi.mocked(estimateSnapshotChange).mockResolvedValueOnce(0.0049);
+		let callIndex = 0;
+		vi.mocked(requestActiveVisionDecision).mockImplementation(async (input) => {
+			callIndex += 1;
+			if (callIndex === 1 && input.imageDataUrls.length === 1) {
+				return JSON.stringify({
+					reflection: "保持一手一步。",
+					strategy: "single-step 2048",
+					reasoning: "优先执行最高排序的一步。",
+					decisionSummary: "choose move_left first",
+					preferredMoves: ["move_left", "move_up", "move_right", "move_down"],
+				});
+			}
+			throw new Error("verification unavailable");
+		});
+		const service = new Game2048Service({
+			bus: new EventBus(),
+			orchestrator: {
+				getState: vi.fn(() => ({
+					selectedTarget: { handle: "target-2048", title: "2048" },
+					latestTask: {
+						beforeSnapshot: { dataUrl: "before" },
+						afterSnapshot: { dataUrl: "after" },
+					},
+				})),
+				setTarget: vi.fn(),
+				runFocusTask: vi.fn().mockResolvedValue(undefined),
+			} as never,
+		});
+
+		const result = await service.runSingleStep();
+
+		expect(result.boardChanged).toBe(false);
 	});
 });

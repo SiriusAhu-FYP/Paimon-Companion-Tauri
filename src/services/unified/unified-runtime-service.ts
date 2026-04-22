@@ -215,15 +215,16 @@ export class UnifiedRuntimeService {
 					}
 					this.state.lastCompanionText = normalizedReply;
 					this.emitCompanionReplyToChat(normalizedReply);
-					if (this.state.speechEnabled) {
+					if (this.state.speechEnabled && source === "reflection") {
 						this.state.phase = "speaking";
 						this.emitState();
-						this.safeSpeak(normalizedReply, { interruptQueue: source === "reflection" });
+						this.safeSpeak(normalizedReply, { interruptQueue: true });
 					}
 				},
 			});
 			this.state.lastCompanionText = result.summary;
 			if (result.status === "failed") {
+				this.emitDelegationFailureReason(result.summary);
 				this.state.phase = "failed";
 				throw new Error(result.summary);
 			}
@@ -468,6 +469,18 @@ export class UnifiedRuntimeService {
 		});
 	}
 
+	private emitDelegationFailureReason(summary: string) {
+		const reasonText = summarizeDelegationFailureReason(summary);
+		this.state.lastCompanionText = reasonText;
+		this.emitCompanionReplyToChat(reasonText);
+		if (!this.state.speechEnabled) {
+			return;
+		}
+		this.state.phase = "speaking";
+		this.emitState();
+		this.safeSpeak(reasonText, { interruptQueue: true });
+	}
+
 	private emitState() {
 		this.bus.emit("unified:state-change", { state: this.getState() });
 	}
@@ -547,10 +560,10 @@ export class UnifiedRuntimeService {
 					this.emitCompanionReplyToChat(normalizedReply);
 					run.companionText = normalizedReply;
 					run.companionTextSource = "llm";
-					if (this.state.speechEnabled) {
+					if (this.state.speechEnabled && source === "reflection") {
 						this.state.phase = "speaking";
 						this.emitState();
-						this.safeSpeak(normalizedReply, { interruptQueue: source === "reflection" });
+						run.spoke = this.safeSpeak(normalizedReply, { interruptQueue: true }) || run.spoke;
 					}
 				},
 			});
@@ -570,7 +583,7 @@ export class UnifiedRuntimeService {
 			}
 			const beforeSpeechAt = Date.now();
 			run.timings.totalNonBlockingMs = Math.max(0, beforeSpeechAt - run.startedAt);
-			if (this.state.speechEnabled && run.companionText) {
+			if (this.state.speechEnabled && run.companionText && run.companionTextSource !== "llm") {
 				this.state.phase = "speaking";
 				this.emitState();
 				const speechStartedAt = Date.now();
@@ -583,7 +596,7 @@ export class UnifiedRuntimeService {
 			run.phase = "failed";
 			run.error = message;
 			run.summary = `delegation-mode unified run failed: ${message}`;
-			run.companionText = "这轮托管没有成功，我先停下来，等你确认当前窗口后再继续。";
+			run.companionText = summarizeDelegationFailureReason(message);
 			run.companionTextSource = "fallback";
 			run.emotion = "sad";
 			this.state.lastCompanionText = run.companionText;
@@ -1476,6 +1489,17 @@ function resolveUnifiedEmotion(value: string): "neutral" | "happy" | "angry" | "
 		default:
 			return "neutral";
 	}
+}
+
+function summarizeDelegationFailureReason(rawSummary: string): string {
+	const summary = rawSummary.trim().replace(/\s+/g, " ");
+	if (!summary) {
+		return "托管已停止：这轮没有形成有效推进，派蒙建议先确认窗口与定位状态。";
+	}
+	if (/达到最大轮次/i.test(summary)) {
+		return `托管已停止：${summary} 派蒙建议先检查定位结果，再继续执行。`;
+	}
+	return `托管已停止：${summary}`;
 }
 
 function inferVoiceCommand(text: string): UnifiedVoiceCommand {

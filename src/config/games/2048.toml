@@ -42,7 +42,7 @@ locatorMinConfidence = 0.6
 
 [delegationProfile.roles.missionAnalyst]
 missionAnalystTemperature = 0.1
-missionAnalystThinkingMode = "medium"
+missionAnalystThinkingMode = "off"
 missionAnalystRules = [
 	"如果任务是 2048 操作，必须标注 taskMode=game。",
 	"目标要聚焦棋盘推进，不要回答常识问答。",

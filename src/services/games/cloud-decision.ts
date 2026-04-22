@@ -9,6 +9,24 @@ interface OpenAIChatCompletionResponse {
 	}>;
 }
 
+interface OpenAICompatibleClientConfig {
+	baseUrl: string;
+	model: string;
+	temperature: number;
+	secretKey?: string;
+}
+
+export type CloudThinkingMode = "off" | "low" | "medium" | "high";
+
+class CloudDecisionHttpError extends Error {
+	status: number;
+	constructor(scope: "cloud decision" | "cloud vision decision", status: number) {
+		super(`${scope} request failed with HTTP ${status}`);
+		this.status = status;
+		this.name = "CloudDecisionHttpError";
+	}
+}
+
 function extractMessageText(response: OpenAIChatCompletionResponse): string {
 	const content = response.choices?.[0]?.message?.content;
 	if (typeof content === "string") {
@@ -23,9 +41,7 @@ function extractMessageText(response: OpenAIChatCompletionResponse): string {
 	return "";
 }
 
-function resolveActiveOpenAICompatibleTextClient():
-	| { baseUrl: string; model: string; temperature: number; secretKey?: string }
-	| null {
+function resolveActiveOpenAICompatibleClient(): OpenAICompatibleClientConfig | null {
 	const config = getConfig();
 	const activeProfile = config.activeLlmProfileId
 		? config.llmProfiles.find((profile) => profile.id === config.activeLlmProfileId)
@@ -53,6 +69,61 @@ function resolveActiveOpenAICompatibleTextClient():
 	};
 }
 
+function resolveThinkingPayload(thinkingMode: CloudThinkingMode | undefined): Record<string, unknown> {
+	if (!thinkingMode || thinkingMode === "off") {
+		return {};
+	}
+	const effort = thinkingMode;
+	return {
+		reasoning: { effort },
+		reasoning_effort: effort,
+		enable_thinking: true,
+	};
+}
+
+async function requestCompletionWithOptionalThinking(input: {
+	scope: "cloud decision" | "cloud vision decision";
+	client: OpenAICompatibleClientConfig;
+	basePayload: Record<string, unknown>;
+	timeoutMs: number;
+	thinkingMode?: CloudThinkingMode;
+}): Promise<OpenAIChatCompletionResponse> {
+	const thinkingPayload = resolveThinkingPayload(input.thinkingMode);
+	const payloadWithThinking = Object.keys(thinkingPayload).length
+		? { ...input.basePayload, ...thinkingPayload }
+		: input.basePayload;
+	try {
+		return await requestCompletion(input.scope, input.client, payloadWithThinking, input.timeoutMs);
+	} catch (error) {
+		if (!(error instanceof CloudDecisionHttpError) || !Object.keys(thinkingPayload).length) {
+			throw error;
+		}
+		return requestCompletion(input.scope, input.client, input.basePayload, input.timeoutMs);
+	}
+}
+
+async function requestCompletion(
+	scope: "cloud decision" | "cloud vision decision",
+	client: OpenAICompatibleClientConfig,
+	payload: Record<string, unknown>,
+	timeoutMs: number,
+): Promise<OpenAIChatCompletionResponse> {
+	const response = await proxyRequest({
+		url: `${client.baseUrl}/chat/completions`,
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		secretKey: client.secretKey,
+		body: JSON.stringify(payload),
+		timeoutMs,
+	});
+
+	if (response.status < 200 || response.status >= 300) {
+		throw new CloudDecisionHttpError(scope, response.status);
+	}
+
+	return JSON.parse(response.body) as OpenAIChatCompletionResponse;
+}
+
 export async function requestActiveTextDecision(input: {
 	systemPrompt: string;
 	userPrompt: string;
@@ -60,18 +131,19 @@ export async function requestActiveTextDecision(input: {
 	temperature?: number;
 	timeoutMs?: number;
 	jsonResponse?: boolean;
+	thinkingMode?: CloudThinkingMode;
 }): Promise<string> {
-	const client = resolveActiveOpenAICompatibleTextClient();
+	const client = resolveActiveOpenAICompatibleClient();
 	if (!client) {
 		throw new Error("cloud decision requires an active openai-compatible LLM profile");
 	}
 
-	const response = await proxyRequest({
-		url: `${client.baseUrl}/chat/completions`,
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		secretKey: client.secretKey,
-		body: JSON.stringify({
+	const parsed = await requestCompletionWithOptionalThinking({
+		scope: "cloud decision",
+		client,
+		timeoutMs: input.timeoutMs ?? 30_000,
+		thinkingMode: input.thinkingMode,
+		basePayload: {
 			model: client.model,
 			temperature: input.temperature ?? client.temperature ?? 0.2,
 			max_tokens: input.maxTokens ?? 320,
@@ -80,18 +152,63 @@ export async function requestActiveTextDecision(input: {
 				{ role: "system", content: input.systemPrompt },
 				{ role: "user", content: input.userPrompt },
 			],
-		}),
-		timeoutMs: input.timeoutMs ?? 30_000,
+		},
 	});
-
-	if (response.status < 200 || response.status >= 300) {
-		throw new Error(`cloud decision request failed with HTTP ${response.status}`);
-	}
-
-	const parsed = JSON.parse(response.body) as OpenAIChatCompletionResponse;
 	const content = extractMessageText(parsed);
 	if (!content) {
 		throw new Error("cloud decision returned empty content");
+	}
+	return content;
+}
+
+export async function requestActiveVisionDecision(input: {
+	systemPrompt: string;
+	userPrompt: string;
+	imageDataUrls: string[];
+	maxTokens?: number;
+	temperature?: number;
+	timeoutMs?: number;
+	jsonResponse?: boolean;
+	thinkingMode?: CloudThinkingMode;
+}): Promise<string> {
+	const client = resolveActiveOpenAICompatibleClient();
+	if (!client) {
+		throw new Error("cloud vision decision requires an active openai-compatible LLM profile");
+	}
+
+	const imageDataUrls = input.imageDataUrls.map((item) => item.trim()).filter(Boolean);
+	if (!imageDataUrls.length) {
+		throw new Error("cloud vision decision requires at least one image");
+	}
+
+	const parsed = await requestCompletionWithOptionalThinking({
+		scope: "cloud vision decision",
+		client,
+		timeoutMs: input.timeoutMs ?? 30_000,
+		thinkingMode: input.thinkingMode,
+		basePayload: {
+			model: client.model,
+			temperature: input.temperature ?? client.temperature ?? 0.1,
+			max_tokens: input.maxTokens ?? 360,
+			response_format: input.jsonResponse ? { type: "json_object" } : undefined,
+			messages: [
+				{ role: "system", content: input.systemPrompt },
+				{
+					role: "user",
+					content: [
+						{ type: "text", text: input.userPrompt },
+						...imageDataUrls.map((url) => ({
+							type: "image_url",
+							image_url: { url },
+						})),
+					],
+				},
+			],
+		},
+	});
+	const content = extractMessageText(parsed);
+	if (!content) {
+		throw new Error("cloud vision decision returned empty content");
 	}
 	return content;
 }

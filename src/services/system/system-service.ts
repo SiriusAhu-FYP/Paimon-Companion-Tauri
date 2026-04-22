@@ -2,6 +2,7 @@ import { isTauriEnvironment } from "@/utils/window-sync";
 import { invoke } from "@tauri-apps/api/core";
 import { createLogger } from "@/services/logger";
 import type {
+	HostFocusOptions,
 	HostMouseAction,
 	HostMouseButton,
 	HostWindowCapture,
@@ -37,16 +38,22 @@ export async function captureWindow(handle: string): Promise<HostWindowCapture> 
 	return capture;
 }
 
-export async function focusWindow(handle: string): Promise<void> {
+export async function focusWindow(handle: string, options?: HostFocusOptions): Promise<void> {
 	if (!isTauriEnvironment()) {
 		throw new Error("focusWindow requires Tauri environment");
 	}
+	const applyDelegatedViewport = options?.applyDelegatedViewport ?? true;
 
 	await invoke("focus_window", {
-		request: { handle },
+		request: {
+			handle,
+			applyDelegatedViewport,
+		},
 	});
 
-	log.info(`focused window ${handle}`);
+	log.info(`focused window ${handle}`, {
+		applyDelegatedViewport,
+	});
 }
 
 export async function sendHostKey(handle: string, key: string): Promise<void> {
@@ -85,4 +92,18 @@ export async function sendHostMouse(
 	});
 
 	log.info(`sent mouse ${options?.action ?? "click"}:${options?.button ?? "left"} to ${handle}`);
+}
+
+export async function sendHostText(handle: string, text: string): Promise<void> {
+	if (!isTauriEnvironment()) {
+		throw new Error("sendHostText requires Tauri environment");
+	}
+
+	await invoke("send_text", {
+		request: { handle, text },
+	});
+
+	log.info(`sent text to ${handle}`, {
+		length: text.length,
+	});
 }

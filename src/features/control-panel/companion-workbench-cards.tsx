@@ -24,18 +24,6 @@ type ProactiveStateLike = {
 	lastEmittedSource: string | null;
 };
 
-type DelegationRecordLike = {
-	sourceGame: string | null;
-	verificationResult: { success: boolean };
-	executionSummary: string;
-	analysisSource: string | null;
-	decisionSummary: string | null;
-	plannedActions: string[];
-	attemptedActions: string[];
-	nextStepHint: string | null;
-	followUpSummary: string | null;
-};
-
 export function LiveStateCard(props: {
 	emotion: string;
 	emotionReason: string | null;
@@ -132,37 +120,6 @@ export function ProactiveDebugCard(props: {
 				<Typography variant="body2">{t("最近跳过原因", "Latest Skip Reason")}：{props.proactive.lastSkipReason ?? t("无", "None")}</Typography>
 				<Typography variant="body2">{t("最近主动来源", "Latest Proactive Source")}：{props.proactive.lastEmittedSource ?? t("无", "None")}</Typography>
 			</Stack>
-		</PanelCard>
-	);
-}
-
-export function DelegationMemoryCard(props: {
-	latestRecord: DelegationRecordLike | null;
-	recentCount: number;
-}) {
-	const { t } = useI18n();
-
-	return (
-		<PanelCard>
-			<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
-				{t("Delegation Memory", "Delegation Memory")}
-			</Typography>
-			{props.latestRecord ? (
-				<Stack spacing={0.35}>
-					<Typography variant="body2">{t("最近游戏", "Latest Game")}：{props.latestRecord.sourceGame ?? t("无", "None")}</Typography>
-					<Typography variant="body2">{t("验证结果", "Verification Result")}：{props.latestRecord.verificationResult.success ? t("成功", "Success") : t("失败", "Failed")}</Typography>
-					<Typography variant="body2">{t("执行总结", "Execution Summary")}：{props.latestRecord.executionSummary}</Typography>
-					<Typography variant="body2">{t("决策来源", "Decision Source")}：{props.latestRecord.analysisSource ?? t("无", "None")}</Typography>
-					<Typography variant="body2">{t("决策摘要", "Decision Summary")}：{props.latestRecord.decisionSummary ?? t("无", "None")}</Typography>
-					<Typography variant="body2">{t("计划动作", "Planned Actions")}：{props.latestRecord.plannedActions.length ? props.latestRecord.plannedActions.join(" -> ") : t("无", "None")}</Typography>
-					<Typography variant="body2">{t("尝试动作", "Attempted Actions")}：{props.latestRecord.attemptedActions.length ? props.latestRecord.attemptedActions.join(" -> ") : t("无", "None")}</Typography>
-					<Typography variant="body2">{t("下一步线索", "Next Step Hint")}：{props.latestRecord.nextStepHint ?? t("无", "None")}</Typography>
-					<Typography variant="body2">{t("最近跟进", "Latest Follow-up")}：{props.latestRecord.followUpSummary || t("无", "None")}</Typography>
-					<Typography variant="body2">{t("最近条数", "Recent Count")}：{props.recentCount}</Typography>
-				</Stack>
-			) : (
-				<Typography variant="body2">{t("尚无托管记录", "No delegated records yet")}</Typography>
-			)}
 		</PanelCard>
 	);
 }

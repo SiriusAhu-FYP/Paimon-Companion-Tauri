@@ -180,8 +180,8 @@ export function StatusBar({
 				{latestEntry
 					? `${t("最近事件", "Latest")}: ${latestEntry.summary}`
 					: (functionalState.activeTaskId
-						? t("托管执行中", "Delegated execution in progress")
-						: t("陪伴待机中", "Companion standing by"))}
+						? t("托管执行中", "Delegation Mode execution in progress")
+						: t("陪伴待机中", "Companion Mode standing by"))}
 			</Typography>
 		</Box>
 	);

@@ -1,0 +1,51 @@
+# Delegation Mode browser profile template
+# Keep this file mostly natural-language-first.
+# The runtime only needs a few numeric knobs plus clear behavioral rules.
+
+defaultProfileId = "browser"
+
+[profile]
+# Internal IDs
+taskId = "browser-generic"
+displayName = "Generic Browser Delegation"
+
+# Loop bounds
+maxRounds = 8
+maxActionsPerRound = 2
+afterActionWaitMs = 1000
+
+# Tool gate (runtime discovered tools will be intersected against this list)
+allowedTools = [
+	"host.list_windows",
+	"host.focus_window",
+	"host.capture_window",
+	"host.send_key",
+	"host.send_mouse",
+	"host.paste_text",
+]
+
+[profile.locator]
+locatorRulesEnabled = true
+locatorCloudEnabled = true
+locatorLocalFallbackEnabled = true
+locatorMinConfidence = 0.55
+
+[profile.roles.missionAnalyst]
+missionAnalystTemperature = 0.1
+missionAnalystThinkingMode = "medium"
+missionAnalystRules = [
+	"Describe the mission goal and hard constraints first.",
+	"If user requests a specific site (for example Google), keep it explicit.",
+]
+
+[profile.roles.operationsPlanner]
+operationsPlannerTemperature = 0.1
+operationsPlannerRules = [
+	"Use only allowed tools and keep actions minimal.",
+]
+
+[profile.roles.progressEvaluator]
+progressEvaluatorTemperature = 0.1
+progressEvaluatorRules = [
+	"Compare before/after screenshots and avoid guessing.",
+]

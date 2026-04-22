@@ -186,10 +186,10 @@ Cross-cutting rule during `P2` and later:
   - [-] keep new game/plugin expansion out of scope unless it is strictly required to validate the emotion loop
 
 - [x] P4: Full Emotion Companion Validation
-  Goal: raise the emotion runtime from "state exists" to "companion feels coherently emotional" across chat, observation, and delegated execution.
+  Goal: raise the emotion runtime from "state exists" to "companion feels coherently emotional" across chat, observation, and Delegation Mode execution.
   The acceptance bar here is a basic but believable full-emotion module rather than a loose collection of separate text/voice/expression tricks.
   This phase should prefer controllable video/scenario-based validation for companion behavior and should not wait for full functional hardening.
-  - [x] keep emotion continuity across multi-turn chat, passive companion runtime, and delegated-task follow-up
+  - [x] keep emotion continuity across multi-turn chat, passive companion runtime, and Delegation Mode follow-up
   - [x] let runtime observations and summaries support companion appraisal and proactive response, while keeping the actual relational-core change tied to companion reply/appraisal rather than raw summary text
   - [x] define and validate a proactive response policy around event relevance plus a minimum silence threshold so the companion can speak up without becoming noisy
   - [x] build a small set of repeatable video/scenario validation cases for observation -> appraisal -> reply/expression consistency before relying on stronger game-solving quality
@@ -211,30 +211,37 @@ P3/P4 close-out:
   Goal: after the companion-side emotional baseline is usable, harden the actual task/delegation stack so the system is not expressive but unreliable.
   This phase narrows functional work to the existing validated targets first, with clearer companion-first boundaries before any broader expansion.
   It is also the right place to formalize the heavier reflection loop instead of forcing that complexity into `P4`.
-  The accepted target architecture for this phase is now explicit: `companion` and `delegated` must share the same local-vision primary perception chain, and cloud models should consume that observation context for summary, planning, reply, and follow-up instead of directly reading raw gameplay screenshots as the default functional path.
-  Delegated action planning should also adapt to task type: dynamic / stochastic tasks should default to single-step observe-decide-act loops, while static / deterministic tasks may use bounded short action sequences with per-step verification and replan on mismatch.
-  This phase should only complete the short-horizon memory loop, not the final long-horizon companion memory system: recent frame descriptions, rolling summaries, delegated verification records, and short next-step carry-over should all be coherent, but true summary-of-summaries and file-backed pseudo-long-term memory belong to the final convergence phase.
+  The accepted Delegation Mode architecture is now explicit and implemented as a three-role chain: `Mission Analyst -> Operations Planner -> Progress Evaluator`.
+  `Mission Analyst` runs once at task start (task goal/constraints/subtask chain extraction, with thinking mode enabled), then `Operations Planner` and `Progress Evaluator` run in a bounded loop with screenshot evidence (`pre-action/current -> action -> before/after -> evaluation`).
+  Browser and game Delegation Mode tasks now share the same main loop; scenario differences are profile-driven (`browser / game-2048 / game-sokoban`) through plug-and-play config plus bounded `host.*`/`game.*` tools.
+  Focus now supports a Delegation Mode viewport policy (`16:9` reduced-tier physical resize, centered on target monitor), and click localization follows a ladder (`rule-based -> cloud coordinate -> local lightweight vision fallback`).
+  This phase should only complete the short-horizon memory loop, not the final long-horizon companion memory system: recent frame descriptions, rolling summaries, Delegation Mode verification records, and short next-step carry-over should all be coherent, but true summary-of-summaries and file-backed pseudo-long-term memory belong to the final convergence phase.
+  - [x] refactor Delegation Mode loop to `Mission Analyst -> Operations Planner -> Progress Evaluator` and enable Mission Analyst thinking mode
+  - [x] unify browser and `2048/Sokoban` Delegation Mode entry to one loop with profile-driven differences
+  - [x] apply Delegation Mode focus viewport policy (`16:9` reduced-tier physical resize) in TS/Rust command chain
+  - [x] add lightweight non-DOM click localization ladder (rules -> cloud coordinate -> local lightweight fallback)
   - [ ] raise `2048` from accepted loop validation to a more repeatable stable solving baseline
   - [ ] raise `Sokoban` from minimum semantic-action skeleton to real simple-level solving
-  - [ ] land an explicit companion mode / delegated mode state with clear entry and exit conditions instead of relying on temporary unified-run style control flow
-  - [ ] make companion-first and delegated-execution boundaries explicit in runtime/orchestration behavior
-  - [ ] structure delegated-task follow-up around explicit verification plus memory update rather than treating action execution as the end of the loop
-  - [ ] correct the current functional-path perception mismatch so `Unified Run`, `2048`, and `Sokoban` all depend on the local companion runtime observation chain rather than direct cloud screenshot analysis
+  - [ ] land an explicit Companion Mode / Delegation Mode state with clear entry and exit conditions instead of relying on temporary unified-run style control flow
+  - [ ] make companion-first and Delegation Mode boundaries explicit in runtime/orchestration behavior
+  - [ ] structure Delegation Mode follow-up around explicit verification plus memory update rather than treating action execution as the end of the loop
+  - [ ] complete the generic Delegation Mode browser loop through `host.*` MCP tools and task configs (no hardcoded task branch)
+  - [ ] keep control panel as the only formal interaction entry (`Runtime State -> Debug Capture -> Interaction Mode`) and keep workbench debug-only
   - [ ] decide which task/game capabilities stay in core MCP tools and which should become pluginized phase-by-phase
   - [-] keep broader new-game transfer outside the acceptance bar until the existing functional pair is stable
 
 P5 close-out note:
 
 - code close-out work is now in place for the remaining quality issues that dominated Round 2 / Round 3 validation:
-  - delegated runs auto-start the local observation chain and wait through warmup instead of failing immediately
+  - Delegation Mode runs auto-start the local observation chain and wait through warmup instead of failing immediately
   - `2048` follow-up consumes post-action observation and avoids inventing stale board conclusions
   - `Sokoban` stays on bounded short plans and now asks for more grounded, position-aware follow-up
-  - delegated looping can continue autonomously without overlapping runs or duplicate speech
+  - Delegation Mode looping can continue autonomously without overlapping runs or duplicate speech
 - the remaining `P5` gate is no longer missing architecture; it is final manual close-out validation
 - `P5` should only be marked done after the final short validation pass confirms:
   - one-click warmup is stable
   - `2048` follow-up stays grounded
-  - `Sokoban` single-round and delegated-loop commentary are concrete enough to count as continuous thought
+  - `Sokoban` single-round and Delegation Mode commentary are concrete enough to count as continuous thought
 - if those checks pass, all remaining larger concerns move to `P6/P7`, especially:
   - layered memory / summary-of-summaries / file-backed pseudo-long-term memory
   - long-horizon companion recall
@@ -244,7 +251,7 @@ P5 close-out note:
   Goal: finish the last round of core product work so the system has a defensible final runtime shape rather than only a collection of working subsystems.
   This phase is still a core implementation phase, focused on memory, orchestration, and the final local-small / cloud-big split, not on packaging and write-up.
   - [ ] finalize the local-small / cloud-big split for perception, reasoning, and reply paths
-  - [ ] complete the layered-memory design so both companion and delegated modes can retain short-horizon context during play and compress multiple rolling summaries into larger session summaries, then into file-backed pseudo-long-term memory
+  - [ ] complete the layered-memory design so both Companion Mode and Delegation Mode can retain short-horizon context during play and compress multiple rolling summaries into larger session summaries, then into file-backed pseudo-long-term memory
   - [ ] validate the final long-horizon companion bar: after an extended session, the companion should still be able to recall and narrate earlier salient events from the same play session instead of only the most recent few summaries
   - [ ] decide whether a fast local reaction layer is needed for speech/short companion reactions while keeping richer cloud replies where appropriate, or explicitly justify not implementing it
   - [ ] tighten bounded GCC scope, mode-aware orchestration, and layered memory into the final explicit product definition

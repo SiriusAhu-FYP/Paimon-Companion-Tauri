@@ -9,6 +9,7 @@
     "build": "pnpm setup:local-asr && tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "logs:filter": "node ./scripts/filter-debug-capture.mjs",
     "tauri": "tauri",
     "kill-port": "powershell -Command \"$ports = 31420,31421; $connections = Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in $ports }; if ($connections) { $connections | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }; exit 0\""
   },
@@ -29,6 +30,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-i18next": "^16.6.6",
+    "smol-toml": "^1.6.1",
     "tauri-plugin-keyring-api": "^0.1.1"
   },
   "devDependencies": {

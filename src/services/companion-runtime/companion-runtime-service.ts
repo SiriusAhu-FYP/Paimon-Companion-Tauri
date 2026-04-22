@@ -36,6 +36,14 @@ interface OpenAIChatCompletionResponse {
 	}>;
 }
 
+interface PromptContextProfile {
+	recentFrameCount: number;
+	recentSummaryCount: number;
+	lineCharLimit: number;
+	summaryHistoryCount: number;
+	auditLogEnabled: boolean;
+}
+
 function makeInitialMetrics(): CompanionRuntimeMetrics {
 	return {
 		sessionStartedAt: null,
@@ -100,6 +108,31 @@ function extractMessageText(response: OpenAIChatCompletionResponse): string {
 function truncateLine(text: string, limit = 160): string {
 	if (text.length <= limit) return text;
 	return `${text.slice(0, limit - 1)}…`;
+}
+
+function clampInt(value: number, fallback: number, min: number, max: number): number {
+	if (!Number.isFinite(value)) {
+		return fallback;
+	}
+	return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function resolvePromptContextProfile(): PromptContextProfile {
+	const runtimeConfig = getConfig().companionRuntime;
+	return {
+		recentFrameCount: clampInt(runtimeConfig.promptRecentFrameCount, 3, 1, 12),
+		recentSummaryCount: clampInt(runtimeConfig.promptRecentSummaryCount, 3, 1, 12),
+		lineCharLimit: clampInt(runtimeConfig.promptLineCharLimit, 120, 60, 500),
+		summaryHistoryCount: clampInt(runtimeConfig.promptSummaryHistoryCount, 6, 1, 20),
+		auditLogEnabled: runtimeConfig.promptAuditLogEnabled === true,
+	};
+}
+
+function countDirectionalCues(text: string): number {
+	const patterns = ["左", "右", "上", "下", "前方", "后方", "通道", "墙", "箱子", "目标点"];
+	return patterns.reduce((count, pattern) => (
+		text.includes(pattern) ? count + 1 : count
+	), 0);
 }
 
 function buildFallbackSummary(frames: readonly CompanionFrameDescriptionRecord[]): string {
@@ -205,6 +238,7 @@ export class CompanionRuntimeService {
 	}
 
 	getPromptContext(): string {
+		const promptProfile = resolvePromptContextProfile();
 		const latestTimestamp = this.state.lastSummary?.createdAt ?? this.state.lastFrame?.capturedAt ?? 0;
 		if (!latestTimestamp) {
 			return "";
@@ -230,27 +264,38 @@ export class CompanionRuntimeService {
 			);
 		}
 
-		const recentFrames = this.state.frameQueue.slice(-3);
+		const recentFrames = this.state.frameQueue.slice(-promptProfile.recentFrameCount);
 		if (recentFrames.length) {
 			parts.push(
 				[
 					"最近帧描述：",
-					...recentFrames.map((frame) => `- [${formatTime(frame.capturedAt)}] ${truncateLine(frame.description, 120)}`),
+					...recentFrames.map((frame) => `- [${formatTime(frame.capturedAt)}] ${truncateLine(frame.description, promptProfile.lineCharLimit)}`),
 				].join("\n"),
 			);
 		}
 
-		const recentSummaries = this.state.summaryHistory.slice(-3);
+		const recentSummaries = this.state.summaryHistory.slice(-promptProfile.recentSummaryCount);
 		if (recentSummaries.length > 1) {
 			parts.push(
 				[
 					"最近总结历史：",
-					...recentSummaries.map((summary) => `- [${formatTime(summary.createdAt)}] ${truncateLine(summary.summary, 120)}`),
+					...recentSummaries.map((summary) => `- [${formatTime(summary.createdAt)}] ${truncateLine(summary.summary, promptProfile.lineCharLimit)}`),
 				].join("\n"),
 			);
 		}
 
-		return parts.join("\n\n").trim();
+		const context = parts.join("\n\n").trim();
+		if (promptProfile.auditLogEnabled && context) {
+			log.info("companion prompt context audit", {
+				targetTitle: targetTitle ?? null,
+				contextChars: context.length,
+				recentFrameCount: recentFrames.length,
+				recentSummaryCount: recentSummaries.length,
+				lineCharLimit: promptProfile.lineCharLimit,
+				directionalCueHits: countDirectionalCues(context),
+			});
+		}
+		return context;
 	}
 
 	requireObservationContext(
@@ -527,6 +572,17 @@ export class CompanionRuntimeService {
 				summaryWindowMs: this.state.summaryWindowMs,
 				historyRetentionMs: this.state.historyRetentionMs,
 				proactiveRuntimeSummarySilenceSeconds: getConfig().companionRuntime.proactiveRuntimeSummarySilenceSeconds,
+				promptRecentFrameCount: getConfig().companionRuntime.promptRecentFrameCount,
+				promptRecentSummaryCount: getConfig().companionRuntime.promptRecentSummaryCount,
+				promptLineCharLimit: getConfig().companionRuntime.promptLineCharLimit,
+				promptSummaryHistoryCount: getConfig().companionRuntime.promptSummaryHistoryCount,
+				promptAuditLogEnabled: getConfig().companionRuntime.promptAuditLogEnabled,
+				browserLoadGuardEnabled: getConfig().companionRuntime.browserLoadGuardEnabled,
+				browserLoadIntervalMs: getConfig().companionRuntime.browserLoadIntervalMs,
+				browserLoadStableCount: getConfig().companionRuntime.browserLoadStableCount,
+				browserLoadTimeoutMs: getConfig().companionRuntime.browserLoadTimeoutMs,
+				browserLoadChangeThreshold: getConfig().companionRuntime.browserLoadChangeThreshold,
+				browserLoadCropScale: getConfig().companionRuntime.browserLoadCropScale,
 			},
 		});
 
@@ -538,8 +594,8 @@ export class CompanionRuntimeService {
 		this.emitState();
 	}
 
-	async testLocalVisionConnection(): Promise<void> {
-		await this.waitForLocalVisionReady();
+	async testLocalVisionConnection(options?: { timeoutMs?: number }): Promise<void> {
+		await this.waitForLocalVisionReady(options?.timeoutMs);
 	}
 
 	private async probeLocalVisionConnection(): Promise<void> {
@@ -554,8 +610,8 @@ export class CompanionRuntimeService {
 		}
 	}
 
-	private async waitForLocalVisionReady(): Promise<void> {
-		const deadline = Date.now() + LOCAL_VISION_READY_TIMEOUT_MS;
+	private async waitForLocalVisionReady(timeoutMs = LOCAL_VISION_READY_TIMEOUT_MS): Promise<void> {
+		const deadline = Date.now() + timeoutMs;
 		let lastError: unknown = null;
 		this.state.phase = "connecting";
 		this.state.observationReady = false;
@@ -580,7 +636,7 @@ export class CompanionRuntimeService {
 		}
 
 		const message = [
-			`本地视觉节点在 ${Math.round(LOCAL_VISION_READY_TIMEOUT_MS / 1000)} 秒内未就绪：${normalizeCompatibleOpenAIBaseUrl(this.state.localVisionBaseUrl)}`,
+			`本地视觉节点在 ${Math.round(timeoutMs / 1000)} 秒内未就绪：${normalizeCompatibleOpenAIBaseUrl(this.state.localVisionBaseUrl)}`,
 			"如果服务跑在 WSL 里，请确认：",
 			"1. vLLM 已经完成模型加载和 warmup",
 			"2. 端口已对 Windows 暴露",
@@ -904,6 +960,7 @@ export class CompanionRuntimeService {
 		previousSummaries: readonly CompanionSummaryRecord[],
 	): Promise<{ summary: string; source: "cloud" | "fallback" }> {
 		const config = getConfig();
+		const promptProfile = resolvePromptContextProfile();
 		const activeProfile = config.activeLlmProfileId
 			? config.llmProfiles.find((profile) => profile.id === config.activeLlmProfileId)
 			: null;
@@ -921,14 +978,25 @@ export class CompanionRuntimeService {
 
 		const historyText = previousSummaries.length
 			? previousSummaries
-				.slice(-6)
-				.map((summary, index) => `${index + 1}. ${summary.summary}`)
+				.slice(-promptProfile.summaryHistoryCount)
+				.map((summary, index) => `${index + 1}. ${truncateLine(summary.summary, promptProfile.lineCharLimit)}`)
 				.join("\n")
 			: "none";
 		const frameText = windowFrames
-			.map((frame) => `- [${new Date(frame.capturedAt).toLocaleTimeString()}] ${frame.description}`)
+			.map((frame) => `- [${new Date(frame.capturedAt).toLocaleTimeString()}] ${truncateLine(frame.description, promptProfile.lineCharLimit)}`)
 			.join("\n");
 		const observationOverlay = buildObservationOverlay(this.state.target?.title ?? windowFrames[windowFrames.length - 1]?.targetTitle ?? "");
+		if (promptProfile.auditLogEnabled) {
+			log.info("companion summary prompt audit", {
+				targetTitle: this.state.target?.title ?? null,
+				windowFrameCount: windowFrames.length,
+				historySummaryCount: previousSummaries.slice(-promptProfile.summaryHistoryCount).length,
+				frameTextChars: frameText.length,
+				historyTextChars: historyText.length,
+				lineCharLimit: promptProfile.lineCharLimit,
+				maxTokens: 220,
+			});
+		}
 
 		const response = await proxyRequest({
 			url: `${normalizeCompatibleOpenAIBaseUrl(baseUrl)}/chat/completions`,

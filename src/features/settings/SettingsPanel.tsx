@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
 	Box, Button, Typography, Stack, TextField,
-	Divider, Alert, IconButton, Tooltip,
+	Divider, Alert, IconButton, Tooltip, Select, MenuItem, FormControlLabel, Switch,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import NetworkCheckIcon from "@mui/icons-material/NetworkCheck";
@@ -19,12 +19,21 @@ import { AudioPlayer } from "@/services/audio/audio-player";
 import { checkLocalSherpaHealth } from "@/services/asr";
 import { HelpTooltip } from "@/components";
 import { useI18n } from "@/contexts/I18nProvider";
-import { refreshProviders } from "@/services";
+import { getServices, refreshProviders } from "@/services";
+import { MOCK_CHARACTER_PROFILE } from "@/utils/mock";
+import type { CharacterProfile } from "@/types";
 import { AsrProfilesSection } from "./AsrProfilesSection";
 import { LLMProfilesSection } from "./LLMProfilesSection";
 import { TTSProfilesSection } from "./TTSProfilesSection";
 
 const log = createLogger("settings");
+
+function normalizeSelectedCharacterId(currentId: string | null, available: readonly CharacterProfile[]): string {
+	if (!currentId || currentId === MOCK_CHARACTER_PROFILE.id) {
+		return "__manual__";
+	}
+	return available.some((profile) => profile.id === currentId) ? currentId : "__manual__";
+}
 
 interface SettingsPanelProps {
 	onClose?: () => void;
@@ -41,6 +50,8 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 	const [testing, setTesting] = useState<"llm" | "tts" | "asr" | null>(null);
 	const [ttsTestText, setTtsTestText] = useState(() => t("你好，我是测试文本", "Hello, this is a test sample."));
 	const [ttsTesting, setTtsTesting] = useState(false);
+	const [characterProfiles, setCharacterProfiles] = useState<CharacterProfile[]>([]);
+	const [selectedCharacterId, setSelectedCharacterId] = useState("__manual__");
 
 	useEffect(() => {
 		let cancelled = false;
@@ -48,6 +59,13 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 			const loaded = await loadConfig();
 			if (cancelled) return;
 			setConfig(loaded);
+			const { character } = getServices();
+			const available = character.getAvailableProfiles();
+			setCharacterProfiles([...available]);
+			const current = character.getProfile();
+			setSelectedCharacterId(
+				normalizeSelectedCharacterId(current?.id ?? loaded.character.activeProfileId ?? null, available),
+			);
 			log.info("settings loaded");
 		})();
 		return () => { cancelled = true; };
@@ -82,6 +100,95 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		});
 		return config.tts;
 	}, [config]);
+
+	const handleCharacterSelect = useCallback(async (nextId: string) => {
+		const { character, llm } = getServices();
+		if (nextId === "__manual__") {
+			character.loadFromProfile(MOCK_CHARACTER_PROFILE);
+			llm.clearHistory();
+			setSelectedCharacterId("__manual__");
+			setConfig((current) => ({
+				...current,
+				character: {
+					...current.character,
+					activeProfileId: "",
+				},
+			}));
+			await updateConfig({
+				character: {
+					...config.character,
+					activeProfileId: "",
+				},
+			});
+			return;
+		}
+
+		const profile = character.findProfileById(nextId);
+		if (!profile) {
+			return;
+		}
+		character.loadFromProfile(profile);
+		llm.clearHistory();
+		setSelectedCharacterId(profile.id);
+		setConfig((current) => ({
+			...current,
+			character: {
+				...current.character,
+				activeProfileId: profile.id,
+			},
+		}));
+		await updateConfig({
+			character: {
+				...config.character,
+				activeProfileId: profile.id,
+			},
+		});
+	}, [config.character]);
+
+	const handleExpressionTimeoutChange = useCallback((rawValue: string) => {
+		const parsed = Number(rawValue);
+		const nextValue = Number.isFinite(parsed)
+			? Math.max(5, Math.min(600, Math.round(parsed)))
+			: DEFAULT_CONFIG.character.expressionIdleTimeoutSeconds;
+		setConfig((current) => ({
+			...current,
+			character: {
+				...current.character,
+				expressionIdleTimeoutSeconds: nextValue,
+			},
+		}));
+	}, []);
+
+	const handleProactiveSilenceChange = useCallback((rawValue: string) => {
+		const parsed = Number(rawValue);
+		const nextValue = Number.isFinite(parsed)
+			? Math.max(5, Math.min(600, Math.round(parsed)))
+			: DEFAULT_CONFIG.companionRuntime.proactiveRuntimeSummarySilenceSeconds;
+		setConfig((current) => ({
+			...current,
+			companionRuntime: {
+				...current.companionRuntime,
+				proactiveRuntimeSummarySilenceSeconds: nextValue,
+			},
+		}));
+	}, []);
+
+	const persistBehaviorSettings = useCallback(async () => {
+		const { character, proactiveCompanion } = getServices();
+		character.setExpressionIdleTimeoutSeconds(config.character.expressionIdleTimeoutSeconds);
+		proactiveCompanion.setRuntimeSummarySilenceSeconds(config.companionRuntime.proactiveRuntimeSummarySilenceSeconds);
+		await updateConfig({
+			character: { ...config.character },
+			companionRuntime: {
+				...config.companionRuntime,
+			},
+		});
+	}, [config.character, config.companionRuntime]);
+
+	const currentProfileName = selectedCharacterId === "__manual__"
+		? t("手动人设", "Manual Persona")
+		: characterProfiles.find((profile) => profile.id === selectedCharacterId)?.name
+			?? t("手动人设", "Manual Persona");
 
 	const handleTestLLM = useCallback(async () => {
 		setTesting("llm");
@@ -330,6 +437,150 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 				refreshProviders();
 			}}
 		/>
+
+		<Divider />
+
+		<SectionTitle>
+			{t("角色与行为", "Character & Behavior")}
+			<HelpTooltip title={t("角色切换、情感调参和行为约束统一放在设置中。", "Character switch, affect tuning, and behavior constraints are managed in settings.")} />
+		</SectionTitle>
+		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+			<Stack spacing={0.5}>
+				<Typography variant="caption" color="text.secondary">
+					{t("当前角色", "Current Character")}：{currentProfileName}
+				</Typography>
+				<Select
+					size="small"
+					fullWidth
+					value={selectedCharacterId}
+					onChange={(event) => { void handleCharacterSelect(event.target.value); }}
+				>
+					<MenuItem value="__manual__">
+						<em>{t("手动人设", "Manual Persona")}</em>
+					</MenuItem>
+					{characterProfiles.map((profile) => (
+						<MenuItem key={profile.id} value={profile.id}>
+							{profile.name}
+						</MenuItem>
+					))}
+				</Select>
+			</Stack>
+
+			<Stack direction="row" spacing={0.5}>
+				<TextField
+					size="small"
+					fullWidth
+					type="number"
+					label={t("情感衰减窗口(秒)", "Affect Decay Window (s)")}
+					value={config.character.expressionIdleTimeoutSeconds}
+					onChange={(event) => handleExpressionTimeoutChange(event.target.value)}
+					onBlur={() => { void persistBehaviorSettings(); }}
+					inputProps={{ min: 5, max: 600, step: 5 }}
+				/>
+				<TextField
+					size="small"
+					fullWidth
+					type="number"
+					label={t("主动静默窗口(秒)", "Proactive Silence Window (s)")}
+					value={config.companionRuntime.proactiveRuntimeSummarySilenceSeconds}
+					onChange={(event) => handleProactiveSilenceChange(event.target.value)}
+					onBlur={() => { void persistBehaviorSettings(); }}
+					inputProps={{ min: 5, max: 600, step: 5 }}
+				/>
+			</Stack>
+
+			<FormControlLabel
+				control={(
+					<Switch
+						size="small"
+						checked={config.character.behaviorConstraints.enabled}
+						onChange={(event) => {
+							const enabled = event.target.checked;
+							setConfig((current) => ({
+								...current,
+								character: {
+									...current.character,
+									behaviorConstraints: {
+										...current.character.behaviorConstraints,
+										enabled,
+									},
+								},
+							}));
+							void updateConfig({
+								character: {
+									...config.character,
+									behaviorConstraints: {
+										...config.character.behaviorConstraints,
+										enabled,
+									},
+								},
+							});
+						}}
+					/>
+				)}
+				label={t("行为约束", "Behavior Constraints")}
+			/>
+
+			{config.character.behaviorConstraints.enabled && (
+				<Stack spacing={0.5}>
+					<TextField
+						size="small"
+						type="number"
+						label={t("最大回复字数", "Max Reply Length")}
+						value={config.character.behaviorConstraints.maxReplyLength}
+						onChange={(event) => {
+							const value = Math.max(20, Math.min(500, Number(event.target.value) || 150));
+							setConfig((current) => ({
+								...current,
+								character: {
+									...current.character,
+									behaviorConstraints: {
+										...current.character.behaviorConstraints,
+										maxReplyLength: value,
+									},
+								},
+							}));
+						}}
+						onBlur={() => {
+							void updateConfig({
+								character: {
+									...config.character,
+								},
+							});
+						}}
+						inputProps={{ min: 20, max: 500, step: 10 }}
+					/>
+					<TextField
+						size="small"
+						fullWidth
+						multiline
+						minRows={2}
+						maxRows={4}
+						label={t("自定义规则", "Custom Rules")}
+						value={config.character.behaviorConstraints.customRules}
+						onChange={(event) => {
+							setConfig((current) => ({
+								...current,
+								character: {
+									...current.character,
+									behaviorConstraints: {
+										...current.character.behaviorConstraints,
+										customRules: event.target.value,
+									},
+								},
+							}));
+						}}
+						onBlur={() => {
+							void updateConfig({
+								character: {
+									...config.character,
+								},
+							});
+						}}
+					/>
+				</Stack>
+			)}
+		</Box>
 
 		<Divider />
 

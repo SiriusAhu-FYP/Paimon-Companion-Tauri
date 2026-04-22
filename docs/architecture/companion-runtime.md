@@ -33,14 +33,14 @@ In other words, structured control should live in the tool layer, not in the vis
 This applies to both user-facing modes:
 
 - `companion`
-- `delegated`
+- `delegation`
 
 Both modes should share the same local-vision primary perception path. The difference between them is not which visual stack is used, but how the cloud layer consumes the same observation context:
 
 - `companion`: reply / proactive / emotional support
-- `delegated`: task plan / action decision / grounded follow-up
+- `delegation`: task plan / action decision / grounded follow-up
 
-Delegated planning should not be one-size-fits-all. The cloud layer should adapt action granularity to the task:
+Delegation Mode planning should not be one-size-fits-all. The cloud layer should adapt action granularity to the task:
 
 - dynamic or stochastic tasks, such as `2048`, should default to single-step closed loops: observe -> decide one move -> execute -> verify -> observe again
 - static or deterministic tasks, such as `Sokoban`, may return a bounded short action sequence, but every step still requires verification and the remaining sequence should be discarded if the observed state diverges
@@ -101,7 +101,7 @@ Its job is to produce:
 - companion-facing natural language
 - MCP tool calls when emotion or gameplay actions are needed
 - higher-level temporal understanding of what is happening
-- delegated-mode planning / action decisions based on the same local observation context
+- Delegation Mode planning / action decisions based on the same local observation context
 
 This layer should own the higher-cost reasoning, not the local VLM.
 

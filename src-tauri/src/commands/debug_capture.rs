@@ -154,12 +154,8 @@ fn sanitize_label(raw: &str) -> String {
 }
 
 fn chrono_like_timestamp() -> String {
-	let now = std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.unwrap_or_default();
-	let secs = now.as_secs();
-	let millis = now.subsec_millis();
-	format!("{secs}-{millis:03}")
+	let now = chrono::Local::now();
+	now.format("%Y%m%d-%H%M%S-%3f").to_string()
 }
 
 fn decode_data_url(data_url: &str) -> Result<Vec<u8>, String> {

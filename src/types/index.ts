@@ -39,6 +39,7 @@ export type {
 	DelegatedExecutionRecord,
 	DelegatedExecutionVerificationResult,
 	DelegationMemoryState,
+	SokobanChangeType,
 } from "./delegation-memory";
 export type {
 	UnifiedRunPhase,
@@ -81,6 +82,7 @@ export type {
 	PerceptionSnapshot,
 } from "./functional";
 export type {
+	HostFocusOptions,
 	HostMouseAction,
 	HostMouseButton,
 	HostWindowCapture,
@@ -88,6 +90,7 @@ export type {
 } from "./system";
 export type {
 	SemanticActionExecutionResult,
+	SemanticDelegationProfileConfig,
 	SemanticGameActionDefinition,
 	SemanticGameManifest,
 	SemanticGamePluginDefinition,

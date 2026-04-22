@@ -7,6 +7,8 @@ export interface DelegatedExecutionVerificationResult {
 	error: string | null;
 }
 
+export type SokobanChangeType = "reposition" | "open_path" | "push_box" | "no_progress";
+
 export interface DelegatedExecutionRecord {
 	id: string;
 	createdAt: number;
@@ -21,6 +23,7 @@ export interface DelegatedExecutionRecord {
 	selectedAction: string | null;
 	executionSummary: string;
 	verificationResult: DelegatedExecutionVerificationResult;
+	sokobanChangeType?: SokobanChangeType;
 	postActionObservationStatus?: "fresh-changed" | "fresh-ambiguous" | "timeout";
 	postActionObservationSummary?: string | null;
 	followUpSummary: string;
