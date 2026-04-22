@@ -6,6 +6,7 @@ import { callLocalMcpTool, callLocalMcpToolJson, listLocalMcpTools } from "@/ser
 import type { OrchestratorService } from "@/services/orchestrator";
 import { requestOpenAICompatibleVision } from "@/services/vlm";
 import type { FunctionalTarget } from "@/types";
+import type { MemoryCandidate } from "@/types/memory";
 import { getDelegatedTaskConfig, type DelegatedTaskProfileConfig } from "./delegated-task-config";
 
 const log = createLogger("delegated-task-runner");
@@ -103,6 +104,7 @@ export async function runDelegatedTaskLoop(input: {
 	shouldStop: () => boolean;
 	onAssistantReply?: (reply: string, source: "planner" | "reflection") => Promise<void> | void;
 	scratchpad?: DelegationScratchpadRuntime | null;
+	recallMemoryCandidates?: (query: string) => Promise<MemoryCandidate[]>;
 }): Promise<DelegatedTaskRunnerResult> {
 	const config = getDelegatedTaskConfig(input.profileId);
 	const history: string[] = [];
@@ -184,6 +186,31 @@ export async function runDelegatedTaskLoop(input: {
 		{ append: false },
 	);
 
+	let memoryRecallSummary = "";
+	if (input.recallMemoryCandidates) {
+		const recallQuery = buildMemoryRecallQuery(input.taskText, mission);
+		try {
+			const candidates = await recallWithTimeout(input.recallMemoryCandidates, recallQuery, 2_500);
+			if (candidates.length > 0) {
+				log.info("delegation memory recall completed", {
+					count: candidates.length,
+					queryPreview: recallQuery.slice(0, 120),
+				});
+				memoryRecallSummary = formatMemoryRecallSummary(candidates);
+				await persistScratchpadText(
+					input.scratchpad,
+					"memory-recall.md",
+					`# 历史记忆召回\n${memoryRecallSummary}\n`,
+					{ append: false },
+				);
+			}
+		} catch (error) {
+			log.warn("delegation memory recall failed", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+
 	const buildTimeline = (): import("@/types/unified").DelegationTimeline => ({
 		taskText: input.taskText,
 		missionGoal: mission.missionGoal,
@@ -204,6 +231,7 @@ export async function runDelegatedTaskLoop(input: {
 		const sharedScratchpadContext = buildSharedScratchpadContext({
 			taskText: input.taskText,
 			mission,
+			memoryRecallSummary,
 			latestHint,
 			latestExpectedOutcome,
 			latestExpectedMet,
@@ -306,6 +334,7 @@ export async function runDelegatedTaskLoop(input: {
 			`${buildSharedScratchpadContext({
 				taskText: input.taskText,
 				mission,
+				memoryRecallSummary,
 				latestHint,
 				latestExpectedOutcome,
 				latestExpectedMet,
@@ -365,6 +394,7 @@ export async function runDelegatedTaskLoop(input: {
 				`${buildSharedScratchpadContext({
 					taskText: input.taskText,
 					mission,
+					memoryRecallSummary,
 					latestHint,
 					latestExpectedOutcome,
 					latestExpectedMet,
@@ -438,6 +468,7 @@ export async function runDelegatedTaskLoop(input: {
 					scratchpadContext: buildSharedScratchpadContext({
 						taskText: input.taskText,
 						mission,
+						memoryRecallSummary,
 						latestHint,
 						latestExpectedOutcome,
 						latestExpectedMet,
@@ -543,6 +574,7 @@ export async function runDelegatedTaskLoop(input: {
 				`${buildSharedScratchpadContext({
 					taskText: input.taskText,
 					mission,
+					memoryRecallSummary,
 					latestHint,
 					latestExpectedOutcome,
 					latestExpectedMet,
@@ -1895,6 +1927,7 @@ function pushScratchpadNote(bucket: string[], note: string, limit: number): void
 function buildSharedScratchpadContext(input: {
 	taskText: string;
 	mission: MissionAnalysisDecision;
+	memoryRecallSummary: string;
 	latestHint: string;
 	latestExpectedOutcome: string;
 	latestExpectedMet: boolean | null;
@@ -1913,6 +1946,8 @@ function buildSharedScratchpadContext(input: {
 		`constraints=${input.mission.hardConstraints.join(" | ") || "(none)"}`,
 		`subtaskChain=${input.mission.subtaskChain.join(" -> ") || "(none)"}`,
 		`completionSignals=${input.mission.completionSignals.join(" | ") || "(none)"}`,
+		"### memoryRecall",
+		input.memoryRecallSummary || "(none)",
 		"### latestHint",
 		input.latestHint || "(none)",
 		"### latestExpectation",
@@ -1925,6 +1960,46 @@ function buildSharedScratchpadContext(input: {
 		"### executionHistoryRecent",
 		historyTail.length ? historyTail.join("\n") : "(none)",
 	].join("\n");
+}
+
+function buildMemoryRecallQuery(taskText: string, mission: MissionAnalysisDecision): string {
+	const parts = [
+		taskText,
+		mission.missionGoal,
+		mission.subtaskChain.join(" "),
+		mission.completionSignals.join(" "),
+	].map((item) => item.trim()).filter(Boolean);
+	return parts.join(" | ");
+}
+
+async function recallWithTimeout(
+	recallFn: (query: string) => Promise<MemoryCandidate[]>,
+	query: string,
+	timeoutMs: number,
+): Promise<MemoryCandidate[]> {
+	const timeoutPromise = new Promise<MemoryCandidate[]>((resolve) => {
+		setTimeout(() => resolve([]), timeoutMs);
+	});
+	return Promise.race([
+		recallFn(query),
+		timeoutPromise,
+	]);
+}
+
+function formatMemoryRecallSummary(candidates: MemoryCandidate[]): string {
+	return candidates.map((candidate, index) => {
+		const entry = candidate.entry;
+		const time = new Date(entry.time_start).toLocaleString();
+		const entities = entry.entities.length ? entry.entities.join(",") : "无";
+		return [
+			`[记忆 ${index + 1}] 时间=${time}`,
+			`场景=${entry.scene_or_task}`,
+			`实体=${entities}`,
+			`结果=${entry.event_result}`,
+			`摘要=${entry.summary}`,
+			`相关度=${candidate.relevanceScore.toFixed(2)}`,
+		].join(" | ");
+	}).join("\n");
 }
 
 async function persistScratchpadText(

@@ -215,6 +215,9 @@ export class UnifiedRuntimeService {
 				orchestrator: this.orchestrator,
 				shouldStop: () => this.activeLoopId !== loopId,
 				scratchpad,
+				recallMemoryCandidates: this.ltmService
+					? async (query: string) => this.ltmService!.recall(query, 3)
+					: undefined,
 				onAssistantReply: async (reply, source) => {
 					const normalizedReply = reply.trim();
 					if (!normalizedReply) {
@@ -552,23 +555,6 @@ export class UnifiedRuntimeService {
 				taskText: input.taskText,
 				target: input.target,
 			});
-
-			// One-shot async recall after task confirmation (focus + scratchpad ready)
-			if (this.ltmService) {
-				try {
-					const candidates = await this.ltmService.recall(input.taskText, 3);
-					if (candidates.length > 0) {
-						log.info("delegation recall completed", { count: candidates.length });
-						const recallBlock = candidates.map((c, i) => {
-							const e = c.entry;
-							return `[记忆 ${i + 1}] ${e.scene_or_task} | ${e.summary} (${e.event_result})`;
-						}).join("\n");
-						scratchpad?.append("memory-recall.md", `# 历史记忆召回\n${recallBlock}\n`);
-					}
-				} catch (err) {
-					log.warn("delegation async recall failed", err);
-				}
-			}
 			const actionStartedAt = Date.now();
 			const result = await runDelegatedTaskLoop({
 				taskText: input.taskText,
@@ -577,6 +563,9 @@ export class UnifiedRuntimeService {
 				traceId: run.id,
 				shouldStop: () => this.activeLoopId !== loopId,
 				scratchpad,
+				recallMemoryCandidates: this.ltmService
+					? async (query: string) => this.ltmService!.recall(query, 3)
+					: undefined,
 				onAssistantReply: async (reply, source) => {
 					const normalizedReply = reply.trim();
 					if (!normalizedReply) {

@@ -9,6 +9,7 @@ pub fn run() {
 		.manage(McpBridgeState::default())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_store::Builder::default().build())
+		.plugin(tauri_plugin_fs::init())
 		.plugin(tauri_plugin_keyring::init())
 		.setup(|app| {
 			let _ = commands::delegation_scratchpad::cleanup_stale_delegation_scratchpads(24);
