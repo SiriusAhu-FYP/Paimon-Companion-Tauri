@@ -8,7 +8,7 @@ import type {
 } from "@/types/memory";
 import { createLogger } from "@/services/logger";
 import { appDataDir } from "@tauri-apps/api/path";
-import { mkdir, readDir, readTextFile, writeTextFile, remove } from "@tauri-apps/plugin-fs";
+import { mkdir, readDir, readTextFile, writeTextFile, remove, stat } from "@tauri-apps/plugin-fs";
 
 const log = createLogger("persistent-memory");
 
@@ -18,6 +18,8 @@ const MAX_LOADED_SESSIONS = 5;
 const MAX_CROSS_SESSION_CONTEXT_CHARS = 800;
 const DEBUG_CAPTURE_TTL_DAYS = 7;
 const SESSION_MEMORY_TTL_DAYS = 30;
+const MAX_DEBUG_CAPTURES_BYTES = 2 * 1024 * 1024 * 1024; // 2GB
+const SCRATCHPAD_TTL_DAYS = 1;
 
 export interface PersistentMemoryServiceDeps {
 	bus: EventBus;
@@ -227,7 +229,93 @@ export class PersistentMemoryService {
 		try {
 			const appDir = await appDataDir();
 			const debugDir = `${appDir}logs/debug-captures`;
-			const entries = await readDir(debugDir);
+			await this.cleanupDebugCaptures(debugDir, debugTtl, now);
+		} catch {
+			// debug-captures dir may not exist
+		}
+
+		try {
+			const appDir = await appDataDir();
+			const scratchpadDir = `${appDir}logs/delegation-scratchpads`;
+			await this.cleanupScratchpads(scratchpadDir, now);
+		} catch {
+			// scratchpads dir may not exist
+		}
+	}
+
+	private async cleanupDebugCaptures(debugDir: string, debugTtl: number, now: number): Promise<void> {
+		const entries = await readDir(debugDir);
+		const dirs: { name: string; date: number }[] = [];
+
+		for (const entry of entries) {
+			if (!entry.isDirectory) continue;
+			const match = entry.name.match(/^(\d{8})-(\d{6})/);
+			if (!match) continue;
+			const dateStr = match[1]!;
+			const year = parseInt(dateStr.slice(0, 4), 10);
+			const month = parseInt(dateStr.slice(4, 6), 10) - 1;
+			const day = parseInt(dateStr.slice(6, 8), 10);
+			const dirDate = new Date(year, month, day).getTime();
+
+			if (now - dirDate > debugTtl) {
+				try {
+					await remove(`${debugDir}/${entry.name}`, { recursive: true });
+					log.info("removed expired debug capture", { name: entry.name });
+				} catch {
+					// best-effort
+				}
+			} else {
+				dirs.push({ name: entry.name, date: dirDate });
+			}
+		}
+
+		// Size-based LRU: if remaining dirs exceed threshold, remove oldest first
+		dirs.sort((a, b) => a.date - b.date);
+		let totalSize = 0;
+		const dirSizes: { name: string; date: number; size: number }[] = [];
+		for (const d of dirs) {
+			try {
+				const dirPath = `${debugDir}/${d.name}`;
+				const files = await readDir(dirPath);
+				let dirSize = 0;
+				for (const f of files) {
+					if (f.isDirectory) continue;
+					try {
+						const s = await stat(`${dirPath}/${f.name}`);
+						dirSize += s.size;
+					} catch {
+						// ignore stat errors
+					}
+				}
+				totalSize += dirSize;
+				dirSizes.push({ ...d, size: dirSize });
+			} catch {
+				// ignore
+			}
+		}
+
+		if (totalSize > MAX_DEBUG_CAPTURES_BYTES) {
+			log.info("debug captures exceed size threshold", {
+				totalMB: (totalSize / (1024 * 1024)).toFixed(0),
+				thresholdMB: (MAX_DEBUG_CAPTURES_BYTES / (1024 * 1024)).toFixed(0),
+			});
+			for (const d of dirSizes) {
+				if (totalSize <= MAX_DEBUG_CAPTURES_BYTES) break;
+				try {
+					await remove(`${debugDir}/${d.name}`, { recursive: true });
+					totalSize -= d.size;
+					log.info("removed debug capture (LRU)", { name: d.name, sizeMB: (d.size / (1024 * 1024)).toFixed(1) });
+				} catch {
+					// best-effort
+				}
+			}
+		}
+	}
+
+	private async cleanupScratchpads(scratchpadDir: string, now: number): Promise<void> {
+		const ttl = SCRATCHPAD_TTL_DAYS * 24 * 60 * 60 * 1000;
+		try {
+			const entries = await readDir(scratchpadDir);
 			for (const entry of entries) {
 				if (!entry.isDirectory) continue;
 				const match = entry.name.match(/^(\d{8})-(\d{6})/);
@@ -237,17 +325,17 @@ export class PersistentMemoryService {
 				const month = parseInt(dateStr.slice(4, 6), 10) - 1;
 				const day = parseInt(dateStr.slice(6, 8), 10);
 				const dirDate = new Date(year, month, day).getTime();
-				if (now - dirDate > debugTtl) {
+				if (now - dirDate > ttl) {
 					try {
-						await remove(`${debugDir}/${entry.name}`, { recursive: true });
-						log.info("removed expired debug capture", { name: entry.name });
+						await remove(`${scratchpadDir}/${entry.name}`, { recursive: true });
+						log.info("removed expired scratchpad", { name: entry.name });
 					} catch {
 						// best-effort
 					}
 				}
 			}
 		} catch {
-			// debug-captures dir may not exist
+			// directory may not exist
 		}
 	}
 
