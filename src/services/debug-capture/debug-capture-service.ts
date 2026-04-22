@@ -15,23 +15,43 @@ function makeInitialState(): DebugCaptureState {
 	};
 }
 
-function sanitizePayload(value: unknown): unknown {
-	if (value == null) return value;
-	if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-		return value;
+const STRING_SOFT_LIMIT = 512;
+const ARRAY_DEPTH_LIMIT = 32;
+const DATA_URL_PREFIX = "data:image/";
+
+function isDataUrl(value: string): boolean {
+	return value.startsWith(DATA_URL_PREFIX);
+}
+
+function truncateString(value: string): string | { _truncated: true; length: number; preview: string } {
+	if (isDataUrl(value)) {
+		return { _truncated: true, length: value.length, preview: value.slice(0, 40) + "..." };
 	}
+	if (value.length <= STRING_SOFT_LIMIT) return value;
+	return { _truncated: true, length: value.length, preview: value.slice(0, STRING_SOFT_LIMIT) + "..." };
+}
+
+function sanitizePayload(value: unknown, depth = 0): unknown {
+	if (value == null) return value;
+	if (typeof value === "number" || typeof value === "boolean") return value;
+	if (typeof value === "string") return truncateString(value);
 	if (value instanceof ArrayBuffer) {
-		return { type: "ArrayBuffer", byteLength: value.byteLength };
+		return { _type: "ArrayBuffer", byteLength: value.byteLength };
 	}
 	if (ArrayBuffer.isView(value)) {
-		return { type: value.constructor.name, byteLength: value.byteLength };
+		return { _type: value.constructor.name, byteLength: value.byteLength };
 	}
+	if (depth >= 6) return "[depth limit]";
 	if (Array.isArray(value)) {
-		return value.map(sanitizePayload);
+		const items = value.slice(0, ARRAY_DEPTH_LIMIT).map((v) => sanitizePayload(v, depth + 1));
+		if (value.length > ARRAY_DEPTH_LIMIT) {
+			items.push({ _truncated: true, totalLength: value.length });
+		}
+		return items;
 	}
 	if (typeof value === "object") {
 		return Object.fromEntries(
-			Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, sanitizePayload(nested)]),
+			Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, sanitizePayload(nested, depth + 1)]),
 		);
 	}
 	return String(value);
@@ -41,6 +61,15 @@ function stringifyJsonl(payload: unknown) {
 	return `${JSON.stringify(payload)}\n`;
 }
 
+const THROTTLED_EVENTS = new Set([
+	"orchestrator:state-change",
+	"companion-runtime:state-change",
+	"unified:state-change",
+	"game2048:state-change",
+	"sokoban:state-change",
+]);
+const THROTTLE_INTERVAL_MS = 2000;
+
 export class DebugCaptureService {
 	private bus: EventBus;
 	private state: DebugCaptureState = makeInitialState();
@@ -49,6 +78,7 @@ export class DebugCaptureService {
 	private pendingWrites = new Map<string, string[]>();
 	private flushTimer: ReturnType<typeof setTimeout> | null = null;
 	private flushInFlight = false;
+	private lastThrottledWriteAt = new Map<string, number>();
 
 	constructor(bus: EventBus) {
 		this.bus = bus;
@@ -155,8 +185,11 @@ export class DebugCaptureService {
 		if (!nextEntries.length) return;
 		for (const entry of nextEntries) {
 			this.lastEventSequence = entry.sequence;
-			if (entry.event === "debug-capture:state-change") {
-				continue;
+			if (entry.event === "debug-capture:state-change") continue;
+			if (THROTTLED_EVENTS.has(entry.event)) {
+				const lastAt = this.lastThrottledWriteAt.get(entry.event) ?? 0;
+				if (entry.timestamp - lastAt < THROTTLE_INTERVAL_MS) continue;
+				this.lastThrottledWriteAt.set(entry.event, entry.timestamp);
 			}
 			this.enqueueEvent(entry);
 		}

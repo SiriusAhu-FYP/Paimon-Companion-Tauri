@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	Accordion,
 	AccordionDetails,
@@ -10,12 +10,14 @@ import {
 	MenuItem,
 	FormControl,
 	InputLabel,
+	LinearProgress,
 	type SelectChangeEvent,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorIcon from "@mui/icons-material/Error";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import { useUnifiedRuntime } from "@/hooks/use-unified-runtime";
 import { useI18n } from "@/contexts/I18nProvider";
 import type { DelegationRoundEntry, DelegationTimeline, UnifiedRunRecord } from "@/types/unified";
@@ -28,7 +30,7 @@ function StatusChip({ ok, label }: { ok: boolean; label: string }) {
 			label={label}
 			color={ok ? "success" : "error"}
 			variant="outlined"
-			sx={{ mr: 0.5, mb: 0.5 }}
+			sx={{ mr: 0.5 }}
 		/>
 	);
 }
@@ -41,13 +43,7 @@ function AlignmentChip({ alignment }: { alignment: string }) {
 		deviated: "error",
 	};
 	return (
-		<Chip
-			size="small"
-			label={alignment}
-			color={colorMap[alignment] ?? "default"}
-			variant="outlined"
-			sx={{ mr: 0.5, mb: 0.5 }}
-		/>
+		<Chip size="small" label={alignment} color={colorMap[alignment] ?? "default"} variant="outlined" sx={{ mr: 0.5 }} />
 	);
 }
 
@@ -59,117 +55,155 @@ function ProgressChip({ progress }: { progress: string }) {
 		none: "error",
 	};
 	return (
-		<Chip
-			size="small"
-			label={`progress: ${progress}`}
-			color={colorMap[progress] ?? "default"}
-			variant="outlined"
-			sx={{ mr: 0.5, mb: 0.5 }}
-		/>
+		<Chip size="small" label={progress} color={colorMap[progress] ?? "default"} variant="outlined" sx={{ mr: 0.5 }} />
 	);
 }
 
-function RoundCard({ entry }: { entry: DelegationRoundEntry }) {
+function RoundCard({ entry, isLatest }: { entry: DelegationRoundEntry; isLatest: boolean }) {
 	const time = new Date(entry.timestamp).toLocaleTimeString();
 
 	return (
 		<Accordion
-			defaultExpanded={false}
+			defaultExpanded={isLatest}
 			disableGutters
-			sx={{ "&:before": { display: "none" }, boxShadow: "none", borderBottom: 1, borderColor: "divider" }}
+			sx={{
+				"&:before": { display: "none" },
+				boxShadow: "none",
+				borderLeft: 3,
+				borderColor: entry.evaluatorSucceeded ? "success.main" : "error.main",
+				mb: 0.5,
+				bgcolor: isLatest ? "action.selected" : "transparent",
+			}}
 		>
-			<AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, "& .MuiAccordionSummary-content": { my: 0.5 } }}>
-				<Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", width: "100%" }}>
-					<Typography variant="subtitle2" sx={{ fontWeight: 700, minWidth: 60 }}>
+			<AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 36, py: 0, "& .MuiAccordionSummary-content": { my: 0.5, alignItems: "center" } }}>
+				<Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap", width: "100%" }}>
+					<Typography variant="caption" sx={{ fontWeight: 700, fontFamily: "monospace", minWidth: 28 }}>
 						R{entry.round}
 					</Typography>
-					<Typography variant="caption" color="text.secondary">
+					<Typography variant="caption" color="text.disabled" sx={{ fontSize: "0.65rem" }}>
 						{time}
 					</Typography>
-					<Chip size="small" label={entry.actionTool} variant="filled" sx={{ fontSize: "0.7rem" }} />
+					<Chip size="small" label={entry.actionTool.replace("host.", "")} sx={{ fontSize: "0.65rem", height: 18 }} />
+					<Box sx={{ flex: 1 }} />
 					<StatusChip ok={entry.evaluatorSucceeded} label={entry.evaluatorSucceeded ? "OK" : "FAIL"} />
 					<AlignmentChip alignment={entry.evaluatorAlignment} />
 					<ProgressChip progress={entry.evaluatorProgress} />
 				</Box>
 			</AccordionSummary>
-			<AccordionDetails sx={{ pt: 0 }}>
-				<Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-					<Box>
-						<Typography variant="caption" color="text.secondary" fontWeight={600}>Planner</Typography>
-						<Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+			<AccordionDetails sx={{ pt: 0, px: 1.5, pb: 1 }}>
+				<Box sx={{ display: "flex", flexDirection: "column", gap: 0.8 }}>
+					<Section label="Planner">
+						<Typography variant="body2" sx={{ whiteSpace: "pre-wrap", fontSize: "0.8rem" }}>
 							{entry.plannerReasoning}
 						</Typography>
 						{entry.plannerExpectedOutcome && (
-							<Typography variant="body2" color="info.main" sx={{ mt: 0.5 }}>
+							<Typography variant="body2" color="info.main" sx={{ mt: 0.3, fontSize: "0.8rem" }}>
 								→ {entry.plannerExpectedOutcome}
 							</Typography>
 						)}
-					</Box>
-					<Box>
-						<Typography variant="caption" color="text.secondary" fontWeight={600}>Action</Typography>
-						<Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.75rem", wordBreak: "break-all" }}>
-							{entry.actionTool}: {entry.actionSummary}
+					</Section>
+					<Section label="Action">
+						<Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.72rem", wordBreak: "break-all", color: "text.secondary" }}>
+							{entry.actionTool}({entry.actionSummary})
 						</Typography>
-					</Box>
-					<Box>
-						<Typography variant="caption" color="text.secondary" fontWeight={600}>Evaluator</Typography>
-						<Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mb: 0.5 }}>
+					</Section>
+					<Section label="Evaluator">
+						<Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mb: 0.3 }}>
 							<StatusChip ok={entry.evaluatorCorrect} label={entry.evaluatorCorrect ? "correct" : "incorrect"} />
-							<StatusChip ok={entry.evaluatorExpectedMet} label={entry.evaluatorExpectedMet ? "expected met" : "expected not met"} />
+							<StatusChip ok={entry.evaluatorExpectedMet} label={entry.evaluatorExpectedMet ? "expected met" : "expected miss"} />
 						</Box>
 						{entry.evaluatorReply && (
-							<Typography variant="body2" sx={{ fontStyle: "italic" }}>
+							<Typography variant="body2" sx={{ fontStyle: "italic", fontSize: "0.8rem", color: "text.secondary" }}>
 								"{entry.evaluatorReply}"
 							</Typography>
 						)}
 						{entry.evaluatorHint && (
-							<Typography variant="body2" color="warning.main" sx={{ mt: 0.5 }}>
-								Hint: {entry.evaluatorHint}
+							<Typography variant="body2" color="warning.main" sx={{ mt: 0.3, fontSize: "0.8rem" }}>
+								💡 {entry.evaluatorHint}
 							</Typography>
 						)}
-					</Box>
+					</Section>
 				</Box>
 			</AccordionDetails>
 		</Accordion>
 	);
 }
 
-function TimelineView({ timeline, run }: { timeline: DelegationTimeline; run: UnifiedRunRecord }) {
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+	return (
+		<Box>
+			<Typography variant="caption" color="text.disabled" fontWeight={600} sx={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: 0.5 }}>
+				{label}
+			</Typography>
+			{children}
+		</Box>
+	);
+}
+
+function TaskHeader({ timeline, run }: { timeline: DelegationTimeline; run: UnifiedRunRecord }) {
 	const { t } = useI18n();
 	const statusColor: Record<string, "success" | "error" | "warning"> = {
 		completed: "success",
 		failed: "error",
 		running: "warning",
 	};
+	const isRunning = run.status === "running";
 
 	return (
-		<Box sx={{ p: 1 }}>
-			<Box sx={{ mb: 1.5 }}>
-				<Typography variant="subtitle2" fontWeight={700}>
-					{timeline.taskText}
+		<Box sx={{ px: 1.5, pt: 1.5, pb: 1 }}>
+			<Typography variant="subtitle2" fontWeight={700} sx={{ lineHeight: 1.3 }}>
+				{timeline.taskText}
+			</Typography>
+			<Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.3, lineHeight: 1.4 }}>
+				{timeline.missionGoal}
+			</Typography>
+			<Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center" }}>
+				<Chip
+					size="small"
+					icon={isRunning ? <PlayArrowIcon /> : undefined}
+					label={run.status}
+					color={statusColor[run.status] ?? "default"}
+				/>
+				<Typography variant="caption" color="text.secondary">
+					{timeline.rounds.length} {t("轮", "rounds")}
+					{run.timings.actionMs ? ` · ${(run.timings.actionMs / 1000).toFixed(1)}s` : ""}
 				</Typography>
-				<Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-					{timeline.missionGoal}
-				</Typography>
-				<Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap", alignItems: "center" }}>
-					<Chip
-						size="small"
-						label={run.status}
-						color={statusColor[run.status] ?? "default"}
-					/>
-					<Typography variant="caption" color="text.secondary">
-						{timeline.rounds.length} {t("轮", "rounds")}
-						{" · "}
-						{run.timings.actionMs ? `${(run.timings.actionMs / 1000).toFixed(1)}s` : "—"}
-					</Typography>
-				</Box>
 			</Box>
-			{timeline.rounds.map((entry) => (
-				<RoundCard key={entry.round} entry={entry} />
-			))}
-			{run.summary && (
-				<Box sx={{ mt: 1.5, p: 1, bgcolor: "action.hover", borderRadius: 1 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>
+			{isRunning && <LinearProgress sx={{ mt: 1, borderRadius: 1 }} />}
+		</Box>
+	);
+}
+
+function TimelineView({ timeline, run }: { timeline: DelegationTimeline; run: UnifiedRunRecord }) {
+	const { t } = useI18n();
+	const scrollRef = useRef<HTMLDivElement>(null);
+	const prevRoundCount = useRef(timeline.rounds.length);
+
+	useEffect(() => {
+		if (timeline.rounds.length > prevRoundCount.current && scrollRef.current) {
+			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+		}
+		prevRoundCount.current = timeline.rounds.length;
+	}, [timeline.rounds.length]);
+
+	return (
+		<Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+			<TaskHeader timeline={timeline} run={run} />
+			<Box ref={scrollRef} sx={{ flex: 1, overflowY: "auto", px: 1, pb: 1 }}>
+				{timeline.rounds.map((entry, i) => (
+					<RoundCard key={entry.round} entry={entry} isLatest={i === timeline.rounds.length - 1} />
+				))}
+				{!timeline.rounds.length && (
+					<Box sx={{ p: 2, textAlign: "center" }}>
+						<Typography variant="body2" color="text.disabled">
+							{t("等待第一轮执行…", "Waiting for first round…")}
+						</Typography>
+					</Box>
+				)}
+			</Box>
+			{run.summary && run.status !== "running" && (
+				<Box sx={{ mx: 1.5, mb: 1, p: 1, bgcolor: run.status === "completed" ? "success.main" : "error.main", borderRadius: 1, color: "white" }}>
+					<Typography variant="caption" fontWeight={600}>
 						{t("结论", "Conclusion")}
 					</Typography>
 					<Typography variant="body2">{run.summary}</Typography>
@@ -191,23 +225,28 @@ export function DelegationTimelinePanel() {
 
 	const activeTimeline = state.lastRun?.delegationTimeline;
 	const activeRun = state.lastRun;
-	const hasActive = activeTimeline && activeTimeline.rounds.length > 0 && activeRun;
+	const hasActive = activeTimeline && activeRun;
 
 	const allRuns = [
-		...(hasActive ? [{ run: activeRun!, timeline: activeTimeline!, label: `${t("当前", "Current")} (${activeRun!.id.slice(-6)})` }] : []),
-		...runsWithTimeline.map((r) => ({
-			run: r,
-			timeline: r.delegationTimeline,
-			label: `${r.status === "completed" ? "✓" : "✗"} ${r.id.slice(-6)} — ${r.requestText?.slice(0, 30) ?? "—"}`,
-		})),
+		...(hasActive ? [{ run: activeRun, timeline: activeTimeline, label: `${activeRun.status === "running" ? "▶" : activeRun.status === "completed" ? "✓" : "✗"} ${activeRun.id.slice(-6)} — ${activeRun.requestText?.slice(0, 24) ?? "—"}` }] : []),
+		...runsWithTimeline
+			.filter((r) => r.id !== activeRun?.id)
+			.map((r) => ({
+				run: r,
+				timeline: r.delegationTimeline,
+				label: `${r.status === "completed" ? "✓" : "✗"} ${r.id.slice(-6)} — ${r.requestText?.slice(0, 24) ?? "—"}`,
+			})),
 	];
 
 	if (!allRuns.length) {
 		return (
-			<Box sx={{ p: 3, textAlign: "center" }}>
-				<HelpOutlineIcon sx={{ fontSize: 40, color: "text.disabled", mb: 1 }} />
-				<Typography variant="body2" color="text.secondary">
-					{t("暂无托管任务记录。启动一次托管任务后，时间轴将显示在此处。", "No delegation task history yet. Start a delegation task to see the timeline here.")}
+			<Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 1.5, px: 3 }}>
+				<HelpOutlineIcon sx={{ fontSize: 48, color: "text.disabled" }} />
+				<Typography variant="body2" color="text.secondary" textAlign="center">
+					{t(
+						"暂无托管任务记录。启动一次托管任务后，时间轴将实时显示每一轮的规划、执行与评估。",
+						"No delegation tasks yet. Start a task and the timeline will show each round's planning, execution, and evaluation in real time.",
+					)}
 				</Typography>
 			</Box>
 		);
@@ -218,16 +257,16 @@ export function DelegationTimelinePanel() {
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
 			{allRuns.length > 1 && (
-				<Box sx={{ p: 1, borderBottom: 1, borderColor: "divider" }}>
+				<Box sx={{ px: 1.5, pt: 1, borderBottom: 1, borderColor: "divider" }}>
 					<FormControl size="small" fullWidth>
-						<InputLabel>{t("选择任务", "Select Task")}</InputLabel>
+						<InputLabel>{t("任务", "Task")}</InputLabel>
 						<Select
 							value={selectedIdx}
-							label={t("选择任务", "Select Task")}
+							label={t("任务", "Task")}
 							onChange={(e: SelectChangeEvent<number>) => setSelectedIdx(Number(e.target.value))}
 						>
 							{allRuns.map((item, idx) => (
-								<MenuItem key={idx} value={idx}>
+								<MenuItem key={idx} value={idx} sx={{ fontSize: "0.85rem" }}>
 									{item.label}
 								</MenuItem>
 							))}

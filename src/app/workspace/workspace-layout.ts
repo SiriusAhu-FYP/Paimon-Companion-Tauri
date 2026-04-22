@@ -6,6 +6,7 @@ export const DOCK_PANEL_IDS = [
 	"stage-controls",
 	"stage-slot",
 	"chat",
+	"delegation-timeline",
 	"control-panel",
 	"knowledge",
 	"workbench",
@@ -42,6 +43,7 @@ const PANEL_TITLES: Record<DockPanelId, string> = {
 	"stage-controls": "Stage",
 	"stage-slot": "Attach Stage",
 	chat: "Chat",
+	"delegation-timeline": "Timeline",
 	"control-panel": "Control Panel",
 	knowledge: "Knowledge",
 	workbench: "Workbench",
@@ -106,7 +108,7 @@ const DEFAULT_LAYOUT: DefaultWorkspaceLayout = {
 						...createDockTabsetJson(TABSET_IDS.chat, ["stage-slot"], TABSET_WEIGHTS.stageSlot),
 					},
 					{
-						...createDockTabsetJson(TABSET_IDS.chatMain, ["chat"], TABSET_WEIGHTS.chat),
+						...createDockTabsetJson(TABSET_IDS.chatMain, ["chat", "delegation-timeline"], TABSET_WEIGHTS.chat),
 					},
 					{
 						...createDockTabsetJson(TABSET_IDS.right, ["control-panel", "knowledge", "workbench", "settings"], TABSET_WEIGHTS.right),
@@ -297,6 +299,7 @@ function getPreferredTabsetId(panelId: DockPanelId): string {
 		case "stage-slot":
 			return TABSET_IDS.chat;
 		case "chat":
+		case "delegation-timeline":
 			return TABSET_IDS.chatMain;
 		case "event-log":
 			return TABSET_IDS.bottom;
