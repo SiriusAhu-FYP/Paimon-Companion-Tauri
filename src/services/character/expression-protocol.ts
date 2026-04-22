@@ -16,7 +16,6 @@ export const COMPANION_EMOTIONS: CompanionEmotion[] = [
 ];
 
 const PAIMENG_VTS_MODEL = "/Resources/Commercial_models/paimengVts/3paimeng Vts.model3.json";
-const BUNNY_MODEL = "/Resources/Commercial_models/英伦兔兔/英伦兔兔.model3.json";
 
 export const DEFAULT_PROTOCOL_EXPRESSION_MAP: CharacterExpressionMap = {
 	neutral: ["表情1"],
@@ -30,26 +29,9 @@ export const DEFAULT_PROTOCOL_EXPRESSION_MAP: CharacterExpressionMap = {
 
 export const MODEL_EXPRESSION_PROTOCOLS: Record<string, CharacterExpressionMap> = {
 	[PAIMENG_VTS_MODEL]: DEFAULT_PROTOCOL_EXPRESSION_MAP,
-	[BUNNY_MODEL]: {
-		neutral: ["123"],
-		happy: ["Cat face", "Love"],
-		angry: ["angry", "Black"],
-		sad: ["Sluggish"],
-		delighted: ["star", "Love"],
-		alarmed: ["Crazy", "perspire"],
-		dazed: ["Silly", "perspire", "Sluggish"],
-	},
 };
 
-export const MODEL_MOTION_PROTOCOLS: Record<string, Partial<Record<CompanionEmotion, CharacterMotionCandidate[]>>> = {
-	[BUNNY_MODEL]: {
-		happy: [{ motionGroup: "Custom", index: 0 }],
-		delighted: [{ motionGroup: "Custom", index: 0 }],
-		angry: [{ motionGroup: "Custom", index: 1 }],
-		alarmed: [{ motionGroup: "Custom", index: 1 }],
-		dazed: [{ motionGroup: "Custom", index: 1 }],
-	},
-};
+export const MODEL_MOTION_PROTOCOLS: Record<string, Partial<Record<CompanionEmotion, CharacterMotionCandidate[]>>> = {};
 
 export function isCompanionEmotion(value: string): value is CompanionEmotion {
 	return COMPANION_EMOTIONS.includes(value as CompanionEmotion);
