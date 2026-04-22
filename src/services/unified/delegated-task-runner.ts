@@ -738,7 +738,7 @@ function buildProgressEvaluatorSystemPrompt(rules: string[], mission: MissionAna
 		`completionSignals: ${mission.completionSignals.join(" | ") || "(none)"}`,
 		"若 executedAction 的 text 内含 {ENTER}/{RETURN} 这类字面宏，必须判定 wasActionCorrect=false、goalAlignment=deviated。",
 		"若动作后仍停留在无关页面（如 GitHub/Bilibili）且目标是 Bing/Google 搜索，应判定 actionSucceeded=false 且给出纠偏 nextHint。",
-		"reply 必须是一句简短角色化复盘，格式优先：派蒙刚刚试着<动作>，<结果>。",
+		"reply 是一句自然口语化的简短复盘（≤40字），以派蒙第一人称说话，像跟朋友汇报进度一样，避免重复相同句式。",
 		"nextHint 要明确“当前处于哪个状态、下一轮应推进到哪个状态”，不要笼统描述。",
 		"禁止输出代码块、禁止附加解释文本，只输出 JSON。",
 	];
@@ -1720,11 +1720,8 @@ function normalizeDelegatedCompanionReply(reply: string, source: "planner" | "re
 	if (/^我/.test(text)) {
 		text = text.replace(/^我/, "派蒙");
 	}
-	if (!text.startsWith("派蒙")) {
-		text = source === "reflection" ? `派蒙刚刚试了下，${text}` : `派蒙这就来，${text}`;
-	}
-	if (source === "reflection" && !text.startsWith("派蒙刚刚")) {
-		text = text.replace(/^派蒙/, "派蒙刚刚");
+	if (!text.startsWith("派蒙") && !/^[搞好嗯哎呀太]/.test(text)) {
+		text = source === "reflection" ? `派蒙${text}` : `派蒙这就来，${text}`;
 	}
 	text = text.replace(/\s+/g, " ").trim();
 	return text;

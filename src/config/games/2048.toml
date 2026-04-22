@@ -25,14 +25,10 @@ notes = [
 profileId = "delegation"
 taskId = "delegation-generic"
 displayName = "Generic Delegation"
-maxRounds = 10
+maxRounds = 20
 maxActionsPerRound = 1
 afterActionWaitMs = 600
-allowedTools = [
-	"host.focus_window",
-	"host.capture_window",
-	"host.send_key",
-]
+allowedTools = ["host.focus_window", "host.capture_window", "host.send_key"]
 
 [delegationProfile.locator]
 locatorRulesEnabled = true
@@ -57,10 +53,7 @@ operationsPlannerRules = [
 
 [delegationProfile.roles.progressEvaluator]
 progressEvaluatorTemperature = 0.1
-progressEvaluatorRules = [
-	"先判断动作是否成功作用于棋盘，再判断是否更接近目标。",
-	"当没有可靠证据时，不要宣称完成。",
-]
+progressEvaluatorRules = ["先判断动作是否成功作用于棋盘，再判断是否更接近目标。", "当没有可靠证据时，不要宣称完成。"]
 
 [[actions]]
 id = "move_up"

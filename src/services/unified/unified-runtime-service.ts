@@ -574,7 +574,13 @@ export class UnifiedRuntimeService {
 			run.status = "completed";
 			run.phase = this.state.speechEnabled ? "speaking" : "idle";
 			run.summary = result.summary;
-			if (!run.companionText) {
+			if (result.status === "completed") {
+				const completionText = `搞定啦！${result.summary}`;
+				run.companionText = completionText;
+				run.companionTextSource = "fallback";
+				this.state.lastCompanionText = completionText;
+				this.emitCompanionReplyToChat(completionText);
+			} else if (!run.companionText) {
 				const fallbackText = result.status === "stopped" ? "托管任务已停止。" : result.summary;
 				run.companionText = fallbackText;
 				run.companionTextSource = "fallback";

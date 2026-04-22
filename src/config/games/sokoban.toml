@@ -33,14 +33,10 @@ notes = [
 profileId = "delegation"
 taskId = "delegation-generic"
 displayName = "Generic Delegation"
-maxRounds = 10
+maxRounds = 20
 maxActionsPerRound = 1
 afterActionWaitMs = 700
-allowedTools = [
-	"host.focus_window",
-	"host.capture_window",
-	"host.send_key",
-]
+allowedTools = ["host.focus_window", "host.capture_window", "host.send_key"]
 
 [delegationProfile.locator]
 locatorRulesEnabled = true
@@ -65,10 +61,7 @@ operationsPlannerRules = [
 
 [delegationProfile.roles.progressEvaluator]
 progressEvaluatorTemperature = 0.1
-progressEvaluatorRules = [
-	"判断动作是否让角色或箱子状态发生了有效推进。",
-	"无法确认推进时，明确给出下一步纠偏建议。",
-]
+progressEvaluatorRules = ["判断动作是否让角色或箱子状态发生了有效推进。", "无法确认推进时，明确给出下一步纠偏建议。"]
 
 [[actions]]
 id = "move_up"

@@ -10,7 +10,7 @@ taskId = "browser-generic"
 displayName = "Generic Browser Delegation"
 
 # Loop bounds
-maxRounds = 8
+maxRounds = 20
 maxActionsPerRound = 2
 afterActionWaitMs = 1000
 

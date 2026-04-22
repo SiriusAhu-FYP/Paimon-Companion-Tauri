@@ -4,22 +4,18 @@
 gameId = "example-game"
 displayName = "Example Game"
 windowTitleHints = ["example game"]
-loadGuardPolicy = "force-disable" # auto | force-enable | force-disable
+loadGuardPolicy = "force-disable"   # auto | force-enable | force-disable
 
-observationFocus = [
-	"Describe board state and actionable cues only.",
-]
+observationFocus = ["Describe board state and actionable cues only."]
 
 defaultActionOrder = ["move_up", "move_left", "move_right", "move_down"]
-notes = [
-	"Game-specific strategy notes in natural language.",
-]
+notes = ["Game-specific strategy notes in natural language."]
 
 [delegationProfile]
 profileId = "game-example"
 taskId = "game-example-generic"
 displayName = "Generic Example Delegation"
-maxRounds = 10
+maxRounds = 20
 maxActionsPerRound = 1
 afterActionWaitMs = 700
 allowedTools = ["host.focus_window", "host.capture_window", "host.send_key"]
@@ -33,21 +29,15 @@ locatorMinConfidence = 0.6
 [delegationProfile.roles.missionAnalyst]
 missionAnalystTemperature = 0.1
 missionAnalystThinkingMode = "medium"
-missionAnalystRules = [
-	"Constrain the goal to this game and current level.",
-]
+missionAnalystRules = ["Constrain the goal to this game and current level."]
 
 [delegationProfile.roles.operationsPlanner]
 operationsPlannerTemperature = 0.1
-operationsPlannerRules = [
-	"Prefer one grounded action per round.",
-]
+operationsPlannerRules = ["Prefer one grounded action per round."]
 
 [delegationProfile.roles.progressEvaluator]
 progressEvaluatorTemperature = 0.1
-progressEvaluatorRules = [
-	"State whether the move caused real progress.",
-]
+progressEvaluatorRules = ["State whether the move caused real progress."]
 
 [[actions]]
 id = "move_up"
