@@ -63,6 +63,16 @@ export const EVENT_CATEGORIES: Record<string, { events: EventName[]; color: stri
 		],
 		color: "#ffb74d",
 	},
+	"记忆": {
+		events: [
+			"memory:log-appended",
+			"memory:l2-updated",
+			"memory:salient-event",
+			"memory:committed",
+			"memory:recall-complete",
+		],
+		color: "#9575cd",
+	},
 	"调试": {
 		events: [
 			"perception:snapshot",
@@ -233,6 +243,50 @@ function formatPayloadPreview(event: EventName, payload: unknown): string {
 				data.record.nextStepHint ? `next=${compactReason(data.record.nextStepHint, 48)}` : "",
 			].join(" | ");
 		}
+		case "memory:log-appended": {
+			const data = payload as EventMap["memory:log-appended"];
+			return [
+				`source=${data.entry.source}`,
+				data.entry.kind ? `kind=${data.entry.kind}` : "",
+				data.entry.sessionId ? `session=${data.entry.sessionId}` : "",
+				data.entry.hasPreCompressed ? "precompressed=yes" : "precompressed=no",
+			].filter(Boolean).join(" | ");
+		}
+		case "memory:l2-updated": {
+			const data = payload as EventMap["memory:l2-updated"];
+			return [
+				`updated=${formatShortTime(data.context.lastUpdatedAt)}`,
+				`summaryIds=${data.context.windowSummaryIds.length}`,
+				`summary=${compactReason(data.context.compressedSummary, 72)}`,
+			].join(" | ");
+		}
+		case "memory:salient-event": {
+			const data = payload as EventMap["memory:salient-event"];
+			return [
+				`type=${data.event.type}`,
+				`severity=${data.event.severity}`,
+				`src=${data.event.source}`,
+				`desc=${compactReason(data.event.description, 72)}`,
+			].join(" | ");
+		}
+		case "memory:committed": {
+			const data = payload as EventMap["memory:committed"];
+			return [
+				`source=${data.entry.source}`,
+				`result=${data.entry.event_result}`,
+				`scene=${compactReason(data.entry.scene_or_task, 56)}`,
+				`tags=${data.entry.tags.join(",") || "none"}`,
+			].join(" | ");
+		}
+		case "memory:recall-complete": {
+			const data = payload as EventMap["memory:recall-complete"];
+			const top = data.candidates[0];
+			return [
+				`query=${compactReason(data.query, 48)}`,
+				`results=${data.candidates.length}`,
+				top ? `top=${compactReason(top.entry.scene_or_task, 40)}@${top.relevanceScore.toFixed(2)}` : "",
+			].filter(Boolean).join(" | ");
+		}
 		default:
 			return serializePayload(payload);
 	}
@@ -352,6 +406,26 @@ function formatSummary(event: EventName, payload: unknown): string {
 		case "delegation-memory:record-added": {
 			const data = payload as EventMap["delegation-memory:record-added"];
 			return `record added: ${data.record.sourceGame ?? "none"} / ${data.record.analysisSource ?? "none"} / ${data.record.verificationResult.success ? "success" : "failed"}`;
+		}
+		case "memory:log-appended": {
+			const data = payload as EventMap["memory:log-appended"];
+			return `memory log: ${data.entry.source}${data.entry.kind ? ` / ${data.entry.kind}` : ""}`;
+		}
+		case "memory:l2-updated": {
+			const data = payload as EventMap["memory:l2-updated"];
+			return `L2 updated: ${truncate(data.context.compressedSummary, 80)}`;
+		}
+		case "memory:salient-event": {
+			const data = payload as EventMap["memory:salient-event"];
+			return `salient ${data.event.type}: ${truncate(data.event.description, 80)}`;
+		}
+		case "memory:committed": {
+			const data = payload as EventMap["memory:committed"];
+			return `LTM committed: ${data.entry.scene_or_task}`;
+		}
+		case "memory:recall-complete": {
+			const data = payload as EventMap["memory:recall-complete"];
+			return `memory recall: ${data.candidates.length} hit(s) for ${truncate(data.query, 48)}`;
 		}
 		case "functional:target-change": {
 			const data = payload as EventMap["functional:target-change"];
@@ -546,6 +620,10 @@ function getSeverity(event: EventName, payload: unknown): "info" | "warn" | "err
 		case "safety:decision": {
 			const data = payload as EventMap["safety:decision"];
 			return data.allowed ? "info" : "warn";
+		}
+		case "memory:salient-event": {
+			const data = payload as EventMap["memory:salient-event"];
+			return data.event.severity >= 4 ? "warn" : "info";
 		}
 		default:
 			return "info";

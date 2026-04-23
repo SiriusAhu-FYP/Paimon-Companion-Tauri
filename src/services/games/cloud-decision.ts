@@ -16,6 +16,15 @@ interface OpenAICompatibleClientConfig {
 	secretKey?: string;
 }
 
+function isLikelyTextOnlyModel(client: OpenAICompatibleClientConfig): boolean {
+	const normalizedBaseUrl = client.baseUrl.toLowerCase();
+	const normalizedModel = client.model.toLowerCase();
+	if (normalizedBaseUrl.includes("api.deepseek.com")) {
+		return normalizedModel === "deepseek-chat" || normalizedModel === "deepseek-reasoner";
+	}
+	return false;
+}
+
 export type CloudThinkingMode = "off" | "low" | "medium" | "high";
 
 class CloudDecisionHttpError extends Error {
@@ -45,6 +54,35 @@ function resolveActiveOpenAICompatibleClient(): OpenAICompatibleClientConfig | n
 	const config = getConfig();
 	const activeProfile = config.activeLlmProfileId
 		? config.llmProfiles.find((profile) => profile.id === config.activeLlmProfileId)
+		: null;
+
+	const provider = activeProfile?.provider ?? config.llm.provider;
+	if (provider !== "openai-compatible") {
+		return null;
+	}
+
+	const baseUrl = activeProfile?.baseUrl ?? config.llm.baseUrl;
+	const model = activeProfile?.model ?? config.llm.model;
+	const temperature = activeProfile?.temperature ?? config.llm.temperature;
+	const secretKey = activeProfile ? SECRET_KEYS.LLM_API_KEY(activeProfile.id) : undefined;
+
+	if (!baseUrl || !model) {
+		return null;
+	}
+
+	return {
+		baseUrl: normalizeCompatibleOpenAIBaseUrl(baseUrl),
+		model,
+		temperature,
+		secretKey,
+	};
+}
+
+function resolveActiveVisionOpenAICompatibleClient(): OpenAICompatibleClientConfig | null {
+	const config = getConfig();
+	const activeProfileId = config.activeVisionLlmProfileId || config.activeLlmProfileId;
+	const activeProfile = activeProfileId
+		? config.llmProfiles.find((profile) => profile.id === activeProfileId)
 		: null;
 
 	const provider = activeProfile?.provider ?? config.llm.provider;
@@ -171,7 +209,7 @@ export async function requestActiveVisionDecision(input: {
 	jsonResponse?: boolean;
 	thinkingMode?: CloudThinkingMode;
 }): Promise<string> {
-	const client = resolveActiveOpenAICompatibleClient();
+	const client = resolveActiveVisionOpenAICompatibleClient();
 	if (!client) {
 		throw new Error("cloud vision decision requires an active openai-compatible LLM profile");
 	}
@@ -179,6 +217,9 @@ export async function requestActiveVisionDecision(input: {
 	const imageDataUrls = input.imageDataUrls.map((item) => item.trim()).filter(Boolean);
 	if (!imageDataUrls.length) {
 		throw new Error("cloud vision decision requires at least one image");
+	}
+	if (isLikelyTextOnlyModel(client)) {
+		throw new Error(`cloud vision decision requires a vision-capable model; current active model is ${client.model}`);
 	}
 
 	const parsed = await requestCompletionWithOptionalThinking({

@@ -304,7 +304,9 @@ export function EventLog() {
 					className="event-log-entries"
 					onScroll={(event) => {
 						const element = event.currentTarget;
-						setScrollTop(element.scrollTop);
+						setScrollTop((current) => (
+							Math.abs(current - element.scrollTop) < 0.5 ? current : element.scrollTop
+						));
 						const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
 						stickToBottomRef.current = distanceFromBottom < 16;
 					}}

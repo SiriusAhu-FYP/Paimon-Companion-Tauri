@@ -89,5 +89,14 @@ export interface MemoryRecallCompletePayload {
 }
 
 export interface MemoryLogAppendedPayload {
-	entry: { id: string; source: string; createdAt: number };
+	entry: {
+		id: string;
+		source: string;
+		kind?: string;
+		sessionId?: string;
+		createdAt: number;
+		timeStart?: number;
+		timeEnd?: number;
+		hasPreCompressed?: boolean;
+	};
 }

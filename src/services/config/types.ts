@@ -152,6 +152,7 @@ export interface AppConfig {
 	ttsProfiles: TTSProfile[];
 	asrProfiles: ASRProfile[];
 	activeLlmProfileId: string;
+	activeVisionLlmProfileId: string;
 	activeTtsProfileId: string;
 	activeAsrProfileId: string;
 	knowledge: import("@/types/knowledge").KnowledgeConfig;
@@ -216,7 +217,7 @@ export const DEFAULT_CONFIG: AppConfig = {
 		localVisionBaseUrl: "http://localhost:32183/v1",
 		localVisionModel: "Qwen/Qwen3-VL-2B-Instruct",
 		captureIntervalMs: 1000,
-		summaryWindowMs: 10000,
+		summaryWindowMs: 8000,
 		historyRetentionMs: 60000,
 		proactiveRuntimeSummarySilenceSeconds: 30,
 		promptRecentFrameCount: 3,
@@ -236,6 +237,7 @@ export const DEFAULT_CONFIG: AppConfig = {
 	ttsProfiles: [],
 	asrProfiles: [],
 	activeLlmProfileId: "",
+	activeVisionLlmProfileId: "",
 	activeTtsProfileId: "",
 	activeAsrProfileId: "",
 	knowledge: {

@@ -36,6 +36,7 @@ function deepMerge(defaults: AppConfig, overrides: Partial<AppConfig>): AppConfi
 		ttsProfiles: overrides.ttsProfiles ?? defaults.ttsProfiles,
 		asrProfiles: overrides.asrProfiles ?? defaults.asrProfiles,
 		activeLlmProfileId: overrides.activeLlmProfileId ?? defaults.activeLlmProfileId,
+		activeVisionLlmProfileId: overrides.activeVisionLlmProfileId ?? defaults.activeVisionLlmProfileId,
 		activeTtsProfileId: overrides.activeTtsProfileId ?? defaults.activeTtsProfileId,
 		activeAsrProfileId: overrides.activeAsrProfileId ?? defaults.activeAsrProfileId,
 		knowledge: {
@@ -217,12 +218,19 @@ export async function loadConfig(): Promise<AppConfig> {
 			cachedConfig.character as CharacterSettingsConfig & { persona?: string },
 		),
 	};
+	const normalizedConfig = cachedConfig;
+	if (normalizedConfig.activeLlmProfileId && !normalizedConfig.llmProfiles.some((profile) => profile.id === normalizedConfig.activeLlmProfileId)) {
+		normalizedConfig.activeLlmProfileId = "";
+	}
+	if (normalizedConfig.activeVisionLlmProfileId && !normalizedConfig.llmProfiles.some((profile) => profile.id === normalizedConfig.activeVisionLlmProfileId)) {
+		normalizedConfig.activeVisionLlmProfileId = "";
+	}
 	log.info("config loaded", {
-		llmProvider: cachedConfig.llm.provider,
-		ttsProvider: cachedConfig.tts.provider,
-		asrProvider: cachedConfig.asr.provider,
+		llmProvider: normalizedConfig.llm.provider,
+		ttsProvider: normalizedConfig.tts.provider,
+		asrProvider: normalizedConfig.asr.provider,
 	});
-	return cachedConfig;
+	return normalizedConfig;
 }
 
 export function getConfig(): AppConfig {
@@ -264,6 +272,7 @@ export async function resetConfig(): Promise<AppConfig> {
 		ttsProfiles: [],
 		asrProfiles: [],
 		activeLlmProfileId: "",
+		activeVisionLlmProfileId: "",
 		activeTtsProfileId: "",
 		activeAsrProfileId: "",
 	};

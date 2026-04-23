@@ -80,6 +80,15 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 		return config.llm;
 	}, [config]);
 
+	const getActiveVisionLlmConfig = useCallback(() => {
+		const activeProfileId = config.activeVisionLlmProfileId || config.activeLlmProfileId;
+		if (activeProfileId) {
+			const profile = config.llmProfiles.find((p) => p.id === activeProfileId);
+			if (profile) return profile;
+		}
+		return config.llm;
+	}, [config]);
+
 	/** 从激活的 TTS 档案或根配置中获取当前 TTS 配置 */
 	const getActiveTtsConfig = useCallback(() => {
 		if (config.activeTtsProfileId) {
@@ -383,10 +392,62 @@ export function SettingsPanel({ onClose, embedded = false }: SettingsPanelProps)
 			activeId={config.activeLlmProfileId}
 			onAdd={(p) => setConfig((c) => ({ ...c, llmProfiles: [...c.llmProfiles, p] }))}
 			onUpdate={(p) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.map((x) => x.id === p.id ? p : x) }))}
-			onDelete={(id) => setConfig((c) => ({ ...c, llmProfiles: c.llmProfiles.filter((x) => x.id !== id), activeLlmProfileId: c.activeLlmProfileId === id ? "" : c.activeLlmProfileId }))}
+			onDelete={(id) => setConfig((c) => ({
+				...c,
+				llmProfiles: c.llmProfiles.filter((x) => x.id !== id),
+				activeLlmProfileId: c.activeLlmProfileId === id ? "" : c.activeLlmProfileId,
+				activeVisionLlmProfileId: c.activeVisionLlmProfileId === id ? "" : c.activeVisionLlmProfileId,
+			}))}
 			onSelect={(id) => { setConfig((c) => ({ ...c, activeLlmProfileId: id })); updateConfig({ activeLlmProfileId: id }); refreshProviders(); }}
-			onPersist={async (newProfiles, newActiveId) => (await updateConfig({ llmProfiles: newProfiles, activeLlmProfileId: newActiveId }), refreshProviders())}
+			onPersist={async (newProfiles, newActiveId) => {
+				const nextVisionId = config.activeVisionLlmProfileId && newProfiles.some((profile) => profile.id === config.activeVisionLlmProfileId)
+					? config.activeVisionLlmProfileId
+					: "";
+				await updateConfig({
+					llmProfiles: newProfiles,
+					activeLlmProfileId: newActiveId,
+					activeVisionLlmProfileId: nextVisionId,
+				});
+				refreshProviders();
+			}}
 		/>
+
+		<Box sx={{ bgcolor: "background.paper", borderRadius: 1, p: 1, mt: 0.75, display: "flex", flexDirection: "column", gap: 0.75 }}>
+			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+				{t("视觉 LLM 档案", "Vision LLM Profile")}
+			</Typography>
+			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+				{t("与文本 LLM 共用同一组档案；这里只单独选择视觉链路使用哪一个。留空时自动回退到文本 LLM。", "Shares the same profile list as text LLM; this only selects which one the vision path uses. Leave empty to fall back to the text LLM.")} 
+			</Typography>
+			<Select
+				size="small"
+				fullWidth
+				displayEmpty
+				value={config.activeVisionLlmProfileId}
+				onChange={(event) => {
+					const id = event.target.value;
+					setConfig((current) => ({ ...current, activeVisionLlmProfileId: id }));
+					void updateConfig({ activeVisionLlmProfileId: id });
+				}}
+			>
+				<MenuItem value="">
+					<em>{t("跟随文本 LLM", "Follow text LLM")}</em>
+				</MenuItem>
+				{config.llmProfiles.map((profile) => (
+					<MenuItem key={profile.id} value={profile.id}>
+						{profile.name}
+					</MenuItem>
+				))}
+			</Select>
+			<Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+				{t("当前视觉读取", "Current vision selection")}：
+				{config.activeVisionLlmProfileId
+					? t(`档案「${config.llmProfiles.find((p) => p.id === config.activeVisionLlmProfileId)?.name || "(未命名)"}」`, `Profile "${config.llmProfiles.find((p) => p.id === config.activeVisionLlmProfileId)?.name || "(Unnamed)"}"`)
+					: t("跟随文本 LLM", "Follow text LLM")}
+				{" · "}
+				{getActiveVisionLlmConfig().model || getActiveVisionLlmConfig().provider}
+			</Typography>
+		</Box>
 
 		<Divider />
 

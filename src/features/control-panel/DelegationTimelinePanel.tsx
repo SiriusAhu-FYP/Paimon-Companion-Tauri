@@ -143,7 +143,7 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 function TaskHeader({ timeline, status, timingsActionMs }: { timeline: DelegationTimeline; status: string; timingsActionMs?: number }) {
 	const { t } = useI18n();
 	const statusColor: Record<string, "success" | "error" | "warning"> = {
-		completed: "success", failed: "error", running: "warning",
+		completed: "success", failed: "error", running: "warning", stopped: "warning",
 	};
 	const isRunning = status === "running";
 	return (
@@ -199,7 +199,7 @@ function TimelineView({ timeline, status, summary, timingsActionMs }: {
 				)}
 			</Box>
 			{summary && status !== "running" && (
-				<Box sx={{ mx: 1.5, mb: 1, p: 1, bgcolor: status === "completed" ? "success.main" : "error.main", borderRadius: 1, color: "white" }}>
+				<Box sx={{ mx: 1.5, mb: 1, p: 1, bgcolor: status === "completed" ? "success.main" : status === "stopped" ? "warning.main" : "error.main", borderRadius: 1, color: "white" }}>
 					<Typography variant="caption" fontWeight={600}>
 						{t("结论", "Conclusion")}
 					</Typography>
@@ -280,7 +280,7 @@ function HistoryBrowser() {
 		setSelectedSession(sessionId);
 		setLoadingSession(true);
 		try {
-			const raw = await readDebugCaptureFile(sessionId, "session.jsonl");
+			const raw = await readDebugCaptureFile(sessionId, "events.jsonl");
 			const lines = raw.trim().split("\n").filter(Boolean);
 			let timeline: DelegationTimeline | null = null;
 			let status = "unknown";
@@ -297,6 +297,18 @@ function HistoryBrowser() {
 					}
 					if (entry.delegationTimeline) {
 						timeline = entry.delegationTimeline;
+					}
+					if (entry.event === "unified:state-change" && entry.payload?.state?.lastRun) {
+						const lastRun = entry.payload.state.lastRun as UnifiedRunRecord;
+						if (lastRun.delegationTimeline) {
+							timeline = lastRun.delegationTimeline;
+							status = lastRun.status ?? status;
+							summary = lastRun.summary || summary;
+						}
+					}
+					if (entry.event === "unified:run-complete" && entry.payload) {
+						status = entry.payload.success ? "completed" : "failed";
+						summary = entry.payload.summary ?? summary;
 					}
 					if (entry.status) {
 						status = entry.status;

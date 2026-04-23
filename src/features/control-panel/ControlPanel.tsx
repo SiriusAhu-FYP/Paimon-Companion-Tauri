@@ -32,7 +32,7 @@ export function ControlPanel() {
 	const { state: functionalState, setTarget, runFocus } = useFunctional();
 	const debugCapture = useDebugCaptureState();
 	const [delegationTaskText, setDelegationTaskText] = useState(() =>
-		t("请根据当前页面完成目标：例如打开最新的 README 并总结重点。", "Complete a goal on the current page, for example open the latest README and summarize key points."),
+		t("请使用 Google 查询今日 GitHub 的热门项目", "Use Google to find today's trending GitHub projects."),
 	);
 	const [windowList, setWindowList] = useState<HostWindowInfo[]>([]);
 	const [windowsLoading, setWindowsLoading] = useState(false);
@@ -149,7 +149,7 @@ export function ControlPanel() {
 				companionRunning={companionRunning}
 				delegationRunning={delegationRunning}
 				delegationTaskText={delegationTaskText}
-				delegationTaskPlaceholder={t("输入托管任务说明（由托管模式连续执行）", "Describe a Delegation Mode task to execute continuously")}
+				delegationTaskPlaceholder={t("请使用 Google 查询今日 GitHub 的热门项目", "Use Google to find today's trending GitHub projects.")}
 				windowList={windowList}
 				windowsLoading={windowsLoading}
 				selectedTargetHandle={functionalState.selectedTarget?.handle ?? null}

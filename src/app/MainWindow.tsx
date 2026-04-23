@@ -3,6 +3,7 @@ import { Box, Button, IconButton, Menu, MenuItem, Tooltip } from "@mui/material"
 import DashboardCustomizeIcon from "@mui/icons-material/DashboardCustomize";
 import ViewQuiltIcon from "@mui/icons-material/ViewQuilt";
 import CheckIcon from "@mui/icons-material/Check";
+import PushPinIcon from "@mui/icons-material/PushPin";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import TranslateIcon from "@mui/icons-material/Translate";
@@ -22,6 +23,12 @@ import { useI18n } from "@/contexts/I18nProvider";
 const log = createLogger("main-window");
 const UI_STALL_THRESHOLD_MS = 200;
 const UI_STALL_THROTTLE_MS = 3000;
+
+interface PanelMenuItem {
+	id: DockPanelId;
+	label: string;
+	fixed?: boolean;
+}
 
 export function MainWindow() {
 	const { mode, setMode } = useThemeMode();
@@ -135,6 +142,28 @@ export function MainWindow() {
 		});
 	}, [syncDockedStageBounds]);
 
+	const handleStageSlotRectChange = useCallback((rect: DOMRect | null) => {
+		setStageSlotRect((current) => {
+			if (!rect && !current) {
+				return current;
+			}
+			if (
+				rect
+				&& current
+				&& Math.abs(current.left - rect.left) < 0.5
+				&& Math.abs(current.top - rect.top) < 0.5
+				&& Math.abs(current.width - rect.width) < 0.5
+				&& Math.abs(current.height - rect.height) < 0.5
+			) {
+				return current;
+			}
+			return rect;
+		});
+		if (rect) {
+			debouncedSyncDockedStageBounds(rect);
+		}
+	}, [debouncedSyncDockedStageBounds]);
+
 	useEffect(() => {
 		const nextMode = stageSlotOpen ? "docked" : "floating";
 		setStageMode((current) => {
@@ -223,10 +252,11 @@ export function MainWindow() {
 	}, []);
 
 	const closePanelsMenu = useCallback(() => setPanelsMenuAnchor(null), []);
-	const panelMenuItems = [
+	const panelMenuItems: readonly PanelMenuItem[] = [
+		{ id: "control-panel", label: t("控制面板", "Control Panel"), fixed: true },
 		{ id: "stage-controls", label: t("舞台面板", "Stage Panel") },
-		{ id: "chat", label: t("对话", "Chat") },
 		{ id: "delegation-timeline", label: t("托管时间轴", "Delegation Timeline") },
+		{ id: "chat", label: t("对话", "Chat") },
 		{ id: "knowledge", label: t("知识库", "Knowledge") },
 		{ id: "workbench", label: t("开发工作台", "Workbench") },
 		{ id: "settings", label: t("设置", "Settings") },
@@ -321,6 +351,9 @@ export function MainWindow() {
 					const isOpen = openPanelsSnapshot.has(panel.id);
 					return (
 						<MenuItem key={panel.id} onClick={() => {
+							if (panel.fixed) {
+								return;
+							}
 							if (isOpen) {
 								requestCloseWorkspacePanel(panel.id);
 								setOpenPanelsSnapshot((current) => {
@@ -337,10 +370,12 @@ export function MainWindow() {
 								});
 							}
 						}}>
-							<Box sx={{ width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", mr: 0.75, color: "primary.main" }}>
-								{isOpen ? <CheckIcon sx={{ fontSize: 16 }} /> : null}
+							<Box sx={{ width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", mr: 0.75, color: panel.fixed ? "warning.main" : "primary.main" }}>
+								{panel.fixed
+									? <PushPinIcon sx={{ fontSize: 15 }} />
+									: isOpen ? <CheckIcon sx={{ fontSize: 16 }} /> : null}
 							</Box>
-							{panel.label}
+							<span>{panel.label}</span>
 						</MenuItem>
 					);
 				})}
@@ -356,12 +391,7 @@ export function MainWindow() {
 				onAlwaysOnTopChange={setAlwaysOnTop}
 				onDisplayModeChange={setDisplayMode}
 				onStageSlotOpenChange={setStageSlotOpen}
-				onStageSlotRectChange={(rect) => {
-					setStageSlotRect(rect);
-					if (rect) {
-						debouncedSyncDockedStageBounds(rect);
-					}
-				}}
+				onStageSlotRectChange={handleStageSlotRectChange}
 			/>
 
 			<StatusBar

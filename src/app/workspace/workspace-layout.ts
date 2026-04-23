@@ -102,13 +102,13 @@ const DEFAULT_LAYOUT: DefaultWorkspaceLayout = {
 				weight: 78,
 				children: [
 					{
-						...createDockTabsetJson(TABSET_IDS.stage, ["stage-controls"], TABSET_WEIGHTS.stage),
+						...createDockTabsetJson(TABSET_IDS.stage, ["stage-controls", "delegation-timeline"], TABSET_WEIGHTS.stage),
 					},
 					{
 						...createDockTabsetJson(TABSET_IDS.chat, ["stage-slot"], TABSET_WEIGHTS.stageSlot),
 					},
 					{
-						...createDockTabsetJson(TABSET_IDS.chatMain, ["chat", "delegation-timeline"], TABSET_WEIGHTS.chat),
+						...createDockTabsetJson(TABSET_IDS.chatMain, ["chat"], TABSET_WEIGHTS.chat),
 					},
 					{
 						...createDockTabsetJson(TABSET_IDS.right, ["control-panel", "knowledge", "workbench", "settings"], TABSET_WEIGHTS.right),
@@ -230,6 +230,13 @@ function getRestoreTarget(model: Model, panelId: DockPanelId): { toNodeId: strin
 		}
 	}
 
+	if (panelId === "delegation-timeline") {
+		if (model.getNodeById(TABSET_IDS.chat)?.getType() === "tabset") {
+			model.doAction(Actions.addNode(createDockTabJson("delegation-timeline"), TABSET_IDS.chat, DockLocation.LEFT, -1, true));
+			return { toNodeId: TABSET_IDS.stage, location: DockLocation.CENTER };
+		}
+	}
+
 	if (panelId === "stage-slot") {
 		if (model.getNodeById(TABSET_IDS.chatMain)?.getType() === "tabset") {
 			model.doAction(Actions.addNode(createDockTabJson("stage-slot"), TABSET_IDS.chatMain, DockLocation.LEFT, -1, true));
@@ -295,11 +302,11 @@ function getRestoreTarget(model: Model, panelId: DockPanelId): { toNodeId: strin
 function getPreferredTabsetId(panelId: DockPanelId): string {
 	switch (panelId) {
 		case "stage-controls":
+		case "delegation-timeline":
 			return TABSET_IDS.stage;
 		case "stage-slot":
 			return TABSET_IDS.chat;
 		case "chat":
-		case "delegation-timeline":
 			return TABSET_IDS.chatMain;
 		case "event-log":
 			return TABSET_IDS.bottom;
@@ -314,6 +321,8 @@ function getFallbackAnchorPanel(panelId: DockPanelId): DockPanelId {
 			return "chat";
 		case "stage-slot":
 			return "chat";
+		case "delegation-timeline":
+			return "stage-controls";
 		case "chat":
 			return "control-panel";
 		case "event-log":
