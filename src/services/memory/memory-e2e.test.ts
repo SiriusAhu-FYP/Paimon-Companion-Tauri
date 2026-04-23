@@ -7,23 +7,32 @@ import type { LongTermMemoryEntry, MemoryCandidate } from "@/types/memory";
 import { buildSystemMessage, type PromptContext } from "@/services/llm/prompt-builder";
 
 vi.mock("@tauri-apps/api/path", () => ({
+	BaseDirectory: {
+		AppData: "AppData",
+	},
 	appDataDir: vi.fn().mockResolvedValue("/mock/app/data/"),
 }));
 
 const fsStore = new Map<string, string>();
+function resolveMockPath(path: string, options?: { baseDir?: string }) {
+	if (options?.baseDir === "AppData") {
+		return `/mock/app/data/${path.replace(/^[\\/]+/, "")}`;
+	}
+	return path;
+}
 vi.mock("@tauri-apps/plugin-fs", () => ({
 	mkdir: vi.fn().mockResolvedValue(undefined),
 	readDir: vi.fn().mockResolvedValue([]),
-	readTextFile: vi.fn().mockImplementation(async (path: string) => {
-		const content = fsStore.get(path);
+	readTextFile: vi.fn().mockImplementation(async (path: string, options?: { baseDir?: string }) => {
+		const content = fsStore.get(resolveMockPath(path, options));
 		if (!content) throw new Error(`File not found: ${path}`);
 		return content;
 	}),
-	writeTextFile: vi.fn().mockImplementation(async (path: string, content: string) => {
-		fsStore.set(path, content);
+	writeTextFile: vi.fn().mockImplementation(async (path: string, content: string, options?: { baseDir?: string }) => {
+		fsStore.set(resolveMockPath(path, options), content);
 	}),
-	remove: vi.fn().mockImplementation(async (path: string) => {
-		fsStore.delete(path);
+	remove: vi.fn().mockImplementation(async (path: string, options?: { baseDir?: string }) => {
+		fsStore.delete(resolveMockPath(path, options));
 	}),
 	stat: vi.fn().mockResolvedValue({ size: 100 }),
 }));

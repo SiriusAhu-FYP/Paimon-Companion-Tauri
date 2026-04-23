@@ -36,6 +36,7 @@ describe("delegated task memory integration", () => {
 				return JSON.stringify({
 					taskMode: "game",
 					missionGoal: "在生存模式中保持存活",
+					initialStateSummary: "当前处于夜晚危险状态",
 					hardConstraints: ["不要离开当前窗口"],
 					subtaskChain: ["观察威胁", "规避攻击", "回到安全区域"],
 					completionSignals: ["角色脱离危险"],
@@ -128,5 +129,76 @@ describe("delegated task memory integration", () => {
 		);
 		expect(plannerUserPrompt).toContain("### memoryRecall");
 		expect(plannerUserPrompt).toContain("僵尸");
+	});
+
+	it("keeps observed current page as initial state instead of hard constraint", async () => {
+		let visionCallCount = 0;
+		let plannerUserPrompt = "";
+
+		vi.mocked(requestActiveVisionDecision).mockImplementation(async (input: {
+			userPrompt: string;
+		}) => {
+			visionCallCount += 1;
+			if (visionCallCount === 1) {
+				return JSON.stringify({
+					taskMode: "browser",
+					missionGoal: "使用 Google 查询今日美元-人民币汇率",
+					initialStateSummary: "当前处于 GitHub 标签页，尚未打开 Google。",
+					hardConstraints: ["在当前 GitHub 标签页中操作", "必须使用 Google 查询"],
+					subtaskChain: ["确认当前状态", "新建标签页", "打开 Google", "输入汇率查询"],
+					completionSignals: ["看到 Google 汇率结果"],
+					analysisReply: "",
+					ackReply: "收到委托。",
+					reply: "",
+				});
+			}
+			if (visionCallCount === 2) {
+				plannerUserPrompt = input.userPrompt;
+				return JSON.stringify({
+					goalReached: false,
+					reasoning: "先确认当前标签页状态，再新建标签页。",
+					reply: "先确认页面",
+					expectedOutcome: "确认当前页不是 Google，准备切换到新标签页",
+					actions: [{ tool: "host.send_key", args: { key: "Ctrl+T" } }],
+				});
+			}
+			return JSON.stringify({
+				actionSucceeded: true,
+				wasActionCorrect: true,
+				expectedMet: true,
+				expectationReview: "达成预期",
+				goalAlignment: "achieved",
+				goalProgress: "done",
+				reply: "已经切到新标签页",
+				nextHint: "继续打开 Google",
+			});
+		});
+
+		const orchestrator = {
+			runCaptureTask: vi.fn().mockResolvedValue({
+				beforeSnapshot: {
+					dataUrl: "data:image/png;base64,before",
+					width: 1280,
+					height: 720,
+				},
+				afterSnapshot: {
+					dataUrl: "data:image/png;base64,after",
+					width: 1280,
+					height: 720,
+				},
+			}),
+		};
+
+		const result = await runDelegatedTaskLoop({
+			taskText: "请使用 Google 查询今日美元-人民币汇率",
+			target: { handle: "h-1", title: "GitHub — Mozilla Firefox" },
+			orchestrator: orchestrator as never,
+			shouldStop: () => false,
+		});
+
+		expect(result.status).toBe("completed");
+		expect(plannerUserPrompt).toContain("initialState=当前处于 GitHub 标签页，尚未打开 Google。");
+		expect(plannerUserPrompt).toContain("missionHardConstraints: 必须使用 Google 查询");
+		expect(plannerUserPrompt).not.toContain("在当前 GitHub 标签页中操作");
 	});
 });

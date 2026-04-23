@@ -1,6 +1,6 @@
 /**
  * Tests for the log-driven LTM mechanism:
- * 1. Intermediate log -> startup promotion -> successful write -> cleanup
+ * 1. Intermediate companion summary logs -> startup promotion -> successful write -> cleanup
  * 2. Lightweight auto-recall injects relevant candidates but not for irrelevant input
  * 3. Proactive companion prompt structure: identity/style first, prohibitions last
  */
@@ -13,6 +13,9 @@ import type { ILLMService } from "@/services/llm/types";
 import type { LongTermMemoryEntry } from "@/types/memory";
 
 vi.mock("@tauri-apps/api/path", () => ({
+	BaseDirectory: {
+		AppData: "AppData",
+	},
 	appDataDir: vi.fn().mockResolvedValue("/mock/app/data/"),
 }));
 
@@ -80,34 +83,48 @@ describe("Log-driven LTM promotion", () => {
 		fsStore.clear();
 	});
 
-	it("promotes pending log entries to LTM on startup and cleans up", async () => {
+	it("promotes grouped companion summary logs to LTM on startup and cleans up", async () => {
 		const bus = createMockBus();
 		const memoryLog = new MemoryLogService({ bus });
 		const ltm = new LongTermMemoryService({ bus });
 		await memoryLog.initialize();
 		await ltm.initialize();
 
-		// Simulate a pending log from a previous crashed session
+		// Simulate two summary logs from a previous crashed companion session
 		await memoryLog.append({
-			id: "companion-crash-recovery-test",
+			id: "companion-summary-1",
 			source: "companion",
+			kind: "companion-summary",
+			sessionId: "session-123",
 			createdAt: Date.now() - 60000,
-			rawContext: "会话滚动上下文：用户在探索蒙德城\n关键事件：\n- [discovery] 发现了一个宝箱 (严重度: 3)",
+			timeStart: Date.now() - 70000,
+			timeEnd: Date.now() - 65000,
+			rawContext: "在蒙德城门附近观察到一群黑衣人经过。",
+			promoted: false,
+		});
+		await memoryLog.append({
+			id: "companion-summary-2",
+			source: "companion",
+			kind: "companion-summary",
+			sessionId: "session-123",
+			createdAt: Date.now() - 50000,
+			timeStart: Date.now() - 65000,
+			timeEnd: Date.now() - 60000,
+			rawContext: "随后镜头切到街道另一侧，黑衣人消失在巷子里。",
 			promoted: false,
 		});
 
 		// Verify log is pending
 		const pending = await memoryLog.listPending();
-		expect(pending.length).toBe(1);
-		expect(pending[0]!.id).toBe("companion-crash-recovery-test");
+		expect(pending.length).toBe(2);
 
 		// Simulate startup promotion with LLM that returns valid compressed entry
 		const llm = createStreamMockLLM(JSON.stringify({
-			scene_or_task: "蒙德城探索",
-			entities: ["宝箱", "蒙德"],
-			event_result: "success",
-			summary: "在蒙德城探索中发现了一个宝箱",
-			tags: ["exploration", "mondstadt"],
+			scene_or_task: "蒙德街头异动",
+			entities: ["黑衣人", "蒙德"],
+			event_result: "unknown",
+			summary: "在蒙德街头观察到黑衣人短暂出现后消失。",
+			tags: ["mondstadt", "suspicious"],
 		}));
 
 		const promoted = await promotePendingLogs(memoryLog, ltm, llm);
@@ -116,7 +133,8 @@ describe("Log-driven LTM promotion", () => {
 		// Verify LTM now has the entry
 		const index = ltm.getIndex();
 		expect(index.entries.length).toBe(1);
-		expect(index.entries[0]!.scene_or_task).toBe("蒙德城探索");
+		expect(index.entries[0]!.scene_or_task).toBe("蒙德街头异动");
+		expect(index.entries[0]!.memory_id).toBe("companion-session-123");
 
 		// Verify cleanup — no more pending logs
 		const afterPending = await memoryLog.listPending();
@@ -191,7 +209,7 @@ describe("Lightweight auto-recall", () => {
 		// Relevant query should match
 		const results = await ltm.recall("深渊螺旋", 3);
 		expect(results.length).toBeGreaterThan(0);
-		expect(results[0]!.relevanceScore).toBeGreaterThanOrEqual(1.5);
+		expect(results[0]!.relevanceScore).toBeGreaterThanOrEqual(2.0);
 	});
 
 	it("does not return candidates for completely irrelevant queries", async () => {
@@ -215,7 +233,7 @@ describe("Lightweight auto-recall", () => {
 		// Completely irrelevant query
 		const results = await ltm.recall("今天天气怎么样", 3);
 		// Should have zero or very low score matches
-		const highScoreResults = results.filter((r) => r.relevanceScore >= 1.5);
+		const highScoreResults = results.filter((r) => r.relevanceScore >= 2.0);
 		expect(highScoreResults.length).toBe(0);
 	});
 

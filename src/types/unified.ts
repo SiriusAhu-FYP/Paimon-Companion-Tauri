@@ -1,6 +1,6 @@
 export type UnifiedRunPhase = "idle" | "listening" | "thinking" | "acting" | "speaking" | "failed";
 export type UnifiedRunTrigger = "manual" | "voice";
-export type UnifiedRunStatus = "running" | "completed" | "failed";
+export type UnifiedRunStatus = "running" | "completed" | "failed" | "stopped";
 
 export interface UnifiedRunTimings {
 	actionMs: number;

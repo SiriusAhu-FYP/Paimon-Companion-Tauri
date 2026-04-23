@@ -7,7 +7,7 @@ import type {
 	MemoryCandidate,
 } from "@/types/memory";
 import { createLogger } from "@/services/logger";
-import { appDataDir } from "@tauri-apps/api/path";
+import { BaseDirectory } from "@tauri-apps/api/path";
 import { mkdir, readDir, readTextFile, writeTextFile, remove, stat } from "@tauri-apps/plugin-fs";
 
 const log = createLogger("long-term-memory");
@@ -18,6 +18,13 @@ const WRITEBACK_DIR = "writeback-pending";
 
 const MAX_ENTRIES = 200;
 const MAX_TOTAL_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+
+function joinStoragePath(...segments: string[]): string {
+	return segments
+		.map((segment) => segment.replace(/^[\\/]+|[\\/]+$/g, ""))
+		.filter(Boolean)
+		.join("/");
+}
 
 export interface LongTermMemoryServiceDeps {
 	bus: EventBus;
@@ -38,10 +45,9 @@ export class LongTermMemoryService {
 		if (this.initialized) return;
 
 		try {
-			const appDir = await appDataDir();
-			this.basePath = `${appDir}${LTM_DIR}`;
-			await mkdir(this.basePath, { recursive: true });
-			await mkdir(`${this.basePath}/${WRITEBACK_DIR}`, { recursive: true });
+			this.basePath = LTM_DIR;
+			await mkdir(this.basePath, { recursive: true, baseDir: BaseDirectory.AppData });
+			await mkdir(joinStoragePath(this.basePath, WRITEBACK_DIR), { recursive: true, baseDir: BaseDirectory.AppData });
 			await this.loadIndex();
 			await this.retryPendingWritebacks();
 			this.initialized = true;
@@ -80,8 +86,8 @@ export class LongTermMemoryService {
 
 		try {
 			entry.committed_at = Date.now();
-			const filePath = `${this.basePath}/${entry.memory_id}.json`;
-			await writeTextFile(filePath, JSON.stringify(entry, null, "\t"));
+			const filePath = joinStoragePath(this.basePath, `${entry.memory_id}.json`);
+			await writeTextFile(filePath, JSON.stringify(entry, null, "\t"), { baseDir: BaseDirectory.AppData });
 
 			this.addToIndex(entry);
 			await this.saveIndex();
@@ -148,7 +154,7 @@ export class LongTermMemoryService {
 	private async loadIndex(): Promise<void> {
 		if (!this.basePath) return;
 		try {
-			const raw = await readTextFile(`${this.basePath}/${INDEX_FILE}`);
+			const raw = await readTextFile(joinStoragePath(this.basePath, INDEX_FILE), { baseDir: BaseDirectory.AppData });
 			this.index = JSON.parse(raw) as LongTermMemoryIndex;
 		} catch {
 			this.index = { version: 1, entries: [] };
@@ -158,7 +164,7 @@ export class LongTermMemoryService {
 	private async saveIndex(): Promise<void> {
 		if (!this.basePath) return;
 		try {
-			await writeTextFile(`${this.basePath}/${INDEX_FILE}`, JSON.stringify(this.index, null, "\t"));
+			await writeTextFile(joinStoragePath(this.basePath, INDEX_FILE), JSON.stringify(this.index, null, "\t"), { baseDir: BaseDirectory.AppData });
 		} catch (err) {
 			log.error("failed to save LTM index", err);
 		}
@@ -167,7 +173,7 @@ export class LongTermMemoryService {
 	private async loadEntry(memoryId: string): Promise<LongTermMemoryEntry | null> {
 		if (!this.basePath) return null;
 		try {
-			const raw = await readTextFile(`${this.basePath}/${memoryId}.json`);
+			const raw = await readTextFile(joinStoragePath(this.basePath, `${memoryId}.json`), { baseDir: BaseDirectory.AppData });
 			return JSON.parse(raw) as LongTermMemoryEntry;
 		} catch {
 			log.warn("failed to load LTM entry", { memoryId });
@@ -263,8 +269,8 @@ export class LongTermMemoryService {
 	private async savePendingTask(task: WritebackTask): Promise<void> {
 		if (!this.basePath) return;
 		try {
-			const path = `${this.basePath}/${WRITEBACK_DIR}/${task.id}.json`;
-			await writeTextFile(path, JSON.stringify(task, null, "\t"));
+			const path = joinStoragePath(this.basePath, WRITEBACK_DIR, `${task.id}.json`);
+			await writeTextFile(path, JSON.stringify(task, null, "\t"), { baseDir: BaseDirectory.AppData });
 		} catch (err) {
 			log.error("failed to save writeback task", { id: task.id, err });
 		}
@@ -273,7 +279,7 @@ export class LongTermMemoryService {
 	private async removePendingTask(id: string): Promise<void> {
 		if (!this.basePath) return;
 		try {
-			await remove(`${this.basePath}/${WRITEBACK_DIR}/${id}.json`);
+			await remove(joinStoragePath(this.basePath, WRITEBACK_DIR, `${id}.json`), { baseDir: BaseDirectory.AppData });
 		} catch {
 			// may not exist
 		}
@@ -283,18 +289,18 @@ export class LongTermMemoryService {
 		if (!this.basePath) return;
 
 		try {
-			const dir = `${this.basePath}/${WRITEBACK_DIR}`;
-			const files = await readDir(dir);
+			const dir = joinStoragePath(this.basePath, WRITEBACK_DIR);
+			const files = await readDir(dir, { baseDir: BaseDirectory.AppData });
 			for (const f of files) {
 				if (!f.name.endsWith(".json")) continue;
 				try {
-					const raw = await readTextFile(`${dir}/${f.name}`);
+					const raw = await readTextFile(joinStoragePath(dir, f.name), { baseDir: BaseDirectory.AppData });
 					const task = JSON.parse(raw) as WritebackTask;
 					if (task.state !== "committed") {
 						log.info("retrying pending writeback", { id: task.id, state: task.state });
 						await this.commit(task.entry);
 					} else {
-						await remove(`${dir}/${f.name}`);
+						await remove(joinStoragePath(dir, f.name), { baseDir: BaseDirectory.AppData });
 					}
 				} catch (err) {
 					log.warn("failed to retry writeback task", { file: f.name, err });
@@ -333,7 +339,7 @@ export class LongTermMemoryService {
 	private async evictEntry(memoryId: string): Promise<void> {
 		if (!this.basePath) return;
 		try {
-			await remove(`${this.basePath}/${memoryId}.json`);
+			await remove(joinStoragePath(this.basePath, `${memoryId}.json`), { baseDir: BaseDirectory.AppData });
 			this.index.entries = this.index.entries.filter((e) => e.memory_id !== memoryId);
 			await this.saveIndex();
 			log.info("evicted LTM entry", { memoryId });
@@ -354,7 +360,7 @@ export class LongTermMemoryService {
 	private async getEntrySize(memoryId: string): Promise<number> {
 		if (!this.basePath) return 0;
 		try {
-			const s = await stat(`${this.basePath}/${memoryId}.json`);
+			const s = await stat(joinStoragePath(this.basePath, `${memoryId}.json`), { baseDir: BaseDirectory.AppData });
 			return s.size;
 		} catch {
 			return 0;

@@ -169,7 +169,6 @@ export function initServices(): ServiceContainer {
 	installSessionWritebackHook({
 		bus: eventBus,
 		llmProvider,
-		l2Service: l2RollingContext,
 		ltmService: longTermMemory,
 		memoryLog,
 	});

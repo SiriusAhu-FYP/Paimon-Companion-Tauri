@@ -37,6 +37,8 @@ type MissionTaskMode = "browser" | "game" | "generic";
 interface MissionAnalysisDecision {
 	taskMode: MissionTaskMode;
 	missionGoal: string;
+	initialStateSummary: string;
+	initialStateSketch: string;
 	hardConstraints: string[];
 	subtaskChain: string[];
 	completionSignals: string[];
@@ -50,6 +52,7 @@ interface OperationsPlannerDecision {
 	reasoning: string;
 	reply: string;
 	expectedOutcome: string;
+	stateSketch: string;
 	actions: DelegatedTaskAction[];
 }
 
@@ -62,6 +65,9 @@ interface ProgressEvaluatorDecision {
 	goalProgress: "none" | "partial" | "done";
 	reply: string;
 	nextHint: string;
+	beforeStateSketch: string;
+	afterStateSketch: string;
+	stateDelta: string;
 }
 
 interface DelegatedGameContext {
@@ -103,6 +109,7 @@ export async function runDelegatedTaskLoop(input: {
 	traceId?: string;
 	shouldStop: () => boolean;
 	onAssistantReply?: (reply: string, source: "planner" | "reflection") => Promise<void> | void;
+	onTimelineUpdate?: (timeline: import("@/types/unified").DelegationTimeline) => Promise<void> | void;
 	scratchpad?: DelegationScratchpadRuntime | null;
 	recallMemoryCandidates?: (query: string) => Promise<MemoryCandidate[]>;
 }): Promise<DelegatedTaskRunnerResult> {
@@ -136,7 +143,7 @@ export async function runDelegatedTaskLoop(input: {
 		jsonResponse: true,
 		timeoutMs: 35_000,
 	});
-	const mission = normalizeMissionAnalysisDecision(missionRaw, input.taskText);
+	const mission = normalizeMissionAnalysisDecision(missionRaw, input.taskText, input.target);
 	const gameContext = resolveOperationalGameContext(candidateGameContext, mission.taskMode, input.taskText);
 	const allowedTools = buildAllowedTools(config.allowedTools, gameContext, runtimeToolNames);
 
@@ -179,6 +186,7 @@ export async function runDelegatedTaskLoop(input: {
 			taskText: input.taskText,
 			target: input.target.title,
 			missionGoal: mission.missionGoal,
+			initialStateSummary: mission.initialStateSummary,
 			hardConstraints: mission.hardConstraints,
 			subtaskChain: mission.subtaskChain,
 			completionSignals: mission.completionSignals,
@@ -216,6 +224,11 @@ export async function runDelegatedTaskLoop(input: {
 		missionGoal: mission.missionGoal,
 		rounds: timelineRounds,
 	});
+	const emitTimelineUpdate = async () => {
+		await input.onTimelineUpdate?.(buildTimeline());
+	};
+
+	await emitTimelineUpdate();
 
 	for (let round = 1; round <= config.maxRounds; round += 1) {
 		if (input.shouldStop()) {
@@ -253,6 +266,7 @@ export async function runDelegatedTaskLoop(input: {
 			reasoning: "",
 			reply: "",
 			expectedOutcome: "",
+			stateSketch: "",
 			actions: [] as DelegatedTaskAction[],
 		};
 		while (plannerRetryCount <= 1) {
@@ -492,6 +506,9 @@ export async function runDelegatedTaskLoop(input: {
 					expectedMet: false,
 					goalAlignment: reflection.goalAlignment === "achieved" ? "deviated" : reflection.goalAlignment,
 					goalProgress: reflection.goalProgress === "done" ? "none" : reflection.goalProgress,
+					beforeStateSketch: reflection.beforeStateSketch || "",
+					afterStateSketch: reflection.afterStateSketch || "",
+					stateDelta: reflection.stateDelta || "",
 					nextHint: combineHints(
 						reflection.nextHint,
 						`动作执行报错：${actionExecutionError}。下一轮先修正动作参数或先做聚焦/定位校准。`,
@@ -527,6 +544,9 @@ export async function runDelegatedTaskLoop(input: {
 					wasActionCorrect: false,
 					expectedMet: false,
 					goalAlignment: "deviated",
+					beforeStateSketch: reflection.beforeStateSketch || "",
+					afterStateSketch: reflection.afterStateSketch || "",
+					stateDelta: reflection.stateDelta || "",
 				};
 				const lastOutcome = recentActionOutcomes[recentActionOutcomes.length - 1];
 				if (lastOutcome) {
@@ -565,6 +585,7 @@ export async function runDelegatedTaskLoop(input: {
 				evaluatorReply: reflection.reply,
 				evaluatorHint: latestHint,
 			});
+			await emitTimelineUpdate();
 			if (history.length > 6) {
 				history.splice(0, history.length - 6);
 			}
@@ -653,6 +674,8 @@ function buildMissionAnalystSystemPrompt(rules: string[]): string {
 	const baseRules = [
 		"你是 Mission Analyst。你会在动作执行前分析任务目标、约束和可能的子任务链。",
 		"必须优先识别用户显式约束，例如“指定网站”“不要离开当前页面”“不要改动原页面”等。",
+		"当前页面/窗口/标签页标题属于初始环境观察，不属于 hardConstraints；除非用户明确要求，否则不得把它们写成约束。",
+		"你必须输出 initialStateSummary，用一句话描述当前处于什么页面/窗口状态，以及这会如何影响后续规划。",
 		"若用户任务是浏览器操作，不要误判为游戏托管。",
 		"浏览器任务必须先分析初始状态：当前标签页是空白新标签页、目标站点页，还是已有内容页。",
 		"当当前标签页已有内容且任务可能破坏上下文时，优先把“新建标签页”纳入子任务链，再继续导航。",
@@ -675,7 +698,8 @@ function buildMissionAnalystUserPrompt(input: {
 		: "none";
 	return [
 		`task: ${input.taskText}`,
-		`target: ${input.target.title} (${input.target.handle})`,
+		`observedCurrentWindow: ${input.target.title} (${input.target.handle})`,
+		"注意：observedCurrentWindow 只是当前观察到的初始状态，不是用户约束；不要把它直接抄进 hardConstraints。",
 		`candidateGameContext: ${gameContextText}`,
 		`allowedTools: ${input.allowedTools.join(", ")}`,
 		"",
@@ -683,9 +707,11 @@ function buildMissionAnalystUserPrompt(input: {
 		"{",
 		'  "taskMode": "browser|game|generic",',
 		'  "missionGoal": "string",',
+		'  "initialStateSummary": "string",',
 		'  "hardConstraints": ["string"],',
 		'  "subtaskChain": ["string"],',
 		'  "completionSignals": ["string"],',
+		'  "initialStateSketch": "string（可选；离散棋盘/网格任务时用纯文本表示观察到的局面）",',
 		'  "analysisReply": "string",',
 		'  "ackReply": "string",',
 		'  "reply": "string（兼容旧字段，可与 analysisReply 相同）"',
@@ -778,6 +804,7 @@ function buildOperationsPlannerUserPrompt(input: {
 		'  "reasoning": "string",',
 		'  "reply": "string",',
 		'  "expectedOutcome": "string",',
+		'  "stateSketch": "string（可选；离散棋盘/网格任务时用纯文本表示当前理解到的局面）",',
 		'  "actions": [',
 		`    { "tool": "${input.allowedTools.join("|")}", "args": { "x": 123, "y": 456, "xNorm": 0.42, "yNorm": 0.31, "locatorHint": "点击搜索框" } }`,
 		"  ]",
@@ -794,11 +821,13 @@ function buildProgressEvaluatorSystemPrompt(rules: string[], mission: MissionAna
 		"你还要检查 executedAction 是否拆成“单步可执行动作”；若动作过于抽象或一步里混了多步，判定 wasActionCorrect=false 并在 nextHint 指出应拆成的最小动作。",
 		"若 history 显示同签名动作已连续失败 >=2 轮，你必须判定 wasActionCorrect=false 且 goalAlignment=deviated，并在 nextHint 强制要求“换策略/换动作链，不得重复同动作”。",
 		`missionGoal: ${mission.missionGoal}`,
+		`initialState: ${mission.initialStateSummary || "(none)"}`,
 		`hardConstraints: ${mission.hardConstraints.join(" | ") || "(none)"}`,
 		`subtaskChain: ${mission.subtaskChain.join(" -> ") || "(none)"}`,
 		`completionSignals: ${mission.completionSignals.join(" | ") || "(none)"}`,
 		"若 executedAction 的 text 内含 {ENTER}/{RETURN} 这类字面宏，必须判定 wasActionCorrect=false、goalAlignment=deviated。",
-		"若动作后仍停留在无关页面（如 GitHub/Bilibili）且目标是 Bing/Google 搜索，应判定 actionSucceeded=false 且给出纠偏 nextHint。",
+		"你必须评估当前环境是否仍然满足任务前提：页面是否正确、站点是否相关、是否发生页面漂移、前置条件是否被破坏。",
+		"若环境已经偏离任务前提，不要只评估局部动作是否成功；要在 nextHint 中明确说明当前错误状态与应恢复到的目标状态。",
 		"reply 是一句自然口语化的简短复盘（≤40字），以派蒙第一人称说话，像跟朋友汇报进度一样，避免重复相同句式。",
 		"nextHint 要明确“当前处于哪个状态、下一轮应推进到哪个状态”，不要笼统描述。",
 		"禁止输出代码块、禁止附加解释文本，只输出 JSON。",
@@ -823,6 +852,7 @@ function buildProgressEvaluatorUserPrompt(input: {
 		`round: ${input.round}`,
 		`target: ${input.target.title} (${input.target.handle})`,
 		`missionGoal: ${input.mission.missionGoal}`,
+		`missionInitialState: ${input.mission.initialStateSummary || "(none)"}`,
 		`executedAction: ${input.action.tool}`,
 		`actionArgs: ${JSON.stringify(input.action.args)}`,
 		`preExpectedOutcome: ${input.expectedOutcome || "(none)"}`,
@@ -841,23 +871,34 @@ function buildProgressEvaluatorUserPrompt(input: {
 		'  "goalAlignment": "closer|unchanged|deviated|achieved",',
 		'  "goalProgress": "none|partial|done",',
 		'  "reply": "string",',
-		'  "nextHint": "string"',
+		'  "nextHint": "string",',
+		'  "beforeStateSketch": "string（可选；离散棋盘/网格任务时描述 before 局面）",',
+		'  "afterStateSketch": "string（可选；离散棋盘/网格任务时描述 after 局面）",',
+		'  "stateDelta": "string（可选；说明这一步到底哪里变了；若几乎没变应明确写无变化）"',
 		"}",
 	].join("\n");
 }
 
-function normalizeMissionAnalysisDecision(rawText: string, taskText: string): MissionAnalysisDecision {
+function normalizeMissionAnalysisDecision(rawText: string, taskText: string, target: FunctionalTarget): MissionAnalysisDecision {
 	const parsed = parseJsonObject(rawText);
-	const hardConstraints = toStringArray(parsed.hardConstraints).slice(0, 8);
+	const hardConstraints = sanitizeMissionHardConstraints(
+		toStringArray(parsed.hardConstraints).slice(0, 8),
+		taskText,
+		target.title,
+	);
 	const subtaskChain = toStringArray(parsed.subtaskChain).slice(0, 8);
 	const completionSignals = toStringArray(parsed.completionSignals).slice(0, 8);
 	const taskMode = normalizeTaskMode(toText(parsed.taskMode), taskText);
 	const missionGoal = toText(parsed.missionGoal) || taskText;
+	const initialStateSummary = toText(parsed.initialStateSummary) || `当前窗口/页面状态：${target.title}`;
+	const initialStateSketch = toText(parsed.initialStateSketch);
 	const analysisReply = toText(parsed.analysisReply || parsed.reply);
 	const ackReply = toText(parsed.ackReply);
 	return {
 		taskMode,
 		missionGoal,
+		initialStateSummary,
+		initialStateSketch,
 		hardConstraints,
 		subtaskChain,
 		completionSignals,
@@ -865,6 +906,37 @@ function normalizeMissionAnalysisDecision(rawText: string, taskText: string): Mi
 		ackReply,
 		reply: toText(parsed.reply),
 	};
+}
+
+function sanitizeMissionHardConstraints(
+	rawConstraints: string[],
+	taskText: string,
+	targetTitle: string,
+): string[] {
+	const titleKeywords = extractObservedTitleKeywords(targetTitle);
+	return rawConstraints.filter((constraint) => {
+		const normalized = constraint.trim();
+		if (!normalized) {
+			return false;
+		}
+		if (!titleKeywords.length) {
+			return true;
+		}
+		const matchesObservedTitle = titleKeywords.some((keyword) => normalized.toLowerCase().includes(keyword.toLowerCase()));
+		const taskMentionsObservedTitle = titleKeywords.some((keyword) => taskText.toLowerCase().includes(keyword.toLowerCase()));
+		if (matchesObservedTitle && !taskMentionsObservedTitle) {
+			return false;
+		}
+		return true;
+	});
+}
+
+function extractObservedTitleKeywords(targetTitle: string): string[] {
+	return targetTitle
+		.split(/[—\-|·•:：/\\()[\]\s]+/)
+		.map((part) => part.trim())
+		.filter((part) => part.length >= 2)
+		.filter((part) => !["mozilla", "firefox", "chrome", "edge", "browser"].includes(part.toLowerCase()));
 }
 
 function normalizeOperationsPlannerDecision(
@@ -886,6 +958,7 @@ function normalizeOperationsPlannerDecision(
 		reasoning: toText(parsed.reasoning),
 		reply: toText(parsed.reply),
 		expectedOutcome: toText(parsed.expectedOutcome),
+		stateSketch: toText(parsed.stateSketch),
 		actions,
 	};
 }
@@ -1016,6 +1089,9 @@ function normalizeProgressEvaluatorDecision(rawText: string): ProgressEvaluatorD
 		goalProgress,
 		reply: toText(parsed.reply),
 		nextHint: toText(parsed.nextHint),
+		beforeStateSketch: toText(parsed.beforeStateSketch),
+		afterStateSketch: toText(parsed.afterStateSketch),
+		stateDelta: toText(parsed.stateDelta),
 	};
 }
 
@@ -1864,6 +1940,8 @@ function buildAnalystScratchpadEntry(input: {
 		`[analyst] task=${input.taskText}`,
 		`target=${input.target.title}`,
 		`missionGoal=${input.mission.missionGoal}`,
+		`initialState=${input.mission.initialStateSummary || "(none)"}`,
+		`initialStateSketch=${input.mission.initialStateSketch || "(none)"}`,
 		`hardConstraints=${input.mission.hardConstraints.join(" | ") || "(none)"}`,
 		`subtaskChain=${input.mission.subtaskChain.join(" -> ") || "(none)"}`,
 		`completionSignals=${input.mission.completionSignals.join(" | ") || "(none)"}`,
@@ -1893,6 +1971,7 @@ function formatPlannerScratchpadNote(input: {
 		`previousExpectedOutcome=${input.previousExpectedOutcome || "(none)"}`,
 		`previousExpectedMet=${input.previousExpectedMet === null ? "unknown" : input.previousExpectedMet ? "yes" : "no"}`,
 		`expectedOutcome=${input.planner.expectedOutcome || "(none)"}`,
+		`stateSketch=${input.planner.stateSketch || "(none)"}`,
 		`reasoning=${input.planner.reasoning || "(none)"}`,
 	].join(" | ");
 }
@@ -1913,6 +1992,9 @@ function formatEvaluatorScratchpadNote(input: {
 		`wasActionCorrect=${input.reflection.wasActionCorrect}`,
 		`goalAlignment=${input.reflection.goalAlignment}`,
 		`goalProgress=${input.reflection.goalProgress}`,
+		`beforeStateSketch=${input.reflection.beforeStateSketch || "(none)"}`,
+		`afterStateSketch=${input.reflection.afterStateSketch || "(none)"}`,
+		`stateDelta=${input.reflection.stateDelta || "(none)"}`,
 		`nextHint=${input.reflection.nextHint || "(none)"}`,
 	].join(" | ");
 }
@@ -1943,6 +2025,8 @@ function buildSharedScratchpadContext(input: {
 		input.taskText,
 		"### mission",
 		`goal=${input.mission.missionGoal}`,
+		`initialState=${input.mission.initialStateSummary || "(none)"}`,
+		`initialStateSketch=${input.mission.initialStateSketch || "(none)"}`,
 		`constraints=${input.mission.hardConstraints.join(" | ") || "(none)"}`,
 		`subtaskChain=${input.mission.subtaskChain.join(" -> ") || "(none)"}`,
 		`completionSignals=${input.mission.completionSignals.join(" | ") || "(none)"}`,

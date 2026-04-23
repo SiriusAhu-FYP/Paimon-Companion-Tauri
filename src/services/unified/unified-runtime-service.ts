@@ -198,70 +198,15 @@ export class UnifiedRuntimeService {
 
 		const preflightTarget = await this.runModePreflight("delegated");
 		const target = this.resolveBrowserTaskTarget(preflightTarget);
-		const loopId = `delegated-browser-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-		this.activeLoopId = loopId;
-		this.state.loopActive = true;
-		this.state.phase = "thinking";
-		this.state.lastCommand = `browser-task:${trimmed}`;
-		this.state.lastVoiceInput = null;
-		this.companionMode.setMode("delegated", "browser-task-start", "system");
-		this.emitState();
-
-		try {
-			this.emitDelegationWarmupCue(trimmed);
-			await this.orchestrator.runFocusTask(target, { applyDelegatedViewport: true });
-			const scratchpad = await this.createDelegationScratchpadRuntime({
-				label: "delegation-task",
-				taskText: trimmed,
-				target,
-			});
-			const result = await runDelegatedTaskLoop({
-				taskText: trimmed,
-				target,
-				orchestrator: this.orchestrator,
-				shouldStop: () => this.activeLoopId !== loopId,
-				scratchpad,
-				recallMemoryCandidates: this.ltmService
-					? async (query: string) => this.ltmService!.recall(query, 3)
-					: undefined,
-				onAssistantReply: async (reply, source) => {
-					const normalizedReply = reply.trim();
-					if (!normalizedReply) {
-						return;
-					}
-					this.state.lastCompanionText = normalizedReply;
-					this.emitCompanionReplyToChat(normalizedReply);
-					if (this.state.speechEnabled && source === "reflection") {
-						this.state.phase = "speaking";
-						this.emitState();
-						this.safeSpeak(normalizedReply, { interruptQueue: true });
-					}
-				},
-			});
-			this.state.lastCompanionText = result.summary;
-			if (result.status === "failed") {
-				this.emitDelegationFailureReason(result.summary);
-				this.state.phase = "failed";
-				throw new Error(result.summary);
-			}
-			this.state.phase = "idle";
-			if (result.status === "stopped") {
-				this.emitCompanionReplyToChat("托管任务已停止。");
-			}
-		} catch (err) {
-			this.state.phase = "failed";
-			throw err;
-		} finally {
-			if (this.activeLoopId === loopId) {
-				this.activeLoopId = null;
-			}
-			this.state.loopActive = this.activeLoopId !== null;
-			if (this.state.phase !== "failed") {
-				this.state.phase = "idle";
-			}
-			this.companionMode.setMode(this.companionMode.getPreferredMode(), "browser-task-complete", "system");
-			this.emitState();
-		}
+		await this.executeDelegationRun({
+			taskTag: "generic",
+			target,
+			trigger: "manual",
+			taskText: trimmed,
+			commandLabel: `browser-task:${trimmed}`,
+			startReason: "browser-task-start",
+			completeReason: "browser-task-complete",
+		});
 	}
 
 	async runDelegationTask(
@@ -485,18 +430,6 @@ export class UnifiedRuntimeService {
 		});
 	}
 
-	private emitDelegationFailureReason(summary: string) {
-		const reasonText = summarizeDelegationFailureReason(summary);
-		this.state.lastCompanionText = reasonText;
-		this.emitCompanionReplyToChat(reasonText);
-		if (!this.state.speechEnabled) {
-			return;
-		}
-		this.state.phase = "speaking";
-		this.emitState();
-		this.safeSpeak(reasonText, { interruptQueue: false });
-	}
-
 	private emitState() {
 		this.bus.emit("unified:state-change", { state: this.getState() });
 	}
@@ -507,6 +440,9 @@ export class UnifiedRuntimeService {
 		trigger: "manual" | "voice";
 		taskText: string;
 		traceId?: string;
+		commandLabel?: string;
+		startReason?: string;
+		completeReason?: string;
 	}): Promise<UnifiedRunRecord> {
 		const run: UnifiedRunRecord = {
 			id: input.traceId ?? `unified-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -537,13 +473,14 @@ export class UnifiedRuntimeService {
 		};
 
 		const loopId = `delegation-task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-		this.companionMode.setMode("delegated", "unified:run-start", "system");
 		this.activeLoopId = loopId;
 		this.state.loopActive = true;
 		this.state.activeRunId = run.id;
 		this.state.phase = "thinking";
-		this.state.lastCommand = `${input.taskTag}-delegation`;
+		this.state.lastCommand = input.commandLabel ?? `${input.taskTag}-delegation`;
 		this.state.lastRun = cloneRun(run);
+		this.state.lastVoiceInput = null;
+		this.companionMode.setMode("delegated", input.startReason ?? "unified:run-start", "system");
 		this.bus.emit("unified:run-start", {
 			runId: run.id,
 			trigger: input.trigger,
@@ -551,6 +488,34 @@ export class UnifiedRuntimeService {
 			traceId: run.id,
 		});
 		this.emitState();
+
+		if (this.memoryLog) {
+			this.memoryLog.append({
+				id: `delegation-${run.id}`,
+				source: "delegation",
+				kind: "delegation-event",
+				sessionId: run.id,
+				createdAt: run.startedAt,
+				timeStart: run.startedAt,
+				timeEnd: run.startedAt,
+				rawContext: `任务: ${input.taskText}`,
+				preCompressed: {
+					memory_id: `delegation-${run.id}`,
+					source: "delegation",
+					time_start: run.startedAt,
+					time_end: run.startedAt,
+					scene_or_task: input.taskText.slice(0, 80),
+					entities: extractEntitiesFromText(input.taskText),
+					event_result: "unknown",
+					summary: `用户曾请求我执行这个托管任务：${input.taskText}`,
+					tags: ["delegation", "intent", input.taskTag],
+					committed_at: 0,
+				},
+				promoted: false,
+			}).catch((err) => {
+				log.warn("delegation intent log failed", err);
+			});
+		}
 
 		try {
 			this.emitDelegationWarmupCue(input.taskText);
@@ -587,21 +552,28 @@ export class UnifiedRuntimeService {
 						run.spoke = this.safeSpeak(normalizedReply, { interruptQueue: true }) || run.spoke;
 					}
 				},
+				onTimelineUpdate: async (timeline) => {
+					run.delegationTimeline = timeline;
+					this.state.lastRun = cloneRun(run);
+					this.emitState();
+				},
 			});
 			run.timings.actionMs = Date.now() - actionStartedAt;
 			if (result.status === "failed") {
 				throw new Error(result.summary);
 			}
-			run.status = "completed";
+			run.status = result.status === "stopped" ? "stopped" : "completed";
 			run.phase = this.state.speechEnabled ? "speaking" : "idle";
 			run.summary = result.summary;
 			run.delegationTimeline = result.timeline ?? null;
 			if (result.status === "completed") {
-				const completionText = `搞定啦！${result.summary}`;
-				run.companionText = completionText;
-				run.companionTextSource = "fallback";
-				this.state.lastCompanionText = completionText;
-				this.emitCompanionReplyToChat(completionText);
+				if (!run.companionText) {
+					const completionText = buildDelegationCompletionText(input.taskText, result.summary);
+					run.companionText = completionText;
+					run.companionTextSource = "fallback";
+					this.state.lastCompanionText = completionText;
+					this.emitCompanionReplyToChat(completionText);
+				}
 			} else if (!run.companionText) {
 				const fallbackText = result.status === "stopped" ? "托管任务已停止。" : result.summary;
 				run.companionText = fallbackText;
@@ -661,7 +633,11 @@ export class UnifiedRuntimeService {
 				this.activeLoopId = null;
 			}
 			this.state.loopActive = this.activeLoopId !== null;
-			this.companionMode.setMode(this.companionMode.getPreferredMode(), "unified:run-complete", "system");
+			this.companionMode.setMode(
+				this.companionMode.getPreferredMode(),
+				input.completeReason ?? "unified:run-complete",
+				"system",
+			);
 			this.emitState();
 
 			// Delegation event writeback via intermediate log
@@ -676,7 +652,11 @@ export class UnifiedRuntimeService {
 				this.memoryLog.append({
 					id: `delegation-${run.id}`,
 					source: "delegation",
-					createdAt: Date.now(),
+					kind: "delegation-event",
+					sessionId: run.id,
+					createdAt: run.startedAt,
+					timeStart: run.startedAt,
+					timeEnd: run.endedAt ?? Date.now(),
 					rawContext: `任务: ${input.taskText}\n结果: ${run.summary || "无"}`,
 					preCompressed: {
 						memory_id: `delegation-${run.id}`,
@@ -1561,6 +1541,25 @@ function summarizeDelegationFailureReason(rawSummary: string): string {
 		return `托管已停止：${summary} 派蒙建议先检查定位结果，再继续执行。`;
 	}
 	return `托管已停止：${summary}`;
+}
+
+function buildDelegationCompletionText(taskText: string, rawSummary: string): string {
+	const summary = rawSummary.trim().replace(/\s+/g, " ");
+	if (!summary) {
+		return `搞定啦！“${truncateDelegationTaskForAck(taskText)}”这轮已经完成。`;
+	}
+	if (summary.startsWith("成功")) {
+		return `搞定啦！${summary}`;
+	}
+	return `搞定啦！关于“${truncateDelegationTaskForAck(taskText)}”，结果是：${summary}`;
+}
+
+function truncateDelegationTaskForAck(taskText: string): string {
+	const normalized = taskText.trim().replace(/\s+/g, " ");
+	if (normalized.length <= 24) {
+		return normalized;
+	}
+	return `${normalized.slice(0, 24)}…`;
 }
 
 function inferVoiceCommand(text: string): UnifiedVoiceCommand {

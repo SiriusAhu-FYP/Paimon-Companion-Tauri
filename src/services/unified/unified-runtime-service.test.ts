@@ -178,7 +178,30 @@ describe("UnifiedRuntimeService delegation path", () => {
 		await service.runDelegationTask("manual", "继续");
 
 		expect(recall).toHaveBeenCalledWith("history query", 3);
-		expect(appendLog).toHaveBeenCalledTimes(1);
+		expect(appendLog).toHaveBeenCalledTimes(2);
+	});
+
+	it("records stopped delegation runs as interrupted instead of success", async () => {
+		const { service } = createService({ selectedTargetTitle: "Mozilla Firefox" });
+		const appendLog = vi.fn().mockResolvedValue(undefined);
+		service.setMemoryLog({ append: appendLog } as never);
+		vi.mocked(runDelegatedTaskLoop).mockResolvedValueOnce({
+			status: "stopped",
+			rounds: 2,
+			summary: "任务被手动停止。",
+			timeline: { taskText: "", missionGoal: "", rounds: [] },
+		});
+
+		await service.submitDelegationTaskInstruction("请使用 Google 查询今日美元-人民币汇率");
+
+		expect(service.getState().lastRun?.status).toBe("stopped");
+		expect(appendLog).toHaveBeenCalledTimes(2);
+		expect(appendLog).toHaveBeenLastCalledWith(expect.objectContaining({
+			preCompressed: expect.objectContaining({
+				event_result: "interrupted",
+				summary: "任务被手动停止。",
+			}),
+		}));
 	});
 
 	it("does not fallback to legacy game service when delegation loop fails", async () => {
@@ -216,7 +239,7 @@ describe("UnifiedRuntimeService delegation path", () => {
 		}));
 		expect(pipeline.run).not.toHaveBeenCalled();
 		expect(visibleReplies).toContain("我先确认了一下当前页面。");
-		expect(service.getState().lastCompanionText).toBe("任务完成");
+		expect(service.getState().lastCompanionText).toBe("我先确认了一下当前页面。");
 	});
 
 	it("voice input no longer triggers delegation execution", async () => {

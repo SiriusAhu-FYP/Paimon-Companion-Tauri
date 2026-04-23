@@ -385,7 +385,7 @@ export class LLMService {
 		});
 
 		// Lightweight automatic recall — every chat round, conservative threshold
-		const AUTO_RECALL_THRESHOLD = 1.5;
+		const AUTO_RECALL_THRESHOLD = 2.0;
 		const AUTO_RECALL_TOP_K = 3;
 		let memoryCandidates: MemoryCandidate[] = [];
 		if (this.ltmService) {
