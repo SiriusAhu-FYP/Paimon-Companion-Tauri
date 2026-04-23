@@ -125,6 +125,58 @@ pub async fn export_debug_capture_session(request: ExportDebugCaptureSessionRequ
 	})
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugCaptureSessionSummary {
+	pub session_id: String,
+	pub label: String,
+	pub created_at: String,
+}
+
+#[tauri::command]
+pub async fn list_debug_capture_sessions() -> Result<Vec<DebugCaptureSessionSummary>, String> {
+	let root = get_logs_root()?;
+	if !root.exists() {
+		return Ok(Vec::new());
+	}
+	let mut sessions: Vec<DebugCaptureSessionSummary> = Vec::new();
+	let entries = fs::read_dir(&root).map_err(|err| format!("failed to read logs root: {err}"))?;
+	for entry in entries {
+		let entry = entry.map_err(|err| format!("failed to iterate logs: {err}"))?;
+		if !entry.path().is_dir() {
+			continue;
+		}
+		let name = entry.file_name().to_string_lossy().to_string();
+		let parts: Vec<&str> = name.splitn(3, '-').collect();
+		let created_at = if parts.len() >= 2 {
+			format!("{}-{}", parts[0], parts[1])
+		} else {
+			name.clone()
+		};
+		let label = if parts.len() >= 3 { parts[2..].join("-") } else { "manual".to_string() };
+		sessions.push(DebugCaptureSessionSummary {
+			session_id: name,
+			label,
+			created_at,
+		});
+	}
+	sessions.sort_by(|a, b| b.session_id.cmp(&a.session_id));
+	Ok(sessions)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadDebugCaptureFileRequest {
+	pub session_id: String,
+	pub file_name: String,
+}
+
+#[tauri::command]
+pub async fn read_debug_capture_file(request: ReadDebugCaptureFileRequest) -> Result<String, String> {
+	let path = resolve_session_path(&request.session_id, &request.file_name)?;
+	fs::read_to_string(&path).map_err(|err| format!("failed to read file: {err}"))
+}
+
 fn get_logs_root() -> Result<PathBuf, String> {
 	let current_dir = std::env::current_dir().map_err(|err| format!("failed to resolve current dir: {err}"))?;
 	Ok(current_dir.join("logs").join("debug-captures"))

@@ -26,6 +26,8 @@ pub fn run() {
 			commands::debug_capture::append_debug_capture_text,
 			commands::debug_capture::write_debug_capture_image,
 			commands::debug_capture::export_debug_capture_session,
+			commands::debug_capture::list_debug_capture_sessions,
+			commands::debug_capture::read_debug_capture_file,
 			commands::delegation_scratchpad::start_delegation_scratchpad,
 			commands::delegation_scratchpad::write_delegation_scratchpad_text,
 			commands::delegation_scratchpad::read_delegation_scratchpad_text,

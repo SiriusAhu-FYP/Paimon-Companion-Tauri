@@ -53,6 +53,22 @@ export async function writeDebugCaptureImage(sessionId: string, fileName: string
 	});
 }
 
+export interface DebugCaptureSessionSummary {
+	sessionId: string;
+	label: string;
+	createdAt: string;
+}
+
+export async function listDebugCaptureSessions(): Promise<DebugCaptureSessionSummary[]> {
+	if (!isTauriEnvironment()) return [];
+	return invoke<DebugCaptureSessionSummary[]>("list_debug_capture_sessions");
+}
+
+export async function readDebugCaptureFile(sessionId: string, fileName: string): Promise<string> {
+	if (!isTauriEnvironment()) throw new Error("requires Tauri");
+	return invoke<string>("read_debug_capture_file", { request: { sessionId, fileName } });
+}
+
 export async function exportDebugCaptureSession(sessionId: string, label?: string): Promise<DebugCaptureExportInfo> {
 	if (!isTauriEnvironment()) {
 		throw new Error("debug capture requires Tauri environment");

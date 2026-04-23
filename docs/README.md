@@ -8,6 +8,8 @@ Tracked public project docs live here.
   project status, setup, and public-facing summary
 - `../ROADMAP.md`
   phase-level progress and accepted direction changes
+- `architecture/000-THIS-FOLDER-IS-OUTDATED-DO-NOT-REFERENCE.md`
+  `docs/architecture/` is currently historical/stale and should not drive active implementation
 - `architecture/tauri-baseline.md`
   current Tauri runtime baseline and responsibility split
 - `architecture/core-repo-integration.md`
@@ -16,8 +18,6 @@ Tracked public project docs live here.
   detailed merged / partial / missing / replaced matrix
 - `architecture/llmplay-retained-scope.md`
   retained / replaced / retired decisions for the `LLMPlay-MVP` line
-- `architecture/companion-runtime.md`
-  target runtime direction for local perception, cloud reasoning, and MCP control
 - `architecture/post-fusion-baseline.md`
   accepted close-out bar for finishing `P2` source fusion, plus the known residual issues carried out of `P2`
 - `architecture/companion-mcp-contract.md`
@@ -38,3 +38,5 @@ Tracked public project docs live here.
   shared base template for future game-specific prompts
 - `evaluation/2048-baseline.md`
   accepted functional evaluation baseline for `2048`
+- `evaluation/p6-memory-validation-protocol.md`
+  reproducible protocol and scoring flow for `P6` memory validation

@@ -1,3 +1,50 @@
+/* ── Theme CSS variables ── */
+
+:root,
+[data-theme="dark"] {
+	--paimon-scrollbar-thumb: rgba(104, 160, 255, 0.72);
+	--paimon-scrollbar-track: rgba(255, 255, 255, 0.05);
+	--paimon-scrollbar-thumb-hover: rgba(132, 182, 255, 0.88);
+	--paimon-fg: rgba(255, 255, 255, 0.88);
+	--paimon-fg-muted: rgba(255, 255, 255, 0.62);
+	--paimon-fg-faint: rgba(255, 255, 255, 0.38);
+	--paimon-fg-faintest: rgba(255, 255, 255, 0.12);
+	--paimon-bg-subtle: rgba(255, 255, 255, 0.02);
+	--paimon-bg-hover: rgba(255, 255, 255, 0.04);
+	--paimon-bg-active: rgba(255, 255, 255, 0.08);
+	--paimon-border: rgba(255, 255, 255, 0.08);
+	--paimon-border-strong: rgba(255, 255, 255, 0.14);
+	--paimon-accent-bg: rgba(89, 159, 255, 0.22);
+	--paimon-accent-hover: rgba(89, 159, 255, 0.18);
+	--paimon-accent-drag: rgba(89, 159, 255, 0.38);
+	--paimon-splitter: rgba(255, 255, 255, 0.04);
+	--paimon-code-bg: rgba(0, 0, 0, 0.22);
+	--paimon-resize-line: rgba(255, 255, 255, 0.12);
+	--paimon-resize-line-hover: rgba(255, 255, 255, 0.24);
+}
+
+[data-theme="light"] {
+	--paimon-scrollbar-thumb: rgba(43, 122, 233, 0.5);
+	--paimon-scrollbar-track: rgba(0, 0, 0, 0.04);
+	--paimon-scrollbar-thumb-hover: rgba(43, 122, 233, 0.7);
+	--paimon-fg: rgba(0, 0, 0, 0.87);
+	--paimon-fg-muted: rgba(0, 0, 0, 0.6);
+	--paimon-fg-faint: rgba(0, 0, 0, 0.38);
+	--paimon-fg-faintest: rgba(0, 0, 0, 0.12);
+	--paimon-bg-subtle: rgba(0, 0, 0, 0.02);
+	--paimon-bg-hover: rgba(0, 0, 0, 0.04);
+	--paimon-bg-active: rgba(0, 0, 0, 0.08);
+	--paimon-border: rgba(0, 0, 0, 0.1);
+	--paimon-border-strong: rgba(0, 0, 0, 0.18);
+	--paimon-accent-bg: rgba(43, 122, 233, 0.14);
+	--paimon-accent-hover: rgba(43, 122, 233, 0.1);
+	--paimon-accent-drag: rgba(43, 122, 233, 0.3);
+	--paimon-splitter: rgba(0, 0, 0, 0.04);
+	--paimon-code-bg: rgba(0, 0, 0, 0.05);
+	--paimon-resize-line: rgba(0, 0, 0, 0.1);
+	--paimon-resize-line-hover: rgba(0, 0, 0, 0.2);
+}
+
 /* ── 全局 reset（MUI CssBaseline 覆盖大部分，仅保留补充） ── */
 
 * {
@@ -5,7 +52,7 @@
 	padding: 0;
 	box-sizing: border-box;
 	scrollbar-width: thin;
-	scrollbar-color: rgba(104, 160, 255, 0.72) rgba(255, 255, 255, 0.06);
+	scrollbar-color: var(--paimon-scrollbar-thumb) var(--paimon-scrollbar-track);
 }
 
 *::-webkit-scrollbar {
@@ -14,18 +61,18 @@
 }
 
 *::-webkit-scrollbar-track {
-	background: rgba(255, 255, 255, 0.05);
+	background: var(--paimon-scrollbar-track);
 }
 
 *::-webkit-scrollbar-thumb {
-	background: rgba(104, 160, 255, 0.72);
+	background: var(--paimon-scrollbar-thumb);
 	border-radius: 999px;
 	border: 2px solid transparent;
 	background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-	background: rgba(132, 182, 255, 0.88);
+	background: var(--paimon-scrollbar-thumb-hover);
 	border: 2px solid transparent;
 	background-clip: padding-box;
 }
@@ -65,56 +112,24 @@
 	height: 8px;
 	cursor: row-resize;
 	background:
-	linear-gradient(
-		to bottom,
-		transparent 0,
-		transparent 2px,
-		rgba(255, 255, 255, 0.12) 2px,
-		rgba(255, 255, 255, 0.12) 3px,
-		transparent 3px,
-		transparent 100%
-	);
+	linear-gradient(to bottom, transparent 0, transparent 2px, var(--paimon-resize-line) 2px, var(--paimon-resize-line) 3px, transparent 3px, transparent 100%);
 }
 
 .resizable-pane-handle-vertical:hover {
 	background:
-	linear-gradient(
-		to bottom,
-		transparent 0,
-		transparent 2px,
-		rgba(255, 255, 255, 0.24) 2px,
-		rgba(255, 255, 255, 0.24) 3px,
-		transparent 3px,
-		transparent 100%
-	);
+	linear-gradient(to bottom, transparent 0, transparent 2px, var(--paimon-resize-line-hover) 2px, var(--paimon-resize-line-hover) 3px, transparent 3px, transparent 100%);
 }
 
 .resizable-pane-handle-horizontal {
 	width: 8px;
 	cursor: col-resize;
 	background:
-	linear-gradient(
-			to right,
-			transparent 0,
-			transparent 2px,
-			rgba(255, 255, 255, 0.12) 2px,
-			rgba(255, 255, 255, 0.12) 3px,
-			transparent 3px,
-			transparent 100%
-		);
+	linear-gradient(to right, transparent 0, transparent 2px, var(--paimon-resize-line) 2px, var(--paimon-resize-line) 3px, transparent 3px, transparent 100%);
 }
 
 .resizable-pane-handle-horizontal:hover {
 	background:
-		linear-gradient(
-			to right,
-			transparent 0,
-			transparent 2px,
-			rgba(255, 255, 255, 0.24) 2px,
-			rgba(255, 255, 255, 0.24) 3px,
-			transparent 3px,
-			transparent 100%
-		);
+	linear-gradient(to right, transparent 0, transparent 2px, var(--paimon-resize-line-hover) 2px, var(--paimon-resize-line-hover) 3px, transparent 3px, transparent 100%);
 }
 
 /* ── Dock Workspace ── */
@@ -126,35 +141,35 @@
 }
 
 .paimon-workspace .flexlayout__layout {
-	--color-text: rgba(255, 255, 255, 0.88);
+	--color-text: var(--paimon-fg);
 	--color-background: var(--mui-palette-background-default, #0f1117);
 	--color-base: var(--mui-palette-background-default, #0f1117);
-	--color-1: rgba(255, 255, 255, 0.02);
-	--color-2: rgba(255, 255, 255, 0.04);
-	--color-3: rgba(255, 255, 255, 0.06);
-	--color-4: rgba(89, 159, 255, 0.22);
-	--color-5: rgba(89, 159, 255, 0.34);
-	--color-6: rgba(89, 159, 255, 0.46);
+	--color-1: var(--paimon-bg-subtle);
+	--color-2: var(--paimon-bg-hover);
+	--color-3: var(--paimon-bg-active);
+	--color-4: var(--paimon-accent-bg);
+	--color-5: var(--paimon-accent-hover);
+	--color-6: var(--paimon-accent-drag);
 	--color-tabset-background: transparent;
-	--color-tabset-header-background: rgba(255, 255, 255, 0.04);
-	--color-tabset-background-selected: rgba(255, 255, 255, 0.04);
+	--color-tabset-header-background: var(--paimon-bg-hover);
+	--color-tabset-background-selected: var(--paimon-bg-hover);
 	--color-tab-content: var(--mui-palette-background-default, #0f1117);
-	--color-tab-selected: rgba(255, 255, 255, 0.96);
-	--color-tab-selected-background: rgba(89, 159, 255, 0.22);
-	--color-tab-unselected: rgba(255, 255, 255, 0.62);
+	--color-tab-selected: var(--paimon-fg);
+	--color-tab-selected-background: var(--paimon-accent-bg);
+	--color-tab-unselected: var(--paimon-fg-muted);
 	--color-tab-unselected-background: transparent;
-	--color-splitter: rgba(255, 255, 255, 0.05);
-	--color-splitter-hover: rgba(89, 159, 255, 0.24);
-	--color-splitter-drag: rgba(89, 159, 255, 0.38);
+	--color-splitter: var(--paimon-splitter);
+	--color-splitter-hover: var(--paimon-accent-hover);
+	--color-splitter-drag: var(--paimon-accent-drag);
 	--color-drag1: rgba(110, 176, 255, 0.95);
 	--color-drag1-background: rgba(110, 176, 255, 0.16);
 	--color-drag2: rgba(110, 176, 255, 0.95);
 	--color-drag2-background: rgba(110, 176, 255, 0.16);
 	--color-drag-rect-border: rgba(110, 176, 255, 0.55);
-	--color-drag-rect-background: rgba(17, 24, 39, 0.92);
-	--color-border-divider-line: rgba(255, 255, 255, 0.08);
-	--color-tabset-divider-line: rgba(255, 255, 255, 0.08);
-	--color-toolbar-button-hover: rgba(89, 159, 255, 0.18);
+	--color-drag-rect-background: var(--paimon-code-bg);
+	--color-border-divider-line: var(--paimon-border);
+	--color-tabset-divider-line: var(--paimon-border);
+	--color-toolbar-button-hover: var(--paimon-accent-hover);
 }
 
 .paimon-workspace .flexlayout__layout_main {
@@ -162,18 +177,18 @@
 }
 
 .paimon-workspace .flexlayout__tabset {
-	border: 1px solid rgba(255, 255, 255, 0.08);
+	border: 1px solid var(--paimon-border);
 	border-radius: 10px;
-	background: rgba(255, 255, 255, 0.02);
+	background: var(--paimon-bg-subtle);
 }
 
 .paimon-workspace .flexlayout__tabset_header {
 	padding: 0 8px;
-	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	border-bottom: 1px solid var(--paimon-border);
 }
 
 .paimon-workspace .flexlayout__tabset_tabbar_outer {
-	background: rgba(255, 255, 255, 0.02);
+	background: var(--paimon-bg-subtle);
 }
 
 .paimon-workspace .flexlayout__tab_button {
@@ -199,26 +214,26 @@
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: rgba(255, 255, 255, 0.72);
+	color: var(--paimon-fg-muted);
 	cursor: pointer;
 	transition: background 160ms ease, color 160ms ease;
 }
 
 .paimon-tabset-action:hover {
-	background: rgba(89, 159, 255, 0.18);
-	color: rgba(255, 255, 255, 0.96);
+	background: var(--paimon-accent-hover);
+	color: var(--paimon-fg);
 }
 
 .paimon-workspace .flexlayout__splitter {
-	background: rgba(255, 255, 255, 0.04);
+	background: var(--paimon-splitter);
 }
 
 .paimon-workspace .flexlayout__splitter:hover {
-	background: rgba(89, 159, 255, 0.18);
+	background: var(--paimon-accent-hover);
 }
 
 .paimon-workspace .flexlayout__splitter_handle {
-	background: rgba(255, 255, 255, 0.28);
+	background: var(--paimon-fg-faint);
 }
 
 /* ── 事件日志 ── */
@@ -286,9 +301,9 @@
 }
 
 .event-log-search {
-	border: 1px solid rgba(255, 255, 255, 0.14);
-	background: rgba(255, 255, 255, 0.04);
-	color: rgba(255, 255, 255, 0.82);
+	border: 1px solid var(--paimon-border-strong);
+	background: var(--paimon-bg-hover);
+	color: var(--paimon-fg);
 	border-radius: 8px;
 	padding: 6px 8px;
 	font-size: 12px;
@@ -302,17 +317,17 @@
 
 .event-log-debug-toggle {
 	padding: 4px 8px;
-	border: 1px solid rgba(255, 255, 255, 0.15);
+	border: 1px solid var(--paimon-border-strong);
 	border-radius: 8px;
 	background: transparent;
-	color: rgba(255, 255, 255, 0.58);
+	color: var(--paimon-fg-muted);
 	font-size: 11px;
 	cursor: pointer;
 }
 
 .event-log-debug-toggle:hover {
-	background: rgba(255, 255, 255, 0.08);
-	color: rgba(255, 255, 255, 0.82);
+	background: var(--paimon-bg-active);
+	color: var(--paimon-fg);
 }
 
 .event-log-debug-toggle.active {
@@ -322,7 +337,7 @@
 }
 
 .event-log-search::placeholder {
-	color: rgba(255, 255, 255, 0.38);
+	color: var(--paimon-fg-faint);
 }
 
 .event-log-filters {
@@ -357,10 +372,10 @@
 
 .event-log-clear-btn {
 	padding: 1px 6px;
-	border: 1px solid rgba(255, 255, 255, 0.15);
+	border: 1px solid var(--paimon-border-strong);
 	border-radius: 8px;
 	background: transparent;
-	color: rgba(255, 255, 255, 0.4);
+	color: var(--paimon-fg-faint);
 	font-size: 10px;
 	cursor: pointer;
 	margin-left: 4px;
@@ -372,8 +387,8 @@
 }
 
 .event-log-clear-btn:hover {
-	background: rgba(255, 255, 255, 0.08);
-	color: rgba(255, 255, 255, 0.7);
+	background: var(--paimon-bg-active);
+	color: var(--paimon-fg-muted);
 }
 
 .event-log-empty {
@@ -383,7 +398,7 @@
 
 .event-log-copy-message {
 	font-size: 11px;
-	color: rgba(255, 255, 255, 0.6);
+	color: var(--paimon-fg-muted);
 	flex-shrink: 0;
 }
 
@@ -400,9 +415,9 @@
 	font-size: 11px;
 	min-height: 0;
 	overflow-y: auto;
-	border: 1px solid rgba(255, 255, 255, 0.08);
+	border: 1px solid var(--paimon-border);
 	border-radius: 10px;
-	background: rgba(255, 255, 255, 0.02);
+	background: var(--paimon-bg-subtle);
 	padding: 4px 6px;
 	position: relative;
 }
@@ -416,7 +431,7 @@
 	gap: 8px;
 	align-items: flex-start;
 	padding: 4px 0;
-	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+	border-bottom: 1px solid var(--paimon-border);
 	background: transparent;
 	border-left: 0;
 	border-right: 0;
@@ -432,11 +447,11 @@
 }
 
 .event-log-entry:hover {
-	background: rgba(255, 255, 255, 0.04);
+	background: var(--paimon-bg-hover);
 }
 
 .event-log-entry.active {
-	background: rgba(255, 255, 255, 0.08);
+	background: var(--paimon-bg-active);
 }
 
 .event-log-entry.warn {
@@ -519,9 +534,9 @@
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
-	border: 1px solid rgba(255, 255, 255, 0.08);
+	border: 1px solid var(--paimon-border);
 	border-radius: 10px;
-	background: rgba(255, 255, 255, 0.03);
+	background: var(--paimon-bg-subtle);
 	padding: 8px 10px;
 	gap: 8px;
 }
@@ -553,7 +568,7 @@
 .event-log-detail-summary {
 	font-size: 12px;
 	line-height: 1.45;
-	color: rgba(255, 255, 255, 0.86);
+	color: var(--paimon-fg);
 }
 
 .event-log-detail-severity {
@@ -578,8 +593,8 @@
 	overflow: auto;
 	padding: 10px;
 	border-radius: 8px;
-	background: rgba(0, 0, 0, 0.22);
-	border: 1px solid rgba(255, 255, 255, 0.08);
+	background: var(--paimon-code-bg);
+	border: 1px solid var(--paimon-border);
 	font-family: "Consolas", "Monaco", monospace;
 	font-size: 11px;
 	line-height: 1.45;

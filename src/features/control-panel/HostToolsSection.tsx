@@ -119,7 +119,7 @@ export function HostToolsSection(props: {
 				});
 			}
 			if (!candidate) {
-				throw new Error("未检测到预设应用窗口，请先确认 Firefox 已打开且窗口可见。");
+				throw new Error("Preset app window not detected. Please ensure the target app is open and visible.");
 			}
 			const target = { handle: candidate.handle, title: candidate.title };
 			props.setTarget(target);

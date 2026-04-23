@@ -248,17 +248,17 @@ P5 close-out:
   - [x] finalize the local-small / cloud-big split for the current product scope
     - Companion Mode: local observation first, cloud temporal summary/reply second
     - Delegation Mode: screenshot-driven cloud mission/planner/evaluator as the primary path; local vision stays as locator fallback
-  - [ ] complete the Companion Mode short-term memory loop for video understanding (rolling frame batches -> cloud summaries -> summary carry-over across later requests)
-  - [ ] deliver a file-backed pseudo-long-term memory prototype: session-end compression with timestamped structured entries (scene/task, key entities, event result, summary)
-  - [ ] keep Delegation Mode memory scope bounded in P6: one async memory retrieval after mission confirmation + event-level writeback (what/when/result/optional attempts), without per-round auto-recall
-  - [ ] support explicit long-term recall in P6 (user asks for past events, optional light session-start pre-read), while deferring fully automatic trigger-based recall to future work
+  - [x] complete the Companion Mode short-term memory loop for video understanding (rolling frame batches -> cloud summaries -> summary carry-over across later requests)
+  - [x] deliver a file-backed pseudo-long-term memory prototype: session-end compression with timestamped structured entries (scene/task, key entities, event result, summary)
+  - [x] keep Delegation Mode memory scope bounded in P6: one async memory retrieval after mission confirmation + event-level writeback (what/when/result/optional attempts), without per-round auto-recall
+  - [x] support explicit long-term recall in P6 (user asks for past events, optional light session-start pre-read), while deferring fully automatic trigger-based recall to future work
   - [-] keep local fast-reaction language layer in Future Work for now; do not block P6 acceptance on this optional path
   - [x] complete events.jsonl image reference-only storage (event payload data URLs are persisted as file refs, base64 removed from JSONL)
   - [-] do not add site-specific cookie/popup bypass logic in P6; keep GCC boundary and rely on generic host.* flow
   - [x] add browser cookie-handling policy into generic delegation profile (prefer reject, else essential/necessary, never accept-all unless explicitly requested)
   - [x] add unified log lifecycle management (TTL, size caps, session export baseline)
-  - [ ] finish Delegation Mode continuity quality close-out (grounded follow-up, cross-round reasoning continuity, and stable position/state narration)
-  - [ ] tighten bounded GCC scope, mode-aware orchestration, and layered memory into the final explicit product definition
+  - [x] finish Delegation Mode continuity quality close-out (grounded follow-up, cross-round reasoning continuity, and stable position/state narration)
+  - [x] tighten bounded GCC scope, mode-aware orchestration, and layered memory into the final explicit product definition (temporarily maintained in private sprint docs)
   - [-] keep complex dynamic game delegation (for example PVZ-like scenarios) in Future Work rather than the `P6` acceptance bar
 
 - [ ] P7: Product Close-Out And FYP Packaging

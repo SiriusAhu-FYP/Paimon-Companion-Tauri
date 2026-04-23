@@ -100,7 +100,7 @@ export function ControlPanel() {
 				normalBonus: 2,
 			});
 			if (!candidate) {
-				throw new Error("未检测到 Firefox 窗口，请确认浏览器已打开且可见。");
+				throw new Error("Firefox window not detected. Please ensure the browser is open and visible.");
 			}
 			const target = { handle: candidate.handle, title: candidate.title };
 			setTarget(target);

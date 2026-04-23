@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
 	Accordion,
 	AccordionDetails,
@@ -6,21 +6,28 @@ import {
 	Box,
 	Chip,
 	Typography,
-	Select,
-	MenuItem,
-	FormControl,
-	InputLabel,
 	LinearProgress,
-	type SelectChangeEvent,
+	Button,
+	ButtonGroup,
+	List,
+	ListItemButton,
+	ListItemText,
+	CircularProgress,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorIcon from "@mui/icons-material/Error";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import HistoryIcon from "@mui/icons-material/History";
+import LiveTvIcon from "@mui/icons-material/LiveTv";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useUnifiedRuntime } from "@/hooks/use-unified-runtime";
 import { useI18n } from "@/contexts/I18nProvider";
+import { listDebugCaptureSessions, readDebugCaptureFile, type DebugCaptureSessionSummary } from "@/services/debug-capture/client";
 import type { DelegationRoundEntry, DelegationTimeline, UnifiedRunRecord } from "@/types/unified";
+
+type ViewMode = "live" | "history";
 
 function StatusChip({ ok, label }: { ok: boolean; label: string }) {
 	return (
@@ -37,26 +44,19 @@ function StatusChip({ ok, label }: { ok: boolean; label: string }) {
 
 function AlignmentChip({ alignment }: { alignment: string }) {
 	const colorMap: Record<string, "success" | "warning" | "error" | "default"> = {
-		achieved: "success",
-		aligned: "success",
-		partial: "warning",
+		achieved: "success", aligned: "success", closer: "success",
+		partial: "warning", unchanged: "warning", stuck: "warning",
 		deviated: "error",
 	};
-	return (
-		<Chip size="small" label={alignment} color={colorMap[alignment] ?? "default"} variant="outlined" sx={{ mr: 0.5 }} />
-	);
+	return <Chip size="small" label={alignment} color={colorMap[alignment] ?? "default"} variant="outlined" sx={{ mr: 0.5 }} />;
 }
 
 function ProgressChip({ progress }: { progress: string }) {
 	const colorMap: Record<string, "success" | "warning" | "error" | "default"> = {
-		done: "success",
-		forward: "success",
-		stuck: "warning",
-		none: "error",
+		done: "success", forward: "success",
+		stuck: "warning", none: "error",
 	};
-	return (
-		<Chip size="small" label={progress} color={colorMap[progress] ?? "default"} variant="outlined" sx={{ mr: 0.5 }} />
-	);
+	return <Chip size="small" label={progress} color={colorMap[progress] ?? "default"} variant="outlined" sx={{ mr: 0.5 }} />;
 }
 
 function RoundCard({ entry, isLatest }: { entry: DelegationRoundEntry; isLatest: boolean }) {
@@ -119,7 +119,7 @@ function RoundCard({ entry, isLatest }: { entry: DelegationRoundEntry; isLatest:
 						)}
 						{entry.evaluatorHint && (
 							<Typography variant="body2" color="warning.main" sx={{ mt: 0.3, fontSize: "0.8rem" }}>
-								💡 {entry.evaluatorHint}
+								{entry.evaluatorHint}
 							</Typography>
 						)}
 					</Section>
@@ -140,15 +140,12 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 	);
 }
 
-function TaskHeader({ timeline, run }: { timeline: DelegationTimeline; run: UnifiedRunRecord }) {
+function TaskHeader({ timeline, status, timingsActionMs }: { timeline: DelegationTimeline; status: string; timingsActionMs?: number }) {
 	const { t } = useI18n();
 	const statusColor: Record<string, "success" | "error" | "warning"> = {
-		completed: "success",
-		failed: "error",
-		running: "warning",
+		completed: "success", failed: "error", running: "warning",
 	};
-	const isRunning = run.status === "running";
-
+	const isRunning = status === "running";
 	return (
 		<Box sx={{ px: 1.5, pt: 1.5, pb: 1 }}>
 			<Typography variant="subtitle2" fontWeight={700} sx={{ lineHeight: 1.3 }}>
@@ -158,15 +155,10 @@ function TaskHeader({ timeline, run }: { timeline: DelegationTimeline; run: Unif
 				{timeline.missionGoal}
 			</Typography>
 			<Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center" }}>
-				<Chip
-					size="small"
-					icon={isRunning ? <PlayArrowIcon /> : undefined}
-					label={run.status}
-					color={statusColor[run.status] ?? "default"}
-				/>
+				<Chip size="small" icon={isRunning ? <PlayArrowIcon /> : undefined} label={status} color={statusColor[status] ?? "default"} />
 				<Typography variant="caption" color="text.secondary">
 					{timeline.rounds.length} {t("轮", "rounds")}
-					{run.timings.actionMs ? ` · ${(run.timings.actionMs / 1000).toFixed(1)}s` : ""}
+					{timingsActionMs ? ` · ${(timingsActionMs / 1000).toFixed(1)}s` : ""}
 				</Typography>
 			</Box>
 			{isRunning && <LinearProgress sx={{ mt: 1, borderRadius: 1 }} />}
@@ -174,7 +166,12 @@ function TaskHeader({ timeline, run }: { timeline: DelegationTimeline; run: Unif
 	);
 }
 
-function TimelineView({ timeline, run }: { timeline: DelegationTimeline; run: UnifiedRunRecord }) {
+function TimelineView({ timeline, status, summary, timingsActionMs }: {
+	timeline: DelegationTimeline;
+	status: string;
+	summary?: string;
+	timingsActionMs?: number;
+}) {
 	const { t } = useI18n();
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const prevRoundCount = useRef(timeline.rounds.length);
@@ -188,7 +185,7 @@ function TimelineView({ timeline, run }: { timeline: DelegationTimeline; run: Un
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-			<TaskHeader timeline={timeline} run={run} />
+			<TaskHeader timeline={timeline} status={status} timingsActionMs={timingsActionMs} />
 			<Box ref={scrollRef} sx={{ flex: 1, overflowY: "auto", px: 1, pb: 1 }}>
 				{timeline.rounds.map((entry, i) => (
 					<RoundCard key={entry.round} entry={entry} isLatest={i === timeline.rounds.length - 1} />
@@ -201,80 +198,228 @@ function TimelineView({ timeline, run }: { timeline: DelegationTimeline; run: Un
 					</Box>
 				)}
 			</Box>
-			{run.summary && run.status !== "running" && (
-				<Box sx={{ mx: 1.5, mb: 1, p: 1, bgcolor: run.status === "completed" ? "success.main" : "error.main", borderRadius: 1, color: "white" }}>
+			{summary && status !== "running" && (
+				<Box sx={{ mx: 1.5, mb: 1, p: 1, bgcolor: status === "completed" ? "success.main" : "error.main", borderRadius: 1, color: "white" }}>
 					<Typography variant="caption" fontWeight={600}>
 						{t("结论", "Conclusion")}
 					</Typography>
-					<Typography variant="body2">{run.summary}</Typography>
+					<Typography variant="body2">{summary}</Typography>
 				</Box>
 			)}
 		</Box>
 	);
 }
 
-export function DelegationTimelinePanel() {
+function LiveView() {
 	const { t } = useI18n();
 	const { state } = useUnifiedRuntime();
-	const [selectedIdx, setSelectedIdx] = useState<number>(0);
+
+	const activeTimeline = state.lastRun?.delegationTimeline;
+	const activeRun = state.lastRun;
+	const hasActive = activeTimeline && activeRun;
 
 	const runsWithTimeline = state.history.filter(
 		(r): r is UnifiedRunRecord & { delegationTimeline: DelegationTimeline } =>
 			r.delegationTimeline != null && r.delegationTimeline.rounds.length > 0,
 	);
 
-	const activeTimeline = state.lastRun?.delegationTimeline;
-	const activeRun = state.lastRun;
-	const hasActive = activeTimeline && activeRun;
-
-	const allRuns = [
-		...(hasActive ? [{ run: activeRun, timeline: activeTimeline, label: `${activeRun.status === "running" ? "▶" : activeRun.status === "completed" ? "✓" : "✗"} ${activeRun.id.slice(-6)} — ${activeRun.requestText?.slice(0, 24) ?? "—"}` }] : []),
-		...runsWithTimeline
-			.filter((r) => r.id !== activeRun?.id)
-			.map((r) => ({
-				run: r,
-				timeline: r.delegationTimeline,
-				label: `${r.status === "completed" ? "✓" : "✗"} ${r.id.slice(-6)} — ${r.requestText?.slice(0, 24) ?? "—"}`,
-			})),
-	];
-
-	if (!allRuns.length) {
+	if (!hasActive && !runsWithTimeline.length) {
 		return (
 			<Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 1.5, px: 3 }}>
 				<HelpOutlineIcon sx={{ fontSize: 48, color: "text.disabled" }} />
 				<Typography variant="body2" color="text.secondary" textAlign="center">
 					{t(
 						"暂无托管任务记录。启动一次托管任务后，时间轴将实时显示每一轮的规划、执行与评估。",
-						"No delegation tasks yet. Start a task and the timeline will show each round's planning, execution, and evaluation in real time.",
+						"No delegation tasks yet. Start a task to see real-time planning, execution, and evaluation.",
 					)}
 				</Typography>
 			</Box>
 		);
 	}
 
-	const selected = allRuns[selectedIdx] ?? allRuns[0];
+	if (hasActive) {
+		return (
+			<TimelineView
+				timeline={activeTimeline}
+				status={activeRun.status}
+				summary={activeRun.summary}
+				timingsActionMs={activeRun.timings.actionMs}
+			/>
+		);
+	}
+
+	const latest = runsWithTimeline[0]!;
+	return (
+		<TimelineView
+			timeline={latest.delegationTimeline}
+			status={latest.status}
+			summary={latest.summary}
+			timingsActionMs={latest.timings.actionMs}
+		/>
+	);
+}
+
+function HistoryBrowser() {
+	const { t } = useI18n();
+	const [sessions, setSessions] = useState<DebugCaptureSessionSummary[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [selectedSession, setSelectedSession] = useState<string | null>(null);
+	const [sessionTimeline, setSessionTimeline] = useState<DelegationTimeline | null>(null);
+	const [sessionStatus, setSessionStatus] = useState("unknown");
+	const [sessionSummary, setSessionSummary] = useState("");
+	const [loadingSession, setLoadingSession] = useState(false);
+
+	useEffect(() => {
+		listDebugCaptureSessions()
+			.then(setSessions)
+			.catch(() => setSessions([]))
+			.finally(() => setLoading(false));
+	}, []);
+
+	const handleSelectSession = useCallback(async (sessionId: string) => {
+		setSelectedSession(sessionId);
+		setLoadingSession(true);
+		try {
+			const raw = await readDebugCaptureFile(sessionId, "session.jsonl");
+			const lines = raw.trim().split("\n").filter(Boolean);
+			let timeline: DelegationTimeline | null = null;
+			let status = "unknown";
+			let summary = "";
+			for (const line of lines) {
+				try {
+					const entry = JSON.parse(line);
+					if (entry.type === "delegation-timeline" && entry.timeline) {
+						timeline = entry.timeline;
+					}
+					if (entry.type === "run-complete" || entry.type === "unified:run-complete") {
+						status = entry.success ? "completed" : "failed";
+						summary = entry.summary ?? "";
+					}
+					if (entry.delegationTimeline) {
+						timeline = entry.delegationTimeline;
+					}
+					if (entry.status) {
+						status = entry.status;
+					}
+					if (entry.summary && !summary) {
+						summary = entry.summary;
+					}
+				} catch { /* skip malformed lines */ }
+			}
+			setSessionTimeline(timeline);
+			setSessionStatus(status);
+			setSessionSummary(summary);
+		} catch {
+			setSessionTimeline(null);
+			setSessionStatus("error");
+			setSessionSummary(t("无法加载会话数据", "Failed to load session data"));
+		} finally {
+			setLoadingSession(false);
+		}
+	}, [t]);
+
+	if (selectedSession) {
+		return (
+			<Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+				<Box sx={{ px: 1, pt: 1, pb: 0.5, display: "flex", alignItems: "center", gap: 1, borderBottom: 1, borderColor: "divider" }}>
+					<Button size="small" startIcon={<ArrowBackIcon />} onClick={() => setSelectedSession(null)} sx={{ textTransform: "none" }}>
+						{t("返回", "Back")}
+					</Button>
+					<Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
+						{selectedSession}
+					</Typography>
+				</Box>
+				{loadingSession ? (
+					<Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
+						<CircularProgress size={24} />
+					</Box>
+				) : sessionTimeline ? (
+					<TimelineView
+						timeline={sessionTimeline}
+						status={sessionStatus}
+						summary={sessionSummary}
+					/>
+				) : (
+					<Box sx={{ p: 2, textAlign: "center" }}>
+						<Typography variant="body2" color="text.secondary">
+							{t("该会话无时间轴数据", "No timeline data in this session")}
+						</Typography>
+					</Box>
+				)}
+			</Box>
+		);
+	}
+
+	if (loading) {
+		return (
+			<Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
+				<CircularProgress size={24} />
+			</Box>
+		);
+	}
+
+	if (!sessions.length) {
+		return (
+			<Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 1.5, px: 3 }}>
+				<HistoryIcon sx={{ fontSize: 48, color: "text.disabled" }} />
+				<Typography variant="body2" color="text.secondary" textAlign="center">
+					{t("暂无历史日志记录。", "No historical log sessions found.")}
+				</Typography>
+			</Box>
+		);
+	}
+
+	return (
+		<List sx={{ overflowY: "auto", flex: 1, py: 0 }}>
+			{sessions.map((s) => (
+				<ListItemButton key={s.sessionId} onClick={() => handleSelectSession(s.sessionId)} sx={{ py: 0.8, borderBottom: 1, borderColor: "divider" }}>
+					<ListItemText
+						primary={
+							<Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
+								{s.label || "manual"}
+							</Typography>
+						}
+						secondary={
+							<Typography variant="caption" color="text.secondary">
+								{s.createdAt} · {s.sessionId}
+							</Typography>
+						}
+					/>
+				</ListItemButton>
+			))}
+		</List>
+	);
+}
+
+export function DelegationTimelinePanel() {
+	const { t } = useI18n();
+	const [viewMode, setViewMode] = useState<ViewMode>("live");
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-			{allRuns.length > 1 && (
-				<Box sx={{ px: 1.5, pt: 1, borderBottom: 1, borderColor: "divider" }}>
-					<FormControl size="small" fullWidth>
-						<InputLabel>{t("任务", "Task")}</InputLabel>
-						<Select
-							value={selectedIdx}
-							label={t("任务", "Task")}
-							onChange={(e: SelectChangeEvent<number>) => setSelectedIdx(Number(e.target.value))}
-						>
-							{allRuns.map((item, idx) => (
-								<MenuItem key={idx} value={idx} sx={{ fontSize: "0.85rem" }}>
-									{item.label}
-								</MenuItem>
-							))}
-						</Select>
-					</FormControl>
-				</Box>
-			)}
-			{selected && <TimelineView timeline={selected.timeline} run={selected.run} />}
+			<Box sx={{ px: 1.5, pt: 1, pb: 0.5, display: "flex", justifyContent: "center", borderBottom: 1, borderColor: "divider" }}>
+				<ButtonGroup size="small" variant="outlined">
+					<Button
+						startIcon={<LiveTvIcon sx={{ fontSize: 14 }} />}
+						variant={viewMode === "live" ? "contained" : "outlined"}
+						onClick={() => setViewMode("live")}
+						sx={{ textTransform: "none", fontSize: 12 }}
+					>
+						{t("当前任务", "Current Task")}
+					</Button>
+					<Button
+						startIcon={<HistoryIcon sx={{ fontSize: 14 }} />}
+						variant={viewMode === "history" ? "contained" : "outlined"}
+						onClick={() => setViewMode("history")}
+						sx={{ textTransform: "none", fontSize: 12 }}
+					>
+						{t("历史日志", "History")}
+					</Button>
+				</ButtonGroup>
+			</Box>
+			<Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+				{viewMode === "live" ? <LiveView /> : <HistoryBrowser />}
+			</Box>
 		</Box>
 	);
 }

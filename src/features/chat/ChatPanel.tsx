@@ -247,7 +247,7 @@ export function ChatPanel() {
 							}}
 						>
 							<Typography variant="caption" sx={{ color: "primary.main", fontWeight: 600, minWidth: 32 }}>
-								{msg.role === "user" ? t("用户", "User") : "AI"}
+								{msg.role === "user" ? t("用户", "User") : t("派蒙", "Paimon")}
 							</Typography>
 							<Typography variant="body2" sx={{ flex: 1 }}>
 								{msg.content}
@@ -288,7 +288,7 @@ export function ChatPanel() {
 							{t("语音诊断", "Voice Diagnostics")}
 						</Typography>
 						<Typography variant="caption" sx={{ color: "text.secondary" }}>
-							{t("状态", "Status")}：{phaseLabelMap[voiceState.status]} · Provider：{voiceState.providerLabel} · {t("权限", "Permission")}：{permissionLabelMap[voiceState.permission]}
+							{t("状态", "Status")}：{phaseLabelMap[voiceState.status]} · {t("提供者", "Provider")}：{voiceState.providerLabel} · {t("权限", "Permission")}：{permissionLabelMap[voiceState.permission]}
 						</Typography>
 						<Typography variant="caption" sx={{ color: voiceState.status === "error" ? "error.main" : "text.secondary" }}>
 							{voiceLabelMap[voiceState.status]}
@@ -332,7 +332,7 @@ export function ChatPanel() {
 			)}
 
 			{/* 输入区 */}
-			<Box sx={{ display: "flex", gap: 0.75, pt: 1, borderTop: "1px solid", borderColor: "secondary.main", mt: 1 }}>
+			<Box sx={{ display: "flex", gap: 0.75, pt: 1, borderTop: "1px solid", borderColor: "divider", mt: 1 }}>
 				<TextField
 					size="small"
 					fullWidth

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from "react";
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from "react";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import { createAppTheme } from "@/theme";
 import type { PaletteMode } from "@mui/material";
@@ -31,6 +31,10 @@ export function ThemeModeProvider({ children }: { children: React.ReactNode }) {
 	}, []);
 
 	const theme = useMemo(() => createAppTheme(mode), [mode]);
+
+	useEffect(() => {
+		document.documentElement.setAttribute("data-theme", mode);
+	}, [mode]);
 
 	const contextValue = useMemo(() => ({ mode, setMode }), [mode, setMode]);
 

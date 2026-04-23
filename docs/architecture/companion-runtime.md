@@ -1,83 +1,10 @@
 # Companion Runtime Architecture
 
-This document records the intended runtime direction after the accepted `P2.3` expression-linkage baseline.
+This tracked file is only a placeholder.
 
-Current implementation note:
+The current working version has been moved to `.private/最终冲刺/06-陪伴运行时口径.md`, which is private and not tracked.
 
-- the first `P2.5` slice now exists as an experimental companion runtime inside the Tauri app
-- it can capture a selected target, ask a local OpenAI-compatible vision node for short frame descriptions, and periodically summarize the latest rolling window through the active cloud LLM profile
-- the latest retained temporal summary is now also exposed to the companion prompt path, so this runtime is no longer isolated to the lab panel
-- the unified game runtime can now also ask the active LLM for a short grounded follow-up after a verified game round, using the same companion/runtime context instead of only speaking hardcoded per-game text
-- when the companion runtime is already observing the same target, unified game rounds now refresh that observation context before generating the follow-up so the reply can speak from fresher state
-- the current slice also includes lightweight change-based filtering, so nearly identical consecutive frames can be coalesced instead of always triggering a fresh local-VLM description
-- the control surface now exposes lightweight session metrics such as capture count, unchanged-frame ratio, and average summary latency
-- the control surface also provides fixed-duration benchmark runs so throughput and summary cadence can be sampled without hand-timing a session
-- the runtime scheduler now uses self-paced capture/summary loops plus bounded queue pruning instead of naive overlapping fixed intervals
-- the runtime now waits for the local vision node to report ready before the first observation tick, instead of failing immediately during long cold starts
-- this is accepted only as an initial runtime slice, not as the finished `Video-Understanding-MVP` fusion endpoint
-
-## Goal
-
-The product should let the companion do both of these without forcing a rigid user-visible reply format:
-
-- give emotional support based on what is happening in the game
-- temporarily take over some gameplay tasks when needed
-
-The preferred mechanism is:
-
-- natural-language companion reply for the player
-- MCP tool calls for emotion changes and gameplay actions
-
-In other words, structured control should live in the tool layer, not in the visible reply text.
-
-This applies to both user-facing modes:
-
-- `companion`
-- `delegation`
-
-The modes share local vision readiness requirements, but not the same primary decision input:
-
-- `companion`: local-vision observation context is the primary input, then cloud reply/proactive/emotional reasoning
-- `delegation`: per-round screenshot evidence is the primary input for task plan / action decision / grounded follow-up
-
-Both modes still require preflight checks that local vision service is reachable before entering active runtime.
-In delegation mode, local vision also remains available for bounded locator-assist scenarios (for example, mouse coordinate localization), even when core round decisions are cloud-screenshot-driven.
-
-Delegation Mode planning should not be one-size-fits-all. The cloud layer should adapt action granularity to the task:
-
-- dynamic or stochastic tasks, such as `2048`, should default to single-step closed loops: observe -> decide one move -> execute -> verify -> observe again
-- static or deterministic tasks, such as `Sokoban`, may return a bounded short action sequence, but every step still requires verification and the remaining sequence should be discarded if the observed state diverges
-
-## Runtime Layers
-
-### 1. Local Fast Vision Layer
-
-Use a low-latency local VLM deployment as the first perception stage.
-
-Current intended baseline:
-
-- local node runs in WSL or another low-latency Linux device
-- model family baseline: `Qwen3-VL-2B-Instruct`
-- target operating mode: fast frame description rather than deep final reasoning
-- the local vLLM node should be started from a local snapshot path in offline mode whenever possible, so cold starts do not depend on remote HuggingFace metadata availability
-
-Reference baseline from `Video-Understanding-MVP`:
-
-- the MVP validated a low-latency local VLM endpoint pattern
-- the MVP also explored sub-second capture intervals, but production runtime should treat `1fps` as an upper-bound stress case rather than a fixed requirement
-
-For this Tauri product, the practical target is:
-
-- tune the local description rate from real measurements
-- start from an `8-10s` rolling summary window
-- retain at least the latest `1min` of summarized context for the cloud model
-- keep perception prompting layered as `general observation + game-specific focus overlay` rather than one globally game-biased prompt
-
-### 2. Rolling Description Queue
-
-The local VLM should not be treated as the final decision maker.
-
-Its job is to produce short scene descriptions for recent frames or keyframes.
+Do not use `docs/architecture/` as the implementation source of truth at this stage.
 
 Those descriptions should flow into a fixed-length rolling queue:
 
