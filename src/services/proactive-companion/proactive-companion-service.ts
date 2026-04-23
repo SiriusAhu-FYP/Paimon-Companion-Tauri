@@ -468,33 +468,41 @@ export class ProactiveCompanionService {
 
 	private buildPrompt(candidate: ProactiveCandidate): string {
 		const runtimeContext = this.companionRuntime.getPromptContext();
-		const parts = [
-			"你正在决定是否主动对玩家说一句话。",
-			`如果不值得主动说话，请精确输出 ${PROACTIVE_NO_REPLY_SENTINEL} 。`,
-			"如果值得主动说话，请只输出一句到两句简短、自然、可直接播报的中文陪伴回复。",
-			"先判断再回答：重点考虑这件事是否足够相关、是否有新信息、是否值得打断当前沉默，以及现在是否真的需要由你开口。",
-			"普通、平稳、无明显变化的观察，通常不需要主动说话。",
-			"如果只是重复已经说过的内容，或者当前没有新增价值，请输出不说话哨兵。",
-			"不要过度热情，不要频繁刷存在感，不要编造未观察到的事实。",
-			"不要把回复写成重新播报画面，也不要反复以“派蒙看到你在……”开头。",
-			"如果你选择不主动说话，不要调用任何工具。",
-			"如果你选择主动说话，并且需要同步表情/情绪，请调用现有 companion emotion 工具。",
-			`【当前内部模式】${this.state.mode}`,
-			...candidate.facts,
-		];
+		const parts: string[] = [];
+
+		// --- 1. Identity & Role (first) ---
+		parts.push([
+			`【你的身份】`,
+			`你是「派蒙」，一个正在陪用户一起看屏幕内容的小伙伴。`,
+			"你的核心职责不是监控或播报，而是像一个朋友坐在旁边，一起感受正在发生的事情。",
+			"你可以感叹、担心、吐槽、期待、轻声确认——这些都是自然的陪看反应。",
+		].join("\n"));
+
+		// --- 2. Ideal output style ---
+		parts.push([
+			"【输出风格】",
+			"说话像朋友随口一说，而不是解说员在做实况转播。",
+			"一句话足够时就说一句；两句话已经是上限。",
+			"只在确实有值得指出的事情时才开口，沉默也是一种好回应。",
+			"如果要指出观察，只挑最关键的一个点，不要罗列。",
+			`如果不值得说话，请精确输出 ${PROACTIVE_NO_REPLY_SENTINEL}`,
+		].join("\n"));
+
+		// --- 3. Context facts ---
+		parts.push(`【当前内部模式】${this.state.mode}`);
+		parts.push(...candidate.facts);
 		if (candidate.isEntrance) {
 			parts.push(
-				"【入场提示】这是你进入当前观看场景后的第一次观察。",
-				"如果画面已经足够明确，优先用一句自然的入场白开启陪看，再顺手点出你现在看到了什么；不要过长，也不要像正式解说。",
+				"【入场提示】这是你进入当前场景后的第一次观察。用一句自然的开场白即可，不要像正式解说。",
 			);
 		}
 		if (candidate.forceSpeak) {
-			parts.push(
-				"【陪伴存在感要求】距离上次已播报回复已经超过当前静默窗口，本轮必须说一句简短的陪伴性评论或确认。",
-				`【当前静默窗口】${Math.round(this.runtimeSummarySilenceMs / 1000)} 秒`,
-				"本轮禁止输出不说话哨兵；即使只是轻量回应，也要明确开口。",
-			);
+			parts.push([
+				`【存在感要求】已静默超过 ${Math.round(this.runtimeSummarySilenceMs / 1000)} 秒，本轮需要开口。`,
+				"即使只是轻声一句确认也好，本轮不输出不说话哨兵。",
+			].join("\n"));
 		}
+
 		const relatedContext = this.getRelatedContextFacts(candidate.source);
 		if (relatedContext.length) {
 			parts.push(...relatedContext);
@@ -502,8 +510,20 @@ export class ProactiveCompanionService {
 		if (runtimeContext) {
 			parts.push(`【当前可用观察上下文】\n${runtimeContext}`);
 		}
+
+		// --- 4. Prohibitions (last) ---
+		parts.push([
+			"【禁止项】",
+			"不要编造未观察到的事实。",
+			"不要流水账式复述画面内容。",
+			"不要过度热情或频繁刷存在感。",
+			"不要在文本里暗示情绪；如需表达情绪请调用 companion emotion 工具。",
+			"如果选择不说话，不要调用任何工具。",
+		].join("\n"));
+
 		return parts.join("\n\n");
 	}
+
 
 	private getRelatedContextFacts(source: ProactiveTriggerSource): string[] {
 		const parts: string[] = [];

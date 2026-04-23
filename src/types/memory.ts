@@ -59,6 +59,7 @@ export interface LongTermMemoryIndexEntry {
 	source: LongTermMemorySource;
 	time_start: number;
 	scene_or_task: string;
+	entities: string[];
 	tags: string[];
 	summaryPreview: string;
 }
@@ -85,4 +86,8 @@ export interface MemoryCommittedPayload {
 export interface MemoryRecallCompletePayload {
 	query: string;
 	candidates: MemoryCandidate[];
+}
+
+export interface MemoryLogAppendedPayload {
+	entry: { id: string; source: string; createdAt: number };
 }

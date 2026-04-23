@@ -269,7 +269,7 @@ describe("ProactiveCompanionService", () => {
 		await flushAsyncWork();
 
 		expect(llm.generateCompanionReply).toHaveBeenCalledWith(
-			expect.stringContaining("【入场提示】这是你进入当前观看场景后的第一次观察。"),
+			expect.stringContaining("【入场提示】"),
 			expect.objectContaining({
 				source: "proactive-reply",
 			}),
@@ -425,7 +425,7 @@ describe("ProactiveCompanionService", () => {
 
 		expect(llm.generateCompanionReply).toHaveBeenCalledTimes(1);
 		expect(llm.generateCompanionReply).toHaveBeenCalledWith(
-			expect.stringContaining("本轮禁止输出不说话哨兵"),
+			expect.stringContaining("不输出不说话哨兵"),
 			expect.objectContaining({
 				source: "proactive-reply",
 			}),
@@ -514,7 +514,7 @@ describe("ProactiveCompanionService", () => {
 		await flushAsyncWork();
 
 		expect(llm.generateCompanionReply).toHaveBeenCalledWith(
-			expect.stringContaining("【入场提示】这是你进入当前观看场景后的第一次观察。"),
+			expect.stringContaining("【入场提示】"),
 			expect.objectContaining({
 				source: "proactive-reply",
 			}),
@@ -578,7 +578,7 @@ describe("ProactiveCompanionService", () => {
 		await flushAsyncWork();
 
 		expect(llm.generateCompanionReply).toHaveBeenCalledWith(
-			expect.stringContaining("【入场提示】这是你进入当前观看场景后的第一次观察。"),
+			expect.stringContaining("【入场提示】"),
 			expect.objectContaining({
 				source: "proactive-reply",
 			}),

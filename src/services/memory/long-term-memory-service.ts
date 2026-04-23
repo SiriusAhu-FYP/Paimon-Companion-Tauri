@@ -138,6 +138,7 @@ export class LongTermMemoryService {
 			source: entry.source,
 			time_start: entry.time_start,
 			scene_or_task: entry.scene_or_task,
+			entities: entry.entities,
 			tags: entry.tags,
 			summaryPreview: entry.summary.slice(0, 100),
 		};
@@ -215,15 +216,17 @@ export class LongTermMemoryService {
 	}
 
 	private computeRelevance(queryTokens: string[], entry: LongTermMemoryIndexEntry): number {
+		if (queryTokens.length === 0) return 0;
+
 		let score = 0;
 		const entryText = [
 			entry.scene_or_task,
 			entry.summaryPreview,
 			...entry.tags,
 		].join(" ").toLowerCase();
-
 		const entryTokens = new Set(this.tokenize(entryText));
 
+		// Base token overlap
 		for (const qt of queryTokens) {
 			if (entryTokens.has(qt)) {
 				score += 1;
@@ -232,14 +235,26 @@ export class LongTermMemoryService {
 			}
 		}
 
-		// Tag exact match bonus
+		// Tag exact match bonus (weighted higher)
 		const queryLower = queryTokens.join(" ");
 		for (const tag of entry.tags) {
 			if (queryLower.includes(tag.toLowerCase())) {
-				score += 0.5;
+				score += 1;
 			}
 		}
 
+		// Entity match bonus (weighted highest — entities are high-signal fields)
+		const entityTokens = new Set(
+			(entry.entities ?? []).flatMap((e) => this.tokenize(e)),
+		);
+		for (const qt of queryTokens) {
+			if (entityTokens.has(qt)) {
+				score += 1.5;
+			}
+		}
+
+		// Normalize to [0, queryTokens.length * maxWeight] is too noisy;
+		// keep raw score — thresholds are calibrated against it.
 		return score;
 	}
 

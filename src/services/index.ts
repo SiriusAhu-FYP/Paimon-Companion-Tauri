@@ -18,7 +18,8 @@ import { CompanionModeService } from "./companion-mode";
 import { DelegationMemoryService } from "./delegation-memory";
 import { L2RollingContextService } from "./memory/l2-rolling-context-service";
 import { LongTermMemoryService } from "./memory/long-term-memory-service";
-import { installSessionWritebackHook } from "./memory/session-writeback-hook";
+import { MemoryLogService } from "./memory/memory-log-service";
+import { installSessionWritebackHook, promotePendingLogs } from "./memory/session-writeback-hook";
 import { AudioPlayer } from "./audio";
 import type { IASRService } from "./asr";
 import { PipelineService } from "./pipeline";
@@ -99,9 +100,17 @@ export function initServices(): ServiceContainer {
 		windowSize: config.companionRuntime.digestWindowSize,
 	});
 	const longTermMemory = new LongTermMemoryService({ bus: eventBus });
+	const memoryLog = new MemoryLogService({ bus: eventBus });
 	llm.setMemoryServices(l2RollingContext, longTermMemory);
-	longTermMemory.initialize().catch((err) => {
-		log.error("long-term memory initialization failed", err);
+
+	// Initialize LTM + memory log, then promote any pending logs from last session
+	Promise.all([
+		longTermMemory.initialize(),
+		memoryLog.initialize(),
+	]).then(() => {
+		return promotePendingLogs(memoryLog, longTermMemory, llmProvider);
+	}).catch((err) => {
+		log.error("memory initialization or startup promotion failed", err);
 	});
 	const game2048 = new Game2048Service({
 		bus: eventBus,
@@ -156,11 +165,13 @@ export function initServices(): ServiceContainer {
 		debugCapture,
 	});
 	unified.setLongTermMemory(longTermMemory);
+	unified.setMemoryLog(memoryLog);
 	installSessionWritebackHook({
 		bus: eventBus,
 		llmProvider,
 		l2Service: l2RollingContext,
 		ltmService: longTermMemory,
+		memoryLog,
 	});
 	const proactiveCompanion = new ProactiveCompanionService({
 		bus: eventBus,

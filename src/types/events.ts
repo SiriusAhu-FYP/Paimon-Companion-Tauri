@@ -34,6 +34,7 @@ import type {
 	MemorySalientEventPayload,
 	MemoryCommittedPayload,
 	MemoryRecallCompletePayload,
+	MemoryLogAppendedPayload,
 } from "./memory";
 
 export interface RuntimeModeChangePayload {
@@ -440,6 +441,7 @@ export interface EventMap {
 	"memory:salient-event": MemorySalientEventPayload;
 	"memory:committed": MemoryCommittedPayload;
 	"memory:recall-complete": MemoryRecallCompletePayload;
+	"memory:log-appended": MemoryLogAppendedPayload;
 }
 
 export type EventName = keyof EventMap;

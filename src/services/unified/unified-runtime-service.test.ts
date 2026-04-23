@@ -162,7 +162,9 @@ describe("UnifiedRuntimeService delegation path", () => {
 		const { service } = createService();
 		const recall = vi.fn().mockResolvedValue([]);
 		const commit = vi.fn().mockResolvedValue(undefined);
+		const appendLog = vi.fn().mockResolvedValue(undefined);
 		service.setLongTermMemory({ recall, commit } as never);
+		service.setMemoryLog({ append: appendLog } as never);
 		vi.mocked(runDelegatedTaskLoop).mockImplementationOnce(async (input) => {
 			await input.recallMemoryCandidates?.("history query");
 			return {
@@ -176,7 +178,7 @@ describe("UnifiedRuntimeService delegation path", () => {
 		await service.runDelegationTask("manual", "继续");
 
 		expect(recall).toHaveBeenCalledWith("history query", 3);
-		expect(commit).toHaveBeenCalledTimes(1);
+		expect(appendLog).toHaveBeenCalledTimes(1);
 	});
 
 	it("does not fallback to legacy game service when delegation loop fails", async () => {

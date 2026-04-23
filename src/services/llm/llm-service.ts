@@ -384,15 +384,28 @@ export class LLMService {
 			knowledgeContextLength: knowledgeContext.length,
 		});
 
+		// Lightweight automatic recall — every chat round, conservative threshold
+		const AUTO_RECALL_THRESHOLD = 1.5;
+		const AUTO_RECALL_TOP_K = 3;
 		let memoryCandidates: MemoryCandidate[] = [];
-		if (this.ltmService && looksLikeHistoryRecall(userText)) {
+		if (this.ltmService) {
 			try {
-				memoryCandidates = await this.ltmService.recall(userText, 3);
+				const allCandidates = await this.ltmService.recall(userText, AUTO_RECALL_TOP_K);
+				memoryCandidates = allCandidates.filter((c) => c.relevanceScore >= AUTO_RECALL_THRESHOLD);
+				log.debug("auto-recall results", {
+					query: userText.slice(0, 60),
+					raw: allCandidates.length,
+					filtered: memoryCandidates.length,
+					scores: allCandidates.map((c) => c.relevanceScore.toFixed(2)),
+				});
 				if (memoryCandidates.length > 0) {
-					log.info("explicit recall triggered for chat", { count: memoryCandidates.length });
+					log.info("auto-recall injected", {
+						count: memoryCandidates.length,
+						topScene: memoryCandidates[0]?.entry.scene_or_task,
+					});
 				}
 			} catch (err) {
-				log.warn("explicit recall failed", err);
+				log.warn("auto-recall failed", err);
 			}
 		}
 
@@ -467,12 +480,6 @@ export class LLMService {
 	clearHistory() {
 		this.history = [];
 	}
-}
-
-const HISTORY_RECALL_PATTERNS = /还记得|之前|那次|以前|上次|记不记得|记得吗|有没有.*过|do you remember|last time|previously/i;
-
-function looksLikeHistoryRecall(text: string): boolean {
-	return HISTORY_RECALL_PATTERNS.test(text);
 }
 
 function summarizeRecentInteraction(history: readonly ChatMessage[]): string {

@@ -11,7 +11,8 @@ import type { CompanionModeService } from "@/services/companion-mode";
 import type { DelegationMemoryService } from "@/services/delegation-memory";
 import type { DebugCaptureService } from "@/services/debug-capture";
 import type { LongTermMemoryService } from "@/services/memory/long-term-memory-service";
-import type { LongTermMemoryEntry, LongTermMemoryEventResult } from "@/types/memory";
+import type { MemoryLogService } from "@/services/memory/memory-log-service";
+import type { LongTermMemoryEventResult } from "@/types/memory";
 import { createLogger } from "@/services/logger";
 import type { DelegatedExecutionRecord, FunctionalTarget, SokobanChangeType, UnifiedRunRecord, UnifiedRuntimeState } from "@/types";
 import { callLocalMcpTool } from "@/services/mcp/local-mcp-client";
@@ -78,6 +79,7 @@ export class UnifiedRuntimeService {
 	private delegationMemory: DelegationMemoryService;
 	private debugCapture?: DebugCaptureService;
 	private ltmService?: LongTermMemoryService;
+	private memoryLog?: MemoryLogService;
 	private state: UnifiedRuntimeState = makeInitialState();
 	private activeLoopId: string | null = null;
 	private preflightCueLastSpokenAt = new Map<PreflightCueKey, number>();
@@ -113,6 +115,10 @@ export class UnifiedRuntimeService {
 
 	setLongTermMemory(ltm: LongTermMemoryService): void {
 		this.ltmService = ltm;
+	}
+
+	setMemoryLog(ml: MemoryLogService): void {
+		this.memoryLog = ml;
 	}
 
 	getState(): Readonly<UnifiedRuntimeState> {
@@ -658,8 +664,8 @@ export class UnifiedRuntimeService {
 			this.companionMode.setMode(this.companionMode.getPreferredMode(), "unified:run-complete", "system");
 			this.emitState();
 
-			// Delegation event writeback to long-term memory
-			if (this.ltmService) {
+			// Delegation event writeback via intermediate log
+			if (this.memoryLog) {
 				const eventResult: LongTermMemoryEventResult =
 					run.status === "completed" ? "success"
 					: run.status === "failed" ? "failure"
@@ -667,20 +673,26 @@ export class UnifiedRuntimeService {
 				const entities = extractEntitiesFromText(
 					`${input.taskText} ${run.summary || ""}`,
 				);
-				const entry: LongTermMemoryEntry = {
-					memory_id: `delegation-${run.id}`,
+				this.memoryLog.append({
+					id: `delegation-${run.id}`,
 					source: "delegation",
-					time_start: run.startedAt,
-					time_end: run.endedAt ?? Date.now(),
-					scene_or_task: input.taskText.slice(0, 80),
-					entities,
-					event_result: eventResult,
-					summary: run.summary || input.taskText,
-					tags: ["delegation", input.taskTag],
-					committed_at: 0,
-				};
-				this.ltmService.commit(entry).catch((err) => {
-					log.warn("delegation event writeback failed", err);
+					createdAt: Date.now(),
+					rawContext: `任务: ${input.taskText}\n结果: ${run.summary || "无"}`,
+					preCompressed: {
+						memory_id: `delegation-${run.id}`,
+						source: "delegation",
+						time_start: run.startedAt,
+						time_end: run.endedAt ?? Date.now(),
+						scene_or_task: input.taskText.slice(0, 80),
+						entities,
+						event_result: eventResult,
+						summary: run.summary || input.taskText,
+						tags: ["delegation", input.taskTag],
+						committed_at: 0,
+					},
+					promoted: false,
+				}).catch((err) => {
+					log.warn("delegation event log failed", err);
 				});
 			}
 		}
