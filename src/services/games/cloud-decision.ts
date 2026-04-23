@@ -25,6 +25,8 @@ interface CloudDecisionTelemetry {
 }
 
 const log = createLogger("cloud-decision");
+const MAX_CLOUD_COMPLETION_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 700;
 
 function resolveThinkingClient(
 	client: OpenAICompatibleClientConfig,
@@ -265,6 +267,59 @@ async function requestCompletion(
 	return JSON.parse(response.body) as OpenAIChatCompletionResponse;
 }
 
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatAttemptLabel(attempt: number, maxAttempts: number): string {
+	return `${attempt}/${maxAttempts}`;
+}
+
+async function requestContentWithRetries(input: {
+	scope: "cloud decision" | "cloud vision decision";
+	client: OpenAICompatibleClientConfig;
+	requester: () => Promise<OpenAIChatCompletionResponse>;
+	telemetry?: CloudDecisionTelemetry;
+}): Promise<OpenAIChatCompletionResponse> {
+	let lastError: unknown = null;
+	for (let attempt = 1; attempt <= MAX_CLOUD_COMPLETION_ATTEMPTS; attempt += 1) {
+		try {
+			const parsed = await input.requester();
+			const content = extractMessageText(parsed);
+			if (!content) {
+				throw new Error(`${input.scope} returned empty content`);
+			}
+			return parsed;
+		} catch (error) {
+			lastError = error;
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			if (attempt >= MAX_CLOUD_COMPLETION_ATTEMPTS) {
+				log.error("cloud completion retries exhausted", {
+					scope: input.scope,
+					role: input.telemetry?.role ?? "unknown",
+					source: input.telemetry?.source ?? "unknown",
+					taskKind: input.telemetry?.taskKind ?? "unknown",
+					model: input.client.model,
+					attempt: formatAttemptLabel(attempt, MAX_CLOUD_COMPLETION_ATTEMPTS),
+					error: errorMessage,
+				});
+				break;
+			}
+			log.warn("cloud completion retry scheduled", {
+				scope: input.scope,
+				role: input.telemetry?.role ?? "unknown",
+				source: input.telemetry?.source ?? "unknown",
+				taskKind: input.telemetry?.taskKind ?? "unknown",
+				model: input.client.model,
+				attempt: formatAttemptLabel(attempt, MAX_CLOUD_COMPLETION_ATTEMPTS),
+				error: errorMessage,
+			});
+			await sleep(RETRY_DELAY_MS * attempt);
+		}
+	}
+	throw lastError instanceof Error ? lastError : new Error(String(lastError ?? "unknown cloud completion failure"));
+}
+
 export async function requestActiveTextDecision(input: {
 	systemPrompt: string;
 	userPrompt: string;
@@ -280,27 +335,29 @@ export async function requestActiveTextDecision(input: {
 		throw new Error("cloud decision requires an active openai-compatible LLM profile");
 	}
 
-	const parsed = await requestCompletionWithOptionalThinking({
+	const parsed = await requestContentWithRetries({
 		scope: "cloud decision",
 		client,
-		timeoutMs: input.timeoutMs ?? 30_000,
-		thinkingMode: input.thinkingMode,
 		telemetry: input.telemetry,
-		basePayload: {
-			model: client.model,
-			temperature: input.temperature ?? client.temperature ?? 0.2,
-			max_tokens: input.maxTokens ?? 320,
-			response_format: input.jsonResponse ? { type: "json_object" } : undefined,
-			messages: [
-				{ role: "system", content: input.systemPrompt },
-				{ role: "user", content: input.userPrompt },
-			],
-		},
+		requester: () => requestCompletionWithOptionalThinking({
+			scope: "cloud decision",
+			client,
+			timeoutMs: input.timeoutMs ?? 30_000,
+			thinkingMode: input.thinkingMode,
+			telemetry: input.telemetry,
+			basePayload: {
+				model: client.model,
+				temperature: input.temperature ?? client.temperature ?? 0.2,
+				max_tokens: input.maxTokens ?? 320,
+				response_format: input.jsonResponse ? { type: "json_object" } : undefined,
+				messages: [
+					{ role: "system", content: input.systemPrompt },
+					{ role: "user", content: input.userPrompt },
+				],
+			},
+		}),
 	});
 	const content = extractMessageText(parsed);
-	if (!content) {
-		throw new Error("cloud decision returned empty content");
-	}
 	return content;
 }
 
@@ -335,35 +392,37 @@ export async function requestActiveVisionDecision(input: {
 		throw new Error(`cloud vision decision requires a vision-capable model; current active model is ${client.model}`);
 	}
 
-	const parsed = await requestCompletionWithOptionalThinking({
+	const parsed = await requestContentWithRetries({
 		scope: "cloud vision decision",
 		client,
-		timeoutMs: input.timeoutMs ?? 30_000,
-		thinkingMode: "off",
 		telemetry: input.telemetry,
-		basePayload: {
-			model: client.model,
-			temperature: input.temperature ?? client.temperature ?? 0.1,
-			max_tokens: input.maxTokens ?? 360,
-			response_format: input.jsonResponse ? { type: "json_object" } : undefined,
-			messages: [
-				{ role: "system", content: input.systemPrompt },
-				{
-					role: "user",
-					content: [
-						{ type: "text", text: input.userPrompt },
-						...imageDataUrls.map((url) => ({
-							type: "image_url",
-							image_url: { url },
-						})),
-					],
-				},
-			],
-		},
+		requester: () => requestCompletionWithOptionalThinking({
+			scope: "cloud vision decision",
+			client,
+			timeoutMs: input.timeoutMs ?? 30_000,
+			thinkingMode: "off",
+			telemetry: input.telemetry,
+			basePayload: {
+				model: client.model,
+				temperature: input.temperature ?? client.temperature ?? 0.1,
+				max_tokens: input.maxTokens ?? 360,
+				response_format: input.jsonResponse ? { type: "json_object" } : undefined,
+				messages: [
+					{ role: "system", content: input.systemPrompt },
+					{
+						role: "user",
+						content: [
+							{ type: "text", text: input.userPrompt },
+							...imageDataUrls.map((url) => ({
+								type: "image_url",
+								image_url: { url },
+							})),
+						],
+					},
+				],
+			},
+		}),
 	});
 	const content = extractMessageText(parsed);
-	if (!content) {
-		throw new Error("cloud vision decision returned empty content");
-	}
 	return content;
 }

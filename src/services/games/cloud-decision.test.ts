@@ -95,4 +95,60 @@ describe("cloud decision thinking policy", () => {
 		expect(payload.reasoning_effort).toBe("medium");
 		expect(payload.enable_thinking).toBe(true);
 	});
+
+	it("retries empty vision responses up to three attempts", async () => {
+		proxyRequest
+			.mockResolvedValueOnce({
+				status: 200,
+				headers: {},
+				body: JSON.stringify({ choices: [{ message: { content: "" } }], usage: {} }),
+			})
+			.mockResolvedValueOnce({
+				status: 200,
+				headers: {},
+				body: JSON.stringify({ choices: [{ message: { content: "   " } }], usage: {} }),
+			})
+			.mockResolvedValueOnce({
+				status: 200,
+				headers: {},
+				body: JSON.stringify({
+					choices: [{ message: { content: "{\"ok\":true}" } }],
+					usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+				}),
+			});
+
+		await requestActiveVisionDecision({
+			systemPrompt: "system",
+			userPrompt: "user",
+			imageDataUrls: ["data:image/png;base64,aaa"],
+			jsonResponse: true,
+		});
+
+		expect(proxyRequest).toHaveBeenCalledTimes(3);
+	});
+
+	it("retries text requests after transient HTTP failure", async () => {
+		proxyRequest
+			.mockResolvedValueOnce({
+				status: 503,
+				headers: {},
+				body: "temporary unavailable",
+			})
+			.mockResolvedValueOnce({
+				status: 200,
+				headers: {},
+				body: JSON.stringify({
+					choices: [{ message: { content: "{\"ok\":true}" } }],
+					usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+				}),
+			});
+
+		await requestActiveTextDecision({
+			systemPrompt: "system",
+			userPrompt: "user",
+			jsonResponse: true,
+		});
+
+		expect(proxyRequest).toHaveBeenCalledTimes(2);
+	});
 });

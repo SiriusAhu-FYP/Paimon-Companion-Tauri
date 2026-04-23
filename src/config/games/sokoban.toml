@@ -4,14 +4,17 @@ windowTitleHints = ["sokoban", "push box", "pushbox"]
 loadGuardPolicy = "force-disable"
 
 observationFocus = [
-	"Ignore top-page UI such as the Level label, level dropdown, Go to Level button, Space to restart text, Login text, and hamburger/menu icon; focus only on the puzzle board below.",
-	"Focus on the player, boxes, targets, walls, blocked paths, corridors, and whether a push creates or avoids deadlocks.",
-	"Treat the pale beige floor as walkable space and the dark stone pattern as solid wall / non-walkable area.",
-	"Treat the pink dots as targets, the orange or brown crates as boxes, and the human sprite as the player.",
+	"Ignore top-page UI and decorative elements outside the board; focus on the puzzle board, the player, boxes, targets, walls, and blocked paths.",
+	"Treat green grass as outer background / non-board environment unless the board clearly extends there; do not confuse it with the player's walkable floor.",
+	"Treat the main puzzle floor tiles as the walkable area inside the board.",
+	"Treat brick or stone blocks as walls / obstacles that cannot be crossed or moved.",
+	"Treat wooden crates as boxes that can be pushed but never pulled.",
+	"Treat grape-like purple markers as target points.",
+	"Treat the blue Restart button as an out-of-board control; ignore it during normal planning unless the task is clearly stalled or deadlocked and restarting is the safest recovery option.",
 	"Describe the player's location relative to the nearest corridor, wall edge, or box cluster instead of narrating the whole scene.",
 	"Identify the nearest relevant box and target relationship before proposing the next move.",
 	"Before proposing a move, verify the immediate next tile in that direction: if it is a wall or blocked box chain, do not choose that move.",
-	"When the board is static and legible, prefer a bounded plan of 2-4 grounded moves instead of a single vague nudge.",
+	"When the board is static and legible, prefer a bounded plan of 3-8 grounded moves instead of a single vague nudge.",
 	"Explain progress in concrete puzzle terms: player position, box access, target alignment, and whether a path just opened or closed.",
 	"Distinguish between pure player repositioning, opening a route, pushing a box, moving a box closer to a target, and completely failing to move.",
 	"Do not treat 'the player moved' as automatically meaning puzzle progress; explain whether that movement created a useful setup.",
@@ -27,10 +30,11 @@ notes = [
 	"Avoid pushing boxes into unrecoverable corners.",
 	"If the very next tile in the chosen direction is a wall, that move is invalid and should not be selected.",
 	"Prefer moves that create visible progress or better positioning over moves that simply bump into walls.",
-	"When a short sequence is clearly available, choose it and keep each step grounded in the current board layout.",
+	"When a short safe sequence is clearly available, choose 3-8 moves at once and keep each step grounded in the current board layout.",
 	"If a move only repositions the player, say so explicitly; do not overclaim box progress.",
 	"If a move changes the board but the exact box relation is still ambiguous, admit that the layout changed but the exact new setup is still resolving.",
 	"Any claimed push must be supported by a changed box position in the after state sketch; otherwise treat it as no confirmed push.",
+	"If the board is clearly deadlocked or long-stagnant, a Restart click on the blue button is allowed as a recovery action; otherwise ignore it.",
 ]
 
 [delegationProfile]
@@ -38,9 +42,9 @@ profileId = "delegation"
 taskId = "delegation-generic"
 displayName = "Generic Delegation"
 maxRounds = 20
-maxActionsPerRound = 1
+maxActionsPerRound = 8
 afterActionWaitMs = 700
-allowedTools = ["host.focus_window", "host.capture_window", "host.send_key"]
+allowedTools = ["host.focus_window", "host.capture_window", "host.send_key", "host.send_mouse"]
 
 [delegationProfile.locator]
 locatorRulesEnabled = true
@@ -56,17 +60,20 @@ missionAnalystRules = [
 	"目标要聚焦当前关卡推进，不要输出与关卡无关回答。",
 	"在 initialStateSketch 中用纯文本画出你当前识别到的棋盘局面，至少标清 P/B/T/#/./*/+ 这些元素里能确认的部分。",
 	"如果玩家、箱子、目标点还有歧义，必须直接承认歧义，不要补齐一个自信但未经确认的棋盘。",
+	"要把绿色草地区分成背景，不要把它误画进棋盘主场景。",
+	"要把紫色葡萄状标记识别为目标点，把蓝色 Restart 识别为场外控制按钮。",
 ]
 
 [delegationProfile.roles.operationsPlanner]
 operationsPlannerTemperature = 0.1
 operationsPlannerThinkingMode = "medium"
 operationsPlannerRules = [
-	"优先使用 game.perform_action；若不可用再考虑 host.send_key。",
-	"每轮最多 1 个动作，保持验证闭环。",
+	"优先使用 game.perform_action；若不可用再考虑 host.send_key；只有确认需要重开时才考虑点击蓝色 Restart。",
+	"每轮最多 8 个动作，但必须是一个短而安全的动作序列，不能跨越大量未知局面。",
 	"reasoning 与 stateSketch 必须基于当前观察到的棋盘局面，而不是基于你希望发生的移动。",
 	"下一个动作必须明确对应某个具体局面目标，例如让 P 靠近哪个 B、让哪个 B 朝哪个 T 推进；不要只写抽象方向。",
 	"如果最近连续两轮都没有确认 stateDelta，就先重建 stateSketch，并明确换一个局面目标；不要沿用同一套方向套路。",
+	"短序列中的每一步都必须服务于同一个局面目标，例如靠近同一个箱子、沿同一走廊绕位、或连续推动同一个箱子。",
 ]
 
 [delegationProfile.roles.progressEvaluator]
@@ -80,6 +87,7 @@ progressEvaluatorRules = [
 	"不要从“按了某个方向键”反推出角色或箱子已经移动；只有在 after 局面中可见变化时才算移动成立。",
 	"如果局面连续两轮没有可确认变化，nextHint 必须要求重新定位 P/B/T 并换一个局面目标，不能只说“再试一次”。",
 	"无法确认推进时，明确给出下一步纠偏建议。",
+	"如果一次执行了多步动作序列，要分别判断这段序列是否整体产生了可信推进；若整体无变化，仍视为失败。",
 ]
 
 [[actions]]

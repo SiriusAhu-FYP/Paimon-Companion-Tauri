@@ -16,7 +16,8 @@ defaultActionOrder = ["move_up", "move_left", "move_right", "move_down"]
 notes = [
 	"Keep the highest tile anchored in one corner when possible.",
 	"Treat each semantic action as a single board shift.",
-	"Dynamic/random board updates should be handled one move at a time with a fresh observation after every move.",
+	"Early in the game, when the board is sparse and no stable corner strategy exists yet, a short sequence of 3-8 low-risk swipes is acceptable before reevaluating.",
+	"Once the board gets denser or a corner strategy becomes visible, shorten the plan and reevaluate more often.",
 	"If a move was verified as successful but the new board is still semantically fuzzy, admit the ambiguity instead of inventing a merge result or a new tile position.",
 	"Describe progress in board terms: merge created, new empty cell opened, new tile spawned, or board changed without a fully resolved layout.",
 ]
@@ -26,7 +27,7 @@ profileId = "delegation"
 taskId = "delegation-generic"
 displayName = "Generic Delegation"
 maxRounds = 20
-maxActionsPerRound = 1
+maxActionsPerRound = 8
 afterActionWaitMs = 600
 allowedTools = ["host.focus_window", "host.capture_window", "host.send_key"]
 
@@ -50,9 +51,10 @@ operationsPlannerTemperature = 0.1
 operationsPlannerThinkingMode = "medium"
 operationsPlannerRules = [
 	"优先使用 game.perform_action；若不可用再考虑 host.send_key。",
-	"每轮最多 1 个动作，避免多步连发导致不可追踪。",
+	"每轮最多 8 个动作；前期棋盘稀疏时可以一次给出 3-8 步短序列，后期局面复杂时应主动缩短序列。",
 	"reasoning 与 stateSketch 必须基于当前观察到的棋盘，不要把“希望出现的合并”写成已经存在的局面。",
 	"如果最近连续两轮没有确认 stateDelta，就先重建 stateSketch，并明确换一个合并目标或保留方向。",
+	"短序列中的动作必须围绕同一个局面意图，例如保持大数在角落、制造一次可预期合并、或清理某一侧阻塞。",
 ]
 
 [delegationProfile.roles.progressEvaluator]
@@ -65,6 +67,7 @@ progressEvaluatorRules = [
 	"如果 before/after 没有可确认变化，则 actionSucceeded=false、expectedMet=false、goalProgress=none，不得判成功。",
 	"当没有可靠证据时，不要宣称完成。",
 	"如果连续两轮没有可确认变化，nextHint 必须要求重新识别棋盘并换一个操作方向，不要只说“继续尝试”。",
+	"如果一次执行了多步动作序列，要按整体结果判断是否推进；若整体无变化，仍视为失败。",
 ]
 
 [[actions]]
