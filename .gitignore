@@ -46,4 +46,5 @@ public/*
 .private/
 .workbench/
 .cursor/
+.claude/
 dev-reports/

@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const DEBUG_CAPTURE_TTL_DAYS: u64 = 7;
+const DEBUG_CAPTURE_TTL_DAYS: u64 = 30;
 const EXPORT_TTL_DAYS: u64 = 30;
 const DEBUG_CAPTURE_MAX_TOTAL_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2GB
 
@@ -43,6 +43,9 @@ fn cleanup_debug_capture_logs(root: &Path) -> Result<(), String> {
             continue;
         }
         let session_name = entry.file_name().to_string_lossy().to_string();
+        if should_preserve_named_capture(&session_name) {
+            continue;
+        }
         let timestamp_ms = parse_session_timestamp_ms(&session_name)
             .unwrap_or_else(|| metadata_timestamp_ms(&entry.path()).unwrap_or(now_ms));
         if now_ms.saturating_sub(timestamp_ms) > ttl_ms {
@@ -111,6 +114,14 @@ fn parse_session_timestamp_ms(name: &str) -> Option<i64> {
     let raw = format!("{date}-{time}-{millis}");
     let parsed = NaiveDateTime::parse_from_str(&raw, "%Y%m%d-%H%M%S-%3f").ok()?;
     Some(parsed.and_utc().timestamp_millis())
+}
+
+fn is_standard_session_name(name: &str) -> bool {
+    parse_session_timestamp_ms(name).is_some()
+}
+
+fn should_preserve_named_capture(name: &str) -> bool {
+    !is_standard_session_name(name)
 }
 
 fn parse_export_timestamp_ms(name: &str) -> Option<i64> {
