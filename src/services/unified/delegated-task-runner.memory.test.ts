@@ -202,7 +202,7 @@ describe("delegated task memory integration", () => {
 		expect(plannerUserPrompt).not.toContain("在当前 GitHub 标签页中操作");
 	});
 
-	it("applies game-specific delegation rules and thinking mode for sokoban", async () => {
+	it("applies game-specific delegation rules for sokoban", async () => {
 		let missionThinkingMode = "";
 		let plannerSystemPrompt = "";
 		let visionCallCount = 0;

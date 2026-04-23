@@ -319,6 +319,13 @@ export async function requestActiveVisionDecision(input: {
 	if (!client) {
 		throw new Error("cloud vision decision requires an active openai-compatible LLM profile");
 	}
+	if (input.thinkingMode && input.thinkingMode !== "off") {
+		log.info("cloud vision thinking disabled", {
+			requestedModel: client.model,
+			requestedThinkingMode: input.thinkingMode,
+			effectiveThinkingMode: "off",
+		});
+	}
 
 	const imageDataUrls = input.imageDataUrls.map((item) => item.trim()).filter(Boolean);
 	if (!imageDataUrls.length) {
@@ -332,7 +339,7 @@ export async function requestActiveVisionDecision(input: {
 		scope: "cloud vision decision",
 		client,
 		timeoutMs: input.timeoutMs ?? 30_000,
-		thinkingMode: input.thinkingMode,
+		thinkingMode: "off",
 		telemetry: input.telemetry,
 		basePayload: {
 			model: client.model,
