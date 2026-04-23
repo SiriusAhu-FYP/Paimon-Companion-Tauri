@@ -20,10 +20,9 @@ This protocol does not validate:
 
 ## Evaluation Assets
 
-- `.private/video4test/01_Minecraft.mp4`
-- `.private/video4test/02_GenshinImpact.mp4`
-- `.private/video4test/01-Minecraft.md` (label notes)
-- `.private/video4test/02-GenshinImpact.md` (label notes)
+- two local benchmark videos (`Minecraft`, `GenshinImpact`)
+- their corresponding local label-note files
+- a local runtime manifest that resolves the concrete asset paths for the current machine
 
 ## Execution Steps
 
@@ -38,7 +37,7 @@ This protocol does not validate:
 ### 1) Generate Logs (One Video)
 
 ```bash
-node .workbench/simulation/run-simulation.mjs --video .private/video4test/01_Minecraft.mp4 --context .private/video4test/01-Minecraft.md --fps 1
+node .workbench/simulation/run-simulation.mjs --video <local-minecraft-video> --context <local-minecraft-label-notes> --fps 1
 ```
 
 ### 2) Archive Run Logs

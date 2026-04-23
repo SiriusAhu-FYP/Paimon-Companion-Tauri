@@ -60,7 +60,7 @@ Instead, the remaining gap is tracked as post-`P2` convergence phases on top of 
   - [x] Remove inherited docs and experiment baggage from the initial fork
   - [x] Remove livestream-only external event injection layer
   - [x] Keep the knowledge module as a support capability
-  - [x] Move private planning/report material out of tracked repo content
+  - [x] move planning/report material out of tracked repo content
   - [x] Copy owner-local `.cursor` workspace rules into the repo as ignored local files
 
 - [x] P1: Functional Core Validation
@@ -258,7 +258,7 @@ P5 close-out:
   - [x] add browser cookie-handling policy into generic delegation profile (prefer reject, else essential/necessary, never accept-all unless explicitly requested)
   - [x] add unified log lifecycle management (TTL, size caps, session export baseline)
   - [x] finish Delegation Mode continuity quality close-out (grounded follow-up, cross-round reasoning continuity, and stable position/state narration)
-  - [x] tighten bounded GCC scope, mode-aware orchestration, and layered memory into the final explicit product definition (temporarily maintained in private sprint docs)
+  - [x] tighten bounded GCC scope, mode-aware orchestration, and layered memory into the final explicit product definition
   - [-] keep complex dynamic game delegation (for example PVZ-like scenarios) in Future Work rather than the `P6` acceptance bar
 
 - [ ] P7: Product Close-Out And FYP Packaging
@@ -276,7 +276,6 @@ P5 close-out:
 - the first-pass fusion matrix is recorded in `docs/architecture/source-fusion-audit.md`
 - retained / replaced / retired `LLMPlay-MVP` decisions are recorded in `docs/architecture/llmplay-retained-scope.md`
 - the ASR restoration strategy is recorded in `docs/architecture/asr-migration-strategy.md`
-- the companion runtime direction is recorded in `docs/architecture/companion-runtime.md`
 - the accepted `P2` close-out bar is recorded in `docs/architecture/post-fusion-baseline.md`
 - accepted `P2.2` baseline: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D response
 - cloud ASR providers remain configured options, but they are not part of the accepted `P2.2` live-validation baseline
