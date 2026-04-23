@@ -16,6 +16,24 @@ interface OpenAICompatibleClientConfig {
 	secretKey?: string;
 }
 
+function resolveThinkingClient(
+	client: OpenAICompatibleClientConfig,
+	thinkingMode: CloudThinkingMode | undefined,
+): OpenAICompatibleClientConfig {
+	if (!thinkingMode || thinkingMode === "off") {
+		return client;
+	}
+	const normalizedBaseUrl = client.baseUrl.toLowerCase();
+	const normalizedModel = client.model.toLowerCase();
+	if (normalizedBaseUrl.includes("api.deepseek.com") && normalizedModel === "deepseek-chat") {
+		return {
+			...client,
+			model: "deepseek-reasoner",
+		};
+	}
+	return client;
+}
+
 function isLikelyTextOnlyModel(client: OpenAICompatibleClientConfig): boolean {
 	const normalizedBaseUrl = client.baseUrl.toLowerCase();
 	const normalizedModel = client.model.toLowerCase();
@@ -126,12 +144,16 @@ async function requestCompletionWithOptionalThinking(input: {
 	timeoutMs: number;
 	thinkingMode?: CloudThinkingMode;
 }): Promise<OpenAIChatCompletionResponse> {
+	const effectiveClient = resolveThinkingClient(input.client, input.thinkingMode);
 	const thinkingPayload = resolveThinkingPayload(input.thinkingMode);
 	const payloadWithThinking = Object.keys(thinkingPayload).length
 		? { ...input.basePayload, ...thinkingPayload }
 		: input.basePayload;
+	const effectivePayload = effectiveClient.model !== input.client.model
+		? { ...payloadWithThinking, model: effectiveClient.model }
+		: payloadWithThinking;
 	try {
-		return await requestCompletion(input.scope, input.client, payloadWithThinking, input.timeoutMs);
+		return await requestCompletion(input.scope, effectiveClient, effectivePayload, input.timeoutMs);
 	} catch (error) {
 		if (!(error instanceof CloudDecisionHttpError) || !Object.keys(thinkingPayload).length) {
 			throw error;

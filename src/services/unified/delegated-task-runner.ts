@@ -113,7 +113,9 @@ export async function runDelegatedTaskLoop(input: {
 	scratchpad?: DelegationScratchpadRuntime | null;
 	recallMemoryCandidates?: (query: string) => Promise<MemoryCandidate[]>;
 }): Promise<DelegatedTaskRunnerResult> {
-	const config = getDelegatedTaskConfig(input.profileId);
+	const candidateGameContext = resolveGameContext(input.target.title);
+	const baseConfig = getDelegatedTaskConfig(input.profileId);
+	const config = mergeDelegatedConfigForGame(baseConfig, candidateGameContext);
 	const history: string[] = [];
 	const plannerNotes: string[] = [];
 	const evaluatorNotes: string[] = [];
@@ -124,7 +126,6 @@ export async function runDelegatedTaskLoop(input: {
 	let latestExpectedMet: boolean | null = null;
 	let noActionStreak = 0;
 	let hasExecutionEvidence = false;
-	const candidateGameContext = resolveGameContext(input.target.title);
 	const runtimeToolNames = await resolveRuntimeToolNames(input.traceId);
 	const missionProbeTools = buildAllowedTools(config.allowedTools, candidateGameContext, runtimeToolNames);
 	const missionSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
@@ -289,6 +290,7 @@ export async function runDelegatedTaskLoop(input: {
 				}),
 				imageDataUrls: [currentSnapshot.dataUrl],
 				temperature: config.operationsPlannerTemperature,
+				thinkingMode: config.operationsPlannerThinkingMode,
 				maxTokens: 700,
 				jsonResponse: true,
 				timeoutMs: 30_000,
@@ -493,11 +495,13 @@ export async function runDelegatedTaskLoop(input: {
 				}),
 				imageDataUrls: [beforeSnapshot.dataUrl, afterSnapshot.dataUrl],
 				temperature: config.progressEvaluatorTemperature,
+				thinkingMode: config.progressEvaluatorThinkingMode,
 				maxTokens: 500,
 				jsonResponse: true,
 				timeoutMs: 30_000,
 			});
 			let reflection = normalizeProgressEvaluatorDecision(reflectionRaw);
+			reflection = applyBoardTaskConsistencyGuard(reflection, gameContext);
 			if (actionExecutionError) {
 				reflection = {
 					...reflection,
@@ -538,6 +542,7 @@ export async function runDelegatedTaskLoop(input: {
 				goalAlignment: reflection.goalAlignment,
 			});
 			const repeatedFailureHint = buildRepeatedFailureHint(recentActionOutcomes);
+			const boardStagnationHint = buildBoardStagnationHint(gameContext, recentActionOutcomes);
 			if (repeatedFailureHint) {
 				reflection = {
 					...reflection,
@@ -554,7 +559,18 @@ export async function runDelegatedTaskLoop(input: {
 					lastOutcome.goalAlignment = "deviated";
 				}
 			}
+			if (boardStagnationHint) {
+				reflection = {
+					...reflection,
+					actionSucceeded: false,
+					wasActionCorrect: false,
+					expectedMet: false,
+					goalAlignment: "deviated",
+					goalProgress: "none",
+				};
+			}
 			latestHint = combineHints(reflection.nextHint, repeatedFailureHint);
+			latestHint = combineHints(latestHint, boardStagnationHint);
 			latestExpectedOutcome = planner.expectedOutcome;
 			latestExpectedMet = reflection.expectedMet;
 			hasExecutionEvidence = true;
@@ -1093,6 +1109,44 @@ function normalizeProgressEvaluatorDecision(rawText: string): ProgressEvaluatorD
 		afterStateSketch: toText(parsed.afterStateSketch),
 		stateDelta: toText(parsed.stateDelta),
 	};
+}
+
+function applyBoardTaskConsistencyGuard(
+	reflection: ProgressEvaluatorDecision,
+	gameContext: DelegatedGameContext | null,
+): ProgressEvaluatorDecision {
+	if (!gameContext) {
+		return reflection;
+	}
+	if (!hasNoChangeEvidence(reflection)) {
+		return reflection;
+	}
+	return {
+		...reflection,
+		actionSucceeded: false,
+		wasActionCorrect: false,
+		expectedMet: false,
+		goalAlignment: "unchanged",
+		goalProgress: "none",
+	};
+}
+
+function hasNoChangeEvidence(reflection: ProgressEvaluatorDecision): boolean {
+	const stateDelta = normalizeStateSketchText(reflection.stateDelta);
+	if (/(无(?:可确认)?变化|基本没变|no(?: [a-z]+)? change|unchanged|no visible change|static)/i.test(stateDelta)) {
+		return true;
+	}
+	const beforeSketch = normalizeStateSketchText(reflection.beforeStateSketch);
+	const afterSketch = normalizeStateSketchText(reflection.afterStateSketch);
+	return Boolean(beforeSketch && afterSketch && beforeSketch === afterSketch);
+}
+
+function normalizeStateSketchText(value: string): string {
+	return value
+		.trim()
+		.toLowerCase()
+		.replace(/\s+/g, "")
+		.replace(/[，。；：、,.!?！？|]/g, "");
 }
 
 function buildExecutableActionPlan(action: DelegatedTaskAction, target: FunctionalTarget): ExecutableActionPlan {
@@ -1784,6 +1838,41 @@ function resolveGameContext(targetTitle: string): DelegatedGameContext | null {
 	};
 }
 
+function mergeDelegatedConfigForGame(
+	baseConfig: DelegatedTaskProfileConfig,
+	gameContext: DelegatedGameContext | null,
+): DelegatedTaskProfileConfig {
+	if (!gameContext) {
+		return baseConfig;
+	}
+	const gameProfile = getSemanticGameManifest(gameContext.gameId).delegationProfile;
+	if (!gameProfile) {
+		return baseConfig;
+	}
+	return {
+		...baseConfig,
+		taskId: gameProfile.taskId ?? baseConfig.taskId,
+		displayName: gameProfile.displayName ?? baseConfig.displayName,
+		maxRounds: gameProfile.maxRounds ?? baseConfig.maxRounds,
+		maxActionsPerRound: gameProfile.maxActionsPerRound ?? baseConfig.maxActionsPerRound,
+		afterActionWaitMs: gameProfile.afterActionWaitMs ?? baseConfig.afterActionWaitMs,
+		locatorRulesEnabled: gameProfile.locatorRulesEnabled ?? baseConfig.locatorRulesEnabled,
+		locatorCloudEnabled: gameProfile.locatorCloudEnabled ?? baseConfig.locatorCloudEnabled,
+		locatorLocalFallbackEnabled: gameProfile.locatorLocalFallbackEnabled ?? baseConfig.locatorLocalFallbackEnabled,
+		locatorMinConfidence: gameProfile.locatorMinConfidence ?? baseConfig.locatorMinConfidence,
+		missionAnalystTemperature: gameProfile.missionAnalystTemperature ?? baseConfig.missionAnalystTemperature,
+		missionAnalystThinkingMode: gameProfile.missionAnalystThinkingMode ?? baseConfig.missionAnalystThinkingMode,
+		operationsPlannerTemperature: gameProfile.operationsPlannerTemperature ?? baseConfig.operationsPlannerTemperature,
+		operationsPlannerThinkingMode: gameProfile.operationsPlannerThinkingMode ?? baseConfig.operationsPlannerThinkingMode,
+		progressEvaluatorTemperature: gameProfile.progressEvaluatorTemperature ?? baseConfig.progressEvaluatorTemperature,
+		progressEvaluatorThinkingMode: gameProfile.progressEvaluatorThinkingMode ?? baseConfig.progressEvaluatorThinkingMode,
+		allowedTools: gameProfile.allowedTools?.length ? [...gameProfile.allowedTools] : [...baseConfig.allowedTools],
+		missionAnalystRules: gameProfile.missionAnalystRules?.length ? [...gameProfile.missionAnalystRules] : [...baseConfig.missionAnalystRules],
+		operationsPlannerRules: gameProfile.operationsPlannerRules?.length ? [...gameProfile.operationsPlannerRules] : [...baseConfig.operationsPlannerRules],
+		progressEvaluatorRules: gameProfile.progressEvaluatorRules?.length ? [...gameProfile.progressEvaluatorRules] : [...baseConfig.progressEvaluatorRules],
+	};
+}
+
 function resolveOperationalGameContext(
 	candidateGameContext: DelegatedGameContext | null,
 	taskMode: MissionTaskMode,
@@ -2202,6 +2291,23 @@ function buildRepeatedFailureHint(outcomes: readonly ActionOutcomeRecord[]): str
 		return "";
 	}
 	return `相同动作“${last.signature}”连续失败。下一轮必须换策略，不得重复同动作；优先改为可直接推进目标状态的动作链。`;
+}
+
+function buildBoardStagnationHint(
+	gameContext: DelegatedGameContext | null,
+	outcomes: readonly ActionOutcomeRecord[],
+): string {
+	if (!gameContext) {
+		return "";
+	}
+	const stagnationRounds = countRecentStagnation(outcomes);
+	if (stagnationRounds < 2) {
+		return "";
+	}
+	if (gameContext.gameId === "sokoban") {
+		return `连续 ${stagnationRounds} 轮没有确认棋盘变化。下一轮必须先重建文本棋盘，重新确认 P/B/T 的相对位置，并换一个局面目标；不要继续重复原来的方向套路。`;
+	}
+	return `连续 ${stagnationRounds} 轮没有确认棋盘变化。下一轮必须先重建 4x4 文本棋盘，再换一个合并目标或保留方向；不要继续重复原来的操作路线。`;
 }
 
 function countRecentStagnation(outcomes: readonly ActionOutcomeRecord[]): number {

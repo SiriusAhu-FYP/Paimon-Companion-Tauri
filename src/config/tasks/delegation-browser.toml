@@ -7,7 +7,7 @@ defaultProfileId = "delegation"
 taskId = "delegation-generic"
 displayName = "Generic Delegation"
 maxRounds = 20
-maxActionsPerRound = 2
+maxActionsPerRound = 4
 afterActionWaitMs = 1000
 allowedTools = [
 	"host.list_windows",
@@ -27,7 +27,7 @@ locatorMinConfidence = 0.55
 
 [profile.roles.missionAnalyst]
 missionAnalystTemperature = 0.1
-missionAnalystThinkingMode = "off"
+missionAnalystThinkingMode = "medium"
 missionAnalystRules = [
 	"先提取明确任务完成目标，不要混入常识问答。",
 	"识别用户显式约束（如指定网站 Google、指定窗口、指定禁忌动作）并固化为 hardConstraints。",
@@ -40,9 +40,11 @@ missionAnalystRules = [
 
 [profile.roles.operationsPlanner]
 operationsPlannerTemperature = 0.1
+operationsPlannerThinkingMode = "medium"
 operationsPlannerRules = [
 	"你只能规划 allowedTools 内的动作，不要编造新工具。",
 	"一次规划最多 maxActionsPerRound 个动作，动作要最小且可验证。",
+	"对 Ctrl+T -> Ctrl+L -> 粘贴 URL/搜索词 -> 回车 这种连续且安全的链条，可以在同一轮内一起给出；涉及页面加载后再找控件、依赖新截图确认的动作，不要硬拼成长链。",
 	"如果任务明确要求在新标签页、其他页面或其他站点展开，就不要优先处理当前标签页里的局部元素（如 cookie 弹窗、站内搜索框、广告遮罩）；除非这些元素实际阻碍了切到正确环境这一步。",
 	"处理 cookie 弹窗时遵循默认策略：reject > essential/necessary > accept all（仅用户明确要求时可选）。",
 	"如果任务已完成，goalReached 设为 true 并给出简短结论。",
@@ -50,6 +52,7 @@ operationsPlannerRules = [
 
 [profile.roles.progressEvaluator]
 progressEvaluatorTemperature = 0.1
+progressEvaluatorThinkingMode = "medium"
 progressEvaluatorRules = [
 	"严格比较 before/after 两张图，只描述可见变化。",
 	"除了变化本身，还要判断动作是否正确、是否朝 mission 目标靠近。",

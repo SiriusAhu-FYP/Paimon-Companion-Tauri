@@ -201,4 +201,158 @@ describe("delegated task memory integration", () => {
 		expect(plannerUserPrompt).toContain("missionHardConstraints: 必须使用 Google 查询");
 		expect(plannerUserPrompt).not.toContain("在当前 GitHub 标签页中操作");
 	});
+
+	it("applies game-specific delegation rules and thinking mode for sokoban", async () => {
+		let missionThinkingMode = "";
+		let plannerSystemPrompt = "";
+		let visionCallCount = 0;
+
+		vi.mocked(requestActiveVisionDecision).mockImplementation(async (input: {
+			systemPrompt: string;
+			thinkingMode?: string;
+		}) => {
+			visionCallCount += 1;
+			if (visionCallCount === 1) {
+				missionThinkingMode = input.thinkingMode ?? "";
+				return JSON.stringify({
+					taskMode: "game",
+					missionGoal: "解决当前推箱子关卡",
+					initialStateSummary: "当前处于推箱子页面。",
+					initialStateSketch: "#####\n#P.B#\n#..T#\n#####",
+					hardConstraints: [],
+					subtaskChain: ["确认棋盘", "靠近箱子", "推进到目标点"],
+					completionSignals: ["箱子进入目标点"],
+					ackReply: "收到。",
+				});
+			}
+			if (visionCallCount === 2) {
+				plannerSystemPrompt = input.systemPrompt;
+				return JSON.stringify({
+					goalReached: true,
+					reasoning: "确认当前棋盘后先暂停。",
+					reply: "我先确认好局面。",
+					expectedOutcome: "确认棋盘局面",
+					stateSketch: "#####\n#P.B#\n#..T#\n#####",
+					actions: [{ tool: "game.perform_action", args: { actionId: "move_right" } }],
+				});
+			}
+			return JSON.stringify({
+				actionSucceeded: false,
+				wasActionCorrect: false,
+				expectedMet: false,
+				expectationReview: "未执行。",
+				goalAlignment: "unchanged",
+				goalProgress: "none",
+				reply: "先停一下。",
+				nextHint: "继续确认棋盘。",
+			});
+		});
+
+		const orchestrator = {
+			runCaptureTask: vi.fn().mockResolvedValue({
+				beforeSnapshot: {
+					dataUrl: "data:image/png;base64,before",
+					width: 1280,
+					height: 720,
+				},
+				afterSnapshot: {
+					dataUrl: "data:image/png;base64,after",
+					width: 1280,
+					height: 720,
+				},
+			}),
+		};
+
+		await runDelegatedTaskLoop({
+			taskText: "请尝试解决当前推箱子关卡",
+			target: { handle: "h-1", title: "Play Sokoban — Mozilla Firefox" },
+			orchestrator: orchestrator as never,
+			shouldStop: () => false,
+		});
+
+		expect(missionThinkingMode).toBe("medium");
+		expect(plannerSystemPrompt).toContain("stateSketch");
+		expect(plannerSystemPrompt).toContain("下一个动作必须明确对应某个具体局面目标");
+	});
+
+	it("treats unchanged board state as a failed step even if evaluator claims success", async () => {
+		let visionCallCount = 0;
+		let secondPlannerPrompt = "";
+
+		vi.mocked(requestActiveVisionDecision).mockImplementation(async (input: {
+			userPrompt: string;
+		}) => {
+			visionCallCount += 1;
+			if (visionCallCount === 1) {
+				return JSON.stringify({
+					taskMode: "game",
+					missionGoal: "解决当前推箱子关卡",
+					initialStateSummary: "当前处于推箱子页面。",
+					initialStateSketch: "#####\n#P.B#\n#..T#\n#####",
+					hardConstraints: [],
+					subtaskChain: ["确认棋盘", "尝试移动"],
+					completionSignals: ["局面推进"],
+					ackReply: "收到。",
+				});
+			}
+			if (visionCallCount === 2) {
+				return JSON.stringify({
+					goalReached: false,
+					reasoning: "先向右试一步。",
+					reply: "先试一步。",
+					expectedOutcome: "玩家或箱子出现可确认变化",
+					stateSketch: "#####\n#P.B#\n#..T#\n#####",
+					actions: [{ tool: "host.send_key", args: { key: "Right" } }],
+				});
+			}
+			if (visionCallCount === 3) {
+				return JSON.stringify({
+					actionSucceeded: true,
+					wasActionCorrect: true,
+					expectedMet: true,
+					expectationReview: "看起来达成预期。",
+					goalAlignment: "closer",
+					goalProgress: "partial",
+					reply: "我推进了一点。",
+					nextHint: "继续同样策略。",
+					beforeStateSketch: "#####\n#P.B#\n#..T#\n#####",
+					afterStateSketch: "#####\n#P.B#\n#..T#\n#####",
+					stateDelta: "无可确认变化",
+				});
+			}
+			secondPlannerPrompt = input.userPrompt;
+			return JSON.stringify({
+				goalReached: true,
+				reasoning: "上一轮没有确认变化，先停下重看棋盘。",
+				reply: "我先重看一下棋盘。",
+				expectedOutcome: "重新确认棋盘状态",
+				stateSketch: "#####\n#P.B#\n#..T#\n#####",
+				actions: [],
+			});
+		});
+
+		const orchestrator = {
+			runCaptureTask: vi.fn().mockResolvedValue({
+				beforeSnapshot: {
+					dataUrl: "data:image/png;base64,before",
+					width: 1280,
+					height: 720,
+				},
+				afterSnapshot: {
+					dataUrl: "data:image/png;base64,after",
+					width: 1280,
+					height: 720,
+				},
+			}),
+		};
+
+		await runDelegatedTaskLoop({
+			taskText: "请尝试解决当前推箱子关卡",
+			target: { handle: "h-1", title: "Play Sokoban — Mozilla Firefox" },
+			orchestrator: orchestrator as never,
+			shouldStop: () => false,
+		});
+
+		expect(secondPlannerPrompt).toContain("previousExpectedMet: no");
+	});
 });

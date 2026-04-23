@@ -17,7 +17,9 @@ export interface DelegatedTaskProfileConfig {
 	missionAnalystTemperature: number;
 	missionAnalystThinkingMode: DelegatedThinkingMode;
 	operationsPlannerTemperature: number;
+	operationsPlannerThinkingMode: DelegatedThinkingMode;
 	progressEvaluatorTemperature: number;
+	progressEvaluatorThinkingMode: DelegatedThinkingMode;
 	allowedTools: string[];
 	missionAnalystRules: string[];
 	operationsPlannerRules: string[];
@@ -47,7 +49,9 @@ type DelegatedTaskProfileRaw = {
 	missionAnalystTemperature?: unknown;
 	missionAnalystThinkingMode?: unknown;
 	operationsPlannerTemperature?: unknown;
+	operationsPlannerThinkingMode?: unknown;
 	progressEvaluatorTemperature?: unknown;
+	progressEvaluatorThinkingMode?: unknown;
 	allowedTools?: unknown;
 	missionAnalystRules?: unknown;
 	operationsPlannerRules?: unknown;
@@ -73,9 +77,11 @@ const DEFAULT_PROFILE_CONFIG: DelegatedTaskProfileConfig = {
 	locatorLocalFallbackEnabled: true,
 	locatorMinConfidence: 0.55,
 	missionAnalystTemperature: 0.1,
-	missionAnalystThinkingMode: "off",
+	missionAnalystThinkingMode: "medium",
 	operationsPlannerTemperature: 0.1,
+	operationsPlannerThinkingMode: "medium",
 	progressEvaluatorTemperature: 0.1,
+	progressEvaluatorThinkingMode: "medium",
 	allowedTools: [
 		"host.list_windows",
 		"host.focus_window",
@@ -161,8 +167,10 @@ function flattenProfileRaw(input: unknown): DelegatedTaskProfileRaw {
 		missionAnalystThinkingMode: parsed.missionAnalystThinkingMode ?? missionAnalyst.missionAnalystThinkingMode,
 		missionAnalystRules: parsed.missionAnalystRules ?? missionAnalyst.missionAnalystRules,
 		operationsPlannerTemperature: parsed.operationsPlannerTemperature ?? operationsPlanner.operationsPlannerTemperature,
+		operationsPlannerThinkingMode: parsed.operationsPlannerThinkingMode ?? operationsPlanner.operationsPlannerThinkingMode,
 		operationsPlannerRules: parsed.operationsPlannerRules ?? operationsPlanner.operationsPlannerRules,
 		progressEvaluatorTemperature: parsed.progressEvaluatorTemperature ?? progressEvaluator.progressEvaluatorTemperature,
+		progressEvaluatorThinkingMode: parsed.progressEvaluatorThinkingMode ?? progressEvaluator.progressEvaluatorThinkingMode,
 		progressEvaluatorRules: parsed.progressEvaluatorRules ?? progressEvaluator.progressEvaluatorRules,
 	};
 }
@@ -212,7 +220,9 @@ function sanitizeProfile(rawValue: unknown, fallback: DelegatedTaskProfileConfig
 		missionAnalystTemperature,
 		missionAnalystThinkingMode: sanitizeThinkingMode(parsed.missionAnalystThinkingMode, fallback.missionAnalystThinkingMode),
 		operationsPlannerTemperature,
+		operationsPlannerThinkingMode: sanitizeThinkingMode(parsed.operationsPlannerThinkingMode, fallback.operationsPlannerThinkingMode),
 		progressEvaluatorTemperature,
+		progressEvaluatorThinkingMode: sanitizeThinkingMode(parsed.progressEvaluatorThinkingMode, fallback.progressEvaluatorThinkingMode),
 		allowedTools: allowedTools.length ? allowedTools : [...fallback.allowedTools],
 		missionAnalystRules: missionAnalystRules.length ? missionAnalystRules : [...fallback.missionAnalystRules],
 		operationsPlannerRules: operationsPlannerRules.length ? operationsPlannerRules : [...fallback.operationsPlannerRules],

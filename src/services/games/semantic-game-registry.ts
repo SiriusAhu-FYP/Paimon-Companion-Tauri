@@ -173,6 +173,8 @@ function validateDelegationProfile(value: unknown): SemanticDelegationProfileCon
 	const operationsPlanner = isObjectRecord(roles.operationsPlanner) ? roles.operationsPlanner : {};
 	const progressEvaluator = isObjectRecord(roles.progressEvaluator) ? roles.progressEvaluator : {};
 	const thinkingMode = missionAnalyst.missionAnalystThinkingMode;
+	const plannerThinkingMode = operationsPlanner.operationsPlannerThinkingMode;
+	const evaluatorThinkingMode = progressEvaluator.progressEvaluatorThinkingMode;
 	return {
 		profileId: typeof value.profileId === "string" ? value.profileId : undefined,
 		taskId: typeof value.taskId === "string" ? value.taskId : undefined,
@@ -194,7 +196,23 @@ function validateDelegationProfile(value: unknown): SemanticDelegationProfileCon
 			? thinkingMode
 			: undefined,
 		operationsPlannerTemperature: toOptionalNumber(operationsPlanner.operationsPlannerTemperature),
+		operationsPlannerThinkingMode: (
+			plannerThinkingMode === "off"
+			|| plannerThinkingMode === "low"
+			|| plannerThinkingMode === "medium"
+			|| plannerThinkingMode === "high"
+		)
+			? plannerThinkingMode
+			: undefined,
 		progressEvaluatorTemperature: toOptionalNumber(progressEvaluator.progressEvaluatorTemperature),
+		progressEvaluatorThinkingMode: (
+			evaluatorThinkingMode === "off"
+			|| evaluatorThinkingMode === "low"
+			|| evaluatorThinkingMode === "medium"
+			|| evaluatorThinkingMode === "high"
+		)
+			? evaluatorThinkingMode
+			: undefined,
 		allowedTools: sanitizeStringArray(value.allowedTools),
 		missionAnalystRules: sanitizeStringArray(missionAnalyst.missionAnalystRules),
 		operationsPlannerRules: sanitizeStringArray(operationsPlanner.operationsPlannerRules),

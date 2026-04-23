@@ -38,7 +38,9 @@ export interface SemanticDelegationProfileConfig {
 	missionAnalystTemperature?: number;
 	missionAnalystThinkingMode?: "off" | "low" | "medium" | "high";
 	operationsPlannerTemperature?: number;
+	operationsPlannerThinkingMode?: "off" | "low" | "medium" | "high";
 	progressEvaluatorTemperature?: number;
+	progressEvaluatorThinkingMode?: "off" | "low" | "medium" | "high";
 	allowedTools?: readonly string[];
 	missionAnalystRules?: readonly string[];
 	operationsPlannerRules?: readonly string[];

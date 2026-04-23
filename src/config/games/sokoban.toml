@@ -50,30 +50,35 @@ locatorMinConfidence = 0.6
 
 [delegationProfile.roles.missionAnalyst]
 missionAnalystTemperature = 0.1
-missionAnalystThinkingMode = "off"
+missionAnalystThinkingMode = "medium"
 missionAnalystRules = [
 	"如果任务是推箱子操作，必须标注 taskMode=game。",
 	"目标要聚焦当前关卡推进，不要输出与关卡无关回答。",
 	"在 initialStateSketch 中用纯文本画出你当前识别到的棋盘局面，至少标清 P/B/T/#/./*/+ 这些元素里能确认的部分。",
+	"如果玩家、箱子、目标点还有歧义，必须直接承认歧义，不要补齐一个自信但未经确认的棋盘。",
 ]
 
 [delegationProfile.roles.operationsPlanner]
 operationsPlannerTemperature = 0.1
+operationsPlannerThinkingMode = "medium"
 operationsPlannerRules = [
 	"优先使用 game.perform_action；若不可用再考虑 host.send_key。",
 	"每轮最多 1 个动作，保持验证闭环。",
 	"reasoning 与 stateSketch 必须基于当前观察到的棋盘局面，而不是基于你希望发生的移动。",
 	"下一个动作必须明确对应某个具体局面目标，例如让 P 靠近哪个 B、让哪个 B 朝哪个 T 推进；不要只写抽象方向。",
+	"如果最近连续两轮都没有确认 stateDelta，就先重建 stateSketch，并明确换一个局面目标；不要沿用同一套方向套路。",
 ]
 
 [delegationProfile.roles.progressEvaluator]
 progressEvaluatorTemperature = 0.1
+progressEvaluatorThinkingMode = "medium"
 progressEvaluatorRules = [
 	"判断动作是否让角色或箱子状态发生了有效推进。",
 	"beforeStateSketch 与 afterStateSketch 必须用纯文本画出你识别到的棋盘局面，至少标清 P/B/T/#/./*/+ 这些元素里能确认的部分。",
 	"stateDelta 必须明确说明哪些格子/相对位置发生了变化；如果棋盘基本没变，就明确写“无可确认变化”。",
 	"如果 before/after 没有可确认变化，则 actionSucceeded=false、expectedMet=false、goalProgress=none，不得判成功。",
 	"不要从“按了某个方向键”反推出角色或箱子已经移动；只有在 after 局面中可见变化时才算移动成立。",
+	"如果局面连续两轮没有可确认变化，nextHint 必须要求重新定位 P/B/T 并换一个局面目标，不能只说“再试一次”。",
 	"无法确认推进时，明确给出下一步纠偏建议。",
 ]
 

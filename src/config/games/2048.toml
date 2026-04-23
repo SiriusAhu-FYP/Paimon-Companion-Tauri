@@ -38,22 +38,34 @@ locatorMinConfidence = 0.6
 
 [delegationProfile.roles.missionAnalyst]
 missionAnalystTemperature = 0.1
-missionAnalystThinkingMode = "off"
+missionAnalystThinkingMode = "medium"
 missionAnalystRules = [
 	"如果任务是 2048 操作，必须标注 taskMode=game。",
 	"目标要聚焦棋盘推进，不要回答常识问答。",
+	"在 initialStateSketch 中用纯文本画出你当前识别到的 4x4 棋盘，至少标出你能确认的数字与空格；不确定就承认不确定。",
 ]
 
 [delegationProfile.roles.operationsPlanner]
 operationsPlannerTemperature = 0.1
+operationsPlannerThinkingMode = "medium"
 operationsPlannerRules = [
 	"优先使用 game.perform_action；若不可用再考虑 host.send_key。",
 	"每轮最多 1 个动作，避免多步连发导致不可追踪。",
+	"reasoning 与 stateSketch 必须基于当前观察到的棋盘，不要把“希望出现的合并”写成已经存在的局面。",
+	"如果最近连续两轮没有确认 stateDelta，就先重建 stateSketch，并明确换一个合并目标或保留方向。",
 ]
 
 [delegationProfile.roles.progressEvaluator]
 progressEvaluatorTemperature = 0.1
-progressEvaluatorRules = ["先判断动作是否成功作用于棋盘，再判断是否更接近目标。", "当没有可靠证据时，不要宣称完成。"]
+progressEvaluatorThinkingMode = "medium"
+progressEvaluatorRules = [
+	"先判断动作是否成功作用于棋盘，再判断是否更接近目标。",
+	"beforeStateSketch 与 afterStateSketch 必须用纯文本画出 4x4 棋盘，至少标出本轮能确认的数字与空格；不确定就承认不确定。",
+	"stateDelta 必须明确说明哪一行/列或哪些格子变化了；如果棋盘基本没变，就明确写“无可确认变化”。",
+	"如果 before/after 没有可确认变化，则 actionSucceeded=false、expectedMet=false、goalProgress=none，不得判成功。",
+	"当没有可靠证据时，不要宣称完成。",
+	"如果连续两轮没有可确认变化，nextHint 必须要求重新识别棋盘并换一个操作方向，不要只说“继续尝试”。",
+]
 
 [[actions]]
 id = "move_up"
