@@ -1,7 +1,9 @@
 import { getConfig, proxyRequest, SECRET_KEYS } from "@/services/config";
+import { createLogger } from "@/services/logger";
 import { normalizeCompatibleOpenAIBaseUrl } from "./game-utils";
 
 interface OpenAIChatCompletionResponse {
+	usage?: Record<string, unknown>;
 	choices?: Array<{
 		message?: {
 			content?: string | Array<{ type?: string; text?: string }>;
@@ -15,6 +17,14 @@ interface OpenAICompatibleClientConfig {
 	temperature: number;
 	secretKey?: string;
 }
+
+interface CloudDecisionTelemetry {
+	role?: string;
+	source?: string;
+	taskKind?: string;
+}
+
+const log = createLogger("cloud-decision");
 
 function resolveThinkingClient(
 	client: OpenAICompatibleClientConfig,
@@ -143,6 +153,7 @@ async function requestCompletionWithOptionalThinking(input: {
 	basePayload: Record<string, unknown>;
 	timeoutMs: number;
 	thinkingMode?: CloudThinkingMode;
+	telemetry?: CloudDecisionTelemetry;
 }): Promise<OpenAIChatCompletionResponse> {
 	const effectiveClient = resolveThinkingClient(input.client, input.thinkingMode);
 	const thinkingPayload = resolveThinkingPayload(input.thinkingMode);
@@ -152,13 +163,83 @@ async function requestCompletionWithOptionalThinking(input: {
 	const effectivePayload = effectiveClient.model !== input.client.model
 		? { ...payloadWithThinking, model: effectiveClient.model }
 		: payloadWithThinking;
+	const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+	log.info("cloud completion started", {
+		scope: input.scope,
+		role: input.telemetry?.role ?? "unknown",
+		source: input.telemetry?.source ?? "unknown",
+		taskKind: input.telemetry?.taskKind ?? "unknown",
+		baseUrl: effectiveClient.baseUrl,
+		requestedModel: input.client.model,
+		effectiveModel: effectiveClient.model,
+		thinkingMode: input.thinkingMode ?? "off",
+		timeoutMs: input.timeoutMs,
+		hasThinkingPayload: Object.keys(thinkingPayload).length > 0,
+	});
 	try {
-		return await requestCompletion(input.scope, effectiveClient, effectivePayload, input.timeoutMs);
+		const parsed = await requestCompletion(input.scope, effectiveClient, effectivePayload, input.timeoutMs);
+		const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt;
+		const usage = parsed.usage ?? {};
+		log.info("cloud completion completed", {
+			scope: input.scope,
+			role: input.telemetry?.role ?? "unknown",
+			source: input.telemetry?.source ?? "unknown",
+			taskKind: input.telemetry?.taskKind ?? "unknown",
+			requestedModel: input.client.model,
+			effectiveModel: effectiveClient.model,
+			thinkingMode: input.thinkingMode ?? "off",
+			elapsedMs: Math.round(elapsedMs),
+			promptTokens: typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : null,
+			completionTokens: typeof usage.completion_tokens === "number" ? usage.completion_tokens : null,
+			totalTokens: typeof usage.total_tokens === "number" ? usage.total_tokens : null,
+		});
+		return parsed;
 	} catch (error) {
+		const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt;
+		const errorMessage = error instanceof Error ? error.message : String(error);
 		if (!(error instanceof CloudDecisionHttpError) || !Object.keys(thinkingPayload).length) {
+			log.error("cloud completion failed", {
+				scope: input.scope,
+				role: input.telemetry?.role ?? "unknown",
+				source: input.telemetry?.source ?? "unknown",
+				taskKind: input.telemetry?.taskKind ?? "unknown",
+				requestedModel: input.client.model,
+				effectiveModel: effectiveClient.model,
+				thinkingMode: input.thinkingMode ?? "off",
+				elapsedMs: Math.round(elapsedMs),
+				error: errorMessage,
+			});
 			throw error;
 		}
-		return requestCompletion(input.scope, input.client, input.basePayload, input.timeoutMs);
+		log.warn("cloud completion thinking fallback triggered", {
+			scope: input.scope,
+			role: input.telemetry?.role ?? "unknown",
+			source: input.telemetry?.source ?? "unknown",
+			taskKind: input.telemetry?.taskKind ?? "unknown",
+			requestedModel: input.client.model,
+			effectiveModel: effectiveClient.model,
+			thinkingMode: input.thinkingMode ?? "off",
+			elapsedMs: Math.round(elapsedMs),
+			error: errorMessage,
+		});
+		const fallbackStartedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+		const parsed = await requestCompletion(input.scope, input.client, input.basePayload, input.timeoutMs);
+		const fallbackElapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - fallbackStartedAt;
+		const usage = parsed.usage ?? {};
+		log.info("cloud completion fallback completed", {
+			scope: input.scope,
+			role: input.telemetry?.role ?? "unknown",
+			source: input.telemetry?.source ?? "unknown",
+			taskKind: input.telemetry?.taskKind ?? "unknown",
+			requestedModel: input.client.model,
+			effectiveModel: input.client.model,
+			thinkingMode: "off",
+			elapsedMs: Math.round(fallbackElapsedMs),
+			promptTokens: typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : null,
+			completionTokens: typeof usage.completion_tokens === "number" ? usage.completion_tokens : null,
+			totalTokens: typeof usage.total_tokens === "number" ? usage.total_tokens : null,
+		});
+		return parsed;
 	}
 }
 
@@ -192,6 +273,7 @@ export async function requestActiveTextDecision(input: {
 	timeoutMs?: number;
 	jsonResponse?: boolean;
 	thinkingMode?: CloudThinkingMode;
+	telemetry?: CloudDecisionTelemetry;
 }): Promise<string> {
 	const client = resolveActiveOpenAICompatibleClient();
 	if (!client) {
@@ -203,6 +285,7 @@ export async function requestActiveTextDecision(input: {
 		client,
 		timeoutMs: input.timeoutMs ?? 30_000,
 		thinkingMode: input.thinkingMode,
+		telemetry: input.telemetry,
 		basePayload: {
 			model: client.model,
 			temperature: input.temperature ?? client.temperature ?? 0.2,
@@ -230,6 +313,7 @@ export async function requestActiveVisionDecision(input: {
 	timeoutMs?: number;
 	jsonResponse?: boolean;
 	thinkingMode?: CloudThinkingMode;
+	telemetry?: CloudDecisionTelemetry;
 }): Promise<string> {
 	const client = resolveActiveVisionOpenAICompatibleClient();
 	if (!client) {
@@ -249,6 +333,7 @@ export async function requestActiveVisionDecision(input: {
 		client,
 		timeoutMs: input.timeoutMs ?? 30_000,
 		thinkingMode: input.thinkingMode,
+		telemetry: input.telemetry,
 		basePayload: {
 			model: client.model,
 			temperature: input.temperature ?? client.temperature ?? 0.1,

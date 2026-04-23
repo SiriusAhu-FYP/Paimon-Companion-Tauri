@@ -143,6 +143,11 @@ export async function runDelegatedTaskLoop(input: {
 		maxTokens: 900,
 		jsonResponse: true,
 		timeoutMs: 35_000,
+		telemetry: {
+			role: "mission-analyst",
+			source: "delegation",
+			taskKind: candidateGameContext?.gameId ?? "generic",
+		},
 	});
 	const mission = normalizeMissionAnalysisDecision(missionRaw, input.taskText, input.target);
 	const gameContext = resolveOperationalGameContext(candidateGameContext, mission.taskMode, input.taskText);
@@ -294,6 +299,11 @@ export async function runDelegatedTaskLoop(input: {
 				maxTokens: 700,
 				jsonResponse: true,
 				timeoutMs: 30_000,
+				telemetry: {
+					role: "operations-planner",
+					source: "delegation",
+					taskKind: gameContext?.gameId ?? mission.taskMode,
+				},
 			});
 			const nextPlanner = normalizeOperationsPlannerDecision(
 				plannerRaw,
@@ -499,6 +509,11 @@ export async function runDelegatedTaskLoop(input: {
 				maxTokens: 500,
 				jsonResponse: true,
 				timeoutMs: 30_000,
+				telemetry: {
+					role: "progress-evaluator",
+					source: "delegation",
+					taskKind: gameContext?.gameId ?? mission.taskMode,
+				},
 			});
 			let reflection = normalizeProgressEvaluatorDecision(reflectionRaw);
 			reflection = applyBoardTaskConsistencyGuard(reflection, gameContext);
@@ -1442,6 +1457,11 @@ async function resolveLocatorFromCloudVision(input: {
 		maxTokens: 260,
 		jsonResponse: true,
 		timeoutMs: 20_000,
+		telemetry: {
+			role: "cloud-locator",
+			source: "delegation",
+			taskKind: input.mission.taskMode,
+		},
 	});
 	return parseLocatorVisionDecision(content, input.beforeSnapshot, "cloud");
 }
