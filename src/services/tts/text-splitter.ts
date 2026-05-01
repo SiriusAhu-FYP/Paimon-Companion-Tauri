@@ -139,19 +139,22 @@ function mergeShortSegments(parts: string[], minLen: number): string[] {
  */
 function detectNonCJKLang(text: string): SplitSegment["lang"] {
 	// 含假名 → 即使占比不高也标为 ja（短日文片段可能夹杂标点）
-	if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) {
+	if (/[぀-ゟ゠-ヿ]/.test(text)) {
 		return "ja";
 	}
-	// 含汉字但 CJK 占比不足 30%，保守标记为 zh
-	if (/[\u4e00-\u9fff]/.test(text)) {
+	// 含汉字但若拉丁字母显著多于汉字，说明英文文本被少量汉字（如数字转换）污染
+	if (/[一-鿿]/.test(text)) {
+		const cjkCount = (text.match(/[一-鿿]/g) ?? []).length;
+		const latinCount = (text.match(/[A-Za-z]/g) ?? []).length;
+		if (latinCount > cjkCount * 3) return "en";
 		return "zh";
 	}
 	// 韩文 Hangul
-	if (/[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/.test(text)) {
+	if (/[가-힯ᄀ-ᇿ㄰-㆏]/.test(text)) {
 		return "unsupported";
 	}
 	// 西里尔、阿拉伯、泰文等非拉丁非 CJK → unsupported
-	if (/[\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F]/.test(text)) {
+	if (/[Ѐ-ӿ؀-ۿ฀-๿]/.test(text)) {
 		return "unsupported";
 	}
 	// 拉丁文字（含法文/德文等带重音字符）统一视为 en

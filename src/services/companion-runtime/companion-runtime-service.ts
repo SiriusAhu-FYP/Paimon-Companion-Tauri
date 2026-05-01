@@ -595,8 +595,8 @@ export class CompanionRuntimeService {
 		this.emitState();
 	}
 
-	async testLocalVisionConnection(options?: { timeoutMs?: number }): Promise<void> {
-		await this.waitForLocalVisionReady(options?.timeoutMs);
+	async testLocalVisionConnection(options?: { timeoutMs?: number; silent?: boolean }): Promise<void> {
+		await this.waitForLocalVisionReady(options?.timeoutMs, { silent: options?.silent });
 	}
 
 	private async probeLocalVisionConnection(): Promise<void> {
@@ -611,7 +611,10 @@ export class CompanionRuntimeService {
 		}
 	}
 
-	private async waitForLocalVisionReady(timeoutMs = LOCAL_VISION_READY_TIMEOUT_MS): Promise<void> {
+	private async waitForLocalVisionReady(
+		timeoutMs = LOCAL_VISION_READY_TIMEOUT_MS,
+		options?: { silent?: boolean },
+	): Promise<void> {
 		const deadline = Date.now() + timeoutMs;
 		let lastError: unknown = null;
 		this.state.phase = "connecting";
@@ -648,10 +651,12 @@ export class CompanionRuntimeService {
 		this.state.phase = "error";
 		this.state.lastError = message;
 		this.setDiagnostic("local-vision-unavailable", message);
-		this.bus.emit("system:error", {
-			module: "companion-runtime",
-			error: message,
-		});
+		if (!options?.silent) {
+			this.bus.emit("system:error", {
+				module: "companion-runtime",
+				error: message,
+			});
+		}
 		this.emitState();
 		throw new Error(message);
 	}

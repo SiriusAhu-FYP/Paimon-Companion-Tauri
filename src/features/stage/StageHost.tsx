@@ -10,6 +10,8 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import CloseIcon from "@mui/icons-material/Close";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import { HelpTooltip } from "@/components";
 import { MODEL_REGISTRY, DEFAULT_MODEL } from "@/features/live2d";
 import { getServices } from "@/services";
@@ -60,6 +62,7 @@ export function StageHost({
 	// 模型 / 表情控制（从 ControlPanel 迁移至此）
 	const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL.path);
 	const [expressions, setExpressions] = useState<string[]>([]);
+	const [expressionsCollapsed, setExpressionsCollapsed] = useState(false);
 
 	// 监听 Stage 侧的 sync-state 和 report-expressions
 	useEffect(() => {
@@ -191,7 +194,15 @@ export function StageHost({
 							<Stack direction="row" alignItems="center" sx={{ mb: 0.5 }}>
 								<Typography variant="caption" color="text.secondary" fontWeight={600}>{t("表情", "Expressions")}</Typography>
 								<HelpTooltip title={t("模型自带的表情文件。点击后 Stage 中的模型会切换表情", "Built-in model expressions. Click to switch the model expression in Stage.")} />
+								<Button
+									size="small"
+									onClick={() => setExpressionsCollapsed((v) => !v)}
+									sx={{ minWidth: 0, p: 0.25, ml: 0.5 }}
+								>
+									{expressionsCollapsed ? <ExpandMoreIcon fontSize="small" /> : <ExpandLessIcon fontSize="small" />}
+								</Button>
 							</Stack>
+							{!expressionsCollapsed && (
 							<Box sx={{
 								display: "flex",
 								flexWrap: "wrap",
@@ -214,6 +225,7 @@ export function StageHost({
 									</Button>
 								))}
 							</Box>
+							)}
 						</Box>
 					)}
 

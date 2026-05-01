@@ -21,9 +21,9 @@ function translateCategoryLabel(category: string, t: (zh: string, en: string) =>
 		case "语音":
 			return t("语音", "Voice");
 		case "LLM":
-			return "LLM";
+			return t("LLM", "LLM");
 		case "MCP":
-			return "MCP";
+			return t("MCP", "MCP");
 		case "其他":
 			return t("其他", "Other");
 		default:
@@ -89,8 +89,8 @@ const EventListItem = memo(function EventListItem(props: {
 			</span>
 			<div className="event-log-body">
 				<div className="event-log-main">
-					{entry.severity === "error" && <span className="event-log-severity error">ERROR</span>}
-					{entry.severity === "warn" && <span className="event-log-severity warn">WARN</span>}
+					{entry.severity === "error" && <span className="event-log-severity error">{t("ERROR", "ERROR")}</span>}
+					{entry.severity === "warn" && <span className="event-log-severity warn">{t("WARN", "WARN")}</span>}
 					<span className="event-log-name" style={{ color: entry.color }}>{entry.event}</span>
 					<span className="event-log-summary">{entry.summary}</span>
 				</div>
@@ -253,10 +253,10 @@ export function EventLog() {
 							}}
 						>
 							{severity === "info"
-								? "INFO"
+								? t("信息", "INFO")
 								: severity === "warn"
-									? "WARN"
-									: "ERROR"}
+									? t("警告", "WARN")
+									: t("错误", "ERROR")}
 						</button>
 					))}
 					<button
@@ -370,7 +370,7 @@ export function EventLog() {
 							</div>
 							{selectedEntry.severity !== "info" && (
 								<div className={`event-log-detail-severity ${selectedEntry.severity}`}>
-									{selectedEntry.severity === "error" ? "ERROR" : "WARN"}
+									{selectedEntry.severity === "error" ? t("错误", "ERROR") : t("警告", "WARN")}
 								</div>
 							)}
 							<div className="event-log-detail-summary">{selectedEntry.summary}</div>

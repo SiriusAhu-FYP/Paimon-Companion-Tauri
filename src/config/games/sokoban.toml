@@ -59,7 +59,7 @@ allowedTools = [
 
 [delegationProfile.locator]
 locatorRulesEnabled = true
-locatorCloudEnabled = true
+locatorCloudEnabled = false
 locatorLocalFallbackEnabled = true
 locatorMinConfidence = 0.6
 

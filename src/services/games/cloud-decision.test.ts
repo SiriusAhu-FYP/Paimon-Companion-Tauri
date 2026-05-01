@@ -14,6 +14,10 @@ vi.mock("@/services/config", () => ({
 	},
 }));
 
+vi.mock("@/services/config/config-service", () => ({
+	getConfig,
+}));
+
 vi.mock("@/services/logger", () => ({
 	createLogger: () => ({
 		debug: vi.fn(),
@@ -27,6 +31,7 @@ describe("cloud decision thinking policy", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		getConfig.mockReturnValue({
+			locale: "en",
 			activeLlmProfileId: "text-profile",
 			activeVisionLlmProfileId: "vision-profile",
 			llm: {
@@ -78,6 +83,7 @@ describe("cloud decision thinking policy", () => {
 		expect(payload.reasoning).toBeUndefined();
 		expect(payload.reasoning_effort).toBeUndefined();
 		expect(payload.enable_thinking).toBeUndefined();
+		expect(payload.messages[0].content).toContain("Reply language mode: English (en).");
 	});
 
 	it("still enables DeepSeek reasoner path for text requests", async () => {
@@ -94,6 +100,47 @@ describe("cloud decision thinking policy", () => {
 		expect(payload.model).toBe("deepseek-reasoner");
 		expect(payload.reasoning_effort).toBe("medium");
 		expect(payload.enable_thinking).toBe(true);
+		expect(payload.messages[0].content).toContain("Reply language mode: English (en).");
+	});
+
+	it("switches structured language instruction to zh when locale is zh", async () => {
+		getConfig.mockReturnValue({
+			locale: "zh",
+			activeLlmProfileId: "text-profile",
+			activeVisionLlmProfileId: "vision-profile",
+			llm: {
+				provider: "openai-compatible",
+				baseUrl: "https://api.example.com",
+				model: "fallback-model",
+				temperature: 0.2,
+			},
+			llmProfiles: [
+				{
+					id: "text-profile",
+					provider: "openai-compatible",
+					baseUrl: "https://api.deepseek.com",
+					model: "deepseek-chat",
+					temperature: 0.2,
+				},
+				{
+					id: "vision-profile",
+					provider: "openai-compatible",
+					baseUrl: "https://vision.example.com",
+					model: "gpt-4.1",
+					temperature: 0.1,
+				},
+			],
+		});
+
+		await requestActiveTextDecision({
+			systemPrompt: "system",
+			userPrompt: "user",
+			jsonResponse: true,
+		});
+
+		const request = proxyRequest.mock.calls[0]?.[0];
+		const payload = JSON.parse(request.body);
+		expect(payload.messages[0].content).toContain("Reply language mode: Simplified Chinese (zh).");
 	});
 
 	it("retries empty vision responses up to three attempts", async () => {

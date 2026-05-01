@@ -1,5 +1,6 @@
 import type { AffectState, CharacterProfile, CompanionModeState, MemoryCandidate } from "@/types";
 import type { BehaviorConstraintsConfig } from "@/services/config/types";
+import { buildConversationReplyLanguageInstruction } from "@/services/config/reply-language";
 import type { ChatMessage } from "./types";
 import type { UserInputSource } from "@/services/affect-state";
 import { buildAffectPromptSummary } from "@/services/affect-state";
@@ -115,6 +116,7 @@ export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 			"除非确实需要执行动作，否则仍应优先给出自然、简洁、可朗读的回复。",
 		].join("\n"),
 	);
+	sections.push(`【回复语言模式】\n${buildConversationReplyLanguageInstruction()}`);
 	sections.push(
 		[
 			"【当前交互模式】",

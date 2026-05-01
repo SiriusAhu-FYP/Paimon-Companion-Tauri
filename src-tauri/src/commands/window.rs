@@ -737,20 +737,25 @@ fn choose_delegated_viewport_size(monitor_width: i32, monitor_height: i32) -> (i
 #[cfg(target_os = "windows")]
 fn send_key_windows(handle: &str, key: &str) -> Result<(), String> {
 	use windows::Win32::UI::Input::KeyboardAndMouse::{
-		KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, keybd_event,
+		KEYBD_EVENT_FLAGS, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, keybd_event,
 	};
 
 	focus_window_windows(handle, false)?;
 
 	let (virtual_key, modifiers) = resolve_virtual_key(key)?;
+	let extended_flag = if is_extended_virtual_key(virtual_key) {
+		KEYEVENTF_EXTENDEDKEY
+	} else {
+		KEYBD_EVENT_FLAGS(0)
+	};
 
 	unsafe {
 		for modifier in &modifiers {
 			keybd_event(modifier.0 as u8, 0, KEYBD_EVENT_FLAGS(0), 0);
 		}
 
-		keybd_event(virtual_key.0 as u8, 0, KEYBD_EVENT_FLAGS(0), 0);
-		keybd_event(virtual_key.0 as u8, 0, KEYEVENTF_KEYUP, 0);
+		keybd_event(virtual_key.0 as u8, 0, extended_flag, 0);
+		keybd_event(virtual_key.0 as u8, 0, extended_flag | KEYEVENTF_KEYUP, 0);
 
 		for modifier in modifiers.iter().rev() {
 			keybd_event(modifier.0 as u8, 0, KEYEVENTF_KEYUP, 0);
@@ -758,6 +763,19 @@ fn send_key_windows(handle: &str, key: &str) -> Result<(), String> {
 	}
 
 	Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn is_extended_virtual_key(
+	vk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY,
+) -> bool {
+	use windows::Win32::UI::Input::KeyboardAndMouse::{
+		VK_DELETE, VK_DOWN, VK_END, VK_HOME, VK_INSERT, VK_LEFT, VK_NEXT, VK_PRIOR, VK_RIGHT, VK_RMENU, VK_UP,
+	};
+	matches!(
+		vk,
+		VK_UP | VK_DOWN | VK_LEFT | VK_RIGHT | VK_HOME | VK_END | VK_PRIOR | VK_NEXT | VK_INSERT | VK_DELETE | VK_RMENU
+	)
 }
 
 #[cfg(target_os = "windows")]

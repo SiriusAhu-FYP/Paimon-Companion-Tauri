@@ -1,4 +1,5 @@
 import { getConfig, proxyRequest, SECRET_KEYS } from "@/services/config";
+import { buildStructuredReplyLanguageInstruction } from "@/services/config/reply-language";
 import { createLogger } from "@/services/logger";
 import { normalizeCompatibleOpenAIBaseUrl } from "./game-utils";
 
@@ -334,6 +335,10 @@ export async function requestActiveTextDecision(input: {
 	if (!client) {
 		throw new Error("cloud decision requires an active openai-compatible LLM profile");
 	}
+	const systemPrompt = [
+		input.systemPrompt,
+		buildStructuredReplyLanguageInstruction({ jsonResponse: input.jsonResponse }),
+	].filter(Boolean).join("\n\n");
 
 	const parsed = await requestContentWithRetries({
 		scope: "cloud decision",
@@ -351,7 +356,7 @@ export async function requestActiveTextDecision(input: {
 				max_tokens: input.maxTokens ?? 320,
 				response_format: input.jsonResponse ? { type: "json_object" } : undefined,
 				messages: [
-					{ role: "system", content: input.systemPrompt },
+					{ role: "system", content: systemPrompt },
 					{ role: "user", content: input.userPrompt },
 				],
 			},
@@ -376,6 +381,10 @@ export async function requestActiveVisionDecision(input: {
 	if (!client) {
 		throw new Error("cloud vision decision requires an active openai-compatible LLM profile");
 	}
+	const systemPrompt = [
+		input.systemPrompt,
+		buildStructuredReplyLanguageInstruction({ jsonResponse: input.jsonResponse }),
+	].filter(Boolean).join("\n\n");
 	if (input.thinkingMode && input.thinkingMode !== "off") {
 		log.info("cloud vision thinking disabled", {
 			requestedModel: client.model,
@@ -408,7 +417,7 @@ export async function requestActiveVisionDecision(input: {
 				max_tokens: input.maxTokens ?? 360,
 				response_format: input.jsonResponse ? { type: "json_object" } : undefined,
 				messages: [
-					{ role: "system", content: input.systemPrompt },
+					{ role: "system", content: systemPrompt },
 					{
 						role: "user",
 						content: [

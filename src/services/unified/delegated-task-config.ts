@@ -10,6 +10,7 @@ export interface DelegatedTaskProfileConfig {
 	maxRounds: number;
 	maxActionsPerRound: number;
 	afterActionWaitMs: number;
+	plannerSpeechLeadMs: number;
 	locatorRulesEnabled: boolean;
 	locatorCloudEnabled: boolean;
 	locatorLocalFallbackEnabled: boolean;
@@ -42,6 +43,7 @@ type DelegatedTaskProfileRaw = {
 	maxRounds?: unknown;
 	maxActionsPerRound?: unknown;
 	afterActionWaitMs?: unknown;
+	plannerSpeechLeadMs?: unknown;
 	locatorRulesEnabled?: unknown;
 	locatorCloudEnabled?: unknown;
 	locatorLocalFallbackEnabled?: unknown;
@@ -72,6 +74,7 @@ const DEFAULT_PROFILE_CONFIG: DelegatedTaskProfileConfig = {
 	maxRounds: 12,
 	maxActionsPerRound: 2,
 	afterActionWaitMs: 1000,
+	plannerSpeechLeadMs: 2000,
 	locatorRulesEnabled: true,
 	locatorCloudEnabled: false,
 	locatorLocalFallbackEnabled: true,
@@ -213,6 +216,7 @@ function sanitizeProfile(rawValue: unknown, fallback: DelegatedTaskProfileConfig
 		maxRounds: sanitizeNumber(parsed.maxRounds, fallback.maxRounds, 1, 40),
 		maxActionsPerRound: sanitizeNumber(parsed.maxActionsPerRound, fallback.maxActionsPerRound, 1, 6),
 		afterActionWaitMs: sanitizeNumber(parsed.afterActionWaitMs, fallback.afterActionWaitMs, 200, 5000),
+		plannerSpeechLeadMs: sanitizeNumber(parsed.plannerSpeechLeadMs, fallback.plannerSpeechLeadMs, 0, 5000),
 		locatorRulesEnabled: sanitizeBoolean(parsed.locatorRulesEnabled, fallback.locatorRulesEnabled),
 		locatorCloudEnabled: sanitizeBoolean(parsed.locatorCloudEnabled, fallback.locatorCloudEnabled),
 		locatorLocalFallbackEnabled: sanitizeBoolean(parsed.locatorLocalFallbackEnabled, fallback.locatorLocalFallbackEnabled),

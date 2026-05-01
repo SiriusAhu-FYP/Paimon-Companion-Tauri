@@ -10,4 +10,12 @@ describe("delegated task config", () => {
 		expect(config.operationsPlannerThinkingMode).toBe("medium");
 		expect(config.progressEvaluatorThinkingMode).toBe("medium");
 	});
+
+	it("has plannerSpeechLeadMs with a valid default", () => {
+		const config = getDelegatedBrowserTaskConfig();
+
+		expect(config.plannerSpeechLeadMs).toBeTypeOf("number");
+		expect(config.plannerSpeechLeadMs).toBeGreaterThanOrEqual(0);
+		expect(config.plannerSpeechLeadMs).toBeLessThanOrEqual(5000);
+	});
 });

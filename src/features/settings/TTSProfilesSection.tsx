@@ -3,6 +3,7 @@ import {
 	Alert,
 	Box,
 	Button,
+	FormControl,
 	IconButton,
 	MenuItem,
 	Popover,
@@ -194,22 +195,36 @@ export function TTSProfilesSection({ profiles, activeId, onAdd, onUpdate, onDele
 										onChange={(e) => setEditingProfile({ ...editingProfile, promptText: e.target.value })}
 									/>
 									<Stack direction="row" spacing={0.5}>
-										<Select size="small" sx={{ flex: 1 }} label={t("参考语言", "Reference Language")}
-											value={editingProfile.promptLang}
-											onChange={(e: SelectChangeEvent) => setEditingProfile({ ...editingProfile, promptLang: e.target.value })}
-										>
-											<MenuItem value="zh">{t("中文", "Chinese")}</MenuItem>
-											<MenuItem value="en">English</MenuItem>
-											<MenuItem value="ja">{t("日语", "Japanese")}</MenuItem>
-										</Select>
-										<Select size="small" sx={{ flex: 1 }} label={t("合成语言", "Synthesis Language")}
-											value={editingProfile.textLang}
-											onChange={(e: SelectChangeEvent) => setEditingProfile({ ...editingProfile, textLang: e.target.value })}
-										>
-											<MenuItem value="zh">{t("中文", "Chinese")}</MenuItem>
-											<MenuItem value="en">English</MenuItem>
-											<MenuItem value="ja">{t("日语", "Japanese")}</MenuItem>
-										</Select>
+										<Box sx={{ flex: 1 }}>
+											<Typography variant="caption" color="text.secondary" fontWeight={600}>
+												{t("参考音频语言", "Reference Audio Language")}
+											</Typography>
+											<FormControl size="small" fullWidth>
+												<Select
+													value={editingProfile.promptLang}
+													onChange={(e: SelectChangeEvent) => setEditingProfile({ ...editingProfile, promptLang: e.target.value })}
+												>
+													<MenuItem value="zh">{t("中文", "Chinese")}</MenuItem>
+													<MenuItem value="en">English</MenuItem>
+													<MenuItem value="ja">{t("日语", "Japanese")}</MenuItem>
+												</Select>
+											</FormControl>
+										</Box>
+										<Box sx={{ flex: 1 }}>
+											<Typography variant="caption" color="text.secondary" fontWeight={600}>
+												{t("待合成文本语言", "Target Text Language")}
+											</Typography>
+											<FormControl size="small" fullWidth>
+												<Select
+													value={editingProfile.textLang}
+													onChange={(e: SelectChangeEvent) => setEditingProfile({ ...editingProfile, textLang: e.target.value })}
+												>
+													<MenuItem value="zh">{t("中文", "Chinese")}</MenuItem>
+													<MenuItem value="en">English</MenuItem>
+													<MenuItem value="ja">{t("日语", "Japanese")}</MenuItem>
+												</Select>
+											</FormControl>
+										</Box>
 									</Stack>
 									<Alert severity="info" sx={{ py: 0 }}>
 										{t("TTS 当前只接受 GPT-SoVITS 路线。", "TTS currently only supports the GPT-SoVITS route.")}

@@ -2,12 +2,17 @@
  * Spoken-text normalizer — 将显示文本转化为口播友好文本。
  * 在 LLM 回复之后、文本切片之前执行。
  * 规则以 rule table 模式组织，方便后续扩展。
+ *
+ * 仅对 CJK 占比 ≥ 30% 的文本应用中文数字/符号口播化；
+ * 英文为主或混合文本原样保留（交给 TTS 引擎处理）。
  */
 
 interface NormRule {
 	pattern: RegExp;
 	replacer: (match: string, ...groups: string[]) => string;
 }
+
+const CJK_RE = /[一-鿿㐀-䶿]/;
 
 const DIGIT_CHARS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
 
@@ -164,9 +169,13 @@ const RULES: NormRule[] = [
 
 /**
  * 将显示文本转为口播文本。
- * 英文原样保留（交给 TTS 引擎处理），中文数字/符号转为口语形式。
+ * 英文等非 CJK 文本原样保留（交给 TTS 引擎处理），中文数字/符号转为口语形式。
  */
 export function normalizeForSpeech(text: string): string {
+	const cjkCount = (text.match(CJK_RE) ?? []).length;
+	if (cjkCount / text.length < 0.3) {
+		return text;
+	}
 	let result = text;
 	for (const rule of RULES) {
 		result = result.replace(rule.pattern, rule.replacer as (...args: string[]) => string);

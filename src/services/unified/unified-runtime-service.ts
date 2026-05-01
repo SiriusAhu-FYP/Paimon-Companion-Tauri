@@ -13,6 +13,7 @@ import type { DebugCaptureService } from "@/services/debug-capture";
 import type { LongTermMemoryService } from "@/services/memory/long-term-memory-service";
 import type { MemoryLogService } from "@/services/memory/memory-log-service";
 import type { LongTermMemoryEventResult } from "@/types/memory";
+import { pickReplyLanguageText } from "@/services/config/reply-language";
 import { createLogger } from "@/services/logger";
 import type { DelegatedExecutionRecord, FunctionalTarget, SokobanChangeType, UnifiedRunRecord, UnifiedRuntimeState } from "@/types";
 import { callLocalMcpTool } from "@/services/mcp/local-mcp-client";
@@ -25,11 +26,30 @@ const BROWSER_WINDOW_TITLE_HINTS = ["firefox", "chrome", "edge", "browser", "moz
 const PREFLIGHT_LOCAL_VISION_TIMEOUT_MS = 8_000;
 const PREFLIGHT_CUE_THROTTLE_MS = 8_000;
 const PREFLIGHT_CUE_TEXT = {
-	noTargetFocused: "我还没找到目标窗口，先帮我聚焦一下 Firefox。",
-	localVisionUnavailable: "我现在看不到屏幕内容，本地视觉服务还没连上。",
-	localVisionRecovering: "本地视觉服务恢复了，我可以继续了。",
-	delegationBlockedByPreflight: "我先不乱点，等目标窗口和视觉连接都就绪再开始托管。",
-	companionBlockedByPreflight: "我先暂停观察，等窗口和视觉服务准备好再陪你继续。",
+	noTargetFocused: {
+		zh: "我还没找到目标窗口，先帮我聚焦一下 Firefox。",
+		en: "I still can't find the target window. Please focus Firefox first.",
+	},
+	localVisionUnavailable: {
+		zh: "我现在看不到屏幕内容，本地视觉服务还没连上。",
+		en: "I cannot see the screen yet because the local vision service is not connected.",
+	},
+	localVisionRecovering: {
+		zh: "本地视觉服务恢复了，我可以继续了。",
+		en: "The local vision service is back. I can continue now.",
+	},
+	delegationBlockedByPreflight: {
+		zh: "我先不乱点，等目标窗口和视觉连接都就绪再开始托管。",
+		en: "I won't click around yet. I'll start delegation once the target window and vision service are ready.",
+	},
+	companionBlockedByPreflight: {
+		zh: "我先暂停观察，等窗口和视觉服务准备好再陪你继续。",
+		en: "I'll pause observation for now and continue once the window and vision service are ready.",
+	},
+	preflightBlocked: {
+		zh: "启动前置检查没通过。",
+		en: "Preflight checks did not pass.",
+	},
 } as const;
 const DELEGATION_WARMUP_CUE = {
 	zh: "有新委托来了？让派蒙瞧瞧。",
@@ -142,29 +162,43 @@ export class UnifiedRuntimeService {
 	}
 
 	async runModePreflight(mode: "companion" | "delegated"): Promise<FunctionalTarget> {
+		const modeLabel = mode === "delegated"
+			? pickReplyLanguageText("托管模式", "Delegation mode")
+			: pickReplyLanguageText("陪伴模式", "Companion mode");
+		const missing: string[] = [];
+
 		const selectedTarget = this.orchestrator.getState().selectedTarget;
 		if (!selectedTarget) {
-			this.playPreflightCue("noTargetFocused");
-			this.playPreflightCue(mode === "delegated" ? "delegationBlockedByPreflight" : "companionBlockedByPreflight");
-			const modeLabel = mode === "delegated" ? "托管模式" : "陪伴模式";
-			throw new Error(`${modeLabel}启动失败：请先聚焦并选中目标窗口。`);
+			missing.push(pickReplyLanguageText("目标窗口未聚焦", "target window is not focused"));
 		}
 
+		let visionError: Error | null = null;
 		try {
-			await this.companionRuntime.testLocalVisionConnection({ timeoutMs: PREFLIGHT_LOCAL_VISION_TIMEOUT_MS });
-			if (this.localVisionWasUnavailable) {
-				this.playPreflightCue("localVisionRecovering");
-			}
-			this.localVisionWasUnavailable = false;
-			return selectedTarget;
+			await this.companionRuntime.testLocalVisionConnection({
+				timeoutMs: PREFLIGHT_LOCAL_VISION_TIMEOUT_MS,
+				silent: true,
+			});
 		} catch (err) {
-			this.localVisionWasUnavailable = true;
-			this.playPreflightCue("localVisionUnavailable");
-			this.playPreflightCue(mode === "delegated" ? "delegationBlockedByPreflight" : "companionBlockedByPreflight");
-			const modeLabel = mode === "delegated" ? "托管模式" : "陪伴模式";
-			const reason = err instanceof Error ? err.message : String(err);
-			throw new Error(`${modeLabel}启动前置检查失败：${reason}`);
+			visionError = err instanceof Error ? err : new Error(String(err));
+			missing.push(pickReplyLanguageText("本地视觉服务未就绪", "local vision service is not ready"));
 		}
+
+		if (missing.length > 0) {
+			this.localVisionWasUnavailable = visionError !== null;
+			this.playPreflightBlockedCue(modeLabel, missing);
+			const detail = visionError ? `（${visionError.message}）` : "";
+			const message = pickReplyLanguageText(
+				`${modeLabel}启动前置检查失败：缺少 ${missing.join("、")}${detail}`,
+				`${modeLabel} preflight check failed: missing ${missing.join(", ")}${detail}`,
+			);
+			throw new Error(message);
+		}
+
+		if (this.localVisionWasUnavailable) {
+			this.playPreflightCue("localVisionRecovering");
+		}
+		this.localVisionWasUnavailable = false;
+		return selectedTarget!;
 	}
 
 	stopDelegationLoop(reason = "manual-stop"): boolean {
@@ -376,8 +410,8 @@ export class UnifiedRuntimeService {
 		}
 	}
 
-	private emitDelegationWarmupCue(taskText: string) {
-		const cue = isLikelyEnglishTask(taskText) ? DELEGATION_WARMUP_CUE.en : DELEGATION_WARMUP_CUE.zh;
+	private emitDelegationWarmupCue(_taskText: string) {
+		const cue = pickReplyLanguageText(DELEGATION_WARMUP_CUE.zh, DELEGATION_WARMUP_CUE.en);
 		this.state.lastCompanionText = cue;
 		this.emitCompanionReplyToChat(cue);
 		if (this.state.speechEnabled) {
@@ -394,13 +428,39 @@ export class UnifiedRuntimeService {
 			return false;
 		}
 		this.preflightCueLastSpokenAt.set(cueKey, now);
-		const cueText = PREFLIGHT_CUE_TEXT[cueKey];
+		const cue = PREFLIGHT_CUE_TEXT[cueKey];
+		const cueText = pickReplyLanguageText(cue.zh, cue.en);
 		this.emitCompanionReplyToChat(cueText);
 		try {
 			return this.safeSpeak(cueText, { interruptQueue: true });
 		} catch (err) {
 			log.warn("preflight cue speak failed", {
 				cueKey,
+				error: err instanceof Error ? err.message : String(err),
+			});
+			return false;
+		}
+	}
+
+	private playPreflightBlockedCue(modeLabel: string, missing: string[]): boolean {
+		const cueKey: PreflightCueKey = "preflightBlocked";
+		const now = Date.now();
+		const lastSpokenAt = this.preflightCueLastSpokenAt.get(cueKey) ?? 0;
+		if (now - lastSpokenAt < PREFLIGHT_CUE_THROTTLE_MS) {
+			return false;
+		}
+		this.preflightCueLastSpokenAt.set(cueKey, now);
+		const cueText = pickReplyLanguageText(
+			`${modeLabel}还启动不了：${missing.join("、")}。请先准备好再试一次。`,
+			`${modeLabel} cannot start yet: ${missing.join(", ")}. Please prepare the prerequisites and try again.`,
+		);
+		this.emitCompanionReplyToChat(cueText);
+		try {
+			return this.safeSpeak(cueText, { interruptQueue: true });
+		} catch (err) {
+			log.warn("preflight blocked cue speak failed", {
+				modeLabel,
+				missing,
 				error: err instanceof Error ? err.message : String(err),
 			});
 			return false;
@@ -546,11 +606,12 @@ export class UnifiedRuntimeService {
 					this.emitCompanionReplyToChat(normalizedReply);
 					run.companionText = normalizedReply;
 					run.companionTextSource = "llm";
-					if (this.state.speechEnabled && source === "reflection") {
-						this.state.phase = "speaking";
-						this.emitState();
-						run.spoke = this.safeSpeak(normalizedReply, { interruptQueue: true }) || run.spoke;
-					}
+				if (this.state.speechEnabled && (source === "reflection" || source === "planner")) {
+					this.state.phase = "speaking";
+					this.emitState();
+					const shouldInterrupt = source === "reflection";
+					run.spoke = this.safeSpeak(normalizedReply, { interruptQueue: shouldInterrupt }) || run.spoke;
+				}
 				},
 				onTimelineUpdate: async (timeline) => {
 					run.delegationTimeline = timeline;
@@ -575,7 +636,9 @@ export class UnifiedRuntimeService {
 					this.emitCompanionReplyToChat(completionText);
 				}
 			} else if (!run.companionText) {
-				const fallbackText = result.status === "stopped" ? "托管任务已停止。" : result.summary;
+				const fallbackText = result.status === "stopped"
+					? pickReplyLanguageText("托管任务已停止。", "Delegation task has been stopped.")
+					: result.summary;
 				run.companionText = fallbackText;
 				run.companionTextSource = "fallback";
 				this.state.lastCompanionText = fallbackText;
@@ -871,7 +934,10 @@ export class UnifiedRuntimeService {
 			run.phase = "failed";
 			run.error = message;
 			run.summary = `unified run failed: ${message}`;
-			run.companionText = "这轮统一运行没成功，我先停下来，等你检查目标窗口或当前画面。";
+			run.companionText = pickReplyLanguageText(
+				"这轮统一运行没成功，我先停下来，等你检查目标窗口或当前画面。",
+				"This unified run did not succeed. I will pause here until you check the target window or current view.",
+			);
 			run.companionTextSource = "fallback";
 			run.emotion = "sad";
 			this.state.lastCompanionText = run.companionText;
@@ -995,7 +1061,10 @@ export class UnifiedRuntimeService {
 				}),
 			});
 
-			const finalReply = reply || "我先帮你看了一下，但这轮还没拿到足够明确的建议。";
+			const finalReply = reply || pickReplyLanguageText(
+				"我先帮你看了一下，但这轮还没拿到足够明确的建议。",
+				"I checked the current state, but I still do not have a clear suggestion for this round.",
+			);
 			this.state.lastCompanionText = finalReply;
 			if (!reply) {
 				this.emitCompanionReplyToChat(finalReply);
@@ -1062,7 +1131,7 @@ export class UnifiedRuntimeService {
 		try {
 			const reply = await this.llm.generateCompanionReply(
 				[
-					"你刚刚完成了一轮游戏托管动作。请基于最近托管执行记录，生成一句到两句简短、口语化、适合 TTS 播报的中文陪伴回复。",
+					"你刚刚完成了一轮游戏托管动作。请基于最近托管执行记录，生成一句到两句简短、口语化、适合 TTS 播报的陪伴回复。",
 					"要求：",
 					"1. 严格依据最近托管执行记录，不要脑补未给出的 Boss 战、血量、奖励或别的游戏剧情。",
 					"2. 语气保持陪伴感和轻度支持感，但不要夸张。",
@@ -1535,23 +1604,35 @@ function resolveUnifiedEmotion(value: string): "neutral" | "happy" | "angry" | "
 function summarizeDelegationFailureReason(rawSummary: string): string {
 	const summary = rawSummary.trim().replace(/\s+/g, " ");
 	if (!summary) {
-		return "托管已停止：这轮没有形成有效推进，派蒙建议先确认窗口与定位状态。";
+		return pickReplyLanguageText(
+			"托管已停止：这轮没有形成有效推进，派蒙建议先确认窗口与定位状态。",
+			"Delegation stopped: this round did not produce valid progress. Please verify the window and locator state first.",
+		);
 	}
 	if (/达到最大轮次/i.test(summary)) {
-		return `托管已停止：${summary} 派蒙建议先检查定位结果，再继续执行。`;
+		return pickReplyLanguageText(
+			`托管已停止：${summary} 派蒙建议先检查定位结果，再继续执行。`,
+			`Delegation stopped: ${summary} Please check locator results before continuing.`,
+		);
 	}
-	return `托管已停止：${summary}`;
+	return pickReplyLanguageText(`托管已停止：${summary}`, `Delegation stopped: ${summary}`);
 }
 
 function buildDelegationCompletionText(taskText: string, rawSummary: string): string {
 	const summary = rawSummary.trim().replace(/\s+/g, " ");
 	if (!summary) {
-		return `搞定啦！“${truncateDelegationTaskForAck(taskText)}”这轮已经完成。`;
+		return pickReplyLanguageText(
+			`搞定啦！“${truncateDelegationTaskForAck(taskText)}”这轮已经完成。`,
+			`Done! The round for "${truncateDelegationTaskForAck(taskText)}" is complete.`,
+		);
 	}
 	if (summary.startsWith("成功")) {
-		return `搞定啦！${summary}`;
+		return pickReplyLanguageText(`搞定啦！${summary}`, `Done! ${summary}`);
 	}
-	return `搞定啦！关于“${truncateDelegationTaskForAck(taskText)}”，结果是：${summary}`;
+	return pickReplyLanguageText(
+		`搞定啦！关于“${truncateDelegationTaskForAck(taskText)}”，结果是：${summary}`,
+		`Done! For "${truncateDelegationTaskForAck(taskText)}", the result is: ${summary}`,
+	);
 }
 
 function truncateDelegationTaskForAck(taskText: string): string {
@@ -1581,16 +1662,6 @@ function inferGameFromText(text: string | null): SupportedUnifiedGameId | null {
 		return "sokoban";
 	}
 	return null;
-}
-
-function isLikelyEnglishTask(text: string): boolean {
-	const trimmed = text.trim();
-	if (!trimmed) {
-		return false;
-	}
-	const latinMatches = trimmed.match(/[A-Za-z]/g)?.length ?? 0;
-	const cjkMatches = trimmed.match(/[\u4E00-\u9FFF]/g)?.length ?? 0;
-	return latinMatches > 0 && latinMatches >= cjkMatches * 2;
 }
 
 /**
