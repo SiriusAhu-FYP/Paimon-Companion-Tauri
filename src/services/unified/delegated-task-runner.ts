@@ -7,6 +7,7 @@ import type { OrchestratorService } from "@/services/orchestrator";
 import { requestOpenAICompatibleVision } from "@/services/vlm";
 import type { FunctionalTarget } from "@/types";
 import type { MemoryCandidate } from "@/types/memory";
+import { pickReplyLanguageText } from "@/services/config/reply-language";
 import { getDelegatedTaskConfig, type DelegatedTaskProfileConfig } from "./delegated-task-config";
 
 const log = createLogger("delegated-task-runner");
@@ -241,7 +242,7 @@ export async function runDelegatedTaskLoop(input: {
 			return {
 				status: "stopped",
 				rounds: round - 1,
-				summary: "任务被手动停止。",
+				summary: pickReplyLanguageText("任务被手动停止。", "Task was stopped manually."),
 				timeline: buildTimeline(),
 			};
 		}
@@ -396,15 +397,14 @@ export async function runDelegatedTaskLoop(input: {
 			actions: effectivePlannerActions,
 		};
 		const plannerReply = resolveOperationsNarration(plannerView, canPlannerFinish);
-		const shouldEmitPlannerReply = planner.goalReached || !effectivePlannerActions.length;
-		if (plannerReply && shouldEmitPlannerReply) {
+		if (plannerReply) {
 			await input.onAssistantReply?.(plannerReply, "planner");
 		}
 		if (canPlannerFinish) {
 			return {
 				status: "completed",
 				rounds: round,
-				summary: planner.reasoning || "规划器判定任务已完成。",
+				summary: planner.reasoning || pickReplyLanguageText("规划器判定任务已完成。", "Planner determined the task is complete."),
 				timeline: buildTimeline(),
 			};
 		}
@@ -413,7 +413,7 @@ export async function runDelegatedTaskLoop(input: {
 			if (history.length > 6) {
 				history.splice(0, history.length - 6);
 			}
-			latestHint = plannerPolicyReminder || "上一轮没有产出可执行动作。下一轮必须给出一个单步工具动作。";
+			latestHint = plannerPolicyReminder || pickReplyLanguageText("上一轮没有产出可执行动作。下一轮必须给出一个单步工具动作。", "No executable action was produced last round. Next round must provide a single-step tool action.");
 			await persistScratchpadText(
 				input.scratchpad,
 				"shared/context.md",
@@ -433,12 +433,22 @@ export async function runDelegatedTaskLoop(input: {
 			continue;
 		}
 
-		for (const action of effectivePlannerActions) {
+		if (config.plannerSpeechLeadMs > 0) {
+			await sleep(config.plannerSpeechLeadMs);
+		}
+
+		const batchBeforeSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
+		const executedActions: { plan: ExecutableActionPlan; error: string }[] = [];
+		let batchAfterSnapshot = batchBeforeSnapshot;
+		let batchExecutionError = "";
+
+		for (let actionIndex = 0; actionIndex < effectivePlannerActions.length; actionIndex += 1) {
+			const action = effectivePlannerActions[actionIndex];
 			if (input.shouldStop()) {
 				return {
 					status: "stopped",
 					rounds: round,
-					summary: "任务在动作执行前被停止。",
+					summary: pickReplyLanguageText("任务在动作执行前被停止。", "Task was stopped before action execution."),
 					timeline: buildTimeline(),
 				};
 			}
@@ -473,157 +483,42 @@ export async function runDelegatedTaskLoop(input: {
 					error: actionExecutionError,
 				});
 			}
-			const afterSnapshot = await capturePostActionSnapshot({
+			batchAfterSnapshot = await capturePostActionSnapshot({
 				orchestrator: input.orchestrator,
 				target: input.target,
 				beforeSnapshot,
 				baseWaitMs: config.afterActionWaitMs,
 			});
-
-			const reflectionRaw = await requestActiveVisionDecision({
-				systemPrompt: buildProgressEvaluatorSystemPrompt(config.progressEvaluatorRules, mission),
-				userPrompt: buildProgressEvaluatorUserPrompt({
-					taskText: input.taskText,
-					round,
-					target: input.target,
-					action: executionPlan.actionForEvaluation,
-					mission,
-					history,
-					expectedOutcome: planner.expectedOutcome,
-					executionError: actionExecutionError,
-					scratchpadContext: buildSharedScratchpadContext({
-						taskText: input.taskText,
-						mission,
-						memoryRecallSummary,
-						latestHint,
-						latestExpectedOutcome,
-						latestExpectedMet,
-						history,
-						plannerNotes,
-						evaluatorNotes,
-					}),
-				}),
-				imageDataUrls: [beforeSnapshot.dataUrl, afterSnapshot.dataUrl],
-				temperature: config.progressEvaluatorTemperature,
-				thinkingMode: config.progressEvaluatorThinkingMode,
-				maxTokens: 500,
-				jsonResponse: true,
-				timeoutMs: 30_000,
-				telemetry: {
-					role: "progress-evaluator",
-					source: "delegation",
-					taskKind: gameContext?.gameId ?? mission.taskMode,
-				},
-			});
-			let reflection = normalizeProgressEvaluatorDecision(reflectionRaw);
-			reflection = applyBoardTaskConsistencyGuard(reflection, gameContext);
+			executedActions.push({ plan: executionPlan, error: actionExecutionError });
 			if (actionExecutionError) {
-				reflection = {
-					...reflection,
-					actionSucceeded: false,
-					wasActionCorrect: false,
-					expectedMet: false,
-					goalAlignment: reflection.goalAlignment === "achieved" ? "deviated" : reflection.goalAlignment,
-					goalProgress: reflection.goalProgress === "done" ? "none" : reflection.goalProgress,
-					beforeStateSketch: reflection.beforeStateSketch || "",
-					afterStateSketch: reflection.afterStateSketch || "",
-					stateDelta: reflection.stateDelta || "",
-					nextHint: combineHints(
-						reflection.nextHint,
-						`动作执行报错：${actionExecutionError}。下一轮先修正动作参数或先做聚焦/定位校准。`,
-					),
-				};
+				batchExecutionError = actionExecutionError;
+				break;
 			}
-			log.info("delegated progress evaluator", {
-				round,
-				tool: resolvedAction.tool,
-				actionSucceeded: reflection.actionSucceeded,
-				wasActionCorrect: reflection.wasActionCorrect,
-				expectedMet: reflection.expectedMet,
-				goalAlignment: reflection.goalAlignment,
-				goalProgress: reflection.goalProgress,
-				legacyChanged: reflection.actionSucceeded,
-			});
-			const reflectionReply = normalizeDelegatedCompanionReply(reflection.reply, "reflection");
-			if (reflectionReply) {
-				await input.onAssistantReply?.(reflectionReply, "reflection");
+			// 0.5s gap before the next action in a multi-action batch
+			const hasNextAction = actionIndex < effectivePlannerActions.length - 1;
+			if (hasNextAction) {
+				await sleep(500);
 			}
+		}
 
-			const actionSignature = buildActionSignature(executionPlan.actionForEvaluation);
-			pushActionOutcome(recentActionOutcomes, {
-				signature: actionSignature,
-				actionSucceeded: reflection.actionSucceeded,
-				wasActionCorrect: reflection.wasActionCorrect,
-				goalAlignment: reflection.goalAlignment,
-			});
-			const repeatedFailureHint = buildRepeatedFailureHint(recentActionOutcomes);
-			const boardStagnationHint = buildBoardStagnationHint(gameContext, recentActionOutcomes);
-			if (repeatedFailureHint) {
-				reflection = {
-					...reflection,
-					wasActionCorrect: false,
-					expectedMet: false,
-					goalAlignment: "deviated",
-					beforeStateSketch: reflection.beforeStateSketch || "",
-					afterStateSketch: reflection.afterStateSketch || "",
-					stateDelta: reflection.stateDelta || "",
-				};
-				const lastOutcome = recentActionOutcomes[recentActionOutcomes.length - 1];
-				if (lastOutcome) {
-					lastOutcome.wasActionCorrect = false;
-					lastOutcome.goalAlignment = "deviated";
-				}
-			}
-			if (boardStagnationHint) {
-				reflection = {
-					...reflection,
-					actionSucceeded: false,
-					wasActionCorrect: false,
-					expectedMet: false,
-					goalAlignment: "deviated",
-					goalProgress: "none",
-				};
-			}
-			latestHint = combineHints(reflection.nextHint, repeatedFailureHint);
-			latestHint = combineHints(latestHint, boardStagnationHint);
-			latestExpectedOutcome = planner.expectedOutcome;
-			latestExpectedMet = reflection.expectedMet;
-			hasExecutionEvidence = true;
-			const evaluatorNote = formatEvaluatorScratchpadNote({
+		const batchActionSummary = executedActions
+			.map((item) => `${item.plan.actionForEvaluation.tool}(${JSON.stringify(item.plan.actionForEvaluation.args)})`)
+			.join(" -> ");
+		const lastExecutedAction = executedActions[executedActions.length - 1]?.plan.actionForEvaluation
+			?? effectivePlannerActions[0];
+
+		const reflectionRaw = await requestActiveVisionDecision({
+			systemPrompt: buildProgressEvaluatorSystemPrompt(config.progressEvaluatorRules, mission),
+			userPrompt: buildProgressEvaluatorUserPrompt({
+				taskText: input.taskText,
 				round,
-				action: executionPlan.actionForEvaluation,
+				target: input.target,
+				action: lastExecutedAction,
+				mission,
+				history,
 				expectedOutcome: planner.expectedOutcome,
-				reflection,
-			});
-			pushScratchpadNote(evaluatorNotes, evaluatorNote, 6);
-			await persistScratchpadText(input.scratchpad, "roles/evaluator.md", `${evaluatorNote}\n`);
-			history.push(
-				`round ${round} ${executionPlan.actionForEvaluation.tool}: expected=${planner.expectedOutcome || "(none)"} expectedMet=${reflection.expectedMet} success=${reflection.actionSucceeded} correct=${reflection.wasActionCorrect} alignment=${reflection.goalAlignment} progress=${reflection.goalProgress} hint=${latestHint}`,
-			);
-			timelineRounds.push({
-				round,
-				timestamp: Date.now(),
-				plannerReasoning: planner.reasoning,
-				plannerExpectedOutcome: planner.expectedOutcome,
-				plannerGoalReached: planner.goalReached,
-				actionTool: executionPlan.actionForEvaluation.tool,
-				actionSummary: JSON.stringify(executionPlan.actionForEvaluation.args),
-				evaluatorSucceeded: reflection.actionSucceeded,
-				evaluatorCorrect: reflection.wasActionCorrect,
-				evaluatorExpectedMet: reflection.expectedMet,
-				evaluatorAlignment: reflection.goalAlignment,
-				evaluatorProgress: reflection.goalProgress,
-				evaluatorReply: reflection.reply,
-				evaluatorHint: latestHint,
-			});
-			await emitTimelineUpdate();
-			if (history.length > 6) {
-				history.splice(0, history.length - 6);
-			}
-			await persistScratchpadText(
-				input.scratchpad,
-				"shared/context.md",
-				`${buildSharedScratchpadContext({
+				executionError: batchExecutionError,
+				scratchpadContext: buildSharedScratchpadContext({
 					taskText: input.taskText,
 					mission,
 					memoryRecallSummary,
@@ -633,18 +528,156 @@ export async function runDelegatedTaskLoop(input: {
 					history,
 					plannerNotes,
 					evaluatorNotes,
-				})}\n`,
-				{ append: false },
-			);
+				}),
+				batchActionSummary: executedActions.length > 1 ? batchActionSummary : undefined,
+			}),
+			imageDataUrls: [batchBeforeSnapshot.dataUrl, batchAfterSnapshot.dataUrl],
+			temperature: config.progressEvaluatorTemperature,
+			thinkingMode: config.progressEvaluatorThinkingMode,
+			maxTokens: 500,
+			jsonResponse: true,
+			timeoutMs: 30_000,
+			telemetry: {
+				role: "progress-evaluator",
+				source: "delegation",
+				taskKind: gameContext?.gameId ?? mission.taskMode,
+			},
+		});
+		let reflection = normalizeProgressEvaluatorDecision(reflectionRaw);
+		reflection = applyBoardTaskConsistencyGuard(reflection, gameContext);
+		if (batchExecutionError) {
+			reflection = {
+				...reflection,
+				actionSucceeded: false,
+				wasActionCorrect: false,
+				expectedMet: false,
+				goalAlignment: reflection.goalAlignment === "achieved" ? "deviated" : reflection.goalAlignment,
+				goalProgress: reflection.goalProgress === "done" ? "none" : reflection.goalProgress,
+				beforeStateSketch: reflection.beforeStateSketch || "",
+				afterStateSketch: reflection.afterStateSketch || "",
+				stateDelta: reflection.stateDelta || "",
+				nextHint: combineHints(
+					reflection.nextHint,
+					pickReplyLanguageText(
+						`动作执行报错：${batchExecutionError}。下一轮先修正动作参数或先做聚焦/定位校准。`,
+						`Action execution error: ${batchExecutionError}. Next round, fix the action parameters or redo focus/locator calibration.`,
+					),
+				),
+			};
+		}
+		log.info("delegated progress evaluator", {
+			round,
+			batchSize: executedActions.length,
+			tool: lastExecutedAction.tool,
+			actionSucceeded: reflection.actionSucceeded,
+			wasActionCorrect: reflection.wasActionCorrect,
+			expectedMet: reflection.expectedMet,
+			goalAlignment: reflection.goalAlignment,
+			goalProgress: reflection.goalProgress,
+		});
+		const reflectionReply = normalizeDelegatedCompanionReply(reflection.reply, "reflection");
+		if (reflectionReply) {
+			await input.onAssistantReply?.(reflectionReply, "reflection");
+		}
 
-			if (reflection.goalProgress === "done" || reflection.goalAlignment === "achieved") {
-				return {
-					status: "completed",
-					rounds: round,
-					summary: reflection.nextHint || "Progress Evaluator 判定任务完成。",
-					timeline: buildTimeline(),
-				};
+		const actionSignature = buildActionSignature(lastExecutedAction);
+		pushActionOutcome(recentActionOutcomes, {
+			signature: actionSignature,
+			actionSucceeded: reflection.actionSucceeded,
+			wasActionCorrect: reflection.wasActionCorrect,
+			goalAlignment: reflection.goalAlignment,
+		});
+		const repeatedFailureHint = buildRepeatedFailureHint(recentActionOutcomes);
+		const boardStagnationHint = buildBoardStagnationHint(gameContext, recentActionOutcomes);
+		if (repeatedFailureHint) {
+			reflection = {
+				...reflection,
+				wasActionCorrect: false,
+				expectedMet: false,
+				goalAlignment: "deviated",
+				beforeStateSketch: reflection.beforeStateSketch || "",
+				afterStateSketch: reflection.afterStateSketch || "",
+				stateDelta: reflection.stateDelta || "",
+			};
+			const lastOutcome = recentActionOutcomes[recentActionOutcomes.length - 1];
+			if (lastOutcome) {
+				lastOutcome.wasActionCorrect = false;
+				lastOutcome.goalAlignment = "deviated";
 			}
+		}
+		if (boardStagnationHint) {
+			reflection = {
+				...reflection,
+				actionSucceeded: false,
+				wasActionCorrect: false,
+				expectedMet: false,
+				goalAlignment: "deviated",
+				goalProgress: "none",
+			};
+		}
+		latestHint = combineHints(reflection.nextHint, repeatedFailureHint);
+		latestHint = combineHints(latestHint, boardStagnationHint);
+		latestExpectedOutcome = planner.expectedOutcome;
+		latestExpectedMet = reflection.expectedMet;
+		hasExecutionEvidence = true;
+		const evaluatorNote = formatEvaluatorScratchpadNote({
+			round,
+			action: lastExecutedAction,
+			expectedOutcome: planner.expectedOutcome,
+			reflection,
+		});
+		pushScratchpadNote(evaluatorNotes, evaluatorNote, 6);
+		await persistScratchpadText(input.scratchpad, "roles/evaluator.md", `${evaluatorNote}\n`);
+		history.push(
+			`round ${round} [${executedActions.map((a) => a.plan.actionForEvaluation.tool).join("+")}]: expected=${planner.expectedOutcome || "(none)"} expectedMet=${reflection.expectedMet} success=${reflection.actionSucceeded} correct=${reflection.wasActionCorrect} alignment=${reflection.goalAlignment} progress=${reflection.goalProgress} hint=${latestHint}`,
+		);
+		timelineRounds.push({
+			round,
+			timestamp: Date.now(),
+			plannerReasoning: planner.reasoning,
+			plannerExpectedOutcome: planner.expectedOutcome,
+			plannerGoalReached: planner.goalReached,
+			actionTool: executedActions.map((a) => a.plan.actionForEvaluation.tool).join("+"),
+			actionSummary: batchActionSummary,
+			evaluatorSucceeded: reflection.actionSucceeded,
+			evaluatorCorrect: reflection.wasActionCorrect,
+			evaluatorExpectedMet: reflection.expectedMet,
+			evaluatorAlignment: reflection.goalAlignment,
+			evaluatorProgress: reflection.goalProgress,
+			evaluatorReply: reflection.reply,
+			evaluatorHint: latestHint,
+		});
+		await emitTimelineUpdate();
+		if (history.length > 6) {
+			history.splice(0, history.length - 6);
+		}
+		await persistScratchpadText(
+			input.scratchpad,
+			"shared/context.md",
+			`${buildSharedScratchpadContext({
+				taskText: input.taskText,
+				mission,
+				memoryRecallSummary,
+				latestHint,
+				latestExpectedOutcome,
+				latestExpectedMet,
+				history,
+				plannerNotes,
+				evaluatorNotes,
+			})}\n`,
+			{ append: false },
+		);
+
+		const evaluatorDeclaresDone = reflection.goalProgress === "done" || reflection.goalAlignment === "achieved";
+			const plannerAgreesDone = planner.goalReached;
+			const strongEvidence = reflection.expectedMet && reflection.actionSucceeded && reflection.wasActionCorrect;
+			if (evaluatorDeclaresDone && (plannerAgreesDone || strongEvidence)) {
+			return {
+				status: "completed",
+				rounds: round,
+				summary: reflection.nextHint || pickReplyLanguageText("Progress Evaluator 判定任务完成。", "Progress Evaluator judged the task complete."),
+				timeline: buildTimeline(),
+			};
 		}
 	}
 
@@ -771,10 +804,10 @@ function buildOperationsPlannerSystemPrompt(input: {
 		"每个 action 必须是“单步可执行”，不要把多个动作混在一个 action 里。",
 		"若 history / latestHint 表示同一动作连续失败，下一轮必须更换策略，不得重复同签名动作。",
 		"若 latestHint 要求“Ctrl+L 后输入 URL 并回车”，actions 不能只给 Ctrl+L，必须给完整动作链。",
-		"点击类动作遵循定位阶梯：本地轻量视觉模型（主路径）-> 规则化低成本策略 -> 云端图像坐标（可选）。",
-		"当你需要点击但无法直接给出像素坐标时，使用 host.send_mouse 并提供 locatorHint。",
+		"点击类动作：定位特定 UI 元素（按钮、tile、图标等）时，必须在 host.send_mouse 的 args 中提供 locatorHint 描述目标元素，不要自己猜测 x/y/xNorm/yNorm 坐标；系统会通过本地视觉定位阶梯自动解析精确坐标。",
+		"只有点击通用位置（游戏棋盘中心、窗口中央等不需要精确定位的地方），才允许直接使用 xNorm/yNorm 而不带 locatorHint。",
 		"根据 Mission 的 subtaskChain 分阶段推进，每轮只推进一个最小可验证状态变化。",
-		"reply 必须简短（建议不超过 24 个中文字符），不包含窗口句柄、十六进制 ID 或长解释。",
+		"reply 必须简短（建议不超过 24 个字符），不包含窗口句柄、十六进制 ID 或长解释。",
 		"若需要“输入并回车”，请拆成两步动作：先 host.paste_text 输入纯文本，再 host.send_key(\"Enter\")；不要把 {ENTER} 混进 text。",
 		"禁止输出代码块、禁止附加解释文本，只输出 JSON。",
 	];
@@ -837,7 +870,7 @@ function buildOperationsPlannerUserPrompt(input: {
 		'  "expectedOutcome": "string",',
 		'  "stateSketch": "string（可选；离散棋盘/网格任务时用纯文本表示当前理解到的局面）",',
 		'  "actions": [',
-		`    { "tool": "${input.allowedTools.join("|")}", "args": { "x": 123, "y": 456, "xNorm": 0.42, "yNorm": 0.31, "locatorHint": "点击搜索框" } }`,
+		`    { "tool": "${input.allowedTools.join("|")}", "args": { "locatorHint": "点击绿色 tile '1'" } }`,
 		"  ]",
 		"}",
 	].join("\n");
@@ -876,16 +909,24 @@ function buildProgressEvaluatorUserPrompt(input: {
 	expectedOutcome: string;
 	executionError: string;
 	scratchpadContext: string;
+	batchActionSummary?: string;
 }): string {
 	const historyText = input.history.length ? input.history.map((item) => `- ${item}`).join("\n") : "- (empty)";
-	return [
+	const lines = [
 		`task: ${input.taskText}`,
 		`round: ${input.round}`,
 		`target: ${input.target.title} (${input.target.handle})`,
 		`missionGoal: ${input.mission.missionGoal}`,
 		`missionInitialState: ${input.mission.initialStateSummary || "(none)"}`,
-		`executedAction: ${input.action.tool}`,
-		`actionArgs: ${JSON.stringify(input.action.args)}`,
+	];
+	if (input.batchActionSummary) {
+		lines.push(`executedActionBatch: ${input.batchActionSummary}`);
+		lines.push("注意：本轮执行了多步动作序列。before 图为本轮首步执行前，after 图为末步执行后。请基于整体结果做出判断。");
+	} else {
+		lines.push(`executedAction: ${input.action.tool}`);
+		lines.push(`actionArgs: ${JSON.stringify(input.action.args)}`);
+	}
+	lines.push(
 		`preExpectedOutcome: ${input.expectedOutcome || "(none)"}`,
 		`executionError: ${input.executionError || "(none)"}`,
 		"scratchpadContext:",
@@ -907,7 +948,8 @@ function buildProgressEvaluatorUserPrompt(input: {
 		'  "afterStateSketch": "string（可选；离散棋盘/网格任务时描述 after 局面）",',
 		'  "stateDelta": "string（可选；说明这一步到底哪里变了；若几乎没变应明确写无变化）"',
 		"}",
-	].join("\n");
+	);
+	return lines.join("\n");
 }
 
 function normalizeMissionAnalysisDecision(rawText: string, taskText: string, target: FunctionalTarget): MissionAnalysisDecision {
@@ -1116,8 +1158,8 @@ function normalizeProgressEvaluatorDecision(rawText: string): ProgressEvaluatorD
 		wasActionCorrect: correctedWasActionCorrect,
 		expectedMet,
 		expectationReview: toText(parsed.expectationReview),
-		goalAlignment: goalProgress === "done" ? "achieved" : goalAlignment,
-		goalProgress,
+		goalProgress: !expectedMet && goalProgress === "done" ? "partial" : goalProgress,
+		goalAlignment: (!expectedMet && goalProgress === "done" ? "partial" : goalProgress) === "done" ? "achieved" : goalAlignment,
 		reply: toText(parsed.reply),
 		nextHint: toText(parsed.nextHint),
 		beforeStateSketch: toText(parsed.beforeStateSketch),
@@ -1148,12 +1190,28 @@ function applyBoardTaskConsistencyGuard(
 
 function hasNoChangeEvidence(reflection: ProgressEvaluatorDecision): boolean {
 	const stateDelta = normalizeStateSketchText(reflection.stateDelta);
-	if (/(无(?:可确认)?变化|基本没变|no(?: [a-z]+)? change|unchanged|no visible change|static)/i.test(stateDelta)) {
+	if (/(无(?:可确认)?变化|基本没变|no(?:[a-z]+)?change|unchanged|novisiblechange|static)/i.test(stateDelta)) {
 		return true;
 	}
 	const beforeSketch = normalizeStateSketchText(reflection.beforeStateSketch);
 	const afterSketch = normalizeStateSketchText(reflection.afterStateSketch);
-	return Boolean(beforeSketch && afterSketch && beforeSketch === afterSketch);
+	if (beforeSketch && afterSketch && beforeSketch === afterSketch) {
+		return true;
+	}
+	const beforeGrid = extractGridSignature(reflection.beforeStateSketch);
+	const afterGrid = extractGridSignature(reflection.afterStateSketch);
+	return Boolean(beforeGrid && afterGrid && beforeGrid === afterGrid);
+}
+
+function extractGridSignature(sketch: string): string {
+	const rows = sketch
+		.split(/[\n\r]+/)
+		.map((row) => row.replace(/[^#.PBTW_*+\s]/gi, "").trim())
+		.filter((row) => row.length > 0 && /[#.PBTW_*+]/i.test(row));
+	if (rows.length < 2) {
+		return "";
+	}
+	return rows.map((r) => r.replace(/\s+/g, "").toLowerCase()).join("|");
 }
 
 function normalizeStateSketchText(value: string): string {
@@ -1257,60 +1315,62 @@ async function resolveActionWithLocator(input: {
 		return input.action;
 	}
 	const args = { ...input.action.args };
-	const x = toFiniteNumber(args.x);
-	const y = toFiniteNumber(args.y);
-	if (x !== null && y !== null) {
-		args.x = Math.round(x);
-		args.y = Math.round(y);
-		return { tool: input.action.tool, args };
-	}
-
-	const xNorm = toUnitNumber(args.xNorm);
-	const yNorm = toUnitNumber(args.yNorm);
-	if (xNorm !== null && yNorm !== null) {
-		args.x = denormalizeCoordinate(xNorm, input.beforeSnapshot.width);
-		args.y = denormalizeCoordinate(yNorm, input.beforeSnapshot.height);
-		return { tool: input.action.tool, args };
-	}
-
+	const plannerX = toFiniteNumber(args.x);
+	const plannerY = toFiniteNumber(args.y);
+	const plannerXNorm = toUnitNumber(args.xNorm);
+	const plannerYNorm = toUnitNumber(args.yNorm);
 	const locatorHint = toText(args.locatorHint);
-	if (!locatorHint) {
-		return input.action;
-	}
 
-	const decision = await resolveLocatorCoordinatesWithLadder({
-		config: input.config,
-		target: input.target,
-		mission: input.mission,
-		beforeSnapshot: input.beforeSnapshot,
-		locatorHint,
-		allowLocalFallback: args.allowLocalVisionFallback !== false,
-	});
-	if (!decision) {
-		log.warn("locator ladder produced no coordinate", {
+	// If the planner provided a locatorHint, always run the locator ladder first.
+	// The locator (local vision consensus) has better spatial precision than
+	// the planner's raw coordinate guess from screenshot viewing.
+	if (locatorHint) {
+		const decision = await resolveLocatorCoordinatesWithLadder({
+			config: input.config,
+			target: input.target,
+			mission: input.mission,
+			beforeSnapshot: input.beforeSnapshot,
+			locatorHint,
+			allowLocalFallback: args.allowLocalVisionFallback !== false,
+		});
+		if (decision) {
+			args.x = decision.x;
+			args.y = decision.y;
+			args.xNorm = decision.xNorm;
+			args.yNorm = decision.yNorm;
+			args.locatorTier = decision.tier;
+			args.locatorConfidence = decision.confidence;
+			args.locatorReason = decision.reason;
+			log.info("locator ladder resolved coordinate", {
+				round: input.round,
+				target: input.target.title,
+				locatorHint,
+				tier: decision.tier,
+				confidence: decision.confidence,
+				x: decision.x,
+				y: decision.y,
+			});
+			return { tool: input.action.tool, args };
+		}
+		log.warn("locator ladder failed, falling back to planner coordinates", {
 			round: input.round,
 			target: input.target.title,
 			locatorHint,
 		});
-		return input.action;
 	}
 
-	args.x = decision.x;
-	args.y = decision.y;
-	args.xNorm = decision.xNorm;
-	args.yNorm = decision.yNorm;
-	args.locatorTier = decision.tier;
-	args.locatorConfidence = decision.confidence;
-	args.locatorReason = decision.reason;
-	log.info("locator ladder resolved coordinate", {
-		round: input.round,
-		target: input.target.title,
-		locatorHint,
-		tier: decision.tier,
-		confidence: decision.confidence,
-		x: decision.x,
-		y: decision.y,
-	});
+	// Fallback: use planner-supplied coordinates when no locatorHint or locator failed.
+	if (plannerX !== null && plannerY !== null) {
+		args.x = Math.round(plannerX);
+		args.y = Math.round(plannerY);
+		return { tool: input.action.tool, args };
+	}
+	if (plannerXNorm !== null && plannerYNorm !== null) {
+		args.x = denormalizeCoordinate(plannerXNorm, input.beforeSnapshot.width);
+		args.y = denormalizeCoordinate(plannerYNorm, input.beforeSnapshot.height);
+		return { tool: input.action.tool, args };
+	}
+
 	return { tool: input.action.tool, args };
 }
 
@@ -1910,35 +1970,9 @@ function resolveOperationalGameContext(
 	return inferTaskModeFromTaskText(taskText) === "game" ? candidateGameContext : null;
 }
 
-function resolveOperationsNarration(planner: OperationsPlannerDecision, canPlannerFinish: boolean): string {
-	if (planner.goalReached && canPlannerFinish) {
-		return normalizeDelegatedCompanionReply(planner.reply || "派蒙这边确认任务目标已经达成啦。", "planner");
+function resolveOperationsNarration(_planner: OperationsPlannerDecision, _canPlannerFinish: boolean): string {
+		return "";
 	}
-	if (!planner.actions.length) {
-		return normalizeDelegatedCompanionReply(planner.reply || "派蒙先再确认一轮当前页面状态。", "planner");
-	}
-	const firstTool = planner.actions[0].tool;
-	switch (firstTool) {
-		case "host.focus_window":
-			return "派蒙先把目标窗口聚焦好。";
-		case "host.capture_window":
-			return "派蒙先截一张当前画面再继续。";
-		case "host.resolve_locator_consensus":
-			return "派蒙先多次定位并校正点击坐标。";
-		case "host.send_key":
-			return "派蒙先做一个按键操作。";
-		case "host.send_mouse":
-			return "派蒙先做一个鼠标操作。";
-		case "host.paste_text":
-			return "派蒙先把内容输入进去。";
-		case "host.list_windows":
-			return "派蒙先确认一下目标窗口。";
-		case "game.perform_action":
-			return "派蒙先执行一轮游戏动作。";
-		default:
-			return "派蒙先执行下一步操作。";
-	}
-}
 
 function resolveMissionAckReply(mission: MissionAnalysisDecision, taskText: string): string {
 	const fallback = `派蒙知道啦！你要我帮忙“${truncateTaskForAck(taskText)}”，派蒙这就去做。`;
@@ -1950,33 +1984,33 @@ function resolveMissionAckReply(mission: MissionAnalysisDecision, taskText: stri
 	return normalized || fallback;
 }
 
-function normalizeDelegatedCompanionReply(reply: string, source: "planner" | "reflection"): string {
-	let text = reply.trim();
-	if (!text) {
-		return "";
+function normalizeDelegatedCompanionReply(reply: string, _source: "planner" | "reflection"): string {
+		let text = reply.trim();
+		if (!text) {
+			return "";
+		}
+		text = text
+			.replace(/（0x[0-9a-f]+）/gi, "")
+			.replace(/(0x[0-9a-f]+)/gi, "");
+		if (pickReplyLanguageText("zh", "en") === "zh") {
+			text = text
+				.replace(/你已经/g, "派蒙已经")
+				.replace(/你可以/g, "派蒙可以")
+				.replace(/你刚刚/g, "派蒙刚刚")
+				.replace(/你现在/g, "派蒙现在")
+				.replace(/请你/g, "派蒙来");
+			if (/^我/.test(text)) {
+				text = text.replace(/^我/, "派蒙");
+			}
+		}
+		text = text.replace(/\s+/g, " ").trim();
+		return text;
 	}
-	text = text
-		.replace(/（0x[0-9a-f]+）/gi, "")
-		.replace(/\(0x[0-9a-f]+\)/gi, "")
-		.replace(/你已经/g, "派蒙已经")
-		.replace(/你可以/g, "派蒙可以")
-		.replace(/你刚刚/g, "派蒙刚刚")
-		.replace(/你现在/g, "派蒙现在")
-		.replace(/请你/g, "派蒙来");
-	if (/^我/.test(text)) {
-		text = text.replace(/^我/, "派蒙");
-	}
-	if (!text.startsWith("派蒙") && !/^[搞好嗯哎呀太]/.test(text)) {
-		text = source === "reflection" ? `派蒙${text}` : `派蒙这就来，${text}`;
-	}
-	text = text.replace(/\s+/g, " ").trim();
-	return text;
-}
 
 function truncateTaskForAck(taskText: string): string {
 	const compact = taskText.trim().replace(/\s+/g, " ");
 	if (!compact) {
-		return "这个委托";
+		return pickReplyLanguageText("这个委托", "this task");
 	}
 	return compact.length > 22 ? compact.slice(0, 22) : compact;
 }
@@ -2310,7 +2344,10 @@ function buildRepeatedFailureHint(outcomes: readonly ActionOutcomeRecord[]): str
 	if (last.actionSucceeded || previous.actionSucceeded) {
 		return "";
 	}
-	return `相同动作“${last.signature}”连续失败。下一轮必须换策略，不得重复同动作；优先改为可直接推进目标状态的动作链。`;
+	return pickReplyLanguageText(
+		`相同动作“${last.signature}”连续失败。下一轮必须换策略，不得重复同动作；优先改为可直接推进目标状态的动作链。`,
+		`Same action “${last.signature}” failed repeatedly. Switch strategy next round; do not repeat the same action. Prioritize action chains that directly advance the target state.`,
+	);
 }
 
 function buildBoardStagnationHint(
@@ -2325,9 +2362,15 @@ function buildBoardStagnationHint(
 		return "";
 	}
 	if (gameContext.gameId === "sokoban") {
-		return `连续 ${stagnationRounds} 轮没有确认棋盘变化。下一轮必须先重建文本棋盘，重新确认 P/B/T 的相对位置，并换一个局面目标；不要继续重复原来的方向套路。`;
+		return pickReplyLanguageText(
+			`连续 ${stagnationRounds} 轮没有确认棋盘变化。下一轮必须先重建文本棋盘，重新确认 P/B/T 的相对位置，并换一个局面目标；不要继续重复原来的方向套路。`,
+			`No confirmed board change for ${stagnationRounds} rounds. Next round must rebuild the text board, re-confirm P/B/T positions, and pick a different board target instead of repeating the same move patterns.`,
+		);
 	}
-	return `连续 ${stagnationRounds} 轮没有确认棋盘变化。下一轮必须先重建 4x4 文本棋盘，再换一个合并目标或保留方向；不要继续重复原来的操作路线。`;
+	return pickReplyLanguageText(
+		`连续 ${stagnationRounds} 轮没有确认棋盘变化。下一轮必须先重建 4x4 文本棋盘，再换一个合并目标或保留方向；不要继续重复原来的操作路线。`,
+		`No confirmed board change for ${stagnationRounds} rounds. Next round must rebuild the 4x4 text board and switch merge targets or keep direction without repeating the same move patterns.`,
+	);
 }
 
 function countRecentStagnation(outcomes: readonly ActionOutcomeRecord[]): number {
@@ -2354,9 +2397,15 @@ function buildDelegationFailureSummary(input: {
 	const stagnationRounds = countRecentStagnation(input.recentActionOutcomes);
 	const hint = input.latestHint.trim();
 	if (stagnationRounds >= 3) {
-		return `达到最大轮次 ${input.maxRounds}，任务未完成。最近连续 ${stagnationRounds} 轮没有有效推进。建议：${hint || "先校准定位后再继续。"}`;
+		return pickReplyLanguageText(
+			`达到最大轮次 ${input.maxRounds}，任务未完成。最近连续 ${stagnationRounds} 轮没有有效推进。建议：${hint || "先校准定位后再继续。"}`,
+			`Reached max rounds ${input.maxRounds}, task incomplete. Last ${stagnationRounds} rounds showed no effective progress. Suggestion: ${hint || "recalibrate positioning first."}`,
+		);
 	}
-	return `达到最大轮次 ${input.maxRounds}，任务未完成。原因：未满足目标完成信号。建议：${hint || "先检查当前页面状态与目标约束。"}`;
+	return pickReplyLanguageText(
+		`达到最大轮次 ${input.maxRounds}，任务未完成。原因：未满足目标完成信号。建议：${hint || "先检查当前页面状态与目标约束。"}`,
+		`Reached max rounds ${input.maxRounds}, task incomplete. Reason: completion signal not met. Suggestion: ${hint || "check current page state and target constraints first."}`,
+	);
 }
 
 function combineHints(primaryHint: string, extraHint: string): string {
@@ -2376,3 +2425,12 @@ function sleep(ms: number): Promise<void> {
 		setTimeout(resolve, ms);
 	});
 }
+
+/** @internal Test-only exports */
+export const __test = {
+	applyBoardTaskConsistencyGuard,
+	hasNoChangeEvidence,
+	extractGridSignature,
+	normalizeStateSketchText,
+	resolveOperationsNarration,
+} as const;

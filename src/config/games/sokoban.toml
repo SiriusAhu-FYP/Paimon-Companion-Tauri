@@ -4,37 +4,42 @@ windowTitleHints = ["sokoban", "push box", "pushbox"]
 loadGuardPolicy = "force-disable"
 
 observationFocus = [
-	"Ignore top-page UI and decorative elements outside the board; focus on the puzzle board, the player, boxes, targets, walls, and blocked paths.",
-	"Treat green grass as outer background / non-board environment unless the board clearly extends there; do not confuse it with the player's walkable floor.",
-	"Treat the main puzzle floor tiles as the walkable area inside the board.",
-	"Treat brick or stone blocks as walls / obstacles that cannot be crossed or moved.",
-	"Treat wooden crates as boxes that can be pushed but never pulled.",
-	"Treat grape-like purple markers as target points.",
-	"Treat the blue Restart button as an out-of-board control; ignore it during normal planning unless the task is clearly stalled or deadlocked and restarting is the safest recovery option.",
-	"Describe the player's location relative to the nearest corridor, wall edge, or box cluster instead of narrating the whole scene.",
-	"Identify the nearest relevant box and target relationship before proposing the next move.",
-	"Before proposing a move, verify the immediate next tile in that direction: if it is a wall or blocked box chain, do not choose that move.",
-	"When the board is static and legible, prefer a bounded plan of 3-8 grounded moves instead of a single vague nudge.",
-	"Explain progress in concrete puzzle terms: player position, box access, target alignment, and whether a path just opened or closed.",
-	"Distinguish between pure player repositioning, opening a route, pushing a box, moving a box closer to a target, and completely failing to move.",
-	"Do not treat 'the player moved' as automatically meaning puzzle progress; explain whether that movement created a useful setup.",
-	"Do not say only 'keep moving' or 'try moving'; always tie the next move to a specific nearby box, lane, wall, or opening.",
-	"Always build a compact text sketch of the board using fixed symbols before deciding the next move: #=wall, .=floor, P=player, B=box, T=target, *=box on target, +=player on target.",
-	"If you cannot confidently identify player, boxes, and targets from the current frame, admit uncertainty instead of inventing positions.",
-	"When comparing before/after, treat a visually unchanged board as no progress; do not infer movement just because a direction key was pressed.",
+	"忽略棋盘外的页面 UI 和装饰元素；主要关注棋盘区域、玩家、箱子、目标点、墙、可行走地砖和被阻挡的路径。",
+	"浅灰色地砖是棋盘内的可行走区域。",
+	"深灰色、带 X 凸起纹理的方块是墙 / 障碍物，不能穿过，也不能推动。",
+	"箱子是可以推动的物体，但不能拉回。",
+	"绿色菱形标记是目标点。",
+	"已经推到目标点上的箱子会显示为绿色、带叉的箱子。",
+	"右上角紫红色的圆圈箭头按钮是重置按钮；点击它可以重新开始当前关卡。只有在明显卡死或长期无进展时才允许使用。",
+	"右上角绿色的撤销 / 回退一步按钮禁止使用，不要把它作为正常动作或恢复手段。",
+	"玩家角色的逻辑位置就是其当前所在格，不存在上下两格的 foot-row offset；在棋盘草图中直接把 P 标在玩家所在格。",
+	"描述玩家位置时，优先说明其相对最近墙体、箱子、目标点或可通行地砖的位置，不要泛泛描述整个画面。",
+	"sparse 棋盘上相邻行之间容易混淆；画棋盘草图前必须逐行数清 P/B/T 的精确行号，不得跨行推定。",
+	"在提出下一步动作前，必须先确认动作方向上的相邻格：如果相邻格是墙，或者是无法继续推动的箱子链，则不要选择该动作。",
+	"如果要推动箱子，必须同时确认箱子后方一格是否可进入；只有箱子后方是可行走地砖或目标点时，推动才可能成立。",
+	"静态画面清晰时，优先给出 3-8 步以内的短动作序列，而不是只给一个模糊方向。",
+	"用具体推箱子术语说明进展：玩家位置、箱子位置、目标点位置、箱子是否更接近目标、是否打开或堵住路径。",
+	"区分纯粹移动玩家、调整站位、推动箱子、让箱子接近目标、箱子上目标点、以及完全没有移动。",
+	"不要把“玩家移动了”自动视为关卡进展；必须说明该移动是否创造了有用站位。",
+	"不要只说“继续移动”或“尝试移动”；下一步必须绑定到具体的箱子、目标点、墙边或可通行格。",
+	"始终用固定符号构建紧凑棋盘草图：#=墙, .=地砖, P=玩家, B=箱子, T=目标点, *=箱子在目标点, +=玩家在目标点。不要使用 W/_ 或其他非标准符号。",
+	"如果当前画面中无法可靠识别玩家、箱子、目标点或墙体，必须承认不确定，不要凭空补全棋盘。",
+	"比较前后状态时，如果棋盘在网格级别没有可确认变化，就视为没有进展；不要仅因为按过方向键就推断发生了移动。",
 ]
 
 defaultActionOrder = ["move_up", "move_left", "move_right", "move_down"]
 notes = [
-	"You can only push boxes, never pull them.",
-	"Avoid pushing boxes into unrecoverable corners.",
-	"If the very next tile in the chosen direction is a wall, that move is invalid and should not be selected.",
-	"Prefer moves that create visible progress or better positioning over moves that simply bump into walls.",
-	"When a short safe sequence is clearly available, choose 3-8 moves at once and keep each step grounded in the current board layout.",
-	"If a move only repositions the player, say so explicitly; do not overclaim box progress.",
-	"If a move changes the board but the exact box relation is still ambiguous, admit that the layout changed but the exact new setup is still resolving.",
-	"Any claimed push must be supported by a changed box position in the after state sketch; otherwise treat it as no confirmed push.",
-	"If the board is clearly deadlocked or long-stagnant, a Restart click on the blue button is allowed as a recovery action; otherwise ignore it.",
+	"只能推动箱子，不能拉箱子。",
+	"避免把箱子推入无法恢复的位置，尤其是非目标点角落或死路。",
+	"如果选择方向上的相邻格是墙，该动作无效，不应选择。",
+	"如果相邻格是箱子，必须检查箱子后方一格；后方不是可行走地砖或目标点时，不应推动。",
+	"优先选择能产生可见进展或改善站位的动作，避免反复撞墙或原地试错。",
+	"当短安全序列清晰可用时，可以一次选择 3-8 步，但每一步都必须基于当前棋盘布局。",
+	"如果动作只是调整玩家站位，必须明确说明，不要夸大成箱子进展。",
+	"任何声称推动箱子的判断，都必须能在 afterStateSketch 中看到箱子位置变化；否则视为未确认推动。",
+	"箱子被推到绿色菱形目标点后，应在草图中标记为 *。",
+	"只有在明确卡死或长期停滞时，才允许点击右上角洋红色 / 紫红色重置按钮。",
+	"禁止使用右上角绿色撤销 / 回退按钮。",
 ]
 
 [delegationProfile]
@@ -44,11 +49,17 @@ displayName = "Generic Delegation"
 maxRounds = 20
 maxActionsPerRound = 8
 afterActionWaitMs = 700
-allowedTools = ["host.focus_window", "host.capture_window", "host.send_key", "host.send_mouse"]
+plannerSpeechLeadMs = 2000
+allowedTools = [
+	"host.focus_window",
+	"host.capture_window",
+	"host.send_key",
+	"host.send_mouse",
+]
 
 [delegationProfile.locator]
 locatorRulesEnabled = true
-locatorCloudEnabled = false
+locatorCloudEnabled = true
 locatorLocalFallbackEnabled = true
 locatorMinConfidence = 0.6
 
@@ -58,36 +69,44 @@ missionAnalystThinkingMode = "medium"
 missionAnalystRules = [
 	"如果任务是推箱子操作，必须标注 taskMode=game。",
 	"目标要聚焦当前关卡推进，不要输出与关卡无关回答。",
-	"在 initialStateSketch 中用纯文本画出你当前识别到的棋盘局面，至少标清 P/B/T/#/./*/+ 这些元素里能确认的部分。",
-	"如果玩家、箱子、目标点还有歧义，必须直接承认歧义，不要补齐一个自信但未经确认的棋盘。",
-	"要把绿色草地区分成背景，不要把它误画进棋盘主场景。",
-	"要把紫色葡萄状标记识别为目标点，把蓝色 Restart 识别为场外控制按钮。",
+	"在 initialStateSketch 中用纯文本画出当前识别到的棋盘局面，至少标清 P/B/T/#/./*/+ 这些元素里能确认的部分。",
+	"玩家 P 标在玩家当前所在格；不要使用脚下行 offset，也不要把玩家拆成上下两格。",
+	"棋盘表示必须使用标准符号：# 墙, . 地砖, P 玩家, B 箱子, T 目标点, * 箱子在目标点, + 玩家在目标点。不要使用 W/_ 等非标准符号。",
+	"如果玩家、箱子、目标点或墙体仍有歧义，必须直接承认歧义，不要补齐一个自信但未经确认的棋盘。",
+	"sparse 棋盘上相邻行容易混淆；构建 initialStateSketch 时必须逐行确认每个 P/B/T 的精确行号，不得跨行推定。",
+	"深灰色带 X 的方块是墙；浅灰色地砖是可行走区域；绿色菱形是目标点；绿色带叉的箱子表示箱子已经在目标点上。",
+	"右上角紫红色圆圈箭头按钮是重置关卡按钮，点击可重新开始当前关卡；仅在卡死时允许；右上角绿色回退按钮禁止使用。",
 ]
 
 [delegationProfile.roles.operationsPlanner]
 operationsPlannerTemperature = 0.1
 operationsPlannerThinkingMode = "medium"
 operationsPlannerRules = [
-	"优先使用 game.perform_action；若不可用再考虑 host.send_key；只有确认需要重开时才考虑点击蓝色 Restart。",
-	"每轮最多 8 个动作，但必须是一个短而安全的动作序列，不能跨越大量未知局面。",
-	"reasoning 与 stateSketch 必须基于当前观察到的棋盘局面，而不是基于你希望发生的移动。",
-	"下一个动作必须明确对应某个具体局面目标，例如让 P 靠近哪个 B、让哪个 B 朝哪个 T 推进；不要只写抽象方向。",
+	"优先使用 game.perform_action；若不可用再考虑 host.send_key；只有确认需要重开时才考虑点击右上角洋红色 / 紫红色重置按钮。",
+	"禁止使用右上角绿色撤销 / 回退按钮。",
+	"每轮最多 8 个动作，但必须是安全动作序列，不能跨越大量未知局面。",
+	"reasoning 与 stateSketch 必须基于当前观察到的棋盘局面，而不是基于希望发生的移动。",
+	"stateSketch 中必须逐行标注 P/B/T 的行列位置；sparse 棋盘上一行之差会导致无效动作，不得跨行推定。",
+	"棋盘表示必须使用标准符号：# 墙, . 地砖, P 玩家, B 箱子, T 目标点, * 箱子在目标点, + 玩家在目标点。不要使用 W/_ 等非标准符号。",
+	"下一个动作必须明确对应具体局面目标，例如让 P 靠近哪个 B、把哪个 B 推向哪个 T、或把 B 推到 T 上。",
+	"推动箱子前必须检查箱子后方一格是否可走；若后方是墙、箱子或棋盘外区域，则不要选择该推动。",
 	"如果最近连续两轮都没有确认 stateDelta，就先重建 stateSketch，并明确换一个局面目标；不要沿用同一套方向套路。",
-	"短序列中的每一步都必须服务于同一个局面目标，例如靠近同一个箱子、沿同一走廊绕位、或连续推动同一个箱子。",
 ]
 
 [delegationProfile.roles.progressEvaluator]
 progressEvaluatorTemperature = 0.1
 progressEvaluatorThinkingMode = "medium"
 progressEvaluatorRules = [
-	"判断动作是否让角色或箱子状态发生了有效推进。",
-	"beforeStateSketch 与 afterStateSketch 必须用纯文本画出你识别到的棋盘局面，至少标清 P/B/T/#/./*/+ 这些元素里能确认的部分。",
-	"stateDelta 必须明确说明哪些格子/相对位置发生了变化；如果棋盘基本没变，就明确写“无可确认变化”。",
+	"判断动作是否让玩家或箱子状态发生了有效推进。",
+	"棋盘表示必须使用标准符号：# 墙, . 地砖, P 玩家, B 箱子, T 目标点, * 箱子在目标点, + 玩家在目标点。不要使用 W/_ 等非标准符号。",
+	"beforeStateSketch 与 afterStateSketch 必须用纯文本画出识别到的棋盘局面，至少标清 P/B/T/#/./*/+ 这些元素里能确认的部分。",
+	"stateDelta 必须明确说明哪些格子或相对位置发生了变化；如果棋盘基本没变，就明确写“无可确认变化”。",
+	"如果箱子从普通位置移动到绿色菱形目标点上，afterStateSketch 中应把该格标记为 *。",
+	"即使 stateDelta 中声称了变化，如果 beforeStateSketch 和 afterStateSketch 在网格级别完全相同，仍必须判定 actionSucceeded=false。",
 	"如果 before/after 没有可确认变化，则 actionSucceeded=false、expectedMet=false、goalProgress=none，不得判成功。",
-	"不要从“按了某个方向键”反推出角色或箱子已经移动；只有在 after 局面中可见变化时才算移动成立。",
-	"如果局面连续两轮没有可确认变化，nextHint 必须要求重新定位 P/B/T 并换一个局面目标，不能只说“再试一次”。",
-	"无法确认推进时，明确给出下一步纠偏建议。",
-	"如果一次执行了多步动作序列，要分别判断这段序列是否整体产生了可信推进；若整体无变化，仍视为失败。",
+	"不要从“按了某个方向键”反推出玩家或箱子已经移动；只有在 after 局面中可见变化时才算移动成立。",
+	"如果局面连续两轮没有可确认变化，nextHint 必须要求重新定位 P/B/T/# 并换一个局面目标，不能只说“再试一次”。",
+	"失败时应考虑是否窗口聚焦失效，可尝试重做动作序列，但在开头增加一个鼠标点击窗口中心的操作。",
 ]
 
 [[actions]]
