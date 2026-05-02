@@ -164,6 +164,11 @@ export function MainWindow() {
 		}
 	}, [debouncedSyncDockedStageBounds]);
 
+	const handleRedockStage = useCallback(() => {
+		lastDockedBoundsRef.current = null;
+		debouncedSyncDockedStageBounds(stageSlotRect);
+	}, [debouncedSyncDockedStageBounds, stageSlotRect]);
+
 	useEffect(() => {
 		const nextMode = stageSlotOpen ? "docked" : "floating";
 		setStageMode((current) => {
@@ -267,6 +272,17 @@ export function MainWindow() {
 		const syncSnapshot = () => setOpenPanelsSnapshot(getStoredOpenDockPanels());
 		return subscribeWorkspaceLayoutChanged(syncSnapshot);
 	}, []);
+
+	useEffect(() => {
+		const handleWorkspaceRedock = () => {
+			if (stageModeRef.current !== "docked" || !stageVisibleRef.current) {
+				return;
+			}
+			lastDockedBoundsRef.current = null;
+			debouncedSyncDockedStageBounds();
+		};
+		return subscribeWorkspaceLayoutChanged(handleWorkspaceRedock);
+	}, [debouncedSyncDockedStageBounds]);
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
@@ -390,6 +406,7 @@ export function MainWindow() {
 				onVisibilityChange={setStageVisible}
 				onAlwaysOnTopChange={setAlwaysOnTop}
 				onDisplayModeChange={setDisplayMode}
+				onResetDockedStage={handleRedockStage}
 				onStageSlotOpenChange={setStageSlotOpen}
 				onStageSlotRectChange={handleStageSlotRectChange}
 			/>
