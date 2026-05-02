@@ -42,7 +42,6 @@ interface StageHostProps {
 	onVisibilityChange: (visible: boolean) => void;
 	onAlwaysOnTopChange: (value: boolean) => void;
 	onDisplayModeChange: (mode: StageDisplayMode) => void;
-	onResetDockedStage: () => void;
 }
 
 export function StageHost({
@@ -54,7 +53,6 @@ export function StageHost({
 	onVisibilityChange,
 	onAlwaysOnTopChange,
 	onDisplayModeChange,
-	onResetDockedStage,
 }: StageHostProps) {
 	const { t } = useI18n();
 	const { character } = getServices();
@@ -114,12 +112,8 @@ export function StageHost({
 	}, [onVisibilityChange]);
 
 	const handleReset = useCallback(() => {
-		if (stageMode === "docked") {
-			onResetDockedStage();
-			return;
-		}
 		broadcastControl({ type: "reset-position" });
-	}, [onResetDockedStage, stageMode]);
+	}, []);
 
 	const handleToggleAttachStage = useCallback(() => {
 		if (stageMode === "docked") {

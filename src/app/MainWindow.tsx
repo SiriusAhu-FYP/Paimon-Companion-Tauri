@@ -68,10 +68,7 @@ export function MainWindow() {
 		handleShowStage();
 	}, [handleShowStage]);
 
-	const syncDockedStageBounds = useCallback(async (
-		rectOverride?: DOMRect | null,
-		options?: { force?: boolean },
-	) => {
+	const syncDockedStageBounds = useCallback(async (rectOverride?: DOMRect | null) => {
 		const rect = rectOverride ?? stageSlotRect;
 		if (!isTauriEnvironment() || stageMode !== "docked" || !rect) return;
 
@@ -94,34 +91,21 @@ export function MainWindow() {
 				height: rect.height,
 			};
 			const previousBounds = lastDockedBoundsRef.current;
-			const stageScaleFactor = await stageWin.scaleFactor();
-			const stageOuterPosition = await stageWin.outerPosition();
-			const stageInnerSize = await stageWin.innerSize();
-			const actualBounds = {
-				x: stageOuterPosition.toLogical(stageScaleFactor).x,
-				y: stageOuterPosition.toLogical(stageScaleFactor).y,
-				width: stageInnerSize.toLogical(stageScaleFactor).width,
-				height: stageInnerSize.toLogical(stageScaleFactor).height,
-			};
-			const desiredBoundsUnchanged = previousBounds
+
+			if (
+				previousBounds
 				&& Math.abs(previousBounds.x - nextBounds.x) < 0.5
 				&& Math.abs(previousBounds.y - nextBounds.y) < 0.5
 				&& Math.abs(previousBounds.width - nextBounds.width) < 0.5
-				&& Math.abs(previousBounds.height - nextBounds.height) < 0.5;
-			const actualBoundsMatch = Math.abs(actualBounds.x - nextBounds.x) < 0.5
-				&& Math.abs(actualBounds.y - nextBounds.y) < 0.5
-				&& Math.abs(actualBounds.width - nextBounds.width) < 0.5
-				&& Math.abs(actualBounds.height - nextBounds.height) < 0.5;
-
-			if (!options?.force && desiredBoundsUnchanged && actualBoundsMatch) {
+				&& Math.abs(previousBounds.height - nextBounds.height) < 0.5
+			) {
 				return;
 			}
 
 			if (
-				options?.force
-				|| !actualBoundsMatch
-				|| Math.abs(actualBounds.x - nextBounds.x) >= 0.5
-				|| Math.abs(actualBounds.y - nextBounds.y) >= 0.5
+				!previousBounds
+				|| Math.abs(previousBounds.x - nextBounds.x) >= 0.5
+				|| Math.abs(previousBounds.y - nextBounds.y) >= 0.5
 			) {
 				await stageWin.setPosition(new LogicalPosition(nextBounds.x, nextBounds.y));
 			}
@@ -130,10 +114,9 @@ export function MainWindow() {
 				rect.width > 50
 				&& rect.height > 50
 				&& (
-					options?.force
-					|| !actualBoundsMatch
-					|| Math.abs(actualBounds.width - nextBounds.width) >= 0.5
-					|| Math.abs(actualBounds.height - nextBounds.height) >= 0.5
+					!previousBounds
+					|| Math.abs(previousBounds.width - nextBounds.width) >= 0.5
+					|| Math.abs(previousBounds.height - nextBounds.height) >= 0.5
 				)
 			) {
 				await stageWin.setSize(new LogicalSize(nextBounds.width, nextBounds.height));
@@ -145,7 +128,7 @@ export function MainWindow() {
 		}
 	}, [stageMode, stageSlotRect]);
 
-	const debouncedSyncDockedStageBounds = useCallback((rectOverride?: DOMRect | null, force = false) => {
+	const debouncedSyncDockedStageBounds = useCallback((rectOverride?: DOMRect | null) => {
 		if (syncDebounceRef.current) {
 			cancelAnimationFrame(syncDebounceRef.current);
 		}
@@ -153,7 +136,7 @@ export function MainWindow() {
 		syncDebounceRef.current = requestAnimationFrame(() => {
 			syncDebounceRef.current = 0;
 			if (stageModeRef.current === "docked" && stageVisibleRef.current) {
-				void syncDockedStageBounds(rectOverride, { force });
+				void syncDockedStageBounds(rectOverride);
 			}
 		});
 	}, [syncDockedStageBounds]);
@@ -176,25 +159,18 @@ export function MainWindow() {
 			return rect;
 		});
 		if (rect) {
-			debouncedSyncDockedStageBounds(rect, true);
+			debouncedSyncDockedStageBounds(rect);
 		}
 	}, [debouncedSyncDockedStageBounds]);
 
-	const handleRedockStage = useCallback(() => {
-		debouncedSyncDockedStageBounds(stageSlotRect, true);
-	}, [debouncedSyncDockedStageBounds, stageSlotRect]);
-
 	useEffect(() => {
 		const nextMode = stageSlotOpen ? "docked" : "floating";
-		broadcastControl({ type: "set-mode", mode: nextMode });
 		setStageMode((current) => {
 			if (current === nextMode) return current;
+			broadcastControl({ type: "set-mode", mode: nextMode });
 			return nextMode;
 		});
-		if (nextMode === "docked") {
-			debouncedSyncDockedStageBounds(stageSlotRect, true);
-		}
-	}, [stageSlotOpen, debouncedSyncDockedStageBounds, stageSlotRect]);
+	}, [stageSlotOpen]);
 
 	useEffect(() => {
 		if (stageMode !== "docked") {
@@ -204,7 +180,7 @@ export function MainWindow() {
 
 	useEffect(() => {
 		if (stageMode !== "docked") return;
-		void syncDockedStageBounds(undefined, { force: true });
+		void syncDockedStageBounds();
 	}, [stageMode, stageSlotRect, stageVisible, syncDockedStageBounds]);
 
 	useEffect(() => {
@@ -414,7 +390,6 @@ export function MainWindow() {
 				onVisibilityChange={setStageVisible}
 				onAlwaysOnTopChange={setAlwaysOnTop}
 				onDisplayModeChange={setDisplayMode}
-				onResetDockedStage={handleRedockStage}
 				onStageSlotOpenChange={setStageSlotOpen}
 				onStageSlotRectChange={handleStageSlotRectChange}
 			/>
