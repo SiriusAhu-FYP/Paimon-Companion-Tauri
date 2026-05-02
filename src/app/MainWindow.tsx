@@ -7,7 +7,8 @@ import PushPinIcon from "@mui/icons-material/PushPin";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import TranslateIcon from "@mui/icons-material/Translate";
-import { Window, getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
+import { Window } from "@tauri-apps/api/window";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { StatusBar } from "@/app/StatusBar";
 import { getStoredOpenDockPanels, type DockPanelId } from "@/app/workspace/workspace-layout";
@@ -192,11 +193,10 @@ export function MainWindow() {
 
 		(async () => {
 			try {
-				const currentWin = getCurrentWindow();
-				unlistenMove = await currentWin.onMoved(() => {
+				unlistenMove = await listen("tauri://move", () => {
 					debouncedSyncDockedStageBounds();
 				});
-				unlistenResize = await currentWin.onResized(() => {
+				unlistenResize = await listen("tauri://resize", () => {
 					debouncedSyncDockedStageBounds();
 				});
 			} catch (err) {
