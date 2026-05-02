@@ -7,7 +7,6 @@ import PushPinIcon from "@mui/icons-material/PushPin";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import TranslateIcon from "@mui/icons-material/Translate";
-import { listen } from "@tauri-apps/api/event";
 import { Window } from "@tauri-apps/api/window";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { StatusBar } from "@/app/StatusBar";
@@ -192,16 +191,38 @@ export function MainWindow() {
 	useEffect(() => {
 		if (!isTauriEnvironment() || !stageSlotOpen) return;
 
-		let unlistenMove: (() => void) | null = null;
-		let unlistenResize: (() => void) | null = null;
+		let unlistenMainMove: (() => void) | null = null;
+		let unlistenMainResize: (() => void) | null = null;
+		let unlistenStageMove: (() => void) | null = null;
+		let unlistenStageResize: (() => void) | null = null;
 		let disposed = false;
 
 		(async () => {
 			try {
-				unlistenMove = await listen("tauri://move", () => {
+				const mainWin = await Window.getByLabel("main");
+				const stageWin = await Window.getByLabel("stage");
+				if (!mainWin || !stageWin) {
+					return;
+				}
+
+				unlistenMainMove = await mainWin.onMoved(() => {
 					debouncedSyncDockedStageBounds();
 				});
-				unlistenResize = await listen("tauri://resize", () => {
+				unlistenMainResize = await mainWin.onResized(() => {
+					debouncedSyncDockedStageBounds();
+				});
+				unlistenStageMove = await stageWin.onMoved(() => {
+					if (stageModeRef.current !== "docked" || !stageVisibleRef.current) {
+						return;
+					}
+					lastDockedBoundsRef.current = null;
+					debouncedSyncDockedStageBounds();
+				});
+				unlistenStageResize = await stageWin.onResized(() => {
+					if (stageModeRef.current !== "docked" || !stageVisibleRef.current) {
+						return;
+					}
+					lastDockedBoundsRef.current = null;
 					debouncedSyncDockedStageBounds();
 				});
 			} catch (err) {
@@ -213,8 +234,10 @@ export function MainWindow() {
 
 		return () => {
 			disposed = true;
-			unlistenMove?.();
-			unlistenResize?.();
+			unlistenMainMove?.();
+			unlistenMainResize?.();
+			unlistenStageMove?.();
+			unlistenStageResize?.();
 		};
 	}, [stageSlotOpen, debouncedSyncDockedStageBounds]);
 
