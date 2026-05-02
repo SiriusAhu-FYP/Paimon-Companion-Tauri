@@ -60,6 +60,7 @@ function ProgressChip({ progress }: { progress: string }) {
 }
 
 function RoundCard({ entry, isLatest }: { entry: DelegationRoundEntry; isLatest: boolean }) {
+	const { t } = useI18n();
 	const time = new Date(entry.timestamp).toLocaleTimeString();
 
 	return (
@@ -85,7 +86,10 @@ function RoundCard({ entry, isLatest }: { entry: DelegationRoundEntry; isLatest:
 					</Typography>
 					<Chip size="small" label={entry.actionTool.replace("host.", "")} sx={{ fontSize: "0.65rem", height: 18 }} />
 					<Box sx={{ flex: 1 }} />
-					<StatusChip ok={entry.evaluatorSucceeded} label={entry.evaluatorSucceeded ? "OK" : "FAIL"} />
+					<StatusChip
+						ok={entry.evaluatorSucceeded}
+						label={entry.evaluatorSucceeded ? t("执行成功", "Action Succeeded") : t("执行失败", "Action Failed")}
+					/>
 					<AlignmentChip alignment={entry.evaluatorAlignment} />
 					<ProgressChip progress={entry.evaluatorProgress} />
 				</Box>
@@ -109,8 +113,22 @@ function RoundCard({ entry, isLatest }: { entry: DelegationRoundEntry; isLatest:
 					</Section>
 					<Section label="Evaluator">
 						<Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mb: 0.3 }}>
-							<StatusChip ok={entry.evaluatorCorrect} label={entry.evaluatorCorrect ? "correct" : "incorrect"} />
-							<StatusChip ok={entry.evaluatorExpectedMet} label={entry.evaluatorExpectedMet ? "expected met" : "expected miss"} />
+							<StatusChip
+								ok={entry.evaluatorCorrect}
+								label={
+									entry.evaluatorCorrect
+										? t("动作判断：合适", "Action Judgment: Correct")
+										: t("动作判断：不合适", "Action Judgment: Incorrect")
+								}
+							/>
+							<StatusChip
+								ok={entry.evaluatorExpectedMet}
+								label={
+									entry.evaluatorExpectedMet
+										? t("预期结果：达成", "Expected Outcome: Met")
+										: t("预期结果：未达成", "Expected Outcome: Missed")
+								}
+							/>
 						</Box>
 						{entry.evaluatorReply && (
 							<Typography variant="body2" sx={{ fontStyle: "italic", fontSize: "0.8rem", color: "text.secondary" }}>
