@@ -83,6 +83,7 @@ interface DockWorkspaceProps {
 	onVisibilityChange: (visible: boolean) => void;
 	onAlwaysOnTopChange: (value: boolean) => void;
 	onDisplayModeChange: (mode: "interactive" | "static") => void;
+	onResetDockedStage: () => void;
 	onStageSlotOpenChange: (open: boolean) => void;
 	onStageSlotRectChange: (rect: DOMRect | null) => void;
 }
@@ -164,6 +165,7 @@ export function DockWorkspace(props: DockWorkspaceProps) {
 							onVisibilityChange={props.onVisibilityChange}
 							onAlwaysOnTopChange={props.onAlwaysOnTopChange}
 							onDisplayModeChange={props.onDisplayModeChange}
+							onResetDockedStage={props.onResetDockedStage}
 						/>
 					</Box>
 				);
