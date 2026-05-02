@@ -88,6 +88,7 @@ missionAnalystRules = [
 	"sparse 棋盘上相邻行容易混淆；构建 initialStateSketch 时必须逐行确认每个 P/B/T 的精确行号，不得跨行推定。",
 	"深灰色带 X 的方块是墙；浅灰色地砖是可行走区域；绿色菱形是目标点；绿色带叉的箱子表示箱子已经在目标点上。",
 	"右上角紫红色圆圈箭头按钮是重置关卡按钮，点击可重新开始当前关卡；仅在卡死时允许；右上角绿色回退按钮禁止使用。",
+	"复杂关卡要优先做目标点-箱子分配分析：先想哪个目标最终由哪个箱子占据，再验证这条分配是否会让另一只箱子失去可达路径；不要因为某个箱子看起来离目标近，就默认先完成它。",
 ]
 
 [delegationProfile.roles.operationsPlanner]
@@ -107,8 +108,10 @@ operationsPlannerRules = [
 	"如果普通箱子 B 被推到贴墙且相邻方向又被墙/已完成箱子封住，导致剩余目标无法继续推进，应停止继续乱走，直接规划重置本关。",
 	"每轮都要明确 currentPhaseGoal：说明本轮要创造什么中间态，例如“先拆开上下箱子”“先把下箱移到可继续操作的位置”“先腾出上箱的活动空间”。不要只盯着“把某箱立即推到目标点”。",
 	"每轮都要明确 activeStrategy：说明当前正在验证哪条高层路线（例如哪只箱子最终去哪个目标，或先释放哪条通道），并在 strategyRevision 中说明本轮是在维持、修正还是放弃原路线。",
+	"复杂关卡的 activeStrategy 必须体现目标点-箱子分配假设，例如“上目标最终由下箱占据”；不要只写‘先把上箱推上去’这种局部贪心路线。",
 	"whyThisPhase 必须解释为什么当前先做这个阶段；abortCondition 必须说明什么情况说明这条阶段策略该放弃或重开。",
 	"允许把箱子暂时推到目标点后再推出，只要这是为后续整体解法服务的中间态；不要把单个箱子到位直接视为整关完成。",
+	"如果某条路线会让另一个箱子后续无路可走，应尽早否掉这条路线；不要在已经证明错误后继续尝试同一箱子-目标分配。",
 ]
 
 [delegationProfile.roles.progressEvaluator]
@@ -130,6 +133,7 @@ progressEvaluatorRules = [
 	"phaseStatus 必须反映当前阶段目标是否推进：advanced=更接近当前阶段中间态，stalled=没推进，blocked=当前阶段已走死或应放弃，completed=当前阶段目标完成但整关未必完成。",
 	"如果 currentPhaseGoal 完成了，但棋盘仍有未完成目标或下一步还必须继续移动其他箱子，goalProgress 只能是 partial，phaseStatus 可以是 completed；不要把阶段完成误判成整关完成。",
 	"planViability 必须评估当前高层路线是否更可信：strengthened=这一步让当前路线更可行，weakened=虽然有变化但路线更危险，invalidated=这条路线应放弃，unchanged=还不足以下结论。",
+	"评估路线时必须考虑另一个箱子之后是否仍可达；如果某个局部成功会让另一只箱子后续无路可走，应把当前路线评为 weakened 或 invalidated，而不是只因为一个箱子更接近目标就给正面评价。",
 ]
 
 [[actions]]

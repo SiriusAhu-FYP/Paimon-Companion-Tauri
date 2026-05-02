@@ -1592,7 +1592,7 @@ function applySokobanDeadlockGuard(
 	if (isSokobanMissionComplete(reflection)) {
 		return reflection;
 	}
-	const deadlock = detectSokobanDeadlock(reflection.afterStateSketch);
+	const deadlock = detectSokobanDeadlock(reflection.beforeStateSketch, reflection.afterStateSketch, reflection.stateDelta);
 	if (!deadlock) {
 		return reflection;
 	}
@@ -1672,8 +1672,33 @@ function isSokobanMissionComplete(reflection: ProgressEvaluatorDecision): boolea
 	return remainingTargets === 0 && occupiedTargets > 0;
 }
 
-function detectSokobanDeadlock(afterStateSketch: string): { reason: string } | null {
-	const rows = extractGridRows(afterStateSketch);
+function detectSokobanDeadlock(
+	beforeStateSketch: string,
+	afterStateSketch: string,
+	_stateDelta: string,
+): { reason: string } | null {
+	const afterRows = extractGridRows(afterStateSketch);
+	const beforeRows = extractGridRows(beforeStateSketch);
+	const beforeBoxes = extractBoxPositions(beforeRows);
+	const afterBoxes = extractBoxPositions(afterRows);
+	if (!afterBoxes.length) {
+		return null;
+	}
+	if (beforeBoxes.length === afterBoxes.length && beforeBoxes.join("|") === afterBoxes.join("|")) {
+		return null;
+	}
+	const beforeDeadlock = detectSokobanDeadlockInRows(beforeRows);
+	const afterDeadlock = detectSokobanDeadlockInRows(afterRows);
+	if (!afterDeadlock) {
+		return null;
+	}
+	if (beforeDeadlock && beforeDeadlock.reason === afterDeadlock.reason) {
+		return null;
+	}
+	return afterDeadlock;
+}
+
+function detectSokobanDeadlockInRows(rows: string[]): { reason: string } | null {
 	if (rows.length < 2) {
 		return null;
 	}
@@ -1710,6 +1735,18 @@ function detectSokobanDeadlock(afterStateSketch: string): { reason: string } | n
 		}
 	}
 	return null;
+}
+
+function extractBoxPositions(rows: string[]): string[] {
+	const positions: string[] = [];
+	for (let r = 0; r < rows.length; r += 1) {
+		for (let c = 0; c < rows[r]!.length; c += 1) {
+			if (rows[r]![c] === "B") {
+				positions.push(`r${r + 1}c${c + 1}`);
+			}
+		}
+	}
+	return positions;
 }
 
 function hasBoardTaskPositiveMovementEvidence(reflection: ProgressEvaluatorDecision): boolean {
@@ -2805,6 +2842,26 @@ function normalizeStrategyIdentity(value: string): string {
 		.trim();
 }
 
+function extractStrategyConcepts(value: string): string[] {
+	const normalized = normalizeStrategyIdentity(value);
+	if (!normalized) {
+		return [];
+	}
+	const concepts = [
+		{ key: "upper-box", pattern: /(upper box|top box|上箱|上面的箱子)/ },
+		{ key: "lower-box", pattern: /(lower box|bottom box|下箱|下面的箱子)/ },
+		{ key: "left-box", pattern: /(left box|左边的箱子|左箱)/ },
+		{ key: "right-box", pattern: /(right box|右边的箱子|右箱)/ },
+		{ key: "upper-right-target", pattern: /(upper-right target|right target|右上目标|上方右侧目标)/ },
+		{ key: "lower-left-target", pattern: /(lower-left target|left target|左下目标|下方左侧目标)/ },
+		{ key: "upper-target", pattern: /(upper target|上目标|上方目标)/ },
+		{ key: "lower-target", pattern: /(lower target|下目标|下方目标)/ },
+		{ key: "first", pattern: /( first\b|先)/ },
+		{ key: "restart", pattern: /(restart|reset|重开|重新开始)/ },
+	];
+	return concepts.filter((item) => item.pattern.test(normalized)).map((item) => item.key);
+}
+
 function pushInvalidatedStrategy(bucket: string[], strategy: string): void {
 	const normalized = normalizeStrategyIdentity(strategy);
 	if (!normalized) {
@@ -2822,12 +2879,30 @@ function detectInvalidatedStrategyReuse(strategy: string, invalidatedStrategies:
 		return "";
 	}
 	const matched = invalidatedStrategies.find((item) => normalizeStrategyIdentity(item) === normalized);
-	if (!matched) {
+	if (matched) {
+		return pickReplyLanguageText(
+			`上一轮已经证明这条高层路线错误：${matched}。请改选另一条候选路线，不能继续沿用同一 activeStrategy。`,
+			`This high-level route was already disproven: ${matched}. Choose a different candidate route instead of reusing the same activeStrategy.`,
+		);
+	}
+	const strategyConcepts = extractStrategyConcepts(strategy);
+	if (!strategyConcepts.length) {
+		return "";
+	}
+	const fuzzyMatched = invalidatedStrategies.find((item) => {
+		const concepts = extractStrategyConcepts(item);
+		if (!concepts.length) {
+			return false;
+		}
+		const overlap = strategyConcepts.filter((concept) => concepts.includes(concept));
+		return overlap.length >= 2;
+	});
+	if (!fuzzyMatched) {
 		return "";
 	}
 	return pickReplyLanguageText(
-		`上一轮已经证明这条高层路线错误：${matched}。请改选另一条候选路线，不能继续沿用同一 activeStrategy。`,
-		`This high-level route was already disproven: ${matched}. Choose a different candidate route instead of reusing the same activeStrategy.`,
+		`这条高层路线与已被否决的方案过于相似：${fuzzyMatched}。请切换到不同的箱子-目标分配或不同的阶段路线。`,
+		`This high-level route is too similar to an already invalidated plan: ${fuzzyMatched}. Switch to a different box-target assignment or staged route.`,
 	);
 }
 

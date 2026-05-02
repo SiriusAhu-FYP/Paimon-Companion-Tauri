@@ -235,7 +235,9 @@ describe("applySokobanDeadlockGuard", () => {
 			expectedMet: true,
 			goalAlignment: "closer",
 			goalProgress: "partial",
+			beforeStateSketch: "######\n#....#\n#....#\n#.TB.#\n#...B#\n######",
 			afterStateSketch: "######\n#....#\n#...*#\n#.T.B#\n#....#\n######",
+			stateDelta: "B moved right into a wall-locked corner position while the player advanced.",
 			nextHint: "Try approaching the lower box from below.",
 		});
 		const result = applySokobanDeadlockGuard(reflection, GAME_CONTEXT);
@@ -261,6 +263,22 @@ describe("applySokobanDeadlockGuard", () => {
 		expect(result.goalAlignment).toBe("achieved");
 		expect(result.goalProgress).toBe("done");
 	});
+
+	it("does not trigger deadlock on pure player repositioning with unchanged boxes", () => {
+		const reflection = makeReflection({
+			actionSucceeded: true,
+			wasActionCorrect: true,
+			expectedMet: false,
+			goalAlignment: "closer",
+			goalProgress: "partial",
+			beforeStateSketch: "######\n#....#\n#..P*#\n#.T.B#\n#....#\n######",
+			afterStateSketch: "######\n#...P#\n#...*#\n#.T.B#\n#....#\n######",
+			stateDelta: "P moved one tile right above the solved box. No box moved.",
+		});
+		const result = applySokobanDeadlockGuard(reflection, GAME_CONTEXT);
+		expect(result.planViability).toBe("unchanged");
+		expect(result.goalProgress).toBe("partial");
+	});
 });
 
 describe("strategy invalidation helpers", () => {
@@ -270,6 +288,14 @@ describe("strategy invalidation helpers", () => {
 			["先拆下箱，再为上箱腾空间"],
 		);
 		expect(issue).toContain("错误");
+	});
+
+	it("blocks planner from reusing a semantically similar invalidated route", () => {
+		const issue = detectInvalidatedStrategyReuse(
+			"Use the upper box for the upper-right target first, then finish the lower box.",
+			["Convert the current staged position into the safe partial completion: upper box to upper-right target first, then use the remaining space to finish the lower box onto the lower-left target."],
+		);
+		expect(issue).toContain("相似");
 	});
 
 	it("marks strategy invalid when evaluator reports deadlock/restart route failure", () => {
@@ -404,12 +430,20 @@ describe("extractGridSignature", () => {
 
 describe("detectSokobanDeadlock", () => {
 	it("detects a box trapped against wall and completed box", () => {
-		const deadlock = detectSokobanDeadlock("######\n#....#\n#...*#\n#.+.B#\n#....#\n######");
+		const deadlock = detectSokobanDeadlock(
+			"######\n#....#\n#...*#\n#.+B.#\n#....#\n######",
+			"######\n#....#\n#...*#\n#.+.B#\n#....#\n######",
+			"B moved right into a blocked wall position.",
+		);
 		expect(deadlock?.reason).toContain("死局");
 	});
 
 	it("does not flag ordinary unsolved boards", () => {
-		const deadlock = detectSokobanDeadlock("######\n#P...#\n#..BT#\n#.TB.#\n#....#\n######");
+		const deadlock = detectSokobanDeadlock(
+			"######\n#P...#\n#..BT#\n#.TB.#\n#....#\n######",
+			"######\n#P...#\n#..BT#\n#.TB.#\n#....#\n######",
+			"No box moved.",
+		);
 		expect(deadlock).toBeNull();
 	});
 });
