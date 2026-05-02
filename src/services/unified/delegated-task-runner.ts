@@ -93,6 +93,8 @@ interface ActionOutcomeRecord {
 	actionSucceeded: boolean;
 	wasActionCorrect: boolean;
 	goalAlignment: "closer" | "unchanged" | "deviated" | "achieved";
+	goalProgress: "none" | "partial" | "done";
+	madeProgress: boolean;
 }
 
 export interface DelegatedTaskRunnerResult {
@@ -237,6 +239,8 @@ export async function runDelegatedTaskLoop(input: {
 
 	await emitTimelineUpdate();
 
+	let roundBoardGrid = "";
+
 	for (let round = 1; round <= config.maxRounds; round += 1) {
 		if (input.shouldStop()) {
 			return {
@@ -248,6 +252,17 @@ export async function runDelegatedTaskLoop(input: {
 		}
 
 		const currentSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
+		log.info("[diag] boardPerceptionPrompt configured", {
+			hasPrompt: Boolean(config.boardPerceptionPrompt),
+			promptLength: config.boardPerceptionPrompt?.length ?? 0,
+			promptPreview: config.boardPerceptionPrompt?.slice(0, 120) ?? "(empty)",
+		});
+		roundBoardGrid = await captureBoardGrid(
+			currentSnapshot,
+			input.target,
+			mission,
+			config.boardPerceptionPrompt,
+		);
 		const sharedScratchpadContext = buildSharedScratchpadContext({
 			taskText: input.taskText,
 			mission,
@@ -293,6 +308,7 @@ export async function runDelegatedTaskLoop(input: {
 					plannerPolicyReminder,
 					previousExpectedOutcome: latestExpectedOutcome,
 					previousExpectedMet: latestExpectedMet,
+					boardPositionsText: formatBoardGridForPlanner(roundBoardGrid) || undefined,
 				}),
 				imageDataUrls: [currentSnapshot.dataUrl],
 				temperature: config.operationsPlannerTemperature,
@@ -501,6 +517,12 @@ export async function runDelegatedTaskLoop(input: {
 			}
 		}
 
+		const afterBoardGrid = await captureBoardGrid(
+			batchAfterSnapshot,
+			input.target,
+			mission,
+			config.boardPerceptionPrompt,
+		);
 		const batchActionSummary = executedActions
 			.map((item) => `${item.plan.actionForEvaluation.tool}(${JSON.stringify(item.plan.actionForEvaluation.args)})`)
 			.join(" -> ");
@@ -530,6 +552,7 @@ export async function runDelegatedTaskLoop(input: {
 					evaluatorNotes,
 				}),
 				batchActionSummary: executedActions.length > 1 ? batchActionSummary : undefined,
+				boardPositionsText: formatBoardGridForEvaluator(roundBoardGrid, afterBoardGrid) || undefined,
 			}),
 			imageDataUrls: [batchBeforeSnapshot.dataUrl, batchAfterSnapshot.dataUrl],
 			temperature: config.progressEvaluatorTemperature,
@@ -545,6 +568,8 @@ export async function runDelegatedTaskLoop(input: {
 		});
 		let reflection = normalizeProgressEvaluatorDecision(reflectionRaw);
 		reflection = applyBoardTaskConsistencyGuard(reflection, gameContext);
+		reflection = applyBoardTaskProgressGuard(reflection, gameContext);
+		reflection = applyMissionCompletionGuard(reflection, gameContext);
 		if (batchExecutionError) {
 			reflection = {
 				...reflection,
@@ -586,10 +611,12 @@ export async function runDelegatedTaskLoop(input: {
 			actionSucceeded: reflection.actionSucceeded,
 			wasActionCorrect: reflection.wasActionCorrect,
 			goalAlignment: reflection.goalAlignment,
+			goalProgress: reflection.goalProgress,
+			madeProgress: didBoardTaskMakeProgress(reflection),
 		});
 		const repeatedFailureHint = buildRepeatedFailureHint(recentActionOutcomes);
 		const boardStagnationHint = buildBoardStagnationHint(gameContext, recentActionOutcomes);
-		if (repeatedFailureHint) {
+		if (repeatedFailureHint && !didBoardTaskMakeProgress(reflection)) {
 			reflection = {
 				...reflection,
 				wasActionCorrect: false,
@@ -603,9 +630,10 @@ export async function runDelegatedTaskLoop(input: {
 			if (lastOutcome) {
 				lastOutcome.wasActionCorrect = false;
 				lastOutcome.goalAlignment = "deviated";
+				lastOutcome.madeProgress = false;
 			}
 		}
-		if (boardStagnationHint) {
+		if (boardStagnationHint && !didBoardTaskMakeProgress(reflection)) {
 			reflection = {
 				...reflection,
 				actionSucceeded: false,
@@ -836,9 +864,14 @@ function buildOperationsPlannerUserPrompt(input: {
 	plannerPolicyReminder: string;
 	previousExpectedOutcome: string;
 	previousExpectedMet: boolean | null;
+		boardPositionsText?: string;
 }): string {
 	const historyText = input.history.length ? input.history.map((item) => `- ${item}`).join("\n") : "- (empty)";
-	const gameContextText = input.gameContext
+
+		const positionLines: string[] = [];
+		if (input.boardPositionsText) {
+			positionLines.push(input.boardPositionsText);
+		}	const gameContextText = input.gameContext
 		? [
 			`gameContext: ${input.gameContext.displayName} (${input.gameContext.gameId})`,
 			`gameActionIds: ${input.gameContext.actionIds.join(", ")}`,
@@ -853,6 +886,7 @@ function buildOperationsPlannerUserPrompt(input: {
 		`missionSubtaskChain: ${input.mission.subtaskChain.join(" -> ") || "(none)"}`,
 		`missionHardConstraints: ${input.mission.hardConstraints.join(" | ") || "(none)"}`,
 		gameContextText,
+		...positionLines,
 		`latestHint: ${input.latestHint || "(none)"}`,
 		`previousExpectedOutcome: ${input.previousExpectedOutcome || "(none)"}`,
 		`previousExpectedMet: ${input.previousExpectedMet === null ? "unknown" : input.previousExpectedMet ? "yes" : "no"}`,
@@ -910,14 +944,20 @@ function buildProgressEvaluatorUserPrompt(input: {
 	executionError: string;
 	scratchpadContext: string;
 	batchActionSummary?: string;
+		boardPositionsText?: string;
 }): string {
 	const historyText = input.history.length ? input.history.map((item) => `- ${item}`).join("\n") : "- (empty)";
+		const initLines: string[] = [];
+		if (input.boardPositionsText) {
+			initLines.push(input.boardPositionsText);
+		}
 	const lines = [
 		`task: ${input.taskText}`,
 		`round: ${input.round}`,
 		`target: ${input.target.title} (${input.target.handle})`,
 		`missionGoal: ${input.mission.missionGoal}`,
 		`missionInitialState: ${input.mission.initialStateSummary || "(none)"}`,
+		...initLines,
 	];
 	if (input.batchActionSummary) {
 		lines.push(`executedActionBatch: ${input.batchActionSummary}`);
@@ -1153,13 +1193,20 @@ function normalizeProgressEvaluatorDecision(rawText: string): ProgressEvaluatorD
 	const correctedWasActionCorrect = !actionSucceeded && goalAlignment === "deviated"
 		? false
 		: wasActionCorrect;
+	const hasTerminalSuccess = goalAlignment === "achieved" || goalProgress === "done";
+	const adjustedGoalProgress: "none" | "partial" | "done" = hasTerminalSuccess
+		? "done"
+		: goalProgress;
+	const adjustedGoalAlignment: "closer" | "unchanged" | "deviated" | "achieved" = hasTerminalSuccess
+		? "achieved"
+		: goalAlignment;
 	return {
-		actionSucceeded,
-		wasActionCorrect: correctedWasActionCorrect,
-		expectedMet,
+		actionSucceeded: hasTerminalSuccess ? true : actionSucceeded,
+		wasActionCorrect: hasTerminalSuccess ? true : correctedWasActionCorrect,
+		expectedMet: hasTerminalSuccess ? true : expectedMet,
 		expectationReview: toText(parsed.expectationReview),
-		goalProgress: !expectedMet && goalProgress === "done" ? "partial" : goalProgress,
-		goalAlignment: (!expectedMet && goalProgress === "done" ? "partial" : goalProgress) === "done" ? "achieved" : goalAlignment,
+		goalProgress: adjustedGoalProgress,
+		goalAlignment: adjustedGoalAlignment,
 		reply: toText(parsed.reply),
 		nextHint: toText(parsed.nextHint),
 		beforeStateSketch: toText(parsed.beforeStateSketch),
@@ -1188,6 +1235,67 @@ function applyBoardTaskConsistencyGuard(
 	};
 }
 
+function applyBoardTaskProgressGuard(
+	reflection: ProgressEvaluatorDecision,
+	gameContext: DelegatedGameContext | null,
+): ProgressEvaluatorDecision {
+	if (!gameContext) {
+		return reflection;
+	}
+	if (hasBoardTaskCompletionEvidence(reflection)) {
+		return {
+			...reflection,
+			actionSucceeded: true,
+			wasActionCorrect: true,
+			expectedMet: true,
+			goalAlignment: "achieved",
+			goalProgress: "done",
+		};
+	}
+	if (!hasBoardTaskPositiveMovementEvidence(reflection)) {
+		return reflection;
+	}
+	return {
+		...reflection,
+		actionSucceeded: true,
+		wasActionCorrect: true,
+		goalAlignment: reflection.goalAlignment === "achieved" ? "achieved" : "closer",
+		goalProgress: reflection.goalProgress === "done" ? "done" : "partial",
+	};
+}
+
+function applyMissionCompletionGuard(
+	reflection: ProgressEvaluatorDecision,
+	gameContext: DelegatedGameContext | null,
+): ProgressEvaluatorDecision {
+	if (!gameContext) {
+		return reflection;
+	}
+	const evaluatorDeclaresDone = reflection.goalProgress === "done" || reflection.goalAlignment === "achieved";
+	if (!evaluatorDeclaresDone) {
+		return reflection;
+	}
+	if (gameContext.gameId !== "sokoban") {
+		return reflection;
+	}
+	if (isSokobanMissionComplete(reflection)) {
+		return reflection;
+	}
+	const madeProgress = didBoardTaskMakeProgress(reflection) || reflection.expectedMet || reflection.actionSucceeded;
+	return {
+		...reflection,
+		goalAlignment: madeProgress ? "closer" : "unchanged",
+		goalProgress: madeProgress ? "partial" : "none",
+		nextHint: combineHints(
+			reflection.nextHint,
+			pickReplyLanguageText(
+				"整关尚未完成：当前棋盘仍显示未覆盖目标或未出现通关画面。把这一步视为局部推进，不要提前结束任务。",
+				"Mission not complete: the current board still shows uncovered targets or no level-clear state. Treat this as local progress and keep solving.",
+			),
+		),
+	};
+}
+
 function hasNoChangeEvidence(reflection: ProgressEvaluatorDecision): boolean {
 	const stateDelta = normalizeStateSketchText(reflection.stateDelta);
 	if (/(无(?:可确认)?变化|基本没变|no(?:[a-z]+)?change|unchanged|novisiblechange|static)/i.test(stateDelta)) {
@@ -1212,6 +1320,49 @@ function extractGridSignature(sketch: string): string {
 		return "";
 	}
 	return rows.map((r) => r.replace(/\s+/g, "").toLowerCase()).join("|");
+}
+
+function hasBoardTaskCompletionEvidence(reflection: ProgressEvaluatorDecision): boolean {
+	const joined = normalizeStateSketchText([
+		reflection.expectationReview,
+		reflection.afterStateSketch,
+		reflection.stateDelta,
+		reflection.nextHint,
+	].join(" "));
+	return /(levelcomplete|overlayshown|missionasfinished|taskcomplete|levelcleared|leveladvanced|successanimation|levelsolvedtransition)/i.test(joined);
+}
+
+function isSokobanMissionComplete(reflection: ProgressEvaluatorDecision): boolean {
+	if (hasBoardTaskCompletionEvidence(reflection)) {
+		return true;
+	}
+	const afterGrid = extractGridSignature(reflection.afterStateSketch);
+	if (!afterGrid) {
+		return false;
+	}
+	const remainingTargets = (afterGrid.match(/t/g) ?? []).length;
+	const occupiedTargets = (afterGrid.match(/[*+]/g) ?? []).length;
+	return remainingTargets === 0 && occupiedTargets > 0;
+}
+
+function hasBoardTaskPositiveMovementEvidence(reflection: ProgressEvaluatorDecision): boolean {
+	if (hasNoChangeEvidence(reflection) || hasBoardTaskCompletionEvidence(reflection)) {
+		return false;
+	}
+	const joined = normalizeStateSketchText([
+		reflection.expectationReview,
+		reflection.stateDelta,
+	].join(" "));
+	return /(\bp\s*moved\b|\bb\s*moved\b|playermoved|boxmoved|movedonetile|movedtwofloortiles|pushed)/i.test(joined);
+}
+
+function didBoardTaskMakeProgress(reflection: ProgressEvaluatorDecision): boolean {
+	return hasBoardTaskCompletionEvidence(reflection)
+		|| (reflection.actionSucceeded
+			&& reflection.wasActionCorrect
+			&& (reflection.goalAlignment === "closer" || reflection.goalAlignment === "achieved")
+			&& (reflection.goalProgress === "partial" || reflection.goalProgress === "done"))
+		|| hasBoardTaskPositiveMovementEvidence(reflection);
 }
 
 function normalizeStateSketchText(value: string): string {
@@ -1502,6 +1653,94 @@ function resolveRuleBasedLocator(
 	}
 	return null;
 }
+
+// --- Board grid capture (pre-round perception) ---
+
+async function captureBoardGrid(
+	snapshot: CapturedTargetSnapshot,
+	target: FunctionalTarget,
+	mission: MissionAnalysisDecision,
+	boardPerceptionPrompt: string,
+): Promise<string> {
+	if (!boardPerceptionPrompt) {
+		log.info("[diag] captureBoardGrid skipped — boardPerceptionPrompt is empty");
+		return "";
+	}
+	try {
+		const runtimeConfig = getConfig().companionRuntime;
+		const rawText = await requestOpenAICompatibleVision({
+			client: {
+				baseUrl: runtimeConfig.localVisionBaseUrl,
+				model: runtimeConfig.localVisionModel,
+			},
+			systemPrompt: [
+				"You are a game board parser.",
+				"Given a screenshot from a puzzle game, output the exact ASCII grid layout.",
+				"Use # for wall, . for floor, P for player, B for box, T for target, * for box-on-target.",
+				"Count exact rows and columns. Do not guess dimensions.",
+				"Output ONLY the grid with no other text or explanation.",
+			].join("\n"),
+			userPrompt: [
+				`target: ${target.title} (${target.handle})`,
+				`missionGoal: ${mission.missionGoal}`,
+				boardPerceptionPrompt,
+			].join("\n"),
+			imageDataUrl: snapshot.dataUrl,
+			maxTokens: 800,
+			temperature: 0,
+			timeoutMs: 25_000,
+			jsonResponse: false,
+		});
+		const gridLines = rawText
+			.split("\n")
+			.map((l) => l.trim())
+			.filter((l) => /^[#.PBT*+\s]+$/.test(l) && l.length > 0);
+		const result = gridLines.join("\n");
+		log.info("[diag] captureBoardGrid success", {
+			lineCount: gridLines.length,
+			gridPreview: result.slice(0, 200),
+		});
+		return result;
+	} catch (err) {
+		log.warn("board grid capture failed", { error: err instanceof Error ? err.message : String(err) });
+		return "";
+	}
+}
+
+function formatBoardGridForPlanner(gridText: string): string {
+	if (!gridText) return "";
+	return [
+		"========== BOARD ANALYSIS (PROGRAMMATIC GRID SCANNER) ==========",
+		"权威数据：以下棋盘由程序化视觉解析，不是AI推测。",
+		"必须在 stateSketch 中使用以下棋盘布局，不可用视觉印象覆盖。",
+		"",
+		gridText,
+		"",
+		"================================================================",
+	].join("\n");
+}
+
+function formatBoardGridForEvaluator(beforeGrid: string, afterGrid: string): string {
+	if (!beforeGrid && !afterGrid) return "";
+	const hasChange = beforeGrid !== afterGrid;
+	const verdict = hasChange
+		? "棋盘发生了变化。请比较前后棋盘差异来判断动作效果。"
+		: "棋盘完全相同——动作未能产生任何实质位移。";
+	return [
+		"========== BOARD ANALYSIS (PROGRAMMATIC GRID SCANNER) ==========",
+		"权威数据：以下前后棋盘由程序化视觉解析。",
+		"",
+		"动作前:",
+		beforeGrid || "(none)",
+		"动作后:",
+		afterGrid || "(none)",
+		"",
+		`>>> 判定: ${verdict}`,
+		"================================================================",
+	].join("\n");
+}
+
+// --- end board grid capture ---
 
 async function resolveLocatorFromCloudVision(input: {
 	target: FunctionalTarget;
@@ -1950,6 +2189,7 @@ function mergeDelegatedConfigForGame(
 		missionAnalystRules: gameProfile.missionAnalystRules?.length ? [...gameProfile.missionAnalystRules] : [...baseConfig.missionAnalystRules],
 		operationsPlannerRules: gameProfile.operationsPlannerRules?.length ? [...gameProfile.operationsPlannerRules] : [...baseConfig.operationsPlannerRules],
 		progressEvaluatorRules: gameProfile.progressEvaluatorRules?.length ? [...gameProfile.progressEvaluatorRules] : [...baseConfig.progressEvaluatorRules],
+		boardPerceptionPrompt: gameProfile.boardPerceptionPrompt ?? baseConfig.boardPerceptionPrompt,
 	};
 }
 
@@ -2380,7 +2620,11 @@ function countRecentStagnation(outcomes: readonly ActionOutcomeRecord[]): number
 		if (!item) {
 			break;
 		}
-		const isPositive = item.actionSucceeded && item.wasActionCorrect && (item.goalAlignment === "closer" || item.goalAlignment === "achieved");
+		const isPositive = item.madeProgress
+			|| (item.actionSucceeded
+				&& item.wasActionCorrect
+				&& (item.goalAlignment === "closer" || item.goalAlignment === "achieved")
+				&& (item.goalProgress === "partial" || item.goalProgress === "done"));
 		if (isPositive) {
 			break;
 		}
@@ -2429,8 +2673,14 @@ function sleep(ms: number): Promise<void> {
 /** @internal Test-only exports */
 export const __test = {
 	applyBoardTaskConsistencyGuard,
+	applyBoardTaskProgressGuard,
+	applyMissionCompletionGuard,
 	hasNoChangeEvidence,
 	extractGridSignature,
+	hasBoardTaskCompletionEvidence,
+	hasBoardTaskPositiveMovementEvidence,
+	isSokobanMissionComplete,
+	didBoardTaskMakeProgress,
 	normalizeStateSketchText,
 	resolveOperationsNarration,
 } as const;

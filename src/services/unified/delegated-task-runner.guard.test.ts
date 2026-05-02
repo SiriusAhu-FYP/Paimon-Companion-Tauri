@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { __test } from "./delegated-task-runner";
 
-const { applyBoardTaskConsistencyGuard, hasNoChangeEvidence, extractGridSignature, resolveOperationsNarration } = __test;
+const {
+	applyBoardTaskConsistencyGuard,
+	applyBoardTaskProgressGuard,
+	applyMissionCompletionGuard,
+	hasNoChangeEvidence,
+	extractGridSignature,
+	hasBoardTaskCompletionEvidence,
+	hasBoardTaskPositiveMovementEvidence,
+	isSokobanMissionComplete,
+	didBoardTaskMakeProgress,
+	resolveOperationsNarration,
+} = __test;
 
 const GAME_CONTEXT = { gameId: "sokoban" as const, displayName: "Sokoban", actionIds: ["move_up"] };
 
@@ -77,6 +88,91 @@ describe("applyBoardTaskConsistencyGuard", () => {
 	});
 });
 
+describe("applyBoardTaskProgressGuard", () => {
+	it("forces terminal success when completion evidence is present", () => {
+		const reflection = makeReflection({
+			actionSucceeded: false,
+			wasActionCorrect: false,
+			expectedMet: false,
+			goalAlignment: "deviated",
+			goalProgress: "none",
+			stateDelta: "P moved down onto the box's former tile, B moved down onto T so that tile became *, and the game advanced to a LEVEL COMPLETE state.",
+			afterStateSketch: "LEVEL COMPLETE overlay shown",
+		});
+		const result = applyBoardTaskProgressGuard(reflection, GAME_CONTEXT);
+		expect(result.actionSucceeded).toBe(true);
+		expect(result.wasActionCorrect).toBe(true);
+		expect(result.expectedMet).toBe(true);
+		expect(result.goalAlignment).toBe("achieved");
+		expect(result.goalProgress).toBe("done");
+	});
+
+	it("upgrades positive movement to partial progress without forcing expectedMet", () => {
+		const reflection = makeReflection({
+			actionSucceeded: false,
+			wasActionCorrect: false,
+			expectedMet: false,
+			goalAlignment: "deviated",
+			goalProgress: "none",
+			stateDelta: "P moved one tile left onto the cell directly above B. B did not move. T did not move.",
+		});
+		const result = applyBoardTaskProgressGuard(reflection, GAME_CONTEXT);
+		expect(result.actionSucceeded).toBe(true);
+		expect(result.wasActionCorrect).toBe(true);
+		expect(result.expectedMet).toBe(false);
+		expect(result.goalAlignment).toBe("closer");
+		expect(result.goalProgress).toBe("partial");
+	});
+
+	it("does not upgrade no-change evidence", () => {
+		const reflection = makeReflection({
+			actionSucceeded: false,
+			wasActionCorrect: false,
+			expectedMet: false,
+			goalAlignment: "deviated",
+			goalProgress: "none",
+			stateDelta: "No confirmable change.",
+		});
+		const result = applyBoardTaskProgressGuard(reflection, GAME_CONTEXT);
+		expect(result.actionSucceeded).toBe(false);
+		expect(result.goalProgress).toBe("none");
+	});
+});
+
+describe("applyMissionCompletionGuard", () => {
+	it("downgrades false terminal completion when sokoban still has uncovered targets", () => {
+		const reflection = makeReflection({
+			actionSucceeded: true,
+			wasActionCorrect: true,
+			expectedMet: true,
+			goalAlignment: "achieved",
+			goalProgress: "done",
+			afterStateSketch: "######\n#....#\n#..P*#\n#.TB.#\n#....#\n######",
+			stateDelta: "The upper box moved right onto the upper target and became *. The lower box and lower target remained in the same positions.",
+			nextHint: "Next state: place the lower box onto the lower target.",
+		});
+		const result = applyMissionCompletionGuard(reflection, GAME_CONTEXT);
+		expect(result.goalAlignment).toBe("closer");
+		expect(result.goalProgress).toBe("partial");
+		expect(result.nextHint).toContain("整关尚未完成");
+	});
+
+	it("keeps terminal completion when all visible targets are covered", () => {
+		const reflection = makeReflection({
+			actionSucceeded: true,
+			wasActionCorrect: true,
+			expectedMet: true,
+			goalAlignment: "achieved",
+			goalProgress: "done",
+			afterStateSketch: "#####\n#...#\n#.###\n#P#\n#*#\n###",
+			stateDelta: "P moved down onto the box's former tile, B moved down onto T so that tile became *.",
+		});
+		const result = applyMissionCompletionGuard(reflection, GAME_CONTEXT);
+		expect(result.goalAlignment).toBe("achieved");
+		expect(result.goalProgress).toBe("done");
+	});
+});
+
 describe("hasNoChangeEvidence", () => {
 	it("detects Chinese no-change phrases in stateDelta", () => {
 		expect(hasNoChangeEvidence(makeReflection({ stateDelta: "无变化" }))).toBe(true);
@@ -103,6 +199,45 @@ describe("hasNoChangeEvidence", () => {
 			afterStateSketch: grid,
 		}));
 		expect(result).toBe(true);
+	});
+});
+
+describe("board progress evidence helpers", () => {
+	it("detects completion evidence from stateDelta and overlay text", () => {
+		const reflection = makeReflection({
+			stateDelta: "B moved down onto T so that tile became *, and the game advanced to a LEVEL COMPLETE state.",
+			afterStateSketch: "LEVEL COMPLETE overlay shown",
+		});
+		expect(hasBoardTaskCompletionEvidence(reflection)).toBe(true);
+	});
+
+	it("detects positive movement evidence from stateDelta", () => {
+		const reflection = makeReflection({
+			stateDelta: "P moved one tile left along the top corridor.",
+			goalAlignment: "deviated",
+			goalProgress: "none",
+		});
+		expect(hasBoardTaskPositiveMovementEvidence(reflection)).toBe(true);
+		expect(didBoardTaskMakeProgress(reflection)).toBe(true);
+	});
+
+	it("does not treat no-change text as positive progress", () => {
+		const reflection = makeReflection({
+			stateDelta: "No visible change: P, B, and T remain in the same cells.",
+			actionSucceeded: false,
+			wasActionCorrect: false,
+			goalAlignment: "unchanged",
+			goalProgress: "none",
+		});
+		expect(hasBoardTaskPositiveMovementEvidence(reflection)).toBe(false);
+		expect(didBoardTaskMakeProgress(reflection)).toBe(false);
+	});
+
+	it("detects incomplete sokoban boards when uncovered targets remain", () => {
+		const reflection = makeReflection({
+			afterStateSketch: "######\n#....#\n#..P*#\n#.TB.#\n#....#\n######",
+		});
+		expect(isSokobanMissionComplete(reflection)).toBe(false);
 	});
 });
 
