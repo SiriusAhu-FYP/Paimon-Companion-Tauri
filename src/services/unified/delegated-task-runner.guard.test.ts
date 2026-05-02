@@ -4,6 +4,7 @@ import { __test } from "./delegated-task-runner";
 const {
 	applyBoardTaskConsistencyGuard,
 	applyBoardTaskProgressGuard,
+	applyPhasePlanProgressGuard,
 	applyMissionCompletionGuard,
 	applySokobanDeadlockGuard,
 	hasNoChangeEvidence,
@@ -35,6 +36,8 @@ function makeReflection(overrides: Record<string, unknown> = {}) {
 		stateDelta: "",
 		phaseStatus: "advanced" as const,
 		phaseAssessment: "",
+		planViability: "unchanged" as const,
+		planAssessment: "",
 		...overrides,
 	};
 }
@@ -142,6 +145,48 @@ describe("applyBoardTaskProgressGuard", () => {
 		const result = applyBoardTaskProgressGuard(reflection, GAME_CONTEXT);
 		expect(result.actionSucceeded).toBe(false);
 		expect(result.goalProgress).toBe("none");
+	});
+});
+
+describe("applyPhasePlanProgressGuard", () => {
+	it("upgrades advanced phase progress to partial success when the board changed", () => {
+		const reflection = makeReflection({
+			actionSucceeded: false,
+			wasActionCorrect: false,
+			expectedMet: false,
+			goalAlignment: "unchanged",
+			goalProgress: "none",
+			beforeStateSketch: "######\n#P...#\n#..B.#\n#.T..#\n######",
+			afterStateSketch: "######\n#.P..#\n#..B.#\n#.T..#\n######",
+			stateDelta: "P moved one tile right to prepare the next push.",
+			phaseStatus: "advanced",
+			phaseAssessment: "站位更好，已接近下一推位。",
+		});
+		const result = applyPhasePlanProgressGuard(reflection, GAME_CONTEXT);
+		expect(result.actionSucceeded).toBe(true);
+		expect(result.wasActionCorrect).toBe(true);
+		expect(result.goalAlignment).toBe("closer");
+		expect(result.goalProgress).toBe("partial");
+	});
+
+	it("upgrades strengthened plan viability to partial success even when expectedMet is false", () => {
+		const reflection = makeReflection({
+			actionSucceeded: false,
+			wasActionCorrect: false,
+			expectedMet: false,
+			goalAlignment: "deviated",
+			goalProgress: "none",
+			beforeStateSketch: "######\n#P...#\n#..B.#\n#.T..#\n######",
+			afterStateSketch: "######\n#....#\n#.PB.#\n#.T..#\n######",
+			stateDelta: "P moved down beside the box and opened the intended route.",
+			phaseStatus: "stalled",
+			planViability: "strengthened",
+			planAssessment: "当前路线更可信，已完成关键站位。",
+		});
+		const result = applyPhasePlanProgressGuard(reflection, GAME_CONTEXT);
+		expect(result.actionSucceeded).toBe(true);
+		expect(result.goalAlignment).toBe("closer");
+		expect(result.goalProgress).toBe("partial");
 	});
 });
 
@@ -330,6 +375,8 @@ describe("buildStrategyLesson", () => {
 				currentPhaseGoal: "先把下箱移到可继续操作的位置",
 				whyThisPhase: "上箱当前无法直接处理",
 				abortCondition: "若下箱被推到右墙死位则重开",
+				activeStrategy: "先拆下箱，再为上箱腾空间",
+				strategyRevision: "放弃先做上箱的路线",
 				actions: [],
 			},
 			reflection: makeReflection({
@@ -355,6 +402,8 @@ describe("resolveOperationsNarration", () => {
 				currentPhaseGoal: "",
 				whyThisPhase: "",
 				abortCondition: "",
+				activeStrategy: "",
+				strategyRevision: "",
 				actions: [{ tool: "host.send_key", args: { key: "Left" } }],
 			};
 			const result = resolveOperationsNarration(planner, false);
@@ -371,6 +420,8 @@ describe("resolveOperationsNarration", () => {
 				currentPhaseGoal: "",
 				whyThisPhase: "",
 				abortCondition: "",
+				activeStrategy: "",
+				strategyRevision: "",
 				actions: [],
 			};
 			const result = resolveOperationsNarration(planner, true);
@@ -387,6 +438,8 @@ describe("resolveOperationsNarration", () => {
 				currentPhaseGoal: "",
 				whyThisPhase: "",
 				abortCondition: "",
+				activeStrategy: "",
+				strategyRevision: "",
 				actions: [{ tool: "game.perform_action", args: { actionId: "move_up" } }],
 			};
 			const result = resolveOperationsNarration(planner, false);
