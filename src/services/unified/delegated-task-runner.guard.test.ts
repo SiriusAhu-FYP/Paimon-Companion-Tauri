@@ -14,6 +14,7 @@ const {
 	isSokobanMissionComplete,
 	detectSokobanDeadlock,
 	didBoardTaskMakeProgress,
+	buildStrategyLesson,
 	resolveOperationsNarration,
 } = __test;
 
@@ -32,6 +33,8 @@ function makeReflection(overrides: Record<string, unknown> = {}) {
 		beforeStateSketch: "",
 		afterStateSketch: "",
 		stateDelta: "",
+		phaseStatus: "advanced" as const,
+		phaseAssessment: "",
 		...overrides,
 	};
 }
@@ -315,6 +318,32 @@ describe("detectSokobanDeadlock", () => {
 	});
 });
 
+describe("buildStrategyLesson", () => {
+	it("records blocked phase lessons with strategy-level wording", () => {
+		const lesson = buildStrategyLesson({
+			planner: {
+				goalReached: false,
+				reasoning: "",
+				reply: "",
+				expectedOutcome: "",
+				stateSketch: "",
+				currentPhaseGoal: "先把下箱移到可继续操作的位置",
+				whyThisPhase: "上箱当前无法直接处理",
+				abortCondition: "若下箱被推到右墙死位则重开",
+				actions: [],
+			},
+			reflection: makeReflection({
+				phaseStatus: "blocked",
+				phaseAssessment: "下箱贴右墙形成死局。",
+				nextHint: "点击右上角紫红色重置按钮重开，并不要重复同一路线。",
+			}),
+		});
+		expect(lesson).toContain("避免重复阶段");
+		expect(lesson).toContain("先把下箱移到可继续操作的位置");
+		expect(lesson).toContain("死局");
+	});
+});
+
 describe("resolveOperationsNarration", () => {
 		it("returns empty string (narrations are now silent)", () => {
 			const planner = {
@@ -323,6 +352,9 @@ describe("resolveOperationsNarration", () => {
 				reply: "",
 				expectedOutcome: "",
 				stateSketch: "",
+				currentPhaseGoal: "",
+				whyThisPhase: "",
+				abortCondition: "",
 				actions: [{ tool: "host.send_key", args: { key: "Left" } }],
 			};
 			const result = resolveOperationsNarration(planner, false);
@@ -336,6 +368,9 @@ describe("resolveOperationsNarration", () => {
 				reply: "任务已完成",
 				expectedOutcome: "",
 				stateSketch: "",
+				currentPhaseGoal: "",
+				whyThisPhase: "",
+				abortCondition: "",
 				actions: [],
 			};
 			const result = resolveOperationsNarration(planner, true);
@@ -349,6 +384,9 @@ describe("resolveOperationsNarration", () => {
 				reply: "",
 				expectedOutcome: "",
 				stateSketch: "",
+				currentPhaseGoal: "",
+				whyThisPhase: "",
+				abortCondition: "",
 				actions: [{ tool: "game.perform_action", args: { actionId: "move_up" } }],
 			};
 			const result = resolveOperationsNarration(planner, false);

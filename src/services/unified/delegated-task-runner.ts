@@ -54,6 +54,9 @@ interface OperationsPlannerDecision {
 	reply: string;
 	expectedOutcome: string;
 	stateSketch: string;
+	currentPhaseGoal: string;
+	whyThisPhase: string;
+	abortCondition: string;
 	actions: DelegatedTaskAction[];
 }
 
@@ -69,6 +72,8 @@ interface ProgressEvaluatorDecision {
 	beforeStateSketch: string;
 	afterStateSketch: string;
 	stateDelta: string;
+	phaseStatus: "advanced" | "stalled" | "blocked" | "completed";
+	phaseAssessment: string;
 }
 
 interface DelegatedGameContext {
@@ -127,8 +132,14 @@ export async function runDelegatedTaskLoop(input: {
 	let latestHint = "";
 	let latestExpectedOutcome = "";
 	let latestExpectedMet: boolean | null = null;
+	let latestPhaseGoal = "";
+	let latestPhaseReason = "";
+	let latestPhaseAbortCondition = "";
+	let latestPhaseStatus: ProgressEvaluatorDecision["phaseStatus"] | "" = "";
+	let latestPhaseAssessment = "";
 	let noActionStreak = 0;
 	let hasExecutionEvidence = false;
+	const strategyLessons: string[] = [];
 	const runtimeToolNames = await resolveRuntimeToolNames(input.traceId);
 	const missionProbeTools = buildAllowedTools(config.allowedTools, candidateGameContext, runtimeToolNames);
 	const missionSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
@@ -270,6 +281,12 @@ export async function runDelegatedTaskLoop(input: {
 			latestHint,
 			latestExpectedOutcome,
 			latestExpectedMet,
+			latestPhaseGoal,
+			latestPhaseReason,
+			latestPhaseAbortCondition,
+			latestPhaseStatus,
+			latestPhaseAssessment,
+			strategyLessons,
 			history,
 			plannerNotes,
 			evaluatorNotes,
@@ -289,6 +306,9 @@ export async function runDelegatedTaskLoop(input: {
 			reply: "",
 			expectedOutcome: "",
 			stateSketch: "",
+			currentPhaseGoal: "",
+			whyThisPhase: "",
+			abortCondition: "",
 			actions: [] as DelegatedTaskAction[],
 		};
 		while (plannerRetryCount <= 1) {
@@ -308,6 +328,12 @@ export async function runDelegatedTaskLoop(input: {
 					plannerPolicyReminder,
 					previousExpectedOutcome: latestExpectedOutcome,
 					previousExpectedMet: latestExpectedMet,
+					latestPhaseGoal,
+					latestPhaseReason,
+					latestPhaseAbortCondition,
+					latestPhaseStatus,
+					latestPhaseAssessment,
+					strategyLessons,
 					boardPositionsText: formatBoardGridForPlanner(roundBoardGrid) || undefined,
 				}),
 				imageDataUrls: [currentSnapshot.dataUrl],
@@ -370,6 +396,9 @@ export async function runDelegatedTaskLoop(input: {
 			previousExpectedMet: latestExpectedMet,
 		});
 		pushScratchpadNote(plannerNotes, plannerNote, 6);
+		latestPhaseGoal = planner.currentPhaseGoal || latestPhaseGoal;
+		latestPhaseReason = planner.whyThisPhase || latestPhaseReason;
+		latestPhaseAbortCondition = planner.abortCondition || latestPhaseAbortCondition;
 		await persistScratchpadText(input.scratchpad, "roles/planner.md", `${plannerNote}\n`);
 		await persistScratchpadText(
 			input.scratchpad,
@@ -381,6 +410,12 @@ export async function runDelegatedTaskLoop(input: {
 				latestHint,
 				latestExpectedOutcome,
 				latestExpectedMet,
+				latestPhaseGoal,
+				latestPhaseReason,
+				latestPhaseAbortCondition,
+				latestPhaseStatus,
+				latestPhaseAssessment,
+				strategyLessons,
 				history,
 				plannerNotes,
 				evaluatorNotes,
@@ -440,6 +475,12 @@ export async function runDelegatedTaskLoop(input: {
 					latestHint,
 					latestExpectedOutcome,
 					latestExpectedMet,
+					latestPhaseGoal,
+					latestPhaseReason,
+					latestPhaseAbortCondition,
+					latestPhaseStatus,
+					latestPhaseAssessment,
+					strategyLessons,
 					history,
 					plannerNotes,
 					evaluatorNotes,
@@ -547,11 +588,20 @@ export async function runDelegatedTaskLoop(input: {
 					latestHint,
 					latestExpectedOutcome,
 					latestExpectedMet,
+					latestPhaseGoal,
+					latestPhaseReason,
+					latestPhaseAbortCondition,
+					latestPhaseStatus,
+					latestPhaseAssessment,
+					strategyLessons,
 					history,
 					plannerNotes,
 					evaluatorNotes,
 				}),
 				batchActionSummary: executedActions.length > 1 ? batchActionSummary : undefined,
+				phaseGoal: planner.currentPhaseGoal,
+				phaseReason: planner.whyThisPhase,
+				phaseAbortCondition: planner.abortCondition,
 				boardPositionsText: formatBoardGridForEvaluator(roundBoardGrid, afterBoardGrid) || undefined,
 			}),
 			imageDataUrls: [batchBeforeSnapshot.dataUrl, batchAfterSnapshot.dataUrl],
@@ -579,6 +629,7 @@ export async function runDelegatedTaskLoop(input: {
 				expectedMet: false,
 				goalAlignment: reflection.goalAlignment === "achieved" ? "deviated" : reflection.goalAlignment,
 				goalProgress: reflection.goalProgress === "done" ? "none" : reflection.goalProgress,
+				phaseStatus: "blocked",
 				beforeStateSketch: reflection.beforeStateSketch || "",
 				afterStateSketch: reflection.afterStateSketch || "",
 				stateDelta: reflection.stateDelta || "",
@@ -600,6 +651,7 @@ export async function runDelegatedTaskLoop(input: {
 			expectedMet: reflection.expectedMet,
 			goalAlignment: reflection.goalAlignment,
 			goalProgress: reflection.goalProgress,
+			phaseStatus: reflection.phaseStatus,
 		});
 		const reflectionReply = normalizeDelegatedCompanionReply(reflection.reply, "reflection");
 		if (reflectionReply) {
@@ -615,6 +667,11 @@ export async function runDelegatedTaskLoop(input: {
 			goalProgress: reflection.goalProgress,
 			madeProgress: didBoardTaskMakeProgress(reflection),
 		});
+		const strategyLesson = buildStrategyLesson({
+			planner,
+			reflection,
+		});
+		pushStrategyLesson(strategyLessons, strategyLesson, 4);
 		const repeatedFailureHint = buildRepeatedFailureHint(recentActionOutcomes);
 		const boardStagnationHint = buildBoardStagnationHint(gameContext, recentActionOutcomes);
 		if (repeatedFailureHint && !didBoardTaskMakeProgress(reflection)) {
@@ -623,6 +680,7 @@ export async function runDelegatedTaskLoop(input: {
 				wasActionCorrect: false,
 				expectedMet: false,
 				goalAlignment: "deviated",
+				phaseStatus: "blocked",
 				beforeStateSketch: reflection.beforeStateSketch || "",
 				afterStateSketch: reflection.afterStateSketch || "",
 				stateDelta: reflection.stateDelta || "",
@@ -642,12 +700,18 @@ export async function runDelegatedTaskLoop(input: {
 				expectedMet: false,
 				goalAlignment: "deviated",
 				goalProgress: "none",
+				phaseStatus: "stalled",
 			};
 		}
 		latestHint = combineHints(reflection.nextHint, repeatedFailureHint);
 		latestHint = combineHints(latestHint, boardStagnationHint);
 		latestExpectedOutcome = planner.expectedOutcome;
 		latestExpectedMet = reflection.expectedMet;
+		latestPhaseGoal = planner.currentPhaseGoal || latestPhaseGoal;
+		latestPhaseReason = planner.whyThisPhase || latestPhaseReason;
+		latestPhaseAbortCondition = planner.abortCondition || latestPhaseAbortCondition;
+		latestPhaseStatus = reflection.phaseStatus;
+		latestPhaseAssessment = reflection.phaseAssessment || latestPhaseAssessment;
 		hasExecutionEvidence = true;
 		const evaluatorNote = formatEvaluatorScratchpadNote({
 			round,
@@ -658,7 +722,7 @@ export async function runDelegatedTaskLoop(input: {
 		pushScratchpadNote(evaluatorNotes, evaluatorNote, 6);
 		await persistScratchpadText(input.scratchpad, "roles/evaluator.md", `${evaluatorNote}\n`);
 		history.push(
-			`round ${round} [${executedActions.map((a) => a.plan.actionForEvaluation.tool).join("+")}]: expected=${planner.expectedOutcome || "(none)"} expectedMet=${reflection.expectedMet} success=${reflection.actionSucceeded} correct=${reflection.wasActionCorrect} alignment=${reflection.goalAlignment} progress=${reflection.goalProgress} hint=${latestHint}`,
+			`round ${round} [${executedActions.map((a) => a.plan.actionForEvaluation.tool).join("+")}]: phase=${planner.currentPhaseGoal || "(none)"} expected=${planner.expectedOutcome || "(none)"} expectedMet=${reflection.expectedMet} success=${reflection.actionSucceeded} correct=${reflection.wasActionCorrect} alignment=${reflection.goalAlignment} progress=${reflection.goalProgress} phaseStatus=${reflection.phaseStatus} hint=${latestHint}`,
 		);
 		timelineRounds.push({
 			round,
@@ -690,6 +754,12 @@ export async function runDelegatedTaskLoop(input: {
 				latestHint,
 				latestExpectedOutcome,
 				latestExpectedMet,
+				latestPhaseGoal,
+				latestPhaseReason,
+				latestPhaseAbortCondition,
+				latestPhaseStatus,
+				latestPhaseAssessment,
+				strategyLessons,
 				history,
 				plannerNotes,
 				evaluatorNotes,
@@ -836,6 +906,8 @@ function buildOperationsPlannerSystemPrompt(input: {
 		"点击类动作：定位特定 UI 元素（按钮、tile、图标等）时，必须在 host.send_mouse 的 args 中提供 locatorHint 描述目标元素，不要自己猜测 x/y/xNorm/yNorm 坐标；系统会通过本地视觉定位阶梯自动解析精确坐标。",
 		"只有点击通用位置（游戏棋盘中心、窗口中央等不需要精确定位的地方），才允许直接使用 xNorm/yNorm 而不带 locatorHint。",
 		"根据 Mission 的 subtaskChain 分阶段推进，每轮只推进一个最小可验证状态变化。",
+		"对复杂棋盘任务，必须显式维护 currentPhaseGoal / whyThisPhase / abortCondition。phaseGoal 应描述当前阶段要创造的中间态，而不只是最终目标。",
+		"允许为了更优解暂时把箱子推离目标点，只要这个中间态明确服务于后续解题；不要把“某箱已经在目标点上”自动等同于整个策略结束。",
 		"reply 必须简短（建议不超过 24 个字符），不包含窗口句柄、十六进制 ID 或长解释。",
 		"若需要“输入并回车”，请拆成两步动作：先 host.paste_text 输入纯文本，再 host.send_key(\"Enter\")；不要把 {ENTER} 混进 text。",
 		"禁止输出代码块、禁止附加解释文本，只输出 JSON。",
@@ -865,6 +937,12 @@ function buildOperationsPlannerUserPrompt(input: {
 	plannerPolicyReminder: string;
 	previousExpectedOutcome: string;
 	previousExpectedMet: boolean | null;
+	latestPhaseGoal: string;
+	latestPhaseReason: string;
+	latestPhaseAbortCondition: string;
+	latestPhaseStatus: string;
+	latestPhaseAssessment: string;
+	strategyLessons: string[];
 		boardPositionsText?: string;
 }): string {
 	const historyText = input.history.length ? input.history.map((item) => `- ${item}`).join("\n") : "- (empty)";
@@ -891,6 +969,12 @@ function buildOperationsPlannerUserPrompt(input: {
 		`latestHint: ${input.latestHint || "(none)"}`,
 		`previousExpectedOutcome: ${input.previousExpectedOutcome || "(none)"}`,
 		`previousExpectedMet: ${input.previousExpectedMet === null ? "unknown" : input.previousExpectedMet ? "yes" : "no"}`,
+		`latestPhaseGoal: ${input.latestPhaseGoal || "(none)"}`,
+		`latestPhaseReason: ${input.latestPhaseReason || "(none)"}`,
+		`latestPhaseAbortCondition: ${input.latestPhaseAbortCondition || "(none)"}`,
+		`latestPhaseStatus: ${input.latestPhaseStatus || "(none)"}`,
+		`latestPhaseAssessment: ${input.latestPhaseAssessment || "(none)"}`,
+		`strategyLessons: ${input.strategyLessons.join(" || ") || "(none)"}`,
 		`plannerPolicyReminder: ${input.plannerPolicyReminder || "(none)"}`,
 		"scratchpadContext:",
 		input.scratchpadContext || "(empty)",
@@ -904,6 +988,9 @@ function buildOperationsPlannerUserPrompt(input: {
 		'  "reply": "string",',
 		'  "expectedOutcome": "string",',
 		'  "stateSketch": "string（可选；离散棋盘/网格任务时用纯文本表示当前理解到的局面）",',
+		'  "currentPhaseGoal": "string（当前阶段要创造的中间态或局面目标）",',
+		'  "whyThisPhase": "string（为什么当前先做这个阶段）",',
+		'  "abortCondition": "string（什么迹象出现后要放弃当前阶段并换策略/重开）",',
 		'  "actions": [',
 		`    { "tool": "${input.allowedTools.join("|")}", "args": { "locatorHint": "点击绿色 tile '1'" } }`,
 		"  ]",
@@ -917,6 +1004,8 @@ function buildProgressEvaluatorSystemPrompt(rules: string[], mission: MissionAna
 		"你不仅要判断是否有变化，还要判断动作是否做对、是否朝 mission 目标推进。",
 		"你必须检查 preExpectedOutcome 是否达成，并输出 expectedMet（布尔）与 expectationReview（一句话）。",
 		"若 preExpectedOutcome 未达成，nextHint 必须明确给出修正动作链，不能只给抽象建议。",
+		"你还必须判断当前阶段目标是否推进，输出 phaseStatus（advanced|stalled|blocked|completed）和 phaseAssessment（一句话）。",
+		"phaseStatus=completed 只表示当前阶段完成，不等于整个 mission 完成；mission 是否完成仍必须严格服从 completionSignals。",
 		"你还要检查 executedAction 是否拆成“单步可执行动作”；若动作过于抽象或一步里混了多步，判定 wasActionCorrect=false 并在 nextHint 指出应拆成的最小动作。",
 		"若 history 显示同签名动作已连续失败 >=2 轮，你必须判定 wasActionCorrect=false 且 goalAlignment=deviated，并在 nextHint 强制要求“换策略/换动作链，不得重复同动作”。",
 		`missionGoal: ${mission.missionGoal}`,
@@ -945,6 +1034,9 @@ function buildProgressEvaluatorUserPrompt(input: {
 	executionError: string;
 	scratchpadContext: string;
 	batchActionSummary?: string;
+	phaseGoal: string;
+	phaseReason: string;
+	phaseAbortCondition: string;
 		boardPositionsText?: string;
 }): string {
 	const historyText = input.history.length ? input.history.map((item) => `- ${item}`).join("\n") : "- (empty)";
@@ -969,6 +1061,9 @@ function buildProgressEvaluatorUserPrompt(input: {
 	}
 	lines.push(
 		`preExpectedOutcome: ${input.expectedOutcome || "(none)"}`,
+		`currentPhaseGoal: ${input.phaseGoal || "(none)"}`,
+		`phaseReason: ${input.phaseReason || "(none)"}`,
+		`phaseAbortCondition: ${input.phaseAbortCondition || "(none)"}`,
 		`executionError: ${input.executionError || "(none)"}`,
 		"scratchpadContext:",
 		input.scratchpadContext || "(empty)",
@@ -987,7 +1082,9 @@ function buildProgressEvaluatorUserPrompt(input: {
 		'  "nextHint": "string",',
 		'  "beforeStateSketch": "string（可选；离散棋盘/网格任务时描述 before 局面）",',
 		'  "afterStateSketch": "string（可选；离散棋盘/网格任务时描述 after 局面）",',
-		'  "stateDelta": "string（可选；说明这一步到底哪里变了；若几乎没变应明确写无变化）"',
+		'  "stateDelta": "string（可选；说明这一步到底哪里变了；若几乎没变应明确写无变化）",',
+		'  "phaseStatus": "advanced|stalled|blocked|completed",',
+		'  "phaseAssessment": "string"',
 		"}",
 	);
 	return lines.join("\n");
@@ -1073,6 +1170,9 @@ function normalizeOperationsPlannerDecision(
 		reply: toText(parsed.reply),
 		expectedOutcome: toText(parsed.expectedOutcome),
 		stateSketch: toText(parsed.stateSketch),
+		currentPhaseGoal: toText(parsed.currentPhaseGoal),
+		whyThisPhase: toText(parsed.whyThisPhase),
+		abortCondition: toText(parsed.abortCondition),
 		actions,
 	};
 }
@@ -1195,6 +1295,22 @@ function normalizeProgressEvaluatorDecision(rawText: string): ProgressEvaluatorD
 		? false
 		: wasActionCorrect;
 	const hasTerminalSuccess = goalAlignment === "achieved" || goalProgress === "done";
+	const phaseStatusRaw = toText(parsed.phaseStatus).toLowerCase();
+	const phaseStatus: ProgressEvaluatorDecision["phaseStatus"] = hasTerminalSuccess
+		? "completed"
+		: phaseStatusRaw === "completed"
+			? "completed"
+			: phaseStatusRaw === "blocked"
+				? "blocked"
+				: phaseStatusRaw === "advanced"
+					? "advanced"
+					: phaseStatusRaw === "stalled"
+						? "stalled"
+						: actionSucceeded
+							? "advanced"
+							: goalAlignment === "deviated"
+								? "blocked"
+								: "stalled";
 	const adjustedGoalProgress: "none" | "partial" | "done" = hasTerminalSuccess
 		? "done"
 		: goalProgress;
@@ -1213,6 +1329,8 @@ function normalizeProgressEvaluatorDecision(rawText: string): ProgressEvaluatorD
 		beforeStateSketch: toText(parsed.beforeStateSketch),
 		afterStateSketch: toText(parsed.afterStateSketch),
 		stateDelta: toText(parsed.stateDelta),
+		phaseStatus,
+		phaseAssessment: toText(parsed.phaseAssessment || parsed.expectationReview),
 	};
 }
 
@@ -1233,6 +1351,7 @@ function applyBoardTaskConsistencyGuard(
 		expectedMet: false,
 		goalAlignment: "unchanged",
 		goalProgress: "none",
+		phaseStatus: "stalled",
 	};
 }
 
@@ -1251,6 +1370,7 @@ function applyBoardTaskProgressGuard(
 			expectedMet: true,
 			goalAlignment: "achieved",
 			goalProgress: "done",
+			phaseStatus: "completed",
 		};
 	}
 	if (!hasBoardTaskPositiveMovementEvidence(reflection)) {
@@ -1262,6 +1382,7 @@ function applyBoardTaskProgressGuard(
 		wasActionCorrect: true,
 		goalAlignment: reflection.goalAlignment === "achieved" ? "achieved" : "closer",
 		goalProgress: reflection.goalProgress === "done" ? "done" : "partial",
+		phaseStatus: reflection.phaseStatus === "completed" ? "completed" : "advanced",
 	};
 }
 
@@ -1287,6 +1408,7 @@ function applyMissionCompletionGuard(
 		...reflection,
 		goalAlignment: madeProgress ? "closer" : "unchanged",
 		goalProgress: madeProgress ? "partial" : "none",
+		phaseStatus: madeProgress ? "advanced" : "stalled",
 		nextHint: combineHints(
 			reflection.nextHint,
 			pickReplyLanguageText(
@@ -1317,6 +1439,7 @@ function applySokobanDeadlockGuard(
 		expectedMet: false,
 		goalAlignment: "deviated",
 		goalProgress: "none",
+		phaseStatus: "blocked",
 		nextHint: combineHints(
 			reflection.nextHint,
 			pickReplyLanguageText(
@@ -2429,6 +2552,9 @@ function formatPlannerScratchpadNote(input: {
 		`noActionStreak=${input.noActionStreak}`,
 		`previousExpectedOutcome=${input.previousExpectedOutcome || "(none)"}`,
 		`previousExpectedMet=${input.previousExpectedMet === null ? "unknown" : input.previousExpectedMet ? "yes" : "no"}`,
+		`currentPhaseGoal=${input.planner.currentPhaseGoal || "(none)"}`,
+		`whyThisPhase=${input.planner.whyThisPhase || "(none)"}`,
+		`abortCondition=${input.planner.abortCondition || "(none)"}`,
 		`expectedOutcome=${input.planner.expectedOutcome || "(none)"}`,
 		`stateSketch=${input.planner.stateSketch || "(none)"}`,
 		`reasoning=${input.planner.reasoning || "(none)"}`,
@@ -2451,6 +2577,8 @@ function formatEvaluatorScratchpadNote(input: {
 		`wasActionCorrect=${input.reflection.wasActionCorrect}`,
 		`goalAlignment=${input.reflection.goalAlignment}`,
 		`goalProgress=${input.reflection.goalProgress}`,
+		`phaseStatus=${input.reflection.phaseStatus}`,
+		`phaseAssessment=${input.reflection.phaseAssessment || "(none)"}`,
 		`beforeStateSketch=${input.reflection.beforeStateSketch || "(none)"}`,
 		`afterStateSketch=${input.reflection.afterStateSketch || "(none)"}`,
 		`stateDelta=${input.reflection.stateDelta || "(none)"}`,
@@ -2465,6 +2593,42 @@ function pushScratchpadNote(bucket: string[], note: string, limit: number): void
 	}
 }
 
+function buildStrategyLesson(input: {
+	planner: OperationsPlannerDecision;
+	reflection: ProgressEvaluatorDecision;
+}): string {
+	const phaseGoal = input.planner.currentPhaseGoal.trim();
+	const phaseReason = input.planner.whyThisPhase.trim();
+	const phaseAssessment = input.reflection.phaseAssessment.trim();
+	const nextHint = input.reflection.nextHint.trim();
+	const shouldRecord = input.reflection.phaseStatus === "blocked"
+		|| /死局|deadlock|重置|restart|不要重复|avoid repeating|错误路线/i.test(nextHint);
+	if (!shouldRecord) {
+		return "";
+	}
+	const parts = [
+		phaseGoal ? `避免重复阶段：${phaseGoal}` : "",
+		phaseReason ? `原策略动机：${phaseReason}` : "",
+		phaseAssessment ? `失败原因：${phaseAssessment}` : "",
+		nextHint ? `修正建议：${nextHint}` : "",
+	].filter(Boolean);
+	return parts.join(" | ").slice(0, 320);
+}
+
+function pushStrategyLesson(bucket: string[], lesson: string, limit: number): void {
+	const normalizedLesson = lesson.trim();
+	if (!normalizedLesson) {
+		return;
+	}
+	if (bucket[bucket.length - 1] === normalizedLesson) {
+		return;
+	}
+	bucket.push(normalizedLesson);
+	if (bucket.length > limit) {
+		bucket.splice(0, bucket.length - limit);
+	}
+}
+
 function buildSharedScratchpadContext(input: {
 	taskText: string;
 	mission: MissionAnalysisDecision;
@@ -2472,6 +2636,12 @@ function buildSharedScratchpadContext(input: {
 	latestHint: string;
 	latestExpectedOutcome: string;
 	latestExpectedMet: boolean | null;
+	latestPhaseGoal: string;
+	latestPhaseReason: string;
+	latestPhaseAbortCondition: string;
+	latestPhaseStatus: string;
+	latestPhaseAssessment: string;
+	strategyLessons: string[];
 	history: string[];
 	plannerNotes: string[];
 	evaluatorNotes: string[];
@@ -2496,6 +2666,14 @@ function buildSharedScratchpadContext(input: {
 		"### latestExpectation",
 		`expectedOutcome=${input.latestExpectedOutcome || "(none)"}`,
 		`expectedMet=${input.latestExpectedMet === null ? "unknown" : input.latestExpectedMet ? "yes" : "no"}`,
+		"### latestPhase",
+		`phaseGoal=${input.latestPhaseGoal || "(none)"}`,
+		`phaseReason=${input.latestPhaseReason || "(none)"}`,
+		`phaseAbortCondition=${input.latestPhaseAbortCondition || "(none)"}`,
+		`phaseStatus=${input.latestPhaseStatus || "(none)"}`,
+		`phaseAssessment=${input.latestPhaseAssessment || "(none)"}`,
+		"### strategyLessons",
+		input.strategyLessons.length ? input.strategyLessons.join("\n") : "(none)",
 		"### plannerRecent",
 		plannerTail.length ? plannerTail.join("\n") : "(none)",
 		"### evaluatorRecent",
@@ -2761,5 +2939,6 @@ export const __test = {
 	detectSokobanDeadlock,
 	didBoardTaskMakeProgress,
 	normalizeStateSketchText,
+	buildStrategyLesson,
 	resolveOperationsNarration,
 } as const;
