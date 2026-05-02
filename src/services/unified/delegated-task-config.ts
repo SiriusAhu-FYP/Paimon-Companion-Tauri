@@ -25,6 +25,7 @@ export interface DelegatedTaskProfileConfig {
 	missionAnalystRules: string[];
 	operationsPlannerRules: string[];
 	progressEvaluatorRules: string[];
+	boardPerceptionPrompt: string;
 }
 
 export interface DelegatedTaskProfilesConfig {
@@ -60,6 +61,8 @@ type DelegatedTaskProfileRaw = {
 	progressEvaluatorRules?: unknown;
 	locator?: unknown;
 	roles?: unknown;
+	boardPerception?: unknown;
+	boardPerceptionPrompt?: unknown;
 	plannerTemperature?: unknown;
 	reflectionTemperature?: unknown;
 	plannerRules?: unknown;
@@ -97,6 +100,7 @@ const DEFAULT_PROFILE_CONFIG: DelegatedTaskProfileConfig = {
 	missionAnalystRules: [],
 	operationsPlannerRules: [],
 	progressEvaluatorRules: [],
+	boardPerceptionPrompt: "",
 };
 
 const DEFAULT_PROFILES: Record<string, DelegatedTaskProfileConfig> = {
@@ -231,6 +235,7 @@ function sanitizeProfile(rawValue: unknown, fallback: DelegatedTaskProfileConfig
 		missionAnalystRules: missionAnalystRules.length ? missionAnalystRules : [...fallback.missionAnalystRules],
 		operationsPlannerRules: operationsPlannerRules.length ? operationsPlannerRules : [...fallback.operationsPlannerRules],
 		progressEvaluatorRules: progressEvaluatorRules.length ? progressEvaluatorRules : [...fallback.progressEvaluatorRules],
+			boardPerceptionPrompt: typeof parsed.boardPerceptionPrompt === "string" && parsed.boardPerceptionPrompt.trim() ? parsed.boardPerceptionPrompt.trim() : fallback.boardPerceptionPrompt,
 	};
 }
 

@@ -45,6 +45,7 @@ export interface SemanticDelegationProfileConfig {
 	missionAnalystRules?: readonly string[];
 	operationsPlannerRules?: readonly string[];
 	progressEvaluatorRules?: readonly string[];
+	boardPerceptionPrompt?: string;
 }
 
 export interface SemanticGameManifest<ActionId extends string> extends SemanticGamePluginDefinition<ActionId> {
