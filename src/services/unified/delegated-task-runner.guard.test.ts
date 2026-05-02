@@ -7,6 +7,9 @@ const {
 	applyPhasePlanProgressGuard,
 	applyMissionCompletionGuard,
 	applySokobanDeadlockGuard,
+	detectInvalidatedStrategyReuse,
+	didRestartActionSucceed,
+	shouldInvalidateStrategy,
 	hasNoChangeEvidence,
 	extractGridSignature,
 	extractGridRows,
@@ -241,6 +244,7 @@ describe("applySokobanDeadlockGuard", () => {
 		expect(result.expectedMet).toBe(false);
 		expect(result.goalAlignment).toBe("deviated");
 		expect(result.goalProgress).toBe("none");
+		expect(result.planViability).toBe("invalidated");
 		expect(result.nextHint).toContain("重置按钮");
 	});
 
@@ -256,6 +260,53 @@ describe("applySokobanDeadlockGuard", () => {
 		const result = applySokobanDeadlockGuard(reflection, GAME_CONTEXT);
 		expect(result.goalAlignment).toBe("achieved");
 		expect(result.goalProgress).toBe("done");
+	});
+});
+
+describe("strategy invalidation helpers", () => {
+	it("blocks planner from reusing an invalidated strategy", () => {
+		const issue = detectInvalidatedStrategyReuse(
+			"先拆下箱，再为上箱腾空间",
+			["先拆下箱，再为上箱腾空间"],
+		);
+		expect(issue).toContain("错误");
+	});
+
+	it("marks strategy invalid when evaluator reports deadlock/restart route failure", () => {
+		const shouldInvalidate = shouldInvalidateStrategy(
+			{
+				goalReached: false,
+				reasoning: "",
+				reply: "",
+				expectedOutcome: "",
+				stateSketch: "",
+				currentPhaseGoal: "",
+				whyThisPhase: "",
+				abortCondition: "",
+				activeStrategy: "先拆下箱，再为上箱腾空间",
+				strategyRevision: "",
+				actions: [],
+			},
+			makeReflection({
+				planViability: "invalidated",
+				planAssessment: "当前路线已被死局证明错误。",
+			}),
+		);
+		expect(shouldInvalidate).toBe(true);
+	});
+
+	it("detects successful restart actions from reflection text", () => {
+		const restarted = didRestartActionSucceed(
+			{
+				tool: "host.send_mouse",
+				args: { locatorHint: "点击右上角紫红色重置按钮 restart" },
+			},
+			makeReflection({
+				stateDelta: "已重开，棋盘回到初始局面。",
+				phaseAssessment: "Restart succeeded and the board returned to the initial state.",
+			}),
+		);
+		expect(restarted).toBe(true);
 	});
 });
 

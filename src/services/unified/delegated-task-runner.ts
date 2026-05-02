@@ -147,6 +147,7 @@ export async function runDelegatedTaskLoop(input: {
 	let latestStrategyRevision = "";
 	let latestPlanViability: ProgressEvaluatorDecision["planViability"] | "" = "";
 	let latestPlanAssessment = "";
+	const invalidatedStrategies: string[] = [];
 	let noActionStreak = 0;
 	let hasExecutionEvidence = false;
 	const strategyLessons: string[] = [];
@@ -302,6 +303,7 @@ export async function runDelegatedTaskLoop(input: {
 			latestStrategyRevision,
 			latestPlanViability,
 			latestPlanAssessment,
+			invalidatedStrategies,
 			strategyLessons,
 			history,
 			plannerNotes,
@@ -355,6 +357,7 @@ export async function runDelegatedTaskLoop(input: {
 					latestStrategyRevision,
 					latestPlanViability,
 					latestPlanAssessment,
+					invalidatedStrategies,
 					strategyLessons,
 					boardPositionsText: formatBoardGridForPlanner(roundBoardGrid) || undefined,
 				}),
@@ -377,7 +380,8 @@ export async function runDelegatedTaskLoop(input: {
 				input.target,
 				gameContext,
 			);
-			const policyIssue = detectPlannerPolicyIssue({
+			const invalidatedStrategyIssue = detectInvalidatedStrategyReuse(nextPlanner.activeStrategy, invalidatedStrategies);
+			const policyIssue = invalidatedStrategyIssue ?? detectPlannerPolicyIssue({
 				goalReached: nextPlanner.goalReached,
 				expectedOutcome: nextPlanner.expectedOutcome,
 				actions: nextPlanner.actions,
@@ -443,6 +447,7 @@ export async function runDelegatedTaskLoop(input: {
 				latestStrategyRevision,
 				latestPlanViability,
 				latestPlanAssessment,
+				invalidatedStrategies,
 				strategyLessons,
 				history,
 				plannerNotes,
@@ -512,6 +517,7 @@ export async function runDelegatedTaskLoop(input: {
 					latestStrategyRevision,
 					latestPlanViability,
 					latestPlanAssessment,
+					invalidatedStrategies,
 					strategyLessons,
 					history,
 					plannerNotes,
@@ -629,6 +635,7 @@ export async function runDelegatedTaskLoop(input: {
 					latestStrategyRevision,
 					latestPlanViability,
 					latestPlanAssessment,
+					invalidatedStrategies,
 					strategyLessons,
 					history,
 					plannerNotes,
@@ -710,6 +717,9 @@ export async function runDelegatedTaskLoop(input: {
 			reflection,
 		});
 		pushStrategyLesson(strategyLessons, strategyLesson, 4);
+		if (shouldInvalidateStrategy(planner, reflection)) {
+			pushInvalidatedStrategy(invalidatedStrategies, planner.activeStrategy);
+		}
 		const repeatedFailureHint = buildRepeatedFailureHint(recentActionOutcomes);
 		const boardStagnationHint = buildBoardStagnationHint(gameContext, recentActionOutcomes);
 		if (repeatedFailureHint && !didBoardTaskMakeProgress(reflection)) {
@@ -754,6 +764,47 @@ export async function runDelegatedTaskLoop(input: {
 		latestStrategyRevision = planner.strategyRevision || latestStrategyRevision;
 		latestPlanViability = reflection.planViability;
 		latestPlanAssessment = reflection.planAssessment || latestPlanAssessment;
+		if (shouldInvalidateStrategy(planner, reflection)) {
+			latestHint = combineHints(
+				latestHint,
+				pickReplyLanguageText(
+					"上一条高层路线已被否决；不要继续沿用它。若当前局面不可恢复，请重开后从其余候选路线中重选。",
+					"The previous high-level route has been invalidated; do not keep following it. If the current board is unrecoverable, restart and choose a different remaining route.",
+				),
+			);
+			latestActiveStrategy = "";
+			latestStrategyRevision = pickReplyLanguageText(
+				"上一条高层路线已被证明错误，下一轮必须改用未被否决的候选路线。",
+				"The previous high-level strategy has been disproven. Next round must choose a different non-invalidated route.",
+			);
+			latestPhaseGoal = "";
+			latestPhaseReason = "";
+			latestPhaseAbortCondition = "";
+			latestPhaseStatus = "";
+			latestPhaseAssessment = "";
+			latestPlanViability = "invalidated";
+			latestPlanAssessment = reflection.planAssessment || latestPlanAssessment;
+		}
+		if (didRestartActionSucceed(lastExecutedAction, reflection)) {
+			latestHint = pickReplyLanguageText(
+				"棋盘已成功重开。保留失败经验，但不要沿用已否决路线；请从其余候选路线中重新选择，并先验证新的中间态方案。",
+				"The board has been successfully restarted. Keep the failure lesson, but do not reuse invalidated routes; choose a different remaining route and validate a new intermediate-state plan first.",
+			);
+			latestActiveStrategy = "";
+			latestStrategyRevision = pickReplyLanguageText(
+				"本轮已成功重开；保留失败经验，但必须从未被否决的候选路线中重新选择。",
+				"The level was successfully restarted; keep the failure lesson, but reselect a route from the non-invalidated candidates.",
+			);
+			latestPhaseGoal = "";
+			latestPhaseReason = "";
+			latestPhaseAbortCondition = "";
+			latestPhaseStatus = "";
+			latestPhaseAssessment = "";
+			latestPlanViability = "";
+			latestPlanAssessment = "";
+			latestExpectedOutcome = "";
+			latestExpectedMet = null;
+		}
 		hasExecutionEvidence = true;
 		const evaluatorNote = formatEvaluatorScratchpadNote({
 			round,
@@ -805,6 +856,7 @@ export async function runDelegatedTaskLoop(input: {
 				latestStrategyRevision,
 				latestPlanViability,
 				latestPlanAssessment,
+				invalidatedStrategies,
 				strategyLessons,
 				history,
 				plannerNotes,
@@ -959,6 +1011,7 @@ function buildOperationsPlannerSystemPrompt(input: {
 		"对复杂棋盘任务，必须显式维护 currentPhaseGoal / whyThisPhase / abortCondition。phaseGoal 应描述当前阶段要创造的中间态，而不只是最终目标。",
 		"对复杂推箱子任务，优先围绕“释放空间、调整箱子相对关系、验证候选路线”选择 activeStrategy，而不是贪心地先完成看起来最近的箱子。",
 		"activeStrategy 应代表当前正在验证的高层路线；strategyRevision 用一句话说明本轮是否维持、修正或放弃原路线。",
+		"若 scratchpadContext 中已经列出 invalidatedStrategies，禁止继续复用这些已被否决的高层路线，必须改选候选路线或明确修正原路线。",
 		"允许为了更优解暂时把箱子推离目标点，只要这个中间态明确服务于后续解题；不要把“某箱已经在目标点上”自动等同于整个策略结束。",
 		"reply 必须简短（建议不超过 24 个字符），不包含窗口句柄、十六进制 ID 或长解释。",
 		"若需要“输入并回车”，请拆成两步动作：先 host.paste_text 输入纯文本，再 host.send_key(\"Enter\")；不要把 {ENTER} 混进 text。",
@@ -998,15 +1051,16 @@ function buildOperationsPlannerUserPrompt(input: {
 	latestStrategyRevision: string;
 	latestPlanViability: string;
 	latestPlanAssessment: string;
+	invalidatedStrategies: string[];
 	strategyLessons: string[];
-		boardPositionsText?: string;
+	boardPositionsText?: string;
 }): string {
 	const historyText = input.history.length ? input.history.map((item) => `- ${item}`).join("\n") : "- (empty)";
-
-		const positionLines: string[] = [];
-		if (input.boardPositionsText) {
-			positionLines.push(input.boardPositionsText);
-		}	const gameContextText = input.gameContext
+	const positionLines: string[] = [];
+	if (input.boardPositionsText) {
+		positionLines.push(input.boardPositionsText);
+	}
+	const gameContextText = input.gameContext
 		? [
 			`gameContext: ${input.gameContext.displayName} (${input.gameContext.gameId})`,
 			`gameActionIds: ${input.gameContext.actionIds.join(", ")}`,
@@ -1036,6 +1090,7 @@ function buildOperationsPlannerUserPrompt(input: {
 		`latestPlanAssessment: ${input.latestPlanAssessment || "(none)"}`,
 		`candidateStrategies: ${input.mission.candidateStrategies.join(" || ") || "(none)"}`,
 		`strategyWarnings: ${input.mission.strategyWarnings.join(" || ") || "(none)"}`,
+		`invalidatedStrategies: ${input.invalidatedStrategies.join(" || ") || "(none)"}`,
 		`strategyLessons: ${input.strategyLessons.join(" || ") || "(none)"}`,
 		`plannerPolicyReminder: ${input.plannerPolicyReminder || "(none)"}`,
 		"scratchpadContext:",
@@ -1104,13 +1159,13 @@ function buildProgressEvaluatorUserPrompt(input: {
 	phaseReason: string;
 	phaseAbortCondition: string;
 	activeStrategy: string;
-		boardPositionsText?: string;
+	boardPositionsText?: string;
 }): string {
 	const historyText = input.history.length ? input.history.map((item) => `- ${item}`).join("\n") : "- (empty)";
-		const initLines: string[] = [];
-		if (input.boardPositionsText) {
-			initLines.push(input.boardPositionsText);
-		}
+	const initLines: string[] = [];
+	if (input.boardPositionsText) {
+		initLines.push(input.boardPositionsText);
+	}
 	const lines = [
 		`task: ${input.taskText}`,
 		`round: ${input.round}`,
@@ -1548,6 +1603,11 @@ function applySokobanDeadlockGuard(
 		goalAlignment: "deviated",
 		goalProgress: "none",
 		phaseStatus: "blocked",
+		planViability: "invalidated",
+		planAssessment: pickReplyLanguageText(
+			`当前高层路线已被否决：${deadlock.reason}`,
+			`The current high-level route is invalidated: ${deadlock.reason}`,
+		),
 		nextHint: combineHints(
 			reflection.nextHint,
 			pickReplyLanguageText(
@@ -2736,6 +2796,84 @@ function buildStrategyLesson(input: {
 	return parts.join(" | ").slice(0, 320);
 }
 
+function normalizeStrategyIdentity(value: string): string {
+	return value
+		.trim()
+		.toLowerCase()
+		.replace(/\s+/g, " ")
+		.replace(/[，。；：、,.!?！？]/g, "")
+		.trim();
+}
+
+function pushInvalidatedStrategy(bucket: string[], strategy: string): void {
+	const normalized = normalizeStrategyIdentity(strategy);
+	if (!normalized) {
+		return;
+	}
+	const exists = bucket.some((item) => normalizeStrategyIdentity(item) === normalized);
+	if (!exists) {
+		bucket.push(strategy.trim());
+	}
+}
+
+function detectInvalidatedStrategyReuse(strategy: string, invalidatedStrategies: string[]): string {
+	const normalized = normalizeStrategyIdentity(strategy);
+	if (!normalized) {
+		return "";
+	}
+	const matched = invalidatedStrategies.find((item) => normalizeStrategyIdentity(item) === normalized);
+	if (!matched) {
+		return "";
+	}
+	return pickReplyLanguageText(
+		`上一轮已经证明这条高层路线错误：${matched}。请改选另一条候选路线，不能继续沿用同一 activeStrategy。`,
+		`This high-level route was already disproven: ${matched}. Choose a different candidate route instead of reusing the same activeStrategy.`,
+	);
+}
+
+function shouldInvalidateStrategy(
+	planner: OperationsPlannerDecision,
+	reflection: ProgressEvaluatorDecision,
+): boolean {
+	if (!normalizeStrategyIdentity(planner.activeStrategy)) {
+		return false;
+	}
+	if (reflection.planViability === "invalidated") {
+		return true;
+	}
+	const joined = normalizeStateSketchText([
+		reflection.phaseAssessment,
+		reflection.planAssessment,
+		reflection.nextHint,
+	].join(" "));
+	return /死局|deadlock|重置|restart|不要重复|avoidrepeating|错误路线|invalidated/.test(joined);
+}
+
+function isRestartAction(action: DelegatedTaskAction): boolean {
+	if (action.tool !== "host.send_mouse") {
+		return false;
+	}
+	const argsText = normalizeStateSketchText(JSON.stringify(action.args));
+	return /restart|reset|重开|重新开始|紫红|粉红/.test(argsText);
+}
+
+function didRestartActionSucceed(
+	action: DelegatedTaskAction,
+	reflection: ProgressEvaluatorDecision,
+): boolean {
+	if (!isRestartAction(action)) {
+		return false;
+	}
+	const joined = normalizeStateSketchText([
+		reflection.stateDelta,
+		reflection.phaseAssessment,
+		reflection.planAssessment,
+		reflection.nextHint,
+		reflection.afterStateSketch,
+	].join(" "));
+	return /restart|reset|freshsolve|initialstate|restarted|重新开始|重开|初始局面|初始/.test(joined);
+}
+
 function pushStrategyLesson(bucket: string[], lesson: string, limit: number): void {
 	const normalizedLesson = lesson.trim();
 	if (!normalizedLesson) {
@@ -2766,6 +2904,7 @@ function buildSharedScratchpadContext(input: {
 	latestStrategyRevision: string;
 	latestPlanViability: string;
 	latestPlanAssessment: string;
+	invalidatedStrategies: string[];
 	strategyLessons: string[];
 	history: string[];
 	plannerNotes: string[];
@@ -2786,6 +2925,7 @@ function buildSharedScratchpadContext(input: {
 		`completionSignals=${input.mission.completionSignals.join(" | ") || "(none)"}`,
 		`candidateStrategies=${input.mission.candidateStrategies.join(" || ") || "(none)"}`,
 		`strategyWarnings=${input.mission.strategyWarnings.join(" || ") || "(none)"}`,
+		`invalidatedStrategies=${input.invalidatedStrategies.join(" || ") || "(none)"}`,
 		"### memoryRecall",
 		input.memoryRecallSummary || "(none)",
 		"### latestHint",
@@ -3063,6 +3203,9 @@ export const __test = {
 	applyPhasePlanProgressGuard,
 	applyMissionCompletionGuard,
 	applySokobanDeadlockGuard,
+	detectInvalidatedStrategyReuse,
+	didRestartActionSucceed,
+	shouldInvalidateStrategy,
 	hasNoChangeEvidence,
 	extractGridSignature,
 	extractGridRows,
