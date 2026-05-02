@@ -251,6 +251,10 @@ export function StageWindow() {
 				break;
 			case "reset-position":
 				try {
+					if (stageMode === "docked") {
+						syncStateToHost({ mode: "docked", visible: true });
+						break;
+					}
 					await win.setPosition(new LogicalPosition(100, 100));
 				} catch { /* */ }
 				break;
