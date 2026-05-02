@@ -5,11 +5,14 @@ const {
 	applyBoardTaskConsistencyGuard,
 	applyBoardTaskProgressGuard,
 	applyMissionCompletionGuard,
+	applySokobanDeadlockGuard,
 	hasNoChangeEvidence,
 	extractGridSignature,
+	extractGridRows,
 	hasBoardTaskCompletionEvidence,
 	hasBoardTaskPositiveMovementEvidence,
 	isSokobanMissionComplete,
+	detectSokobanDeadlock,
 	didBoardTaskMakeProgress,
 	resolveOperationsNarration,
 } = __test;
@@ -173,6 +176,41 @@ describe("applyMissionCompletionGuard", () => {
 	});
 });
 
+describe("applySokobanDeadlockGuard", () => {
+	it("marks wall-locked unsolved box as deadlock and requests restart", () => {
+		const reflection = makeReflection({
+			actionSucceeded: true,
+			wasActionCorrect: true,
+			expectedMet: true,
+			goalAlignment: "closer",
+			goalProgress: "partial",
+			afterStateSketch: "######\n#....#\n#...*#\n#.T.B#\n#....#\n######",
+			nextHint: "Try approaching the lower box from below.",
+		});
+		const result = applySokobanDeadlockGuard(reflection, GAME_CONTEXT);
+		expect(result.actionSucceeded).toBe(true);
+		expect(result.wasActionCorrect).toBe(false);
+		expect(result.expectedMet).toBe(false);
+		expect(result.goalAlignment).toBe("deviated");
+		expect(result.goalProgress).toBe("none");
+		expect(result.nextHint).toContain("重置按钮");
+	});
+
+	it("does not trigger on solved mission state", () => {
+		const reflection = makeReflection({
+			actionSucceeded: true,
+			wasActionCorrect: true,
+			expectedMet: true,
+			goalAlignment: "achieved",
+			goalProgress: "done",
+			afterStateSketch: "#####\n#...#\n#.+*#\n#####",
+		});
+		const result = applySokobanDeadlockGuard(reflection, GAME_CONTEXT);
+		expect(result.goalAlignment).toBe("achieved");
+		expect(result.goalProgress).toBe("done");
+	});
+});
+
 describe("hasNoChangeEvidence", () => {
 	it("detects Chinese no-change phrases in stateDelta", () => {
 		expect(hasNoChangeEvidence(makeReflection({ stateDelta: "无变化" }))).toBe(true);
@@ -257,6 +295,23 @@ describe("extractGridSignature", () => {
 		const sig = extractGridSignature(sketch);
 		expect(sig).toContain("#");
 		expect(sig).toContain("p");
+	});
+
+	it("extracts uppercase grid rows for deadlock analysis", () => {
+		const rows = extractGridRows("# # P\n# B T\n# # #");
+		expect(rows).toEqual(["##P", "#BT", "###"]);
+	});
+});
+
+describe("detectSokobanDeadlock", () => {
+	it("detects a box trapped against wall and completed box", () => {
+		const deadlock = detectSokobanDeadlock("######\n#....#\n#...*#\n#.+.B#\n#....#\n######");
+		expect(deadlock?.reason).toContain("死局");
+	});
+
+	it("does not flag ordinary unsolved boards", () => {
+		const deadlock = detectSokobanDeadlock("######\n#P...#\n#..BT#\n#.TB.#\n#....#\n######");
+		expect(deadlock).toBeNull();
 	});
 });
 

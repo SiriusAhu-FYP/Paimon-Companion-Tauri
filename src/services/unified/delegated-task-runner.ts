@@ -570,6 +570,7 @@ export async function runDelegatedTaskLoop(input: {
 		reflection = applyBoardTaskConsistencyGuard(reflection, gameContext);
 		reflection = applyBoardTaskProgressGuard(reflection, gameContext);
 		reflection = applyMissionCompletionGuard(reflection, gameContext);
+		reflection = applySokobanDeadlockGuard(reflection, gameContext);
 		if (batchExecutionError) {
 			reflection = {
 				...reflection,
@@ -1296,6 +1297,36 @@ function applyMissionCompletionGuard(
 	};
 }
 
+function applySokobanDeadlockGuard(
+	reflection: ProgressEvaluatorDecision,
+	gameContext: DelegatedGameContext | null,
+): ProgressEvaluatorDecision {
+	if (!gameContext || gameContext.gameId !== "sokoban") {
+		return reflection;
+	}
+	if (isSokobanMissionComplete(reflection)) {
+		return reflection;
+	}
+	const deadlock = detectSokobanDeadlock(reflection.afterStateSketch);
+	if (!deadlock) {
+		return reflection;
+	}
+	return {
+		...reflection,
+		wasActionCorrect: false,
+		expectedMet: false,
+		goalAlignment: "deviated",
+		goalProgress: "none",
+		nextHint: combineHints(
+			reflection.nextHint,
+			pickReplyLanguageText(
+				`检测到推箱子死局：${deadlock.reason}。不要继续在当前局面乱走；请点击右上角紫红色/偏粉红色的重置按钮重新开始本关，并记录这条错误思路。`,
+				`Sokoban deadlock detected: ${deadlock.reason}. Do not keep wandering in the current state; click the purple-pink restart button in the upper-right corner, restart the level, and remember this failed idea.`,
+			),
+		),
+	};
+}
+
 function hasNoChangeEvidence(reflection: ProgressEvaluatorDecision): boolean {
 	const stateDelta = normalizeStateSketchText(reflection.stateDelta);
 	if (/(无(?:可确认)?变化|基本没变|no(?:[a-z]+)?change|unchanged|novisiblechange|static)/i.test(stateDelta)) {
@@ -1312,14 +1343,19 @@ function hasNoChangeEvidence(reflection: ProgressEvaluatorDecision): boolean {
 }
 
 function extractGridSignature(sketch: string): string {
-	const rows = sketch
-		.split(/[\n\r]+/)
-		.map((row) => row.replace(/[^#.PBTW_*+\s]/gi, "").trim())
-		.filter((row) => row.length > 0 && /[#.PBTW_*+]/i.test(row));
+	const rows = extractGridRows(sketch);
 	if (rows.length < 2) {
 		return "";
 	}
 	return rows.map((r) => r.replace(/\s+/g, "").toLowerCase()).join("|");
+}
+
+function extractGridRows(sketch: string): string[] {
+	return sketch
+		.split(/[\n\r]+/)
+		.map((row) => row.replace(/[^#.PBTW_*+\s]/gi, "").trim())
+		.filter((row) => row.length > 0 && /[#.PBTW_*+]/i.test(row))
+		.map((row) => row.replace(/\s+/g, "").toUpperCase().replace(/W/g, "#").replace(/_/g, "."));
 }
 
 function hasBoardTaskCompletionEvidence(reflection: ProgressEvaluatorDecision): boolean {
@@ -1343,6 +1379,46 @@ function isSokobanMissionComplete(reflection: ProgressEvaluatorDecision): boolea
 	const remainingTargets = (afterGrid.match(/t/g) ?? []).length;
 	const occupiedTargets = (afterGrid.match(/[*+]/g) ?? []).length;
 	return remainingTargets === 0 && occupiedTargets > 0;
+}
+
+function detectSokobanDeadlock(afterStateSketch: string): { reason: string } | null {
+	const rows = extractGridRows(afterStateSketch);
+	if (rows.length < 2) {
+		return null;
+	}
+	const grid = rows.map((row) => row.split(""));
+	const height = grid.length;
+	const width = Math.max(...grid.map((row) => row.length));
+	const getCell = (r: number, c: number): string => {
+		if (r < 0 || r >= height || c < 0) {
+			return "#";
+		}
+		const row = grid[r];
+		if (!row || c >= row.length) {
+			return "#";
+		}
+		return row[c] ?? "#";
+	};
+	const isBlocked = (cell: string): boolean => cell === "#" || cell === "*";
+	for (let r = 0; r < height; r += 1) {
+		for (let c = 0; c < width; c += 1) {
+			const cell = getCell(r, c);
+			if (cell !== "B") {
+				continue;
+			}
+			const leftBlocked = isBlocked(getCell(r, c - 1));
+			const rightBlocked = isBlocked(getCell(r, c + 1));
+			const upBlocked = isBlocked(getCell(r - 1, c));
+			const downBlocked = isBlocked(getCell(r + 1, c));
+			const stuckInCornerLikeSpot = (leftBlocked || rightBlocked) && (upBlocked || downBlocked);
+			if (stuckInCornerLikeSpot) {
+				return {
+					reason: `普通箱子 B 被推到阻塞位（r${r + 1},c${c + 1}），相邻墙体/已完成箱子形成角落式死局`,
+				};
+			}
+		}
+	}
+	return null;
 }
 
 function hasBoardTaskPositiveMovementEvidence(reflection: ProgressEvaluatorDecision): boolean {
@@ -2675,11 +2751,14 @@ export const __test = {
 	applyBoardTaskConsistencyGuard,
 	applyBoardTaskProgressGuard,
 	applyMissionCompletionGuard,
+	applySokobanDeadlockGuard,
 	hasNoChangeEvidence,
 	extractGridSignature,
+	extractGridRows,
 	hasBoardTaskCompletionEvidence,
 	hasBoardTaskPositiveMovementEvidence,
 	isSokobanMissionComplete,
+	detectSokobanDeadlock,
 	didBoardTaskMakeProgress,
 	normalizeStateSketchText,
 	resolveOperationsNarration,

@@ -17,6 +17,7 @@ observationFocus = [
 	"sparse 棋盘上相邻行之间容易混淆；画棋盘草图前必须逐行数清 P/B/T 的精确行号，不得跨行推定。",
 	"在提出下一步动作前，必须先确认动作方向上的相邻格：如果相邻格是墙，或者是无法继续推动的箱子链，则不要选择该动作。",
 	"如果要推动箱子，必须同时确认箱子后方一格是否可进入；只有箱子后方是可行走地砖或目标点时，推动才可能成立。",
+	"如果某个普通箱子 B 被推到贴墙且形成角落式阻塞位（例如贴外墙且上/下/旁边又被墙或已完成箱子封住），应优先视为死局，而不是继续乱走。",
 	"静态画面清晰时，优先给出 3-8 步以内的短动作序列，而不是只给一个模糊方向。",
 	"用具体推箱子术语说明进展：玩家位置、箱子位置、目标点位置、箱子是否更接近目标、是否打开或堵住路径。",
 	"区分纯粹移动玩家、调整站位、推动箱子、让箱子接近目标、箱子上目标点、以及完全没有移动。",
@@ -39,6 +40,7 @@ notes = [
 	"任何声称推动箱子的判断，都必须能在 afterStateSketch 中看到箱子位置变化；否则视为未确认推动。",
 	"箱子被推到绿色菱形目标点后，应在草图中标记为 *。",
 	"只有在明确卡死或长期停滞时，才允许点击右上角洋红色 / 紫红色重置按钮。",
+	"如果局面已形成明显死局，不要继续试探性乱走；应把当前思路记为错误路线，并重置本关重新尝试另一条开局。",
 	"禁止使用右上角绿色撤销 / 回退按钮。",
 ]
 
@@ -58,9 +60,17 @@ allowedTools = [
 ]
 
 [delegationProfile.locator]
-locatorRulesEnabled = true
-locatorCloudEnabled = false
-locatorLocalFallbackEnabled = true
+# 当前推箱子验证改为纯云端链路：
+# - 关闭 rule locator
+# - 关闭 local vision locator fallback
+# - 仅保留 cloud locator
+# 如需回退到旧逻辑，可恢复：
+#   locatorRulesEnabled = true
+#   locatorCloudEnabled = false
+#   locatorLocalFallbackEnabled = true
+locatorRulesEnabled = false
+locatorCloudEnabled = true
+locatorLocalFallbackEnabled = false
 locatorMinConfidence = 0.6
 
 [delegationProfile.roles.missionAnalyst]
@@ -83,6 +93,7 @@ operationsPlannerTemperature = 0.1
 operationsPlannerThinkingMode = "medium"
 operationsPlannerRules = [
 	"优先使用 game.perform_action；若不可用再考虑 host.send_key；只有确认需要重开时才考虑点击右上角洋红色 / 紫红色重置按钮。",
+	"当 evaluator / latestHint 明确指出 deadlock、死局、卡死、或要求 restart 时，下一轮应优先执行一次 host.send_mouse 点击右上角紫红色/偏粉红色重置按钮，并在 reasoning 中说明上一条错误路线是什么。",
 	"禁止使用右上角绿色撤销 / 回退按钮。",
 	"每轮最多 8 个动作，但必须是安全动作序列，不能跨越大量未知局面。",
 	"reasoning 与 stateSketch 必须基于当前观察到的棋盘局面，而不是基于希望发生的移动。",
@@ -91,6 +102,7 @@ operationsPlannerRules = [
 	"下一个动作必须明确对应具体局面目标，例如让 P 靠近哪个 B、把哪个 B 推向哪个 T、或把 B 推到 T 上。",
 	"推动箱子前必须检查箱子后方一格是否可走；若后方是墙、箱子或棋盘外区域，则不要选择该推动。",
 	"如果最近连续两轮都没有确认 stateDelta，就先重建 stateSketch，并明确换一个局面目标；不要沿用同一套方向套路。",
+	"如果普通箱子 B 被推到贴墙且相邻方向又被墙/已完成箱子封住，导致剩余目标无法继续推进，应停止继续乱走，直接规划重置本关。",
 ]
 
 [delegationProfile.roles.progressEvaluator]
@@ -106,7 +118,9 @@ progressEvaluatorRules = [
 	"如果 before/after 没有可确认变化，则 actionSucceeded=false、expectedMet=false、goalProgress=none，不得判成功。",
 	"不要从“按了某个方向键”反推出玩家或箱子已经移动；只有在 after 局面中可见变化时才算移动成立。",
 	"如果局面连续两轮没有可确认变化，nextHint 必须要求重新定位 P/B/T/# 并换一个局面目标，不能只说“再试一次”。",
-	"失败时应考虑是否窗口聚焦失效，可尝试重做动作序列，但在开头增加一个鼠标点击窗口中心的操作。",
+	"若 before/after 棋盘完全一致且有证据表明按键已发出（actionSucceeded 记录中可以看到），应优先判定移动被墙阻挡、站位错误或棋盘识别仍有歧义，而不是立刻归因于窗口焦点丢失。",
+	"只有在连续多次不同方向按键都无任何可确认变化时，nextHint 才可考虑重新聚焦；禁止给出'点击窗口中心'这类笼统建议，必须说明具体要验证的焦点或局面问题。",
+	"如果某个普通箱子 B 被推到贴墙且相邻方向又被墙/已完成箱子封住，导致剩余目标不可能在当前局面完成，则应明确判定为死局；nextHint 必须要求点击右上角紫红色/偏粉红色重置按钮，并说明是哪一步错误地把箱子推入死局。",
 ]
 
 [[actions]]
@@ -144,3 +158,28 @@ description = "Move the player down once, pushing a box only if the path allows 
 [[actions.steps]]
 kind = "send-key"
 key = "Down"
+
+# 当前停用本地 boardPerception 注入。
+# 原因：最近验证表明本地轻量模型会稳定产出错误 BOARD ANALYSIS，反而污染三角色的云端视觉判断。
+# 这里不再提供 boardPerceptionPrompt，captureBoardGrid 将直接跳过，不会发起本地棋盘抽取请求。
+# 如需回退，可恢复下面这段原始提示词：
+#
+# [delegationProfile.boardPerception]
+# boardPerceptionPrompt = """Observe the Sokoban game board in the screenshot and output the complete grid as ASCII text.
+# Use these symbols exactly:
+#   # = wall (dark gray blocks with X texture)
+#   . = empty floor (light gray tiles)
+#   P = player character
+#   B = box (brown/wooden block)
+#   T = target point (green diamond marker)
+#   * = box on target point
+# Count the exact number of rows and columns — do not guess.
+# Walk through each cell one by one, classifying it carefully.
+# Output ONLY the ASCII grid, nothing else.
+# Example output format:
+# #######
+# #.....#
+# #.#B#T.#
+# #.#.#..#
+# #.P...#
+# #######"""
