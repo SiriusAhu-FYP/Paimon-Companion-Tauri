@@ -173,6 +173,8 @@ function validateDelegationProfile(value: unknown): SemanticDelegationProfileCon
 	const operationsPlanner = isObjectRecord(roles.operationsPlanner) ? roles.operationsPlanner : {};
 	const progressEvaluator = isObjectRecord(roles.progressEvaluator) ? roles.progressEvaluator : {};
 	const boardPerception = isObjectRecord(value.boardPerception) ? value.boardPerception : {};
+	const visionPreprocess = isObjectRecord(value.visionPreprocess) ? value.visionPreprocess : {};
+	const visionPreprocessCrop = isObjectRecord(visionPreprocess.crop) ? visionPreprocess.crop : {};
 	const thinkingMode = missionAnalyst.missionAnalystThinkingMode;
 	const plannerThinkingMode = operationsPlanner.operationsPlannerThinkingMode;
 	const evaluatorThinkingMode = progressEvaluator.progressEvaluatorThinkingMode;
@@ -219,6 +221,19 @@ function validateDelegationProfile(value: unknown): SemanticDelegationProfileCon
 		operationsPlannerRules: sanitizeStringArray(operationsPlanner.operationsPlannerRules),
 		progressEvaluatorRules: sanitizeStringArray(progressEvaluator.progressEvaluatorRules),
 		boardPerceptionPrompt: typeof boardPerception.boardPerceptionPrompt === "string" ? (boardPerception.boardPerceptionPrompt as string) : undefined,
+		visionPreprocess: {
+			enabled: toOptionalBoolean(visionPreprocess.enabled),
+			crop: {
+				xNorm: toOptionalNumber(visionPreprocessCrop.xNorm),
+				yNorm: toOptionalNumber(visionPreprocessCrop.yNorm),
+				widthNorm: toOptionalNumber(visionPreprocessCrop.widthNorm),
+				heightNorm: toOptionalNumber(visionPreprocessCrop.heightNorm),
+			},
+			maxWidth: toOptionalNumber(visionPreprocess.maxWidth),
+			maxHeight: toOptionalNumber(visionPreprocess.maxHeight),
+			format: visionPreprocess.format === "png" || visionPreprocess.format === "jpeg" ? visionPreprocess.format : undefined,
+			quality: toOptionalNumber(visionPreprocess.quality),
+		},
 	};
 }
 

@@ -46,6 +46,19 @@ export interface SemanticDelegationProfileConfig {
 	operationsPlannerRules?: readonly string[];
 	progressEvaluatorRules?: readonly string[];
 	boardPerceptionPrompt?: string;
+	visionPreprocess?: {
+		enabled?: boolean;
+		crop?: {
+			xNorm?: number;
+			yNorm?: number;
+			widthNorm?: number;
+			heightNorm?: number;
+		};
+		maxWidth?: number;
+		maxHeight?: number;
+		format?: "png" | "jpeg";
+		quality?: number;
+	};
 }
 
 export interface SemanticGameManifest<ActionId extends string> extends SemanticGamePluginDefinition<ActionId> {

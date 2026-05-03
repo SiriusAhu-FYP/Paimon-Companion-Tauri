@@ -75,6 +75,14 @@ locatorCloudEnabled = true
 locatorLocalFallbackEnabled = false
 locatorMinConfidence = 0.6
 
+[delegationProfile.visionPreprocess]
+enabled = true
+maxWidth = 960
+maxHeight = 720
+format = "jpeg"
+quality = 0.82
+crop = { xNorm = 0.05, yNorm = 0.06, widthNorm = 0.9, heightNorm = 0.82 }
+
 [delegationProfile.roles.missionAnalyst]
 missionAnalystTemperature = 0.1
 missionAnalystThinkingMode = "medium"
@@ -102,7 +110,7 @@ operationsPlannerRules = [
 	"reasoning 与 stateSketch 必须基于当前观察到的棋盘局面，而不是基于希望发生的移动。",
 	"stateSketch 中必须逐行标注 P/B/T 的行列位置；sparse 棋盘上一行之差会导致无效动作，不得跨行推定。",
 	"棋盘表示必须使用标准符号：# 墙, . 地砖, P 玩家, B 箱子, T 目标点, * 箱子在目标点, + 玩家在目标点。不要使用 W/_ 等非标准符号。",
-	"下一个动作必须明确对应具体局面目标，例如让 P 靠近哪个 B、把哪个 B 推向哪个 T、或把 B 推到 T 上。",
+	"下一个动作必须明确对应某个具体局面目标，例如让 P 靠近哪个 B、把哪个 B 推向哪个 T、或把 B 推到 T 上。",
 	"任何推箱动作必须先做推箱几何校验：写清目标箱子、箱子要移动方向、P 必须站在箱子的哪一侧、P 当前是否已经在该侧、最终 actionId。若 P 不在正确侧，本轮只能先走位。",
 	"推箱方向规则：箱子向左=P 在箱子右侧并 move_left；箱子向右=P 在箱子左侧并 move_right；箱子向上=P 在箱子下方并 move_up；箱子向下=P 在箱子上方并 move_down。",
 	"推动箱子前必须检查箱子后方一格是否可走；若后方是墙、箱子或棋盘外区域，则不要选择该推动。",
@@ -178,27 +186,17 @@ description = "Move the player down once, pushing a box only if the path allows 
 kind = "send-key"
 key = "Down"
 
-# 当前停用本地 boardPerception 注入。
-# 原因：最近验证表明本地轻量模型会稳定产出错误 BOARD ANALYSIS，反而污染三角色的云端视觉判断。
-# 这里不再提供 boardPerceptionPrompt，captureBoardGrid 将直接跳过，不会发起本地棋盘抽取请求。
-# 如需回退，可恢复下面这段原始提示词：
-#
-# [delegationProfile.boardPerception]
-# boardPerceptionPrompt = """Observe the Sokoban game board in the screenshot and output the complete grid as ASCII text.
-# Use these symbols exactly:
-#   # = wall (dark gray blocks with X texture)
-#   . = empty floor (light gray tiles)
-#   P = player character
-#   B = box (brown/wooden block)
-#   T = target point (green diamond marker)
-#   * = box on target point
-# Count the exact number of rows and columns — do not guess.
-# Walk through each cell one by one, classifying it carefully.
-# Output ONLY the ASCII grid, nothing else.
-# Example output format:
-# #######
-# #.....#
-# #.#B#T.#
-# #.#.#..#
-# #.P...#
-# #######"""
+[delegationProfile.boardPerception]
+boardPerceptionPrompt = """Observe only the Sokoban board in the screenshot and convert it to ASCII.
+Use these symbols exactly:
+  # = wall / obstacle block
+  . = empty floor
+  P = player character on its logical tile
+  B = movable box
+  T = target point
+  * = box on target point
+  + = player on target point
+Ignore page chrome, ads, buttons, and background outside the board.
+If a reset button is visible, do not include it in the grid.
+Count rows and columns carefully. If the board is non-rectangular, keep the visible room shape with # walls and . floor; do not invent extra gameplay cells.
+If any P/B/T/# cell is uncertain, set confidence to low and explain the ambiguity."""

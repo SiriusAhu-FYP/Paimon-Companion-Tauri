@@ -3,6 +3,21 @@ import { parse } from "smol-toml";
 
 export type DelegatedThinkingMode = "off" | "low" | "medium" | "high";
 export type DelegatedTaskProfileId = "delegation";
+export type DelegatedVisionPreprocessFormat = "png" | "jpeg";
+
+export interface DelegatedVisionPreprocessConfig {
+	enabled: boolean;
+	crop: {
+		xNorm: number;
+		yNorm: number;
+		widthNorm: number;
+		heightNorm: number;
+	};
+	maxWidth: number;
+	maxHeight: number;
+	format: DelegatedVisionPreprocessFormat;
+	quality: number;
+}
 
 export interface DelegatedTaskProfileConfig {
 	taskId: string;
@@ -26,6 +41,7 @@ export interface DelegatedTaskProfileConfig {
 	operationsPlannerRules: string[];
 	progressEvaluatorRules: string[];
 	boardPerceptionPrompt: string;
+	visionPreprocess: DelegatedVisionPreprocessConfig;
 }
 
 export interface DelegatedTaskProfilesConfig {
@@ -63,6 +79,7 @@ type DelegatedTaskProfileRaw = {
 	roles?: unknown;
 	boardPerception?: unknown;
 	boardPerceptionPrompt?: unknown;
+	visionPreprocess?: unknown;
 	plannerTemperature?: unknown;
 	reflectionTemperature?: unknown;
 	plannerRules?: unknown;
@@ -101,6 +118,14 @@ const DEFAULT_PROFILE_CONFIG: DelegatedTaskProfileConfig = {
 	operationsPlannerRules: [],
 	progressEvaluatorRules: [],
 	boardPerceptionPrompt: "",
+	visionPreprocess: {
+		enabled: false,
+		crop: { xNorm: 0, yNorm: 0, widthNorm: 1, heightNorm: 1 },
+		maxWidth: 960,
+		maxHeight: 960,
+		format: "png",
+		quality: 0.82,
+	},
 };
 
 const DEFAULT_PROFILES: Record<string, DelegatedTaskProfileConfig> = {
@@ -136,6 +161,13 @@ function sanitizeBoolean(value: unknown, fallback: boolean): boolean {
 
 function sanitizeThinkingMode(value: unknown, fallback: DelegatedThinkingMode): DelegatedThinkingMode {
 	if (value === "off" || value === "low" || value === "medium" || value === "high") {
+		return value;
+	}
+	return fallback;
+}
+
+function sanitizeVisionFormat(value: unknown, fallback: DelegatedVisionPreprocessFormat): DelegatedVisionPreprocessFormat {
+	if (value === "png" || value === "jpeg") {
 		return value;
 	}
 	return fallback;
@@ -212,13 +244,14 @@ function sanitizeProfile(rawValue: unknown, fallback: DelegatedTaskProfileConfig
 		? rawProgressEvaluatorRules
 		: sanitizeStringArray(parsed.reflectionRules);
 	const allowedTools = sanitizeStringArray(parsed.allowedTools);
+	const visionPreprocess = sanitizeVisionPreprocess(parsed.visionPreprocess, fallback.visionPreprocess);
 	return {
 		taskId: typeof parsed.taskId === "string" && parsed.taskId.trim() ? parsed.taskId.trim() : fallback.taskId,
 		displayName: typeof parsed.displayName === "string" && parsed.displayName.trim()
 			? parsed.displayName.trim()
 			: fallback.displayName,
 		maxRounds: sanitizeNumber(parsed.maxRounds, fallback.maxRounds, 1, 40),
-		maxActionsPerRound: sanitizeNumber(parsed.maxActionsPerRound, fallback.maxActionsPerRound, 1, 6),
+		maxActionsPerRound: sanitizeNumber(parsed.maxActionsPerRound, fallback.maxActionsPerRound, 1, 8),
 		afterActionWaitMs: sanitizeNumber(parsed.afterActionWaitMs, fallback.afterActionWaitMs, 200, 5000),
 		plannerSpeechLeadMs: sanitizeNumber(parsed.plannerSpeechLeadMs, fallback.plannerSpeechLeadMs, 0, 5000),
 		locatorRulesEnabled: sanitizeBoolean(parsed.locatorRulesEnabled, fallback.locatorRulesEnabled),
@@ -235,7 +268,29 @@ function sanitizeProfile(rawValue: unknown, fallback: DelegatedTaskProfileConfig
 		missionAnalystRules: missionAnalystRules.length ? missionAnalystRules : [...fallback.missionAnalystRules],
 		operationsPlannerRules: operationsPlannerRules.length ? operationsPlannerRules : [...fallback.operationsPlannerRules],
 		progressEvaluatorRules: progressEvaluatorRules.length ? progressEvaluatorRules : [...fallback.progressEvaluatorRules],
-			boardPerceptionPrompt: typeof parsed.boardPerceptionPrompt === "string" && parsed.boardPerceptionPrompt.trim() ? parsed.boardPerceptionPrompt.trim() : fallback.boardPerceptionPrompt,
+		boardPerceptionPrompt: typeof parsed.boardPerceptionPrompt === "string" && parsed.boardPerceptionPrompt.trim() ? parsed.boardPerceptionPrompt.trim() : fallback.boardPerceptionPrompt,
+		visionPreprocess,
+	};
+}
+
+function sanitizeVisionPreprocess(
+	rawValue: unknown,
+	fallback: DelegatedVisionPreprocessConfig,
+): DelegatedVisionPreprocessConfig {
+	const parsed = isObjectRecord(rawValue) ? rawValue : {};
+	const crop = isObjectRecord(parsed.crop) ? parsed.crop : {};
+	return {
+		enabled: sanitizeBoolean(parsed.enabled, fallback.enabled),
+		crop: {
+			xNorm: sanitizeNumber(crop.xNorm, fallback.crop.xNorm, 0, 1),
+			yNorm: sanitizeNumber(crop.yNorm, fallback.crop.yNorm, 0, 1),
+			widthNorm: sanitizeNumber(crop.widthNorm, fallback.crop.widthNorm, 0.05, 1),
+			heightNorm: sanitizeNumber(crop.heightNorm, fallback.crop.heightNorm, 0.05, 1),
+		},
+		maxWidth: Math.round(sanitizeNumber(parsed.maxWidth, fallback.maxWidth, 128, 2000)),
+		maxHeight: Math.round(sanitizeNumber(parsed.maxHeight, fallback.maxHeight, 128, 2000)),
+		format: sanitizeVisionFormat(parsed.format, fallback.format),
+		quality: sanitizeNumber(parsed.quality, fallback.quality, 0.1, 1),
 	};
 }
 

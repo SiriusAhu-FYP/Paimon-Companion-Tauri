@@ -18,4 +18,17 @@ describe("delegated task config", () => {
 		expect(config.plannerSpeechLeadMs).toBeGreaterThanOrEqual(0);
 		expect(config.plannerSpeechLeadMs).toBeLessThanOrEqual(5000);
 	});
+
+	it("keeps browser vision preprocessing disabled by default", () => {
+		const config = getDelegatedBrowserTaskConfig();
+
+		expect(config.visionPreprocess.enabled).toBe(false);
+		expect(config.visionPreprocess.crop).toEqual({
+			xNorm: 0,
+			yNorm: 0,
+			widthNorm: 1,
+			heightNorm: 1,
+		});
+		expect(config.visionPreprocess.format).toBe("png");
+	});
 });

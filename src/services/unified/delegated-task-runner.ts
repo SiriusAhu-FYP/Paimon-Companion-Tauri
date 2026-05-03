@@ -1,5 +1,5 @@
 import { getConfig } from "@/services/config";
-import { requestActiveVisionDecision } from "@/services/games/cloud-decision";
+import { requestActiveTextDecision, requestActiveVisionDecision } from "@/services/games/cloud-decision";
 import { findSemanticGameByTargetTitle, getSemanticGameManifest } from "@/services/games/semantic-game-registry";
 import { createLogger } from "@/services/logger";
 import { callLocalMcpTool, callLocalMcpToolJson, listLocalMcpTools } from "@/services/mcp/local-mcp-client";
@@ -21,6 +21,21 @@ interface CapturedTargetSnapshot {
 	dataUrl: string;
 	width: number;
 	height: number;
+}
+
+type BoardObservationConfidence = "high" | "medium" | "low";
+
+interface BoardObservation {
+	boardGrid: string;
+	entities: string[];
+	confidence: BoardObservationConfidence;
+	ambiguities: string[];
+	source: "cloud" | "none";
+	originalWidth: number;
+	originalHeight: number;
+	processedWidth: number;
+	processedHeight: number;
+	preprocessed: boolean;
 }
 
 interface LocatorCoordinateDecision {
@@ -154,25 +169,22 @@ export async function runDelegatedTaskLoop(input: {
 	const runtimeToolNames = await resolveRuntimeToolNames(input.traceId);
 	const missionProbeTools = buildAllowedTools(config.allowedTools, candidateGameContext, runtimeToolNames);
 	const missionSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
-	const missionRaw = await requestActiveVisionDecision({
-		systemPrompt: buildMissionAnalystSystemPrompt(config.missionAnalystRules),
-		userPrompt: buildMissionAnalystUserPrompt({
-			taskText: input.taskText,
-			target: input.target,
-			allowedTools: missionProbeTools,
-			candidateGameContext,
-		}),
-		imageDataUrls: [missionSnapshot.dataUrl],
-		temperature: config.missionAnalystTemperature,
-		thinkingMode: config.missionAnalystThinkingMode,
-		maxTokens: 900,
-		jsonResponse: true,
-		timeoutMs: 35_000,
-		telemetry: {
-			role: "mission-analyst",
-			source: "delegation",
-			taskKind: candidateGameContext?.gameId ?? "generic",
-		},
+	const preMissionObservation = candidateGameContext
+		? await captureBoardObservation(
+			missionSnapshot,
+			input.target,
+			buildPreMissionForObservation(input.taskText),
+			config,
+		)
+		: emptyBoardObservation(missionSnapshot);
+	const missionRaw = await requestMissionAnalystDecision({
+		config,
+		taskText: input.taskText,
+		target: input.target,
+		allowedTools: missionProbeTools,
+		candidateGameContext,
+		snapshot: missionSnapshot,
+		boardObservation: preMissionObservation,
 	});
 	const mission = normalizeMissionAnalysisDecision(missionRaw, input.taskText, input.target);
 	const gameContext = resolveOperationalGameContext(candidateGameContext, mission.taskMode, input.taskText);
@@ -263,7 +275,7 @@ export async function runDelegatedTaskLoop(input: {
 
 	await emitTimelineUpdate();
 
-	let roundBoardGrid = "";
+	let roundBoardObservation = emptyBoardObservation(missionSnapshot);
 
 	for (let round = 1; round <= config.maxRounds; round += 1) {
 		if (input.shouldStop()) {
@@ -281,11 +293,11 @@ export async function runDelegatedTaskLoop(input: {
 			promptLength: config.boardPerceptionPrompt?.length ?? 0,
 			promptPreview: config.boardPerceptionPrompt?.slice(0, 120) ?? "(empty)",
 		});
-		roundBoardGrid = await captureBoardGrid(
+		roundBoardObservation = await captureBoardObservation(
 			currentSnapshot,
 			input.target,
 			mission,
-			config.boardPerceptionPrompt,
+			config,
 		);
 		const sharedScratchpadContext = buildSharedScratchpadContext({
 			taskText: input.taskText,
@@ -332,9 +344,7 @@ export async function runDelegatedTaskLoop(input: {
 			actions: [] as DelegatedTaskAction[],
 		};
 		while (plannerRetryCount <= 1) {
-			const plannerRaw = await requestActiveVisionDecision({
-				systemPrompt: plannerSystemPrompt,
-				userPrompt: buildOperationsPlannerUserPrompt({
+			const plannerUserPrompt = buildOperationsPlannerUserPrompt({
 					taskText: input.taskText,
 					round,
 					maxRounds: config.maxRounds,
@@ -359,19 +369,15 @@ export async function runDelegatedTaskLoop(input: {
 					latestPlanAssessment,
 					invalidatedStrategies,
 					strategyLessons,
-					boardPositionsText: formatBoardGridForPlanner(roundBoardGrid) || undefined,
-				}),
-				imageDataUrls: [currentSnapshot.dataUrl],
-				temperature: config.operationsPlannerTemperature,
-				thinkingMode: config.operationsPlannerThinkingMode,
-				maxTokens: 700,
-				jsonResponse: true,
-				timeoutMs: 30_000,
-				telemetry: {
-					role: "operations-planner",
-					source: "delegation",
-					taskKind: gameContext?.gameId ?? mission.taskMode,
-				},
+				boardPositionsText: formatBoardObservationForPlanner(roundBoardObservation) || undefined,
+			});
+			const plannerRaw = await requestPlannerDecision({
+				config,
+				systemPrompt: plannerSystemPrompt,
+				userPrompt: plannerUserPrompt,
+				snapshot: currentSnapshot,
+				boardObservation: roundBoardObservation,
+				taskKind: gameContext?.gameId ?? mission.taskMode,
 			});
 			const nextPlanner = normalizeOperationsPlannerDecision(
 				plannerRaw,
@@ -596,11 +602,11 @@ export async function runDelegatedTaskLoop(input: {
 			}
 		}
 
-		const afterBoardGrid = await captureBoardGrid(
+		const afterBoardObservation = await captureBoardObservation(
 			batchAfterSnapshot,
 			input.target,
 			mission,
-			config.boardPerceptionPrompt,
+			config,
 		);
 		const batchActionSummary = executedActions
 			.map((item) => `${item.plan.actionForEvaluation.tool}(${JSON.stringify(item.plan.actionForEvaluation.args)})`)
@@ -608,9 +614,8 @@ export async function runDelegatedTaskLoop(input: {
 		const lastExecutedAction = executedActions[executedActions.length - 1]?.plan.actionForEvaluation
 			?? effectivePlannerActions[0];
 
-		const reflectionRaw = await requestActiveVisionDecision({
-			systemPrompt: buildProgressEvaluatorSystemPrompt(config.progressEvaluatorRules, mission),
-			userPrompt: buildProgressEvaluatorUserPrompt({
+		const evaluatorSystemPrompt = buildProgressEvaluatorSystemPrompt(config.progressEvaluatorRules, mission);
+		const evaluatorUserPrompt = buildProgressEvaluatorUserPrompt({
 				taskText: input.taskText,
 				round,
 				target: input.target,
@@ -646,19 +651,17 @@ export async function runDelegatedTaskLoop(input: {
 				phaseReason: planner.whyThisPhase,
 				phaseAbortCondition: planner.abortCondition,
 				activeStrategy: planner.activeStrategy,
-				boardPositionsText: formatBoardGridForEvaluator(roundBoardGrid, afterBoardGrid) || undefined,
-			}),
-			imageDataUrls: [batchBeforeSnapshot.dataUrl, batchAfterSnapshot.dataUrl],
-			temperature: config.progressEvaluatorTemperature,
-			thinkingMode: config.progressEvaluatorThinkingMode,
-			maxTokens: 500,
-			jsonResponse: true,
-			timeoutMs: 30_000,
-			telemetry: {
-				role: "progress-evaluator",
-				source: "delegation",
-				taskKind: gameContext?.gameId ?? mission.taskMode,
-			},
+				boardPositionsText: formatBoardObservationForEvaluator(roundBoardObservation, afterBoardObservation) || undefined,
+		});
+		const reflectionRaw = await requestEvaluatorDecision({
+			config,
+			systemPrompt: evaluatorSystemPrompt,
+			userPrompt: evaluatorUserPrompt,
+			beforeSnapshot: batchBeforeSnapshot,
+			afterSnapshot: batchAfterSnapshot,
+			beforeObservation: roundBoardObservation,
+			afterObservation: afterBoardObservation,
+			taskKind: gameContext?.gameId ?? mission.taskMode,
 		});
 		let reflection = normalizeProgressEvaluatorDecision(reflectionRaw);
 		reflection = applyBoardTaskConsistencyGuard(reflection, gameContext);
@@ -934,6 +937,214 @@ function isSnapshotLikelyUnchanged(beforeSnapshot: CapturedTargetSnapshot, after
 	return beforeSnapshot.dataUrl === afterSnapshot.dataUrl;
 }
 
+function buildPreMissionForObservation(taskText: string): MissionAnalysisDecision {
+	return {
+		taskMode: "game",
+		missionGoal: taskText,
+		initialStateSummary: "",
+		initialStateSketch: "",
+		hardConstraints: [],
+		subtaskChain: [],
+		completionSignals: [],
+		candidateStrategies: [],
+		strategyWarnings: [],
+		analysisReply: "",
+		ackReply: "",
+		reply: "",
+	};
+}
+
+async function requestMissionAnalystDecision(input: {
+	config: DelegatedTaskProfileConfig;
+	taskText: string;
+	target: FunctionalTarget;
+	allowedTools: string[];
+	candidateGameContext: DelegatedGameContext | null;
+	snapshot: CapturedTargetSnapshot;
+	boardObservation: BoardObservation;
+}): Promise<string> {
+	const systemPrompt = buildMissionAnalystSystemPrompt(input.config.missionAnalystRules);
+	const userPrompt = buildMissionAnalystUserPrompt({
+		taskText: input.taskText,
+		target: input.target,
+		allowedTools: input.allowedTools,
+		candidateGameContext: input.candidateGameContext,
+		boardObservation: input.boardObservation,
+	});
+	const canUseTextReasoning = input.candidateGameContext && isUsableBoardObservation(input.boardObservation);
+	if (canUseTextReasoning) {
+		try {
+			log.info("delegated role request mode", {
+				role: "mission-analyst",
+				mode: "text",
+				thinkingMode: input.config.missionAnalystThinkingMode,
+				boardConfidence: input.boardObservation.confidence,
+			});
+			return await requestActiveTextDecision({
+				systemPrompt,
+				userPrompt,
+				temperature: input.config.missionAnalystTemperature,
+				thinkingMode: input.config.missionAnalystThinkingMode,
+				maxTokens: 900,
+				jsonResponse: true,
+				timeoutMs: 35_000,
+				telemetry: {
+					role: "mission-analyst",
+					source: "delegation",
+					taskKind: input.candidateGameContext?.gameId ?? "generic",
+				},
+			});
+		} catch (error) {
+			log.warn("mission analyst text reasoning failed; falling back to vision", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+	log.info("delegated role request mode", {
+		role: "mission-analyst",
+		mode: "vision-fallback",
+		thinkingMode: "off",
+		boardConfidence: input.boardObservation.confidence,
+	});
+	return requestActiveVisionDecision({
+		systemPrompt,
+		userPrompt,
+		imageDataUrls: [input.snapshot.dataUrl],
+		temperature: input.config.missionAnalystTemperature,
+		thinkingMode: input.config.missionAnalystThinkingMode,
+		maxTokens: 900,
+		jsonResponse: true,
+		timeoutMs: 35_000,
+		telemetry: {
+			role: "mission-analyst",
+			source: "delegation",
+			taskKind: input.candidateGameContext?.gameId ?? "generic",
+		},
+	});
+}
+
+async function requestPlannerDecision(input: {
+	config: DelegatedTaskProfileConfig;
+	systemPrompt: string;
+	userPrompt: string;
+	snapshot: CapturedTargetSnapshot;
+	boardObservation: BoardObservation;
+	taskKind: string;
+}): Promise<string> {
+	if (isUsableBoardObservation(input.boardObservation)) {
+		try {
+			log.info("delegated role request mode", {
+				role: "operations-planner",
+				mode: "text",
+				thinkingMode: input.config.operationsPlannerThinkingMode,
+				boardConfidence: input.boardObservation.confidence,
+			});
+			return await requestActiveTextDecision({
+				systemPrompt: input.systemPrompt,
+				userPrompt: input.userPrompt,
+				temperature: input.config.operationsPlannerTemperature,
+				thinkingMode: input.config.operationsPlannerThinkingMode,
+				maxTokens: 900,
+				jsonResponse: true,
+				timeoutMs: 35_000,
+				telemetry: {
+					role: "operations-planner",
+					source: "delegation",
+					taskKind: input.taskKind,
+				},
+			});
+		} catch (error) {
+			log.warn("planner text reasoning failed; falling back to vision", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+	log.info("delegated role request mode", {
+		role: "operations-planner",
+		mode: "vision-fallback",
+		thinkingMode: "off",
+		boardConfidence: input.boardObservation.confidence,
+	});
+	return requestActiveVisionDecision({
+		systemPrompt: input.systemPrompt,
+		userPrompt: input.userPrompt,
+		imageDataUrls: [input.snapshot.dataUrl],
+		temperature: input.config.operationsPlannerTemperature,
+		thinkingMode: input.config.operationsPlannerThinkingMode,
+		maxTokens: 700,
+		jsonResponse: true,
+		timeoutMs: 30_000,
+		telemetry: {
+			role: "operations-planner",
+			source: "delegation",
+			taskKind: input.taskKind,
+		},
+	});
+}
+
+async function requestEvaluatorDecision(input: {
+	config: DelegatedTaskProfileConfig;
+	systemPrompt: string;
+	userPrompt: string;
+	beforeSnapshot: CapturedTargetSnapshot;
+	afterSnapshot: CapturedTargetSnapshot;
+	beforeObservation: BoardObservation;
+	afterObservation: BoardObservation;
+	taskKind: string;
+}): Promise<string> {
+	if (isUsableBoardObservation(input.beforeObservation) && isUsableBoardObservation(input.afterObservation)) {
+		try {
+			log.info("delegated role request mode", {
+				role: "progress-evaluator",
+				mode: "text",
+				thinkingMode: input.config.progressEvaluatorThinkingMode,
+				beforeConfidence: input.beforeObservation.confidence,
+				afterConfidence: input.afterObservation.confidence,
+			});
+			return await requestActiveTextDecision({
+				systemPrompt: input.systemPrompt,
+				userPrompt: input.userPrompt,
+				temperature: input.config.progressEvaluatorTemperature,
+				thinkingMode: input.config.progressEvaluatorThinkingMode,
+				maxTokens: 700,
+				jsonResponse: true,
+				timeoutMs: 35_000,
+				telemetry: {
+					role: "progress-evaluator",
+					source: "delegation",
+					taskKind: input.taskKind,
+				},
+			});
+		} catch (error) {
+			log.warn("evaluator text reasoning failed; falling back to vision", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+	log.info("delegated role request mode", {
+		role: "progress-evaluator",
+		mode: "vision-fallback",
+		thinkingMode: "off",
+		beforeConfidence: input.beforeObservation.confidence,
+		afterConfidence: input.afterObservation.confidence,
+	});
+	return requestActiveVisionDecision({
+		systemPrompt: input.systemPrompt,
+		userPrompt: input.userPrompt,
+		imageDataUrls: [input.beforeSnapshot.dataUrl, input.afterSnapshot.dataUrl],
+		temperature: input.config.progressEvaluatorTemperature,
+		thinkingMode: input.config.progressEvaluatorThinkingMode,
+		maxTokens: 500,
+		jsonResponse: true,
+		timeoutMs: 30_000,
+		telemetry: {
+			role: "progress-evaluator",
+			source: "delegation",
+			taskKind: input.taskKind,
+		},
+	});
+}
+
 function buildMissionAnalystSystemPrompt(rules: string[]): string {
 	const baseRules = [
 		"你是 Mission Analyst。你会在动作执行前分析任务目标、约束和可能的子任务链。",
@@ -958,16 +1169,24 @@ function buildMissionAnalystUserPrompt(input: {
 	target: FunctionalTarget;
 	allowedTools: string[];
 	candidateGameContext: DelegatedGameContext | null;
+	boardObservation?: BoardObservation;
 }): string {
 	const gameContextText = input.candidateGameContext
 		? `${input.candidateGameContext.displayName} (${input.candidateGameContext.gameId}) actions=${input.candidateGameContext.actionIds.join(", ")}`
 		: "none";
+	const boardObservationText = input.boardObservation && isUsableBoardObservation(input.boardObservation)
+		? [
+			"structuredInitialObservation:",
+			formatBoardObservationForPlanner(input.boardObservation),
+		].join("\n")
+		: "structuredInitialObservation: (none)";
 	return [
 		`task: ${input.taskText}`,
 		`observedCurrentWindow: ${input.target.title} (${input.target.handle})`,
 		"注意：observedCurrentWindow 只是当前观察到的初始状态，不是用户约束；不要把它直接抄进 hardConstraints。",
 		`candidateGameContext: ${gameContextText}`,
 		`allowedTools: ${input.allowedTools.join(", ")}`,
+		boardObservationText,
 		"",
 		"输出 JSON：",
 		"{",
@@ -2337,86 +2556,230 @@ function resolveRuleBasedLocator(
 	return null;
 }
 
-// --- Board grid capture (pre-round perception) ---
+// --- Board observation capture (pre-round perception) ---
 
-async function captureBoardGrid(
+async function captureBoardObservation(
 	snapshot: CapturedTargetSnapshot,
 	target: FunctionalTarget,
 	mission: MissionAnalysisDecision,
-	boardPerceptionPrompt: string,
-): Promise<string> {
-	if (!boardPerceptionPrompt) {
-		log.info("[diag] captureBoardGrid skipped — boardPerceptionPrompt is empty");
-		return "";
+	config: DelegatedTaskProfileConfig,
+): Promise<BoardObservation> {
+	if (!config.boardPerceptionPrompt) {
+		log.info("[diag] captureBoardObservation skipped — boardPerceptionPrompt is empty");
+		return emptyBoardObservation(snapshot);
+	}
+	if (config.visionPreprocess.enabled && !hasBrowserImagePreprocessingSupport()) {
+		log.info("[diag] captureBoardObservation skipped — vision preprocessing requires browser DOM");
+		return emptyBoardObservation(snapshot);
 	}
 	try {
-		const runtimeConfig = getConfig().companionRuntime;
-		const rawText = await requestOpenAICompatibleVision({
-			client: {
-				baseUrl: runtimeConfig.localVisionBaseUrl,
-				model: runtimeConfig.localVisionModel,
-			},
+		const processed = await preprocessSnapshotForVision(snapshot, config);
+		const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+		const rawText = await requestActiveVisionDecision({
 			systemPrompt: [
 				"You are a game board parser.",
-				"Given a screenshot from a puzzle game, output the exact ASCII grid layout.",
-				"Use # for wall, . for floor, P for player, B for box, T for target, * for box-on-target.",
-				"Count exact rows and columns. Do not guess dimensions.",
-				"Output ONLY the grid with no other text or explanation.",
+				"Given a screenshot from a puzzle game, extract the exact structured board state.",
+				"Use # for wall, . for floor, P for player, B for box, T for target, * for box-on-target, + for player-on-target.",
+				"Count exact rows and columns. Do not guess dimensions; use low confidence if uncertain.",
+				"Return JSON only.",
 			].join("\n"),
 			userPrompt: [
 				`target: ${target.title} (${target.handle})`,
 				`missionGoal: ${mission.missionGoal}`,
-				boardPerceptionPrompt,
+				"Output shape:",
+				'{ "boardGrid": "ASCII grid", "entities": ["P=r2c2"], "confidence": "high|medium|low", "ambiguities": ["string"] }',
+				config.boardPerceptionPrompt,
 			].join("\n"),
-			imageDataUrl: snapshot.dataUrl,
-			maxTokens: 800,
+			imageDataUrls: [processed.dataUrl],
+			maxTokens: 700,
 			temperature: 0,
 			timeoutMs: 25_000,
-			jsonResponse: false,
+			jsonResponse: true,
+			thinkingMode: "off",
+			telemetry: {
+				role: "board-parser",
+				source: "delegation",
+				taskKind: mission.taskMode,
+			},
 		});
-		const gridLines = rawText
-			.split("\n")
-			.map((l) => l.trim())
-			.filter((l) => /^[#.PBT*+\s]+$/.test(l) && l.length > 0);
+		const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt;
+		const parsed = parseJsonObject(rawText);
+		const gridText = toText(parsed.boardGrid || parsed.grid || parsed.board);
+		const gridLines = normalizeBoardGridLines(gridText);
 		const result = gridLines.join("\n");
-		log.info("[diag] captureBoardGrid success", {
+		const confidence = normalizeBoardConfidence(toText(parsed.confidence), result);
+		const observation: BoardObservation = {
+			boardGrid: confidence === "low" ? "" : result,
+			entities: toStringArray(parsed.entities).slice(0, 24),
+			confidence,
+			ambiguities: toStringArray(parsed.ambiguities).slice(0, 8),
+			source: "cloud",
+			originalWidth: snapshot.width,
+			originalHeight: snapshot.height,
+			processedWidth: processed.width,
+			processedHeight: processed.height,
+			preprocessed: processed.preprocessed,
+		};
+		log.info("[diag] captureBoardObservation completed", {
+			confidence: observation.confidence,
 			lineCount: gridLines.length,
-			gridPreview: result.slice(0, 200),
+			gridPreview: observation.boardGrid.slice(0, 200),
+			entityCount: observation.entities.length,
+			ambiguityCount: observation.ambiguities.length,
+			elapsedMs: Math.round(elapsedMs),
+			originalWidth: observation.originalWidth,
+			originalHeight: observation.originalHeight,
+			processedWidth: observation.processedWidth,
+			processedHeight: observation.processedHeight,
+			preprocessed: observation.preprocessed,
 		});
-		return result;
+		return observation;
 	} catch (err) {
-		log.warn("board grid capture failed", { error: err instanceof Error ? err.message : String(err) });
-		return "";
+		log.warn("board observation capture failed", { error: err instanceof Error ? err.message : String(err) });
+		return emptyBoardObservation(snapshot);
 	}
 }
 
-function formatBoardGridForPlanner(gridText: string): string {
-	if (!gridText) return "";
+function emptyBoardObservation(snapshot: CapturedTargetSnapshot): BoardObservation {
+	return {
+		boardGrid: "",
+		entities: [],
+		confidence: "low",
+		ambiguities: [],
+		source: "none",
+		originalWidth: snapshot.width,
+		originalHeight: snapshot.height,
+		processedWidth: snapshot.width,
+		processedHeight: snapshot.height,
+		preprocessed: false,
+	};
+}
+
+function normalizeBoardGridLines(gridText: string): string[] {
+	const gridLines = gridText
+		.split("\n")
+		.map((line) => line.trim())
+		.filter((line) => /^[#.PBT*+\d\s]+$/.test(line) && line.length > 0)
+		.map((line) => /\d/.test(line) ? line.replace(/\s+/g, " ") : line.replace(/\s+/g, ""));
+	if (gridLines.length > 24) {
+		return [];
+	}
+	return gridLines;
+}
+
+function normalizeBoardConfidence(rawConfidence: string, boardGrid: string): BoardObservationConfidence {
+	const normalized = rawConfidence.trim().toLowerCase();
+	if (!boardGrid) {
+		return "low";
+	}
+	if (normalized === "high" || normalized === "medium" || normalized === "low") {
+		return normalized;
+	}
+	return "medium";
+}
+
+async function preprocessSnapshotForVision(
+	snapshot: CapturedTargetSnapshot,
+	config: DelegatedTaskProfileConfig,
+): Promise<{ dataUrl: string; width: number; height: number; preprocessed: boolean }> {
+	if (!config.visionPreprocess.enabled) {
+		return {
+			dataUrl: snapshot.dataUrl,
+			width: snapshot.width,
+			height: snapshot.height,
+			preprocessed: false,
+		};
+	}
+	if (!hasBrowserImagePreprocessingSupport()) {
+		log.info("vision preprocessing skipped outside browser DOM");
+		return {
+			dataUrl: snapshot.dataUrl,
+			width: snapshot.width,
+			height: snapshot.height,
+			preprocessed: false,
+		};
+	}
+	const image = await loadDataUrlImage(snapshot.dataUrl);
+	const crop = config.visionPreprocess.crop;
+	const sourceX = Math.round(snapshot.width * crop.xNorm);
+	const sourceY = Math.round(snapshot.height * crop.yNorm);
+	const sourceWidth = Math.max(1, Math.round(snapshot.width * Math.min(crop.widthNorm, 1 - crop.xNorm)));
+	const sourceHeight = Math.max(1, Math.round(snapshot.height * Math.min(crop.heightNorm, 1 - crop.yNorm)));
+	const scale = Math.min(
+		1,
+		config.visionPreprocess.maxWidth / sourceWidth,
+		config.visionPreprocess.maxHeight / sourceHeight,
+	);
+	const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+	const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+	const canvas = document.createElement("canvas");
+	canvas.width = targetWidth;
+	canvas.height = targetHeight;
+	const context = canvas.getContext("2d");
+	if (!context) {
+		throw new Error("2d canvas context unavailable for vision preprocessing");
+	}
+	context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight);
+	const mime = config.visionPreprocess.format === "jpeg" ? "image/jpeg" : "image/png";
+	const dataUrl = config.visionPreprocess.format === "jpeg"
+		? canvas.toDataURL(mime, config.visionPreprocess.quality)
+		: canvas.toDataURL(mime);
+	return {
+		dataUrl,
+		width: targetWidth,
+		height: targetHeight,
+		preprocessed: true,
+	};
+}
+
+function hasBrowserImagePreprocessingSupport(): boolean {
+	return typeof Image !== "undefined" && typeof document !== "undefined";
+}
+
+function loadDataUrlImage(dataUrl: string): Promise<HTMLImageElement> {
+	return new Promise((resolve, reject) => {
+		const image = new Image();
+		image.onload = () => resolve(image);
+		image.onerror = () => reject(new Error("failed to load screenshot for vision preprocessing"));
+		image.src = dataUrl;
+	});
+}
+
+function isUsableBoardObservation(observation: BoardObservation): boolean {
+	return Boolean(observation.boardGrid) && observation.confidence !== "low";
+}
+
+function formatBoardObservationForPlanner(observation: BoardObservation): string {
+	if (!isUsableBoardObservation(observation)) return "";
 	return [
 		"========== BOARD ANALYSIS (PROGRAMMATIC GRID SCANNER) ==========",
-		"权威数据：以下棋盘由程序化视觉解析，不是AI推测。",
+		"权威数据：以下棋盘由云端视觉解析得到；三角色后续应基于该文本棋盘思考。",
 		"必须在 stateSketch 中使用以下棋盘布局，不可用视觉印象覆盖。",
+		`confidence=${observation.confidence}`,
+		`entities=${observation.entities.join(", ") || "(none)"}`,
+		`ambiguities=${observation.ambiguities.join(" | ") || "(none)"}`,
 		"",
-		gridText,
+		observation.boardGrid,
 		"",
 		"================================================================",
 	].join("\n");
 }
 
-function formatBoardGridForEvaluator(beforeGrid: string, afterGrid: string): string {
-	if (!beforeGrid && !afterGrid) return "";
-	const hasChange = beforeGrid !== afterGrid;
+function formatBoardObservationForEvaluator(before: BoardObservation, after: BoardObservation): string {
+	if (!isUsableBoardObservation(before) && !isUsableBoardObservation(after)) return "";
+	const hasChange = before.boardGrid !== after.boardGrid;
 	const verdict = hasChange
 		? "棋盘发生了变化。请比较前后棋盘差异来判断动作效果。"
 		: "棋盘完全相同——动作未能产生任何实质位移。";
 	return [
 		"========== BOARD ANALYSIS (PROGRAMMATIC GRID SCANNER) ==========",
-		"权威数据：以下前后棋盘由程序化视觉解析。",
+		"权威数据：以下前后棋盘由云端视觉解析。",
+		`beforeConfidence=${before.confidence}; afterConfidence=${after.confidence}`,
 		"",
 		"动作前:",
-		beforeGrid || "(none)",
+		before.boardGrid || "(none)",
 		"动作后:",
-		afterGrid || "(none)",
+		after.boardGrid || "(none)",
 		"",
 		`>>> 判定: ${verdict}`,
 		"================================================================",
@@ -2873,6 +3236,16 @@ function mergeDelegatedConfigForGame(
 		operationsPlannerRules: gameProfile.operationsPlannerRules?.length ? [...gameProfile.operationsPlannerRules] : [...baseConfig.operationsPlannerRules],
 		progressEvaluatorRules: gameProfile.progressEvaluatorRules?.length ? [...gameProfile.progressEvaluatorRules] : [...baseConfig.progressEvaluatorRules],
 		boardPerceptionPrompt: gameProfile.boardPerceptionPrompt ?? baseConfig.boardPerceptionPrompt,
+		visionPreprocess: gameProfile.visionPreprocess
+			? {
+				...baseConfig.visionPreprocess,
+				...gameProfile.visionPreprocess,
+				crop: {
+					...baseConfig.visionPreprocess.crop,
+					...gameProfile.visionPreprocess.crop,
+				},
+			}
+			: baseConfig.visionPreprocess,
 	};
 }
 

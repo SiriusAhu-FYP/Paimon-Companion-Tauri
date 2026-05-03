@@ -37,6 +37,21 @@ locatorCloudEnabled = false
 locatorLocalFallbackEnabled = true
 locatorMinConfidence = 0.6
 
+[delegationProfile.visionPreprocess]
+enabled = true
+maxWidth = 720
+maxHeight = 720
+format = "jpeg"
+quality = 0.82
+crop = { xNorm = 0.18, yNorm = 0.18, widthNorm = 0.64, heightNorm = 0.7 }
+
+[delegationProfile.boardPerception]
+boardPerceptionPrompt = """Observe only the 4x4 2048 board in the screenshot.
+Output a 4-row grid using numbers for tiles and . for empty cells.
+Keep rows separated by newlines and cells separated by single spaces.
+If a tile value is not legible, set confidence to low and list the ambiguous cell.
+Ignore score panels, tabs, browser chrome, and buttons."""
+
 [delegationProfile.roles.missionAnalyst]
 missionAnalystTemperature = 0.1
 missionAnalystThinkingMode = "medium"
