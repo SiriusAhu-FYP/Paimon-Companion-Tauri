@@ -1625,10 +1625,10 @@ function applySokobanPushTargetDirectionGuard(
 	action: DelegatedTaskAction,
 	planner: OperationsPlannerDecision,
 ): ProgressEvaluatorDecision {
-	if (gameContext?.gameId !== "sokoban" || action.tool !== "game.perform_action") {
+	if (gameContext?.gameId !== "sokoban") {
 		return reflection;
 	}
-	const actionId = normalizeGameActionId(toText((action.args as Record<string, unknown>)?.actionId));
+	const actionId = getSokobanMoveActionId(action);
 	if (!actionId) {
 		return reflection;
 	}
@@ -1640,7 +1640,8 @@ function applySokobanPushTargetDirectionGuard(
 		reflection.nextHint,
 	].join(" "));
 	const expectsTargetPlacement = /final|finish|complete|solve|remainingtarget|onto.*target|目标|完成|最后|剩余/.test(intentText);
-	if (!expectsTargetPlacement || !isPushingAwayFromPlayerTarget(reflection.beforeStateSketch, actionId)) {
+	const finalPushFailed = expectsTargetPlacement && isFailedFinalPushEvidence(reflection);
+	if (!expectsTargetPlacement || (!finalPushFailed && !isPushingAwayFromPlayerTarget(reflection.beforeStateSketch, actionId))) {
 		return reflection;
 	}
 	const correction = buildSokobanPushTargetDirectionHint(actionId);
@@ -1656,8 +1657,8 @@ function applySokobanPushTargetDirectionGuard(
 		phaseAssessment: combineHints(
 			reflection.phaseAssessment,
 			pickReplyLanguageText(
-				"这一步把箱子从目标侧推开，属于推箱子方向错误。",
-				"This step pushes the box away from the target side, so the Sokoban push direction is wrong.",
+				"这一步没有完成预期推箱，属于收尾推箱方向或站位错误。",
+				"This step did not perform the expected box push, so the finishing push direction or stance is wrong.",
 			),
 		),
 		planAssessment: combineHints(
@@ -1669,6 +1670,29 @@ function applySokobanPushTargetDirectionGuard(
 		),
 		nextHint: combineHints(reflection.nextHint, correction),
 	};
+}
+
+function getSokobanMoveActionId(action: DelegatedTaskAction): string {
+	if (action.tool === "game.perform_action") {
+		return normalizeGameActionId(toText((action.args as Record<string, unknown>)?.actionId));
+	}
+	if (action.tool === "host.send_key") {
+		return normalizeGameActionId(toText((action.args as Record<string, unknown>)?.key));
+	}
+	return "";
+}
+
+function isFailedFinalPushEvidence(reflection: ProgressEvaluatorDecision): boolean {
+	if (reflection.expectedMet || reflection.goalProgress === "done" || reflection.goalAlignment === "achieved") {
+		return false;
+	}
+	const joined = normalizeStateSketchText([
+		reflection.expectationReview,
+		reflection.phaseAssessment,
+		reflection.planAssessment,
+		reflection.stateDelta,
+	].join(" "));
+	return /only.*player.*moved|onlytheplayermoved|nobox.*push|boxwasnotpushed|didnotgetpushed|notpushedont|finishingpush.*incorrect|pushdirection.*incorrect|presumedfinishingpushdirectionwasincorrect|没有推|未推动|只移动了玩家|推箱方向错误/.test(joined);
 }
 
 function isPushingAwayFromPlayerTarget(sketch: string, actionId: string): boolean {
@@ -1707,33 +1731,37 @@ function isPushingAwayFromPlayerTarget(sketch: string, actionId: string): boolea
 }
 
 function buildSokobanPushTargetDirectionHint(actionId: string): string {
+	const suffix = pickReplyLanguageText(
+		"当前收尾路线已被否决；不要继续修补同一最后推法。若无法立即绕到正确推箱侧，请点击右上角紫红色/偏粉红色重置按钮重开。",
+		"The current finishing route is invalidated; do not keep patching the same final push. If you cannot immediately route to the correct push side, click the purple-pink restart button in the upper-right corner.",
+	);
 	if (actionId === "move_right") {
 		return pickReplyLanguageText(
-			"如果目标在箱子左侧，不能从左侧向右推；必须先绕到箱子右侧，再执行 move_left 把箱子推回目标。",
-			"If the target is left of the box, do not push right from the left side; first route to the box's right side, then use move_left to push it back onto the target.",
+			`如果目标在箱子左侧，不能从左侧向右推；必须先绕到箱子右侧，再执行 move_left 把箱子推回目标。${suffix}`,
+			`If the target is left of the box, do not push right from the left side; first route to the box's right side, then use move_left to push it back onto the target. ${suffix}`,
 		);
 	}
 	if (actionId === "move_left") {
 		return pickReplyLanguageText(
-			"如果目标在箱子右侧，不能从右侧向左推；必须先绕到箱子左侧，再执行 move_right 把箱子推回目标。",
-			"If the target is right of the box, do not push left from the right side; first route to the box's left side, then use move_right to push it back onto the target.",
+			`如果目标在箱子右侧，不能从右侧向左推；必须先绕到箱子左侧，再执行 move_right 把箱子推回目标。${suffix}`,
+			`If the target is right of the box, do not push left from the right side; first route to the box's left side, then use move_right to push it back onto the target. ${suffix}`,
 		);
 	}
 	if (actionId === "move_down") {
 		return pickReplyLanguageText(
-			"如果目标在箱子上方，不能从上方向下推；必须先绕到箱子下方，再执行 move_up 把箱子推回目标。",
-			"If the target is above the box, do not push down from above; first route below the box, then use move_up to push it back onto the target.",
+			`如果目标在箱子上方，不能从上方向下推；必须先绕到箱子下方，再执行 move_up 把箱子推回目标。${suffix}`,
+			`If the target is above the box, do not push down from above; first route below the box, then use move_up to push it back onto the target. ${suffix}`,
 		);
 	}
 	if (actionId === "move_up") {
 		return pickReplyLanguageText(
-			"如果目标在箱子下方，不能从下方向上推；必须先绕到箱子上方，再执行 move_down 把箱子推回目标。",
-			"If the target is below the box, do not push up from below; first route above the box, then use move_down to push it back onto the target.",
+			`如果目标在箱子下方，不能从下方向上推；必须先绕到箱子上方，再执行 move_down 把箱子推回目标。${suffix}`,
+			`If the target is below the box, do not push up from below; first route above the box, then use move_down to push it back onto the target. ${suffix}`,
 		);
 	}
 	return pickReplyLanguageText(
-		"重新确认目标、P、箱子的相对位置：要把箱子推到目标上，P 必须站在箱子与目标相反的一侧，然后朝目标方向推。",
-		"Reconfirm target/P/box geometry: to push a box onto a target, P must stand on the opposite side of the box and push toward the target.",
+		`重新确认目标、P、箱子的相对位置：要把箱子推到目标上，P 必须站在箱子与目标相反的一侧，然后朝目标方向推。${suffix}`,
+		`Reconfirm target/P/box geometry: to push a box onto a target, P must stand on the opposite side of the box and push toward the target. ${suffix}`,
 	);
 }
 

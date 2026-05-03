@@ -503,6 +503,38 @@ describe("applySokobanPushTargetDirectionGuard", () => {
 		expect(result.wasActionCorrect).toBe(true);
 		expect(result.planViability).toBe("unchanged");
 	});
+
+	it("invalidates failed final pushes sent through host.send_key", () => {
+		const result = applySokobanPushTargetDirectionGuard(
+			makeReflection({
+				expectedMet: false,
+				goalAlignment: "unchanged",
+				goalProgress: "none",
+				beforeStateSketch: "#######\n#.....#\n#...P*#\n#....B#\n#######",
+				stateDelta: "Only the player moved one tile left; no box was pushed onto the target.",
+				planAssessment: "The presumed finishing push direction was incorrect from this position.",
+			}),
+			GAME_CONTEXT,
+			{ tool: "host.send_key", args: { key: "Left" } },
+			{
+				goalReached: false,
+				reasoning: "",
+				reply: "",
+				expectedOutcome: "The player pushes the final box onto the remaining target and completes the level.",
+				stateSketch: "",
+				currentPhaseGoal: "Place the lower box onto the remaining target with one final push.",
+				whyThisPhase: "",
+				abortCondition: "",
+				activeStrategy: "finish from current endgame alignment",
+				strategyRevision: "",
+				actions: [],
+			},
+		);
+
+		expect(result.wasActionCorrect).toBe(false);
+		expect(result.planViability).toBe("invalidated");
+		expect(result.nextHint).toContain("重置按钮");
+	});
 });
 
 describe("buildStrategyLesson", () => {
