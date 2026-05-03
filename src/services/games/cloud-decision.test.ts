@@ -143,6 +143,47 @@ describe("cloud decision thinking policy", () => {
 		expect(payload.messages[0].content).toContain("Reply language mode: Simplified Chinese (zh).");
 	});
 
+	it("lets callers override structured reply language", async () => {
+		getConfig.mockReturnValue({
+			locale: "zh",
+			activeLlmProfileId: "text-profile",
+			activeVisionLlmProfileId: "vision-profile",
+			llm: {
+				provider: "openai-compatible",
+				baseUrl: "https://api.example.com",
+				model: "fallback-model",
+				temperature: 0.2,
+			},
+			llmProfiles: [
+				{
+					id: "text-profile",
+					provider: "openai-compatible",
+					baseUrl: "https://api.deepseek.com",
+					model: "deepseek-chat",
+					temperature: 0.2,
+				},
+				{
+					id: "vision-profile",
+					provider: "openai-compatible",
+					baseUrl: "https://vision.example.com",
+					model: "gpt-4.1",
+					temperature: 0.1,
+				},
+			],
+		});
+
+		await requestActiveTextDecision({
+			systemPrompt: "system",
+			userPrompt: "user",
+			jsonResponse: true,
+			replyLanguageMode: "en",
+		});
+
+		const request = proxyRequest.mock.calls[0]?.[0];
+		const payload = JSON.parse(request.body);
+		expect(payload.messages[0].content).toContain("Reply language mode: English (en).");
+	});
+
 	it("retries empty vision responses up to three attempts", async () => {
 		proxyRequest
 			.mockResolvedValueOnce({

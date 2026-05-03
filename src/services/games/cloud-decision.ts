@@ -1,5 +1,5 @@
 import { getConfig, proxyRequest, SECRET_KEYS } from "@/services/config";
-import { buildStructuredReplyLanguageInstruction } from "@/services/config/reply-language";
+import { buildStructuredReplyLanguageInstruction, type ReplyLanguageMode } from "@/services/config/reply-language";
 import { createLogger } from "@/services/logger";
 import { normalizeCompatibleOpenAIBaseUrl } from "./game-utils";
 
@@ -329,6 +329,7 @@ export async function requestActiveTextDecision(input: {
 	timeoutMs?: number;
 	jsonResponse?: boolean;
 	thinkingMode?: CloudThinkingMode;
+	replyLanguageMode?: ReplyLanguageMode;
 	telemetry?: CloudDecisionTelemetry;
 }): Promise<string> {
 	const client = resolveActiveOpenAICompatibleClient();
@@ -337,7 +338,10 @@ export async function requestActiveTextDecision(input: {
 	}
 	const systemPrompt = [
 		input.systemPrompt,
-		buildStructuredReplyLanguageInstruction({ jsonResponse: input.jsonResponse }),
+		buildStructuredReplyLanguageInstruction({
+			jsonResponse: input.jsonResponse,
+			languageMode: input.replyLanguageMode,
+		}),
 	].filter(Boolean).join("\n\n");
 
 	const parsed = await requestContentWithRetries({
@@ -375,6 +379,7 @@ export async function requestActiveVisionDecision(input: {
 	timeoutMs?: number;
 	jsonResponse?: boolean;
 	thinkingMode?: CloudThinkingMode;
+	replyLanguageMode?: ReplyLanguageMode;
 	telemetry?: CloudDecisionTelemetry;
 }): Promise<string> {
 	const client = resolveActiveVisionOpenAICompatibleClient();
@@ -383,7 +388,10 @@ export async function requestActiveVisionDecision(input: {
 	}
 	const systemPrompt = [
 		input.systemPrompt,
-		buildStructuredReplyLanguageInstruction({ jsonResponse: input.jsonResponse }),
+		buildStructuredReplyLanguageInstruction({
+			jsonResponse: input.jsonResponse,
+			languageMode: input.replyLanguageMode,
+		}),
 	].filter(Boolean).join("\n\n");
 	if (input.thinkingMode && input.thinkingMode !== "off") {
 		log.info("cloud vision thinking disabled", {

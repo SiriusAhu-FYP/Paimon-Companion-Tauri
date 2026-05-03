@@ -7,7 +7,7 @@ import type { OrchestratorService } from "@/services/orchestrator";
 import { requestOpenAICompatibleVision } from "@/services/vlm";
 import type { FunctionalTarget } from "@/types";
 import type { MemoryCandidate } from "@/types/memory";
-import { pickReplyLanguageText } from "@/services/config/reply-language";
+import { pickReplyLanguageText, type ReplyLanguageMode } from "@/services/config/reply-language";
 import { getDelegatedTaskConfig, type DelegatedTaskProfileConfig } from "./delegated-task-config";
 
 const log = createLogger("delegated-task-runner");
@@ -21,6 +21,18 @@ interface CapturedTargetSnapshot {
 	dataUrl: string;
 	width: number;
 	height: number;
+}
+
+function inferDelegationReplyLanguageMode(taskText: string): ReplyLanguageMode {
+	const hasCjk = /[\u3400-\u9fff]/u.test(taskText);
+	const hasLatinWord = /[A-Za-z]{2,}/u.test(taskText);
+	if (hasLatinWord && !hasCjk) {
+		return "en";
+	}
+	if (hasCjk) {
+		return "zh";
+	}
+	return pickReplyLanguageText("zh", "en") as ReplyLanguageMode;
 }
 
 type BoardObservationConfidence = "high" | "medium" | "low";
@@ -166,6 +178,7 @@ export async function runDelegatedTaskLoop(input: {
 	const candidateGameContext = resolveGameContext(input.target.title);
 	const baseConfig = getDelegatedTaskConfig(input.profileId);
 	const config = mergeDelegatedConfigForGame(baseConfig, candidateGameContext);
+	const replyLanguageMode = inferDelegationReplyLanguageMode(input.taskText);
 	const history: string[] = [];
 	const plannerNotes: string[] = [];
 	const evaluatorNotes: string[] = [];
@@ -209,6 +222,7 @@ export async function runDelegatedTaskLoop(input: {
 		candidateGameContext,
 		snapshot: missionSnapshot,
 		boardObservation: preMissionObservation,
+		replyLanguageMode,
 	});
 	const mission = normalizeMissionAnalysisDecision(missionRaw, input.taskText, input.target);
 	const gameContext = resolveOperationalGameContext(candidateGameContext, mission.taskMode, input.taskText);
@@ -251,6 +265,7 @@ export async function runDelegatedTaskLoop(input: {
 		longSequenceMode,
 		longSequenceMaxActions: config.longSequence.maxActions,
 		longSequenceStepWaitMs: config.longSequence.stepWaitMs,
+		replyLanguageMode,
 		allowedTools,
 	});
 	const missionAckReply = resolveMissionAckReply(mission, input.taskText);
@@ -434,6 +449,8 @@ export async function runDelegatedTaskLoop(input: {
 					invalidatedStrategies,
 					strategyLessons,
 				boardPositionsText: longSequenceMode ? undefined : formatBoardObservationForPlanner(roundBoardObservation) || undefined,
+				longSequenceMode,
+				longSequenceMaxActions: config.longSequence.maxActions,
 			});
 			const plannerSnapshot = longSequenceMode
 				? await preprocessSnapshotForRoleVision(currentSnapshot, config)
@@ -448,6 +465,13 @@ export async function runDelegatedTaskLoop(input: {
 				taskKind: gameContext?.gameId ?? mission.taskMode,
 				forceVision: longSequenceMode,
 				maxTokens: plannerMaxTokens,
+				replyLanguageMode,
+			});
+			log.info("delegated operations planner raw action count", {
+				round,
+				rawActionCount: countRawPlannerActions(plannerRaw),
+				normalizedActionLimit: longSequenceMode ? config.longSequence.maxActions : config.maxActionsPerRound,
+				longSequenceMode,
 			});
 			const nextPlanner = normalizeOperationsPlannerDecision(
 				plannerRaw,
@@ -772,6 +796,7 @@ export async function runDelegatedTaskLoop(input: {
 			afterObservation: afterBoardObservation,
 			taskKind: gameContext?.gameId ?? mission.taskMode,
 			forceVision: longSequenceMode,
+			replyLanguageMode,
 		});
 		let reflection = normalizeProgressEvaluatorDecision(reflectionRaw);
 		reflection = applyBoardTaskConsistencyGuard(reflection, gameContext);
@@ -1083,6 +1108,7 @@ async function requestMissionAnalystDecision(input: {
 	candidateGameContext: DelegatedGameContext | null;
 	snapshot: CapturedTargetSnapshot;
 	boardObservation: BoardObservation;
+	replyLanguageMode: ReplyLanguageMode;
 }): Promise<string> {
 	const systemPrompt = buildMissionAnalystSystemPrompt(input.config.missionAnalystRules);
 	const userPrompt = buildMissionAnalystUserPrompt({
@@ -1109,6 +1135,7 @@ async function requestMissionAnalystDecision(input: {
 				maxTokens: 900,
 				jsonResponse: true,
 				timeoutMs: 35_000,
+				replyLanguageMode: input.replyLanguageMode,
 				telemetry: {
 					role: "mission-analyst",
 					source: "delegation",
@@ -1136,6 +1163,7 @@ async function requestMissionAnalystDecision(input: {
 		maxTokens: 900,
 		jsonResponse: true,
 		timeoutMs: 35_000,
+		replyLanguageMode: input.replyLanguageMode,
 		telemetry: {
 			role: "mission-analyst",
 			source: "delegation",
@@ -1153,6 +1181,7 @@ async function requestPlannerDecision(input: {
 	taskKind: string;
 	forceVision?: boolean;
 	maxTokens?: number;
+	replyLanguageMode: ReplyLanguageMode;
 }): Promise<string> {
 	if (!input.forceVision && isUsableBoardObservation(input.boardObservation)) {
 		try {
@@ -1170,6 +1199,7 @@ async function requestPlannerDecision(input: {
 				maxTokens: input.maxTokens ?? 900,
 				jsonResponse: true,
 				timeoutMs: 35_000,
+				replyLanguageMode: input.replyLanguageMode,
 				telemetry: {
 					role: "operations-planner",
 					source: "delegation",
@@ -1197,6 +1227,7 @@ async function requestPlannerDecision(input: {
 		maxTokens: input.maxTokens ?? 700,
 		jsonResponse: true,
 		timeoutMs: 30_000,
+		replyLanguageMode: input.replyLanguageMode,
 		telemetry: {
 			role: "operations-planner",
 			source: "delegation",
@@ -1215,6 +1246,7 @@ async function requestEvaluatorDecision(input: {
 	afterObservation: BoardObservation;
 	taskKind: string;
 	forceVision?: boolean;
+	replyLanguageMode: ReplyLanguageMode;
 }): Promise<string> {
 	if (!input.forceVision && isUsableBoardObservation(input.beforeObservation) && isUsableBoardObservation(input.afterObservation)) {
 		try {
@@ -1233,6 +1265,7 @@ async function requestEvaluatorDecision(input: {
 				maxTokens: 700,
 				jsonResponse: true,
 				timeoutMs: 35_000,
+				replyLanguageMode: input.replyLanguageMode,
 				telemetry: {
 					role: "progress-evaluator",
 					source: "delegation",
@@ -1261,6 +1294,7 @@ async function requestEvaluatorDecision(input: {
 		maxTokens: 500,
 		jsonResponse: true,
 		timeoutMs: 30_000,
+		replyLanguageMode: input.replyLanguageMode,
 		telemetry: {
 			role: "progress-evaluator",
 			source: "delegation",
@@ -1339,7 +1373,9 @@ function buildOperationsPlannerSystemPrompt(input: {
 	longSequenceMode?: boolean;
 }): string {
 	const baseRules = [
-		"你是 Operations Planner。你只负责下一步动作决策。",
+		input.longSequenceMode
+			? "你是 Operations Planner。长序列模式下，你负责从当前截图一次性规划完整或尽可能完整的连续动作路线。"
+			: "你是 Operations Planner。你只负责下一步动作决策。",
 		`missionGoal: ${input.mission.missionGoal}`,
 		`hardConstraints: ${input.mission.hardConstraints.join(" | ") || "(none)"}`,
 		`completionSignals: ${input.mission.completionSignals.join(" | ") || "(none)"}`,
@@ -1352,8 +1388,12 @@ function buildOperationsPlannerSystemPrompt(input: {
 		"当 goalReached=false 时，必须输出 expectedOutcome（本轮动作执行后应看到的可验证状态变化）。",
 		"当 goalReached=false 时，actions 必须至少包含 1 个可执行动作；禁止输出空数组。",
 		"每个 action 必须是“单步可执行”，不要把多个动作混在一个 action 里。",
-		"若 history / latestHint 表示同一动作连续失败，下一轮必须更换策略，不得重复同签名动作。",
-		"若 latestHint 要求“Ctrl+L 后输入 URL 并回车”，actions 不能只给 Ctrl+L，必须给完整动作链。",
+		input.longSequenceMode
+			? "长序列模式下，history / latestHint 只能作为失败事实参考；必须从当前截图重新生成完整动作路线，不要按 latestHint 做单步响应。"
+			: "若 history / latestHint 表示同一动作连续失败，下一轮必须更换策略，不得重复同签名动作。",
+		input.longSequenceMode
+			? "长序列模式下，禁止把“走到某个推位”作为整轮终点；除非关卡已完成，否则 actions 必须继续展开后续推箱步骤。"
+			: "若 latestHint 要求“Ctrl+L 后输入 URL 并回车”，actions 不能只给 Ctrl+L，必须给完整动作链。",
 		"点击类动作：定位特定 UI 元素（按钮、tile、图标等）时，必须在 host.send_mouse 的 args 中提供 locatorHint 描述目标元素，不要自己猜测 x/y/xNorm/yNorm 坐标；系统会通过本地视觉定位阶梯自动解析精确坐标。",
 		"只有点击通用位置（游戏棋盘中心、窗口中央等不需要精确定位的地方），才允许直接使用 xNorm/yNorm 而不带 locatorHint。",
 		input.longSequenceMode
@@ -1416,6 +1456,8 @@ function buildOperationsPlannerUserPrompt(input: {
 	invalidatedStrategies: string[];
 	strategyLessons: string[];
 	boardPositionsText?: string;
+	longSequenceMode?: boolean;
+	longSequenceMaxActions?: number;
 }): string {
 	const historyText = input.history.length ? input.history.map((item) => `- ${item}`).join("\n") : "- (empty)";
 	const positionLines: string[] = [];
@@ -1429,6 +1471,14 @@ function buildOperationsPlannerUserPrompt(input: {
 			"若你选择 game.perform_action，必须给出合法 actionId。",
 		].join("\n")
 		: "gameContext: none";
+	if (input.longSequenceMode) {
+		return buildLongSequencePlannerUserPrompt({
+			...input,
+			gameContextText,
+			historyText,
+			maxActions: input.longSequenceMaxActions ?? input.allowedTools.length,
+		});
+	}
 	return [
 		`task: ${input.taskText}`,
 		`round: ${input.round}/${input.maxRounds}`,
@@ -1478,6 +1528,99 @@ function buildOperationsPlannerUserPrompt(input: {
 		'  "routeRisks": ["string（当前路线的主要风险）"],',
 		'  "actions": [',
 		`    { "tool": "${input.allowedTools.join("|")}", "args": { "locatorHint": "点击绿色 tile '1'" } }`,
+		"  ]",
+		"}",
+	].join("\n");
+}
+
+function buildLongSequencePlannerUserPrompt(input: {
+	taskText: string;
+	round: number;
+	maxRounds: number;
+	target: FunctionalTarget;
+	history: string[];
+	latestHint: string;
+	mission: MissionAnalysisDecision;
+	gameContext: DelegatedGameContext | null;
+	allowedTools: string[];
+	scratchpadContext: string;
+	plannerPolicyReminder: string;
+	previousExpectedOutcome: string;
+	previousExpectedMet: boolean | null;
+	latestPhaseGoal: string;
+	latestPhaseReason: string;
+	latestPhaseAbortCondition: string;
+	latestPhaseStatus: string;
+	latestPhaseAssessment: string;
+	latestActiveStrategy: string;
+	latestStrategyRevision: string;
+	latestPlanViability: string;
+	latestPlanAssessment: string;
+	invalidatedStrategies: string[];
+	strategyLessons: string[];
+	gameContextText: string;
+	historyText: string;
+	maxActions: number;
+}): string {
+	const failureContext = [
+		`previousExpectedOutcome: ${input.previousExpectedOutcome || "(none)"}`,
+		`previousExpectedMet: ${input.previousExpectedMet === null ? "unknown" : input.previousExpectedMet ? "yes" : "no"}`,
+		`latestHint: ${input.latestHint || "(none)"}`,
+		`latestPlanViability: ${input.latestPlanViability || "(none)"}`,
+		`latestPlanAssessment: ${input.latestPlanAssessment || "(none)"}`,
+		`invalidatedStrategies: ${input.invalidatedStrategies.join(" || ") || "(none)"}`,
+		`strategyLessons: ${input.strategyLessons.join(" || ") || "(none)"}`,
+		`plannerPolicyReminder: ${input.plannerPolicyReminder || "(none)"}`,
+	].join("\n");
+	return [
+		`task: ${input.taskText}`,
+		`round: ${input.round}/${input.maxRounds}`,
+		`target: ${input.target.title} (${input.target.handle})`,
+		`missionGoal: ${input.mission.missionGoal}`,
+		`missionSubtaskChain: ${input.mission.subtaskChain.join(" -> ") || "(none)"}`,
+		`missionHardConstraints: ${input.mission.hardConstraints.join(" | ") || "(none)"}`,
+		`candidateStrategies: ${input.mission.candidateStrategies.join(" || ") || "(none)"}`,
+		`strategyWarnings: ${input.mission.strategyWarnings.join(" || ") || "(none)"}`,
+		input.gameContextText,
+		"",
+		"LONG SEQUENCE MODE:",
+		"- Use the current screenshot as the source of truth for the current board.",
+		"- First solve the puzzle mentally from the current board, then expand that route into consecutive single-step game.perform_action actions.",
+		"- The actions array is the execution plan. It must not stop at a setup position, a stance correction, or a partial milestone.",
+		"- If the level is visible and solvable, output the full solution sequence or the longest contiguous prefix you genuinely believe will solve it.",
+		`- You may output up to ${input.maxActions} actions. A short sequence is acceptable only when it genuinely completes the level, performs a required reset, or the board is unreadable; explain that in abortCondition.`,
+		"- Prefer game.perform_action only. Do not insert evaluator checkpoints; the runner will execute each step and stop automatically on no-change.",
+		"- For Sokoban, compare multiple route ideas before committing. Do not assume boxes are solved linearly or permanently once they touch a target.",
+		"- Temporary placements, moving a box off a target, and interleaving boxes are allowed when they preserve global solvability.",
+		"- Before any push in the sequence, internally verify push geometry: player side, push direction, destination cell, and later access.",
+		"",
+		"Failure facts from previous attempts, if any. Treat them as evidence, not as commands:",
+		failureContext,
+		"",
+		"scratchpadContext:",
+		input.scratchpadContext || "(empty)",
+		"",
+		"history:",
+		input.historyText,
+		"",
+		"Output JSON only:",
+		"{",
+		'  "goalReached": false,',
+		'  "reasoning": "briefly describe the complete route and why it should solve the board",',
+		'  "reply": "short spoken plan in the requested reply language",',
+		'  "expectedOutcome": "what the whole sequence should accomplish, including final completion signal if expected",',
+		'  "stateSketch": "ASCII board you read from the current screenshot, with # . P B T * +",',
+		'  "currentPhaseGoal": "execute one continuous solve attempt, not a one-step correction",',
+		'  "whyThisPhase": "why this full route is globally viable",',
+		'  "abortCondition": "when the runner/evaluator should stop and replan, especially the likely first bad step",',
+		'  "activeStrategy": "the chosen global route, including box/target ordering and temporary placements",',
+		'  "strategyRevision": "how previous failure facts changed this route, or no prior failure",',
+		'  "routeSelfCheck": "explicitly state that the action list continues past setup moves toward completion",',
+		'  "committedRoute": "numbered route milestones for the full attempt",',
+		'  "currentRouteStep": "full-sequence attempt from current board",',
+		'  "routeRisks": ["risk strings"],',
+		'  "actions": [',
+		'    { "tool": "game.perform_action", "args": { "actionId": "move_left" } }',
 		"  ]",
 		"}",
 	].join("\n");
@@ -1680,6 +1823,15 @@ function normalizeOperationsPlannerDecision(
 		routeRisks: toStringArray(parsed.routeRisks).slice(0, 8),
 		actions,
 	};
+}
+
+function countRawPlannerActions(rawText: string): number {
+	try {
+		const parsed = parseJsonObject(rawText);
+		return Array.isArray(parsed.actions) ? parsed.actions.length : 0;
+	} catch {
+		return 0;
+	}
 }
 
 function normalizeAction(
@@ -4509,4 +4661,8 @@ export const __test = {
 	reconcileBoardObservationWithRouteState,
 	reconcileSokobanDynamicBoard,
 	parseSokobanBoardState,
+	inferDelegationReplyLanguageMode,
+	buildOperationsPlannerUserPrompt,
+	buildOperationsPlannerSystemPrompt,
+	countRawPlannerActions,
 } as const;

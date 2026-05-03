@@ -29,9 +29,77 @@ const {
 	parseSokobanBoardState,
 	canLockInitialBoardTopology,
 	scoreInitialBoardObservation,
+	inferDelegationReplyLanguageMode,
+	buildOperationsPlannerUserPrompt,
+	countRawPlannerActions,
 } = __test;
 
 const GAME_CONTEXT = { gameId: "sokoban" as const, displayName: "Sokoban", actionIds: ["move_up"] };
+
+describe("delegation long sequence planning helpers", () => {
+	it("infers reply language from explicit task language", () => {
+		expect(inferDelegationReplyLanguageMode("Solve this puzzle!")).toBe("en");
+		expect(inferDelegationReplyLanguageMode("请解决这个推箱子")).toBe("zh");
+	});
+
+	it("uses a dedicated long-sequence planner prompt instead of the short-step schema", () => {
+		const prompt = buildOperationsPlannerUserPrompt({
+			taskText: "Solve this puzzle!",
+			round: 1,
+			maxRounds: 20,
+			target: { title: "Sokoban", handle: "0x1" },
+			history: [],
+			latestHint: "",
+			mission: {
+				taskMode: "game",
+				missionGoal: "Solve the current Sokoban level.",
+				hardConstraints: [],
+				subtaskChain: ["read board", "solve"],
+				completionSignals: ["all boxes on targets"],
+				candidateStrategies: ["compare routes"],
+				strategyWarnings: ["do not solve boxes linearly"],
+				initialStateSummary: "",
+				initialStateSketch: "",
+				analysisReply: "",
+				ackReply: "",
+				reply: "",
+			},
+			gameContext: GAME_CONTEXT,
+			allowedTools: ["game.perform_action"],
+			scratchpadContext: "",
+			plannerPolicyReminder: "",
+			previousExpectedOutcome: "",
+			previousExpectedMet: null,
+			latestPhaseGoal: "",
+			latestPhaseReason: "",
+			latestPhaseAbortCondition: "",
+			latestPhaseStatus: "",
+			latestPhaseAssessment: "",
+			latestActiveStrategy: "",
+			latestStrategyRevision: "",
+			latestPlanViability: "",
+			latestPlanAssessment: "",
+			invalidatedStrategies: [],
+			strategyLessons: [],
+			longSequenceMode: true,
+			longSequenceMaxActions: 100,
+		});
+
+		expect(prompt).toContain("LONG SEQUENCE MODE");
+		expect(prompt).toContain("must not stop at a setup position");
+		expect(prompt).toContain("up to 100 actions");
+	});
+
+	it("counts raw planner actions before normalization", () => {
+		const raw = JSON.stringify({
+			actions: [
+				{ tool: "game.perform_action", args: { actionId: "move_left" } },
+				{ tool: "game.perform_action", args: { actionId: "move_down" } },
+			],
+		});
+		expect(countRawPlannerActions(raw)).toBe(2);
+	});
+});
 
 function makeBoardObservation(boardGrid: string, overrides: Record<string, unknown> = {}) {
 	return {

@@ -25,11 +25,15 @@ export function buildConversationReplyLanguageInstruction(): string {
 	].join("\n");
 }
 
-export function buildStructuredReplyLanguageInstruction(options?: { jsonResponse?: boolean }): string {
+export function buildStructuredReplyLanguageInstruction(options?: {
+	jsonResponse?: boolean;
+	languageMode?: ReplyLanguageMode;
+}): string {
 	const jsonHint = options?.jsonResponse
 		? "If you output JSON, keep keys, enums, booleans, and tool names unchanged; only localize natural-language text values."
 		: "";
-	if (getReplyLanguageMode() === "en") {
+	const languageMode = options?.languageMode ?? getReplyLanguageMode();
+	if (languageMode === "en") {
 		return [
 			"Reply language mode: English (en).",
 			"Use English for every natural-language sentence you generate.",

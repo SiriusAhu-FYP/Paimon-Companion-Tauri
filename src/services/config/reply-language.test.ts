@@ -45,4 +45,10 @@ describe("reply language helpers", () => {
 		expect(instruction).toContain("Reply language mode: English (en).");
 		expect(instruction).toContain("If you output JSON, keep keys");
 	});
+
+	it("allows explicit structured language override", () => {
+		getConfig.mockReturnValue({ locale: "zh" });
+		const instruction = buildStructuredReplyLanguageInstruction({ languageMode: "en" });
+		expect(instruction).toContain("Reply language mode: English (en).");
+	});
 });
