@@ -380,12 +380,9 @@ export async function runDelegatedTaskLoop(input: {
 				);
 				await sleep(config.afterActionWaitMs);
 			} else {
-				latestHint = combineHints(
-					latestHint,
-					pickReplyLanguageText(
-						"系统已强制重开本关；保留上一条失败经验，但下一轮必须从初始局面重新生成完整长序列。",
-						"The runner has restarted the level; keep the previous failure lesson, but the next planner turn must generate a fresh full long sequence from the initial board.",
-					),
+				latestHint = pickReplyLanguageText(
+					"系统已重开本关。上一轮的局部进展不是当前进度，只能作为失败路线经验；下一轮必须从初始局面重新生成完整长序列。",
+					"The runner has restarted the level. The previous partial progress is not current progress; treat it only as a failed-route lesson and generate a fresh full sequence from the initial board.",
 				);
 				latestExpectedOutcome = "";
 				latestExpectedMet = null;
@@ -806,7 +803,7 @@ export async function runDelegatedTaskLoop(input: {
 					`failedAction=${executionPlan.actionForEvaluation.tool}(${JSON.stringify(executionPlan.actionForEvaluation.args)})`,
 					`executedPrefix=${executedActions.map((item) => item.plan.actionForEvaluation.tool + "(" + JSON.stringify(item.plan.actionForEvaluation.args) + ")").join(" -> ")}`,
 					`remainingActions=${remainingActions}`,
-					"Next planner turn must rebuild a full long-sequence route from the current screenshot unless the evaluator confirms a hard deadlock that requires restart.",
+					"Evaluator must diagnose why this prefix failed and record a failed-route lesson. This attempt will be reset before the next planner turn; do not treat any partial progress as current progress.",
 				].join(" ");
 				batchExecutionError = longSequenceFailureDetail;
 				log.warn("long sequence stopped on unchanged snapshot", {
@@ -847,7 +844,7 @@ export async function runDelegatedTaskLoop(input: {
 		const lastExecutedAction = executedActions[executedActions.length - 1]?.plan.actionForEvaluation
 			?? effectivePlannerActions[0];
 
-		const evaluatorSystemPrompt = buildProgressEvaluatorSystemPrompt(config.progressEvaluatorRules, mission, replyLanguageMode);
+		const evaluatorSystemPrompt = buildProgressEvaluatorSystemPrompt(config.progressEvaluatorRules, mission);
 		const evaluatorUserPrompt = buildProgressEvaluatorUserPrompt({
 				taskText: input.taskText,
 				round,
@@ -930,8 +927,8 @@ export async function runDelegatedTaskLoop(input: {
 						reflection.nextHint,
 						longSequenceMode
 							? pickReplyLanguageText(
-								`长序列执行中断：${batchExecutionError}。若当前局面仍可解，下一轮必须从当前截图重新生成完整长序列；只有确认硬死局时才重开。`,
-								`Long sequence interrupted: ${batchExecutionError}. If the current board is still solvable, next round must rebuild a full long-sequence route from the current screenshot; restart only after confirming a hard deadlock.`,
+								`长序列执行中断：${batchExecutionError}。请判断这条完整尝试在哪个前缀失败、为什么失败，并把它写成下一轮从初始局面避开的经验。`,
+								`Long sequence interrupted: ${batchExecutionError}. Diagnose which prefix failed and why, then record a lesson for the next fresh attempt from the initial board.`,
 							)
 							: pickReplyLanguageText(
 								`动作执行报错：${batchExecutionError}。下一轮先修正动作参数或先做聚焦/定位校准。`,
@@ -970,6 +967,18 @@ export async function runDelegatedTaskLoop(input: {
 			reflection,
 		});
 		pushStrategyLesson(strategyLessons, strategyLesson, 4);
+		if (longSequenceMode && longSequenceFailureDetail) {
+			pushStrategyLesson(
+				strategyLessons,
+				buildLongSequenceAttemptLesson({
+					planner,
+					reflection,
+					failureDetail: longSequenceFailureDetail,
+					actionSummary: batchActionSummary,
+				}),
+				6,
+			);
+		}
 		if (shouldInvalidateStrategy(planner, reflection, gameContext)) {
 			pushInvalidatedStrategy(invalidatedStrategies, planner.activeStrategy);
 		}
@@ -1366,6 +1375,9 @@ function detectLongSequenceRecoveryReason(input: {
 	executionError: string;
 	reflection: ProgressEvaluatorDecision;
 }): string {
+	if (input.executionError) {
+		return input.executionError;
+	}
 	const joined = [
 		input.reflection.nextHint,
 		input.reflection.planAssessment,
@@ -1937,14 +1949,7 @@ function buildLongSequencePlannerUserPrompt(input: {
 	].join("\n");
 }
 
-function buildProgressEvaluatorSystemPrompt(
-	rules: string[],
-	mission: MissionAnalysisDecision,
-	replyLanguageMode: ReplyLanguageMode,
-): string {
-	const replyRule = replyLanguageMode === "en"
-		? "reply is a short natural English spoken recap (<=18 words), in Paimon's first person, reporting the concrete result without repeating the same sentence."
-		: "reply 是一句自然口语化的简短复盘（≤40字），以派蒙第一人称说话，像跟朋友汇报进度一样，避免重复相同句式。";
+function buildProgressEvaluatorSystemPrompt(rules: string[], mission: MissionAnalysisDecision): string {
 	const baseRules = [
 		"你是 Progress Evaluator。你会收到 before/after 两张图。",
 		"你不仅要判断是否有变化，还要判断动作是否做对、是否朝 mission 目标推进。",
@@ -1968,7 +1973,7 @@ function buildProgressEvaluatorSystemPrompt(
 		"若 executedAction 的 text 内含 {ENTER}/{RETURN} 这类字面宏，必须判定 wasActionCorrect=false、goalAlignment=deviated。",
 		"你必须评估当前环境是否仍然满足任务前提：页面是否正确、站点是否相关、是否发生页面漂移、前置条件是否被破坏。",
 		"若环境已经偏离任务前提，不要只评估局部动作是否成功；要在 nextHint 中明确说明当前错误状态与应恢复到的目标状态。",
-		replyRule,
+		"reply is a short natural spoken recap, in Paimon's first person, reporting the concrete result without repeating the same sentence.",
 		"nextHint 要明确“当前处于哪个状态、下一轮应推进到哪个状态”，不要笼统描述。",
 		"禁止输出代码块、禁止附加解释文本，只输出 JSON。",
 	];
@@ -4257,7 +4262,7 @@ function resolveMissionAckReply(mission: MissionAnalysisDecision, taskText: stri
 	return normalized || fallback;
 }
 
-function normalizeDelegatedCompanionReply(reply: string, source: "planner" | "reflection", languageMode: ReplyLanguageMode): string {
+function normalizeDelegatedCompanionReply(reply: string, _source: "planner" | "reflection", languageMode: ReplyLanguageMode): string {
 		let text = reply.trim();
 		if (!text) {
 			return "";
@@ -4265,9 +4270,6 @@ function normalizeDelegatedCompanionReply(reply: string, source: "planner" | "re
 		text = text
 			.replace(/（0x[0-9a-f]+）/gi, "")
 			.replace(/(0x[0-9a-f]+)/gi, "");
-		if (languageMode === "en" && hasCjkText(text)) {
-			return buildEnglishFallbackReply(source, text);
-		}
 		if (languageMode === "zh") {
 			text = text
 				.replace(/你已经/g, "派蒙已经")
@@ -4283,40 +4285,12 @@ function normalizeDelegatedCompanionReply(reply: string, source: "planner" | "re
 		return text;
 	}
 
-function buildEnglishFallbackReply(source: "planner" | "reflection", rawText: string): string {
-	const plannerFallbacks = [
-		"I’ll try the next route now.",
-		"I’m rebuilding the route now.",
-		"I’ll continue with a fresh route.",
-	];
-	const reflectionFallbacks = [
-		"That attempt missed; I need a new route.",
-		"It didn’t work, so I need to rebuild the route.",
-		"I need to rethink the route from here.",
-	];
-	const bucket = source === "planner" ? plannerFallbacks : reflectionFallbacks;
-	const index = stableStringHash(rawText) % bucket.length;
-	return bucket[index] ?? bucket[0];
-}
-
-function stableStringHash(value: string): number {
-	let hash = 0;
-	for (let index = 0; index < value.length; index += 1) {
-		hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
-	}
-	return Math.abs(hash);
-}
-
 function truncateTaskForAck(taskText: string, languageMode?: ReplyLanguageMode): string {
 	const compact = taskText.trim().replace(/\s+/g, " ");
 	if (!compact) {
 		return languageMode === "en" ? "this task" : pickReplyLanguageText("这个委托", "this task");
 	}
 	return compact.length > 22 ? compact.slice(0, 22) : compact;
-}
-
-function hasCjkText(text: string): boolean {
-	return /[\u3400-\u9fff]/u.test(text);
 }
 
 function normalizeHostKey(rawKey: string): string {
@@ -4497,6 +4471,26 @@ function buildStrategyLesson(input: {
 		nextHint ? `修正建议：${nextHint}` : "",
 	].filter(Boolean);
 	return parts.join(" | ").slice(0, 320);
+}
+
+function buildLongSequenceAttemptLesson(input: {
+	planner: OperationsPlannerDecision;
+	reflection: ProgressEvaluatorDecision;
+	failureDetail: string;
+	actionSummary: string;
+}): string {
+	const parts = [
+		"长序列失败尝试",
+		input.planner.activeStrategy ? `路线=${input.planner.activeStrategy}` : "",
+		input.planner.committedRoute ? `里程碑=${input.planner.committedRoute}` : "",
+		input.actionSummary ? `执行前缀=${input.actionSummary}` : "",
+		input.failureDetail ? `失败点=${input.failureDetail}` : "",
+		input.reflection.latestDiagnosis ? `诊断=${input.reflection.latestDiagnosis}` : "",
+		input.reflection.planAssessment ? `路线评估=${input.reflection.planAssessment}` : "",
+		input.reflection.nextHint ? `下一轮避开=${input.reflection.nextHint}` : "",
+		"下一轮从重开后的初始局面重新规划；不要把本轮局部进展当成当前进度。",
+	].filter(Boolean);
+	return parts.join(" | ").slice(0, 900);
 }
 
 function normalizeStrategyIdentity(value: string): string {
