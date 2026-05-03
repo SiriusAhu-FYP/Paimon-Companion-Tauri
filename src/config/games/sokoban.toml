@@ -4,6 +4,7 @@ windowTitleHints = ["sokoban", "push box", "pushbox"]
 loadGuardPolicy = "force-disable"
 
 observationFocus = [
+	"Ignore top-page UI such as the Level label, score/header decorations, and non-board buttons unless explicitly locating the reset button.",
 	"忽略棋盘外的页面 UI 和装饰元素；主要关注棋盘区域、玩家、箱子、目标点、墙、可行走地砖和被阻挡的路径。",
 	"浅灰色地砖是棋盘内的可行走区域。",
 	"深灰色、带 X 凸起纹理的方块是墙 / 障碍物，不能穿过，也不能推动。",
