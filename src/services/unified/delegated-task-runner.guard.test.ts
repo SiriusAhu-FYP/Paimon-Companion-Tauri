@@ -22,8 +22,7 @@ const {
 	detectSokobanDeadlock,
 	didBoardTaskMakeProgress,
 	buildStrategyLesson,
-	formatEvaluatorLearning,
-	enrichEvaluatorLearningFromExecutionError,
+	enrichEvaluatorDiagnosisFromExecutionError,
 	resolveOperationsNarration,
 	resolveReflectionNarration,
 	buildInitialCanonicalBoard,
@@ -267,32 +266,14 @@ describe("delegation long sequence planning helpers", () => {
 		const prompt = buildProgressEvaluatorSystemPrompt([], makeMission(), { longSequenceMode: true });
 
 		expect(prompt).toContain("动作前缀");
-		expect(prompt).toContain("failedPrefix");
-		expect(prompt).toContain("routeLesson");
-		expect(prompt).toContain("preserveStrategy");
+		expect(prompt).toContain("routeStateUpdate/latestDiagnosis");
+		expect(prompt).toContain("失败几何原因");
 		expect(prompt).toContain("不要把“某方向在某个站位失败”泛化成永远禁止该方向");
 		expect(prompt).not.toContain("不得重复同动作");
 	});
 
-	it("formats evaluator learning fields for route-state carryover", () => {
-		const learning = formatEvaluatorLearning(makeReflection({
-			failedPrefix: "move_right -> move_right -> move_down",
-			failedStep: "3/12",
-			failureGeometry: "P was not at the lower box's right side.",
-			routeLesson: "right right down is not enough to reach the lower lane.",
-			nextAttemptConstraint: "Use a different approach prefix before moving down.",
-			preserveStrategy: ["lower-box-first remains plausible"],
-			abandonStrategy: ["right right down opening"],
-		}));
-
-		expect(learning).toContain("failedPrefix=move_right");
-		expect(learning).toContain("routeLesson=right right down");
-		expect(learning).toContain("preserveStrategy=lower-box-first");
-		expect(learning).toContain("abandonStrategy=right right down");
-	});
-
-	it("extracts a failed-prefix lesson from long-sequence execution errors when evaluator is sparse", () => {
-		const enriched = enrichEvaluatorLearningFromExecutionError(
+	it("folds failed-prefix lessons into existing evaluator diagnosis fields when evaluator is sparse", () => {
+		const enriched = enrichEvaluatorDiagnosisFromExecutionError(
 			makeReflection({ latestDiagnosis: "", routeStateUpdate: "" }),
 			"Long sequence stopped at step 10/12: board screenshot did not meaningfully change after 500ms. failedAction=game.perform_action({\"actionId\":\"move_up\",\"gameId\":\"sokoban\"}) executedPrefix=game.perform_action({\"actionId\":\"move_right\",\"gameId\":\"sokoban\"}) -> game.perform_action({\"actionId\":\"move_down\",\"gameId\":\"sokoban\"}) remainingActions=2",
 			{
@@ -312,13 +293,13 @@ describe("delegation long sequence planning helpers", () => {
 			"move_right -> move_down",
 		);
 
-		expect(enriched.failedStep).toBe("10/12");
-		expect(enriched.failedPrefix).toContain("move_right");
-		expect(enriched.failureGeometry).toContain("move_up");
-		expect(enriched.routeLesson).toContain("exact prefix");
-		expect(enriched.nextAttemptConstraint).toContain("reuse");
-		expect(enriched.preserveStrategy?.[0]).toContain("lower-box-first");
-		expect(enriched.abandonStrategy?.[0]).toContain("failed prefix");
+		expect(enriched.routeStateUpdate).toContain("failedStep=10/12");
+		expect(enriched.routeStateUpdate).toContain("failedPrefix=");
+		expect(enriched.routeStateUpdate).toContain("move_right");
+		expect(enriched.routeStateUpdate).toContain("failureGeometry=");
+		expect(enriched.routeStateUpdate).toContain("move_up");
+		expect(enriched.routeStateUpdate).toContain("preserveUsefulPrefixFrom=lower-box-first");
+		expect(enriched.routeStateUpdate).toContain("abandonUnchangedPrefix=");
 		expect(enriched.latestDiagnosis).toContain("exact prefix");
 	});
 

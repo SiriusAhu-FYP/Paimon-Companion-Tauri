@@ -21,13 +21,6 @@ export interface DelegationRoundEntry {
 	committedRoute?: string;
 	currentRouteStep?: string;
 	routeDiagnosis?: string;
-	evaluatorFailedPrefix?: string;
-	evaluatorFailedStep?: string;
-	evaluatorFailureGeometry?: string;
-	evaluatorRouteLesson?: string;
-	evaluatorNextAttemptConstraint?: string;
-	evaluatorPreserveStrategy?: string[];
-	evaluatorAbandonStrategy?: string[];
 	boardGrid?: string;
 	actionTool: string;
 	actionSummary: string;
