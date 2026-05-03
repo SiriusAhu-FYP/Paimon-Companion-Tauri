@@ -27,7 +27,7 @@ locatorMinConfidence = 0.55
 
 [profile.roles.missionAnalyst]
 missionAnalystTemperature = 0.1
-missionAnalystThinkingMode = "medium"
+missionAnalystThinkingMode = "off"
 missionAnalystRules = [
 	"先提取明确任务完成目标，不要混入常识问答。",
 	"识别用户显式约束（如指定网站 Google、指定窗口、指定禁忌动作）并固化为 hardConstraints。",
@@ -40,7 +40,7 @@ missionAnalystRules = [
 
 [profile.roles.operationsPlanner]
 operationsPlannerTemperature = 0.1
-operationsPlannerThinkingMode = "medium"
+operationsPlannerThinkingMode = "off"
 operationsPlannerRules = [
 	"你只能规划 allowedTools 内的动作，不要编造新工具。",
 	"一次规划最多 maxActionsPerRound 个动作，动作要最小且可验证。",
@@ -52,7 +52,7 @@ operationsPlannerRules = [
 
 [profile.roles.progressEvaluator]
 progressEvaluatorTemperature = 0.1
-progressEvaluatorThinkingMode = "medium"
+progressEvaluatorThinkingMode = "off"
 progressEvaluatorRules = [
 	"严格比较 before/after 两张图，只描述可见变化。",
 	"除了变化本身，还要判断动作是否正确、是否朝 mission 目标靠近。",

@@ -86,7 +86,7 @@ crop = { xNorm = 0.05, yNorm = 0.06, widthNorm = 0.9, heightNorm = 0.82 }
 
 [delegationProfile.roles.missionAnalyst]
 missionAnalystTemperature = 0.1
-missionAnalystThinkingMode = "medium"
+missionAnalystThinkingMode = "off"
 missionAnalystRules = [
 	"如果任务是推箱子操作，必须标注 taskMode=game。",
 	"目标要聚焦当前关卡推进，不要输出与关卡无关回答。",
@@ -102,7 +102,7 @@ missionAnalystRules = [
 
 [delegationProfile.roles.operationsPlanner]
 operationsPlannerTemperature = 0.1
-operationsPlannerThinkingMode = "medium"
+operationsPlannerThinkingMode = "off"
 operationsPlannerRules = [
 	"优先使用 game.perform_action；若不可用再考虑 host.send_key；只有确认需要重开时才考虑点击右上角洋红色 / 紫红色重置按钮。",
 	"当 evaluator / latestHint 明确指出 deadlock、死局、卡死、或要求 restart 时，下一轮应优先执行一次 host.send_mouse 点击右上角紫红色/偏粉红色重置按钮，并在 reasoning 中说明上一条错误路线是什么。",
@@ -127,7 +127,7 @@ operationsPlannerRules = [
 
 [delegationProfile.roles.progressEvaluator]
 progressEvaluatorTemperature = 0.1
-progressEvaluatorThinkingMode = "medium"
+progressEvaluatorThinkingMode = "off"
 progressEvaluatorRules = [
 	"判断动作是否让玩家或箱子状态发生了有效推进。",
 	"expectedMet 是本轮动作正确性的主判定。若 expectedMet=false，wasActionCorrect 默认必须为 false；不要因为玩家移动了就把动作判为 correct。",
