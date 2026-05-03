@@ -7,6 +7,7 @@ const {
 	applyPhasePlanProgressGuard,
 	applyMissionCompletionGuard,
 	applySokobanDeadlockGuard,
+	applySokobanPushTargetDirectionGuard,
 	detectInvalidatedStrategyReuse,
 	didRestartActionSucceed,
 	shouldInvalidateStrategy,
@@ -445,6 +446,62 @@ describe("detectSokobanDeadlock", () => {
 			"No box moved.",
 		);
 		expect(deadlock).toBeNull();
+	});
+});
+
+describe("applySokobanPushTargetDirectionGuard", () => {
+	it("invalidates a final push that moves a box away from the target side", () => {
+		const result = applySokobanPushTargetDirectionGuard(
+			makeReflection({
+				beforeStateSketch: "######\n#....#\n#...*#\n#.+B.#\n#....#\n######",
+				nextHint: "Finish the remaining target.",
+			}),
+			GAME_CONTEXT,
+			{ tool: "game.perform_action", args: { actionId: "move_right" } },
+			{
+				goalReached: false,
+				reasoning: "",
+				reply: "",
+				expectedOutcome: "Final push: move the remaining box onto the target and complete the level.",
+				stateSketch: "",
+				currentPhaseGoal: "finish the remaining target",
+				whyThisPhase: "",
+				abortCondition: "",
+				activeStrategy: "finish from left side",
+				strategyRevision: "",
+				actions: [],
+			},
+		);
+
+		expect(result.wasActionCorrect).toBe(false);
+		expect(result.planViability).toBe("invalidated");
+		expect(result.nextHint).toContain("move_left");
+	});
+
+	it("does not invalidate unrelated reposition moves", () => {
+		const result = applySokobanPushTargetDirectionGuard(
+			makeReflection({
+				beforeStateSketch: "######\n#....#\n#...*#\n#.+B.#\n#....#\n######",
+			}),
+			GAME_CONTEXT,
+			{ tool: "game.perform_action", args: { actionId: "move_right" } },
+			{
+				goalReached: false,
+				reasoning: "",
+				reply: "",
+				expectedOutcome: "Probe whether the box can move.",
+				stateSketch: "",
+				currentPhaseGoal: "probe a side lane",
+				whyThisPhase: "",
+				abortCondition: "",
+				activeStrategy: "test lane",
+				strategyRevision: "",
+				actions: [],
+			},
+		);
+
+		expect(result.wasActionCorrect).toBe(true);
+		expect(result.planViability).toBe("unchanged");
 	});
 });
 

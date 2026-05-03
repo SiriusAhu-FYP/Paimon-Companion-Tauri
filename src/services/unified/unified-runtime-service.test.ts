@@ -239,7 +239,33 @@ describe("UnifiedRuntimeService delegation path", () => {
 		}));
 		expect(pipeline.run).not.toHaveBeenCalled();
 		expect(visibleReplies).toContain("我先确认了一下当前页面。");
-		expect(service.getState().lastCompanionText).toBe("我先确认了一下当前页面。");
+		expect(visibleReplies[visibleReplies.length - 1]).toContain("任务完成");
+		expect(service.getState().lastCompanionText).toContain("任务完成");
+	});
+
+	it("emits a final result reply even when planner or evaluator already spoke", async () => {
+		vi.mocked(runDelegatedTaskLoop).mockImplementationOnce(async ({ onAssistantReply }) => {
+			await onAssistantReply?.("I got the page open, but I bundled too many actions.", "reflection");
+			return {
+				status: "completed",
+				rounds: 1,
+				summary: "The QS result page shows Imperial College London ranked number 2.",
+				timeline: { taskText: "", missionGoal: "", rounds: [] },
+			};
+		});
+		const { bus, service } = createService({
+			selectedTargetTitle: "Mozilla Firefox",
+		});
+		const visibleReplies: string[] = [];
+		bus.on("llm:response-end", (payload) => {
+			visibleReplies.push(payload.fullText);
+		});
+
+		await service.submitDelegationTaskInstruction("Search QS rank and report number 2");
+
+		expect(visibleReplies).toContain("I got the page open, but I bundled too many actions.");
+		expect(visibleReplies[visibleReplies.length - 1]).toContain("Imperial College London");
+		expect(service.getState().lastCompanionText).toContain("Imperial College London");
 	});
 
 	it("voice input no longer triggers delegation execution", async () => {

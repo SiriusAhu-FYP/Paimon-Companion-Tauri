@@ -628,8 +628,8 @@ export class UnifiedRuntimeService {
 			run.summary = result.summary;
 			run.delegationTimeline = result.timeline ?? null;
 			if (result.status === "completed") {
-				if (!run.companionText) {
-					const completionText = buildDelegationCompletionText(input.taskText, result.summary);
+				const completionText = buildDelegationCompletionText(input.taskText, result.summary);
+				if (shouldEmitDelegationCompletionText(run.companionText, result.summary, completionText)) {
 					run.companionText = completionText;
 					run.companionTextSource = "fallback";
 					this.state.lastCompanionText = completionText;
@@ -1633,6 +1633,22 @@ function buildDelegationCompletionText(taskText: string, rawSummary: string): st
 		`搞定啦！关于“${truncateDelegationTaskForAck(taskText)}”，结果是：${summary}`,
 		`Done! For "${truncateDelegationTaskForAck(taskText)}", the result is: ${summary}`,
 	);
+}
+
+function shouldEmitDelegationCompletionText(previousText: string, rawSummary: string, completionText: string): boolean {
+	const previous = previousText.trim();
+	if (!previous) {
+		return true;
+	}
+	const summary = rawSummary.trim().replace(/\s+/g, " ");
+	if (!summary) {
+		return false;
+	}
+	const normalize = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
+	const normalizedPrevious = normalize(previous);
+	const normalizedSummary = normalize(summary);
+	const normalizedCompletion = normalize(completionText);
+	return !normalizedPrevious.includes(normalizedSummary) && !normalizedPrevious.includes(normalizedCompletion);
 }
 
 function truncateDelegationTaskForAck(taskText: string): string {
