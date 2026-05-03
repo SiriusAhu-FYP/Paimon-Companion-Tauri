@@ -106,6 +106,30 @@ function RoundCard({ entry, isLatest }: { entry: DelegationRoundEntry; isLatest:
 							</Typography>
 						)}
 					</Section>
+					{(entry.committedRoute || entry.currentRouteStep || entry.routeDiagnosis || entry.boardGrid) && (
+						<Section label={t("路线状态", "Route State")}>
+							{entry.committedRoute && (
+								<Typography variant="body2" sx={{ fontSize: "0.78rem" }}>
+									{t("路线", "Route")}: {entry.committedRoute}
+								</Typography>
+							)}
+							{entry.currentRouteStep && (
+								<Typography variant="body2" sx={{ fontSize: "0.78rem" }}>
+									{t("步骤", "Step")}: {entry.currentRouteStep}
+								</Typography>
+							)}
+							{entry.routeDiagnosis && (
+								<Typography variant="body2" color="warning.main" sx={{ fontSize: "0.78rem" }}>
+									{entry.routeDiagnosis}
+								</Typography>
+							)}
+							{entry.boardGrid && (
+								<Typography variant="body2" sx={{ fontFamily: "monospace", whiteSpace: "pre-wrap", fontSize: "0.72rem", color: "text.secondary" }}>
+									{entry.boardGrid}
+								</Typography>
+							)}
+						</Section>
+					)}
 					<Section label="Action">
 						<Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.72rem", wordBreak: "break-all", color: "text.secondary" }}>
 							{entry.actionTool}({entry.actionSummary})

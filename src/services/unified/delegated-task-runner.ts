@@ -76,6 +76,10 @@ interface OperationsPlannerDecision {
 	abortCondition: string;
 	activeStrategy: string;
 	strategyRevision: string;
+	routeSelfCheck?: string;
+	committedRoute?: string;
+	currentRouteStep?: string;
+	routeRisks?: string[];
 	actions: DelegatedTaskAction[];
 }
 
@@ -95,6 +99,18 @@ interface ProgressEvaluatorDecision {
 	phaseAssessment: string;
 	planViability: "strengthened" | "unchanged" | "weakened" | "invalidated";
 	planAssessment: string;
+	routeStateUpdate?: string;
+	latestDiagnosis?: string;
+}
+
+interface DelegationRouteState {
+	currentBoard: string;
+	routeHypotheses: string[];
+	committedRoute: string;
+	currentRouteStep: string;
+	routeRisks: string[];
+	invalidatedRouteLessons: string[];
+	latestDiagnosis: string;
 }
 
 interface DelegatedGameContext {
@@ -163,6 +179,7 @@ export async function runDelegatedTaskLoop(input: {
 	let latestPlanViability: ProgressEvaluatorDecision["planViability"] | "" = "";
 	let latestPlanAssessment = "";
 	const invalidatedStrategies: string[] = [];
+	let routeState: DelegationRouteState | null = null;
 	let noActionStreak = 0;
 	let hasExecutionEvidence = false;
 	const strategyLessons: string[] = [];
@@ -189,6 +206,17 @@ export async function runDelegatedTaskLoop(input: {
 	const mission = normalizeMissionAnalysisDecision(missionRaw, input.taskText, input.target);
 	const gameContext = resolveOperationalGameContext(candidateGameContext, mission.taskMode, input.taskText);
 	const allowedTools = buildAllowedTools(config.allowedTools, gameContext, runtimeToolNames);
+	routeState = gameContext
+		? {
+			currentBoard: preMissionObservation.boardGrid || mission.initialStateSketch,
+			routeHypotheses: [...mission.candidateStrategies],
+			committedRoute: "",
+			currentRouteStep: "",
+			routeRisks: [...mission.strategyWarnings],
+			invalidatedRouteLessons: [],
+			latestDiagnosis: "",
+		}
+		: null;
 
 	log.info("delegated mission analyst", {
 		taskText: input.taskText,
@@ -235,9 +263,11 @@ export async function runDelegatedTaskLoop(input: {
 			completionSignals: mission.completionSignals,
 			candidateStrategies: mission.candidateStrategies,
 			strategyWarnings: mission.strategyWarnings,
+			routeState,
 		}, null, 2)}\n`,
 		{ append: false },
 	);
+	await persistRouteState(input.scratchpad, routeState);
 
 	let memoryRecallSummary = "";
 	if (input.recallMemoryCandidates) {
@@ -317,6 +347,7 @@ export async function runDelegatedTaskLoop(input: {
 			latestPlanAssessment,
 			invalidatedStrategies,
 			strategyLessons,
+			routeState,
 			history,
 			plannerNotes,
 			evaluatorNotes,
@@ -330,7 +361,7 @@ export async function runDelegatedTaskLoop(input: {
 		});
 		let plannerPolicyReminder = "";
 		let plannerRetryCount = 0;
-		let planner = {
+		let planner: OperationsPlannerDecision = {
 			goalReached: false,
 			reasoning: "",
 			reply: "",
@@ -341,6 +372,10 @@ export async function runDelegatedTaskLoop(input: {
 			abortCondition: "",
 			activeStrategy: "",
 			strategyRevision: "",
+			routeSelfCheck: "",
+			committedRoute: "",
+			currentRouteStep: "",
+			routeRisks: [] as string[],
 			actions: [] as DelegatedTaskAction[],
 		};
 		while (plannerRetryCount <= 1) {
@@ -433,7 +468,9 @@ export async function runDelegatedTaskLoop(input: {
 		latestPhaseAbortCondition = planner.abortCondition || latestPhaseAbortCondition;
 		latestActiveStrategy = planner.activeStrategy || latestActiveStrategy;
 		latestStrategyRevision = planner.strategyRevision || latestStrategyRevision;
+		routeState = updateRouteStateFromPlanner(routeState, planner, roundBoardObservation);
 		await persistScratchpadText(input.scratchpad, "roles/planner.md", `${plannerNote}\n`);
+		await persistRouteState(input.scratchpad, routeState);
 		await persistScratchpadText(
 			input.scratchpad,
 			"shared/context.md",
@@ -455,6 +492,7 @@ export async function runDelegatedTaskLoop(input: {
 				latestPlanAssessment,
 				invalidatedStrategies,
 				strategyLessons,
+				routeState,
 				history,
 				plannerNotes,
 				evaluatorNotes,
@@ -525,6 +563,7 @@ export async function runDelegatedTaskLoop(input: {
 					latestPlanAssessment,
 					invalidatedStrategies,
 					strategyLessons,
+					routeState,
 					history,
 					plannerNotes,
 					evaluatorNotes,
@@ -642,6 +681,7 @@ export async function runDelegatedTaskLoop(input: {
 					latestPlanAssessment,
 					invalidatedStrategies,
 					strategyLessons,
+					routeState,
 					history,
 					plannerNotes,
 					evaluatorNotes,
@@ -811,6 +851,7 @@ export async function runDelegatedTaskLoop(input: {
 			latestExpectedOutcome = "";
 			latestExpectedMet = null;
 		}
+		routeState = updateRouteStateFromEvaluator(routeState, reflection, afterBoardObservation, lastExecutedAction);
 		hasExecutionEvidence = true;
 		const evaluatorNote = formatEvaluatorScratchpadNote({
 			round,
@@ -820,6 +861,7 @@ export async function runDelegatedTaskLoop(input: {
 		});
 		pushScratchpadNote(evaluatorNotes, evaluatorNote, 6);
 		await persistScratchpadText(input.scratchpad, "roles/evaluator.md", `${evaluatorNote}\n`);
+		await persistRouteState(input.scratchpad, routeState);
 		history.push(
 			`round ${round} [${executedActions.map((a) => a.plan.actionForEvaluation.tool).join("+")}]: strategy=${planner.activeStrategy || "(none)"} phase=${planner.currentPhaseGoal || "(none)"} expected=${planner.expectedOutcome || "(none)"} expectedMet=${reflection.expectedMet} success=${reflection.actionSucceeded} correct=${reflection.wasActionCorrect} alignment=${reflection.goalAlignment} progress=${reflection.goalProgress} phaseStatus=${reflection.phaseStatus} planViability=${reflection.planViability} hint=${latestHint}`,
 		);
@@ -829,6 +871,10 @@ export async function runDelegatedTaskLoop(input: {
 			plannerReasoning: planner.reasoning,
 			plannerExpectedOutcome: planner.expectedOutcome,
 			plannerGoalReached: planner.goalReached,
+			committedRoute: routeState?.committedRoute ?? "",
+			currentRouteStep: routeState?.currentRouteStep ?? "",
+			routeDiagnosis: routeState?.latestDiagnosis ?? "",
+			boardGrid: routeState?.currentBoard ?? "",
 			actionTool: executedActions.map((a) => a.plan.actionForEvaluation.tool).join("+"),
 			actionSummary: batchActionSummary,
 			evaluatorSucceeded: reflection.actionSucceeded,
@@ -864,6 +910,7 @@ export async function runDelegatedTaskLoop(input: {
 				latestPlanAssessment,
 				invalidatedStrategies,
 				strategyLessons,
+				routeState,
 				history,
 				plannerNotes,
 				evaluatorNotes,
@@ -1231,6 +1278,8 @@ function buildOperationsPlannerSystemPrompt(input: {
 		"只有点击通用位置（游戏棋盘中心、窗口中央等不需要精确定位的地方），才允许直接使用 xNorm/yNorm 而不带 locatorHint。",
 		"根据 Mission 的 subtaskChain 分阶段推进，每轮只推进一个最小可验证状态变化。",
 		"对复杂棋盘任务，必须显式维护 currentPhaseGoal / whyThisPhase / abortCondition。phaseGoal 应描述当前阶段要创造的中间态，而不只是最终目标。",
+		"对复杂棋盘任务，必须维护 committedRoute / currentRouteStep / routeSelfCheck：先说明当前承诺路线，再自检这一轮动作是否服务于该路线，最后才给 actions。",
+		"如果 committedRoute 与当前棋盘或失败经验冲突，必须在 strategyRevision 中改路线；不要只跟随 latestHint 做局部动作。",
 		"对复杂推箱子任务，优先围绕“释放空间、调整箱子相对关系、验证候选路线”选择 activeStrategy，而不是贪心地先完成看起来最近的箱子。",
 		"对推箱子任务，任何推动箱子的动作都必须在 reasoning 或 expectedOutcome 中显式写清：目标箱子、箱子要移动的方向、P 必须站在箱子的哪一侧、P 当前是否已经在该侧、最终 actionId。若 P 不在正确侧，本轮只能先走位，不能假装已经能推。",
 		"推箱几何硬规则：箱子向左，P 必须在箱子右侧并执行 move_left；箱子向右，P 必须在箱子左侧并执行 move_right；箱子向上，P 必须在箱子下侧并执行 move_up；箱子向下，P 必须在箱子上侧并执行 move_down。",
@@ -1335,6 +1384,10 @@ function buildOperationsPlannerUserPrompt(input: {
 		'  "abortCondition": "string（什么迹象出现后要放弃当前阶段并换策略/重开）",',
 		'  "activeStrategy": "string（当前正在验证的高层路线/箱子-目标分配思路）",',
 		'  "strategyRevision": "string（本轮对高层路线的维持、修正或切换说明）",',
+		'  "routeSelfCheck": "string（行动前自检：本轮动作如何服务 committedRoute，是否保持整体可达性）",',
+		'  "committedRoute": "string（当前承诺执行的路线骨架；不要只写单步动作）",',
+		'  "currentRouteStep": "string（当前正在执行的路线步骤）",',
+		'  "routeRisks": ["string（当前路线的主要风险）"],',
 		'  "actions": [',
 		`    { "tool": "${input.allowedTools.join("|")}", "args": { "locatorHint": "点击绿色 tile '1'" } }`,
 		"  ]",
@@ -1354,6 +1407,7 @@ function buildProgressEvaluatorSystemPrompt(rules: string[], mission: MissionAna
 		"你还必须判断当前阶段目标是否推进，输出 phaseStatus（advanced|stalled|blocked|completed）和 phaseAssessment（一句话）。",
 		"phaseStatus=completed 只表示当前阶段完成，不等于整个 mission 完成；mission 是否完成仍必须严格服从 completionSignals。",
 		"你还必须判断当前高层路线是否更可信，输出 planViability（strengthened|unchanged|weakened|invalidated）和 planAssessment（一句话）。",
+		"你必须输出 routeStateUpdate 和 latestDiagnosis：只诊断路线状态如何变化，不要把 nextHint 写成强制命令。",
 		"如果这一步虽然没完成局部 expectedOutcome，但让当前路线更可行、释放了空间、或验证了某条路线错误，也必须在 planViability / phaseAssessment 中明确指出。",
 		"你还要检查 executedAction 是否拆成“单步可执行动作”；若动作过于抽象或一步里混了多步，判定 wasActionCorrect=false 并在 nextHint 指出应拆成的最小动作。",
 		"若 history 显示同签名动作已连续失败 >=2 轮，你必须判定 wasActionCorrect=false 且 goalAlignment=deviated，并在 nextHint 强制要求“换策略/换动作链，不得重复同动作”。",
@@ -1437,7 +1491,9 @@ function buildProgressEvaluatorUserPrompt(input: {
 		'  "phaseStatus": "advanced|stalled|blocked|completed",',
 		'  "phaseAssessment": "string",',
 		'  "planViability": "strengthened|unchanged|weakened|invalidated",',
-		'  "planAssessment": "string"',
+		'  "planAssessment": "string",',
+		'  "routeStateUpdate": "string（本轮对 committedRoute/currentRouteStep/失败经验的更新）",',
+		'  "latestDiagnosis": "string（给下一轮 Planner 的诊断，不是命令）"',
 		"}",
 	);
 	return lines.join("\n");
@@ -1530,6 +1586,10 @@ function normalizeOperationsPlannerDecision(
 		abortCondition: toText(parsed.abortCondition),
 		activeStrategy: toText(parsed.activeStrategy),
 		strategyRevision: toText(parsed.strategyRevision),
+		routeSelfCheck: toText(parsed.routeSelfCheck || parsed.selfCheck),
+		committedRoute: toText(parsed.committedRoute),
+		currentRouteStep: toText(parsed.currentRouteStep || parsed.routeStep),
+		routeRisks: toStringArray(parsed.routeRisks).slice(0, 8),
 		actions,
 	};
 }
@@ -1700,6 +1760,8 @@ function normalizeProgressEvaluatorDecision(rawText: string): ProgressEvaluatorD
 		phaseAssessment: toText(parsed.phaseAssessment || parsed.expectationReview),
 		planViability,
 		planAssessment: toText(parsed.planAssessment || parsed.phaseAssessment || parsed.expectationReview),
+		routeStateUpdate: toText(parsed.routeStateUpdate),
+		latestDiagnosis: toText(parsed.latestDiagnosis || parsed.nextHint || parsed.expectationReview),
 	};
 }
 
@@ -3416,6 +3478,10 @@ function formatPlannerScratchpadNote(input: {
 		`abortCondition=${input.planner.abortCondition || "(none)"}`,
 		`activeStrategy=${input.planner.activeStrategy || "(none)"}`,
 		`strategyRevision=${input.planner.strategyRevision || "(none)"}`,
+		`committedRoute=${input.planner.committedRoute || "(none)"}`,
+		`currentRouteStep=${input.planner.currentRouteStep || "(none)"}`,
+		`routeSelfCheck=${input.planner.routeSelfCheck || "(none)"}`,
+		`routeRisks=${input.planner.routeRisks?.join(" || ") || "(none)"}`,
 		`expectedOutcome=${input.planner.expectedOutcome || "(none)"}`,
 		`stateSketch=${input.planner.stateSketch || "(none)"}`,
 		`reasoning=${input.planner.reasoning || "(none)"}`,
@@ -3442,6 +3508,8 @@ function formatEvaluatorScratchpadNote(input: {
 		`phaseAssessment=${input.reflection.phaseAssessment || "(none)"}`,
 		`planViability=${input.reflection.planViability}`,
 		`planAssessment=${input.reflection.planAssessment || "(none)"}`,
+		`routeStateUpdate=${input.reflection.routeStateUpdate || "(none)"}`,
+		`latestDiagnosis=${input.reflection.latestDiagnosis || "(none)"}`,
 		`beforeStateSketch=${input.reflection.beforeStateSketch || "(none)"}`,
 		`afterStateSketch=${input.reflection.afterStateSketch || "(none)"}`,
 		`stateDelta=${input.reflection.stateDelta || "(none)"}`,
@@ -3628,6 +3696,76 @@ function pushStrategyLesson(bucket: string[], lesson: string, limit: number): vo
 	}
 }
 
+function updateRouteStateFromPlanner(
+	routeState: DelegationRouteState | null,
+	planner: OperationsPlannerDecision,
+	observation: BoardObservation,
+): DelegationRouteState | null {
+	if (!routeState) {
+		return null;
+	}
+	return {
+		...routeState,
+		currentBoard: observation.boardGrid || planner.stateSketch || routeState.currentBoard,
+		committedRoute: planner.committedRoute || planner.activeStrategy || routeState.committedRoute,
+		currentRouteStep: planner.currentRouteStep || planner.currentPhaseGoal || routeState.currentRouteStep,
+		routeRisks: planner.routeRisks?.length ? planner.routeRisks : routeState.routeRisks,
+	};
+}
+
+function updateRouteStateFromEvaluator(
+	routeState: DelegationRouteState | null,
+	reflection: ProgressEvaluatorDecision,
+	afterObservation: BoardObservation,
+	action: DelegatedTaskAction,
+): DelegationRouteState | null {
+	if (!routeState) {
+		return null;
+	}
+	const nextLessons = [...routeState.invalidatedRouteLessons];
+	if (reflection.planViability === "invalidated") {
+		pushStrategyLesson(nextLessons, reflection.routeStateUpdate || reflection.planAssessment || reflection.latestDiagnosis || "", 8);
+	}
+	const resetSucceeded = didRestartActionSucceed(action, reflection);
+	return {
+		...routeState,
+		currentBoard: afterObservation.boardGrid || reflection.afterStateSketch || (resetSucceeded ? "" : routeState.currentBoard),
+		committedRoute: resetSucceeded || reflection.planViability === "invalidated" ? "" : routeState.committedRoute,
+		currentRouteStep: resetSucceeded || reflection.phaseStatus === "completed" || reflection.planViability === "invalidated"
+			? ""
+			: routeState.currentRouteStep,
+		invalidatedRouteLessons: nextLessons,
+		latestDiagnosis: reflection.latestDiagnosis || reflection.routeStateUpdate || reflection.nextHint || routeState.latestDiagnosis,
+	};
+}
+
+function formatRouteStateForPrompt(routeState: DelegationRouteState): string {
+	return [
+		`currentBoard=${routeState.currentBoard || "(none)"}`,
+		`routeHypotheses=${routeState.routeHypotheses.join(" || ") || "(none)"}`,
+		`committedRoute=${routeState.committedRoute || "(none)"}`,
+		`currentRouteStep=${routeState.currentRouteStep || "(none)"}`,
+		`routeRisks=${routeState.routeRisks.join(" || ") || "(none)"}`,
+		`invalidatedRouteLessons=${routeState.invalidatedRouteLessons.join(" || ") || "(none)"}`,
+		`latestDiagnosis=${routeState.latestDiagnosis || "(none)"}`,
+	].join("\n");
+}
+
+async function persistRouteState(
+	scratchpad: DelegationScratchpadRuntime | null | undefined,
+	routeState: DelegationRouteState | null,
+): Promise<void> {
+	if (!routeState) {
+		return;
+	}
+	await persistScratchpadText(
+		scratchpad,
+		"shared/route-state.json",
+		`${JSON.stringify(routeState, null, 2)}\n`,
+		{ append: false },
+	);
+}
+
 function buildSharedScratchpadContext(input: {
 	taskText: string;
 	mission: MissionAnalysisDecision;
@@ -3646,6 +3784,7 @@ function buildSharedScratchpadContext(input: {
 	latestPlanAssessment: string;
 	invalidatedStrategies: string[];
 	strategyLessons: string[];
+	routeState: DelegationRouteState | null;
 	history: string[];
 	plannerNotes: string[];
 	evaluatorNotes: string[];
@@ -3684,6 +3823,8 @@ function buildSharedScratchpadContext(input: {
 		`strategyRevision=${input.latestStrategyRevision || "(none)"}`,
 		`planViability=${input.latestPlanViability || "(none)"}`,
 		`planAssessment=${input.latestPlanAssessment || "(none)"}`,
+		"### routeState",
+		input.routeState ? formatRouteStateForPrompt(input.routeState) : "(none)",
 		"### strategyLessons",
 		input.strategyLessons.length ? input.strategyLessons.join("\n") : "(none)",
 		"### plannerRecent",

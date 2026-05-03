@@ -18,6 +18,10 @@ export interface DelegationRoundEntry {
 	plannerReasoning: string;
 	plannerExpectedOutcome: string;
 	plannerGoalReached: boolean;
+	committedRoute?: string;
+	currentRouteStep?: string;
+	routeDiagnosis?: string;
+	boardGrid?: string;
 	actionTool: string;
 	actionSummary: string;
 	evaluatorSucceeded: boolean;
