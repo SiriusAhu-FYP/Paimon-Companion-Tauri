@@ -27,6 +27,8 @@ const {
 	reconcileBoardObservationWithRouteState,
 	reconcileSokobanDynamicBoard,
 	parseSokobanBoardState,
+	canLockInitialBoardTopology,
+	scoreInitialBoardObservation,
 } = __test;
 
 const GAME_CONTEXT = { gameId: "sokoban" as const, displayName: "Sokoban", actionIds: ["move_up"] };
@@ -69,19 +71,43 @@ function makeReflection(overrides: Record<string, unknown> = {}) {
 }
 
 describe("canonical Sokoban board reconciliation", () => {
+	it("does not lock a Sokoban topology until core invariants are satisfied", () => {
+		const missingTargets = [
+			"######",
+			"#P...#",
+			"#..B.#",
+			"#..B.#",
+			"######",
+		].join("\n");
+		const validLevel2 = [
+			"######",
+			"#P...#",
+			"#..BT#",
+			"#.TB.#",
+			"######",
+		].join("\n");
+		const mission = { initialStateSketch: missingTargets };
+
+		expect(canLockInitialBoardTopology(GAME_CONTEXT, missingTargets)).toBe(false);
+		expect(canLockInitialBoardTopology(GAME_CONTEXT, validLevel2)).toBe(true);
+		expect(buildInitialCanonicalBoard(GAME_CONTEXT, mission as never, makeBoardObservation(missingTargets))).toBeNull();
+		expect(scoreInitialBoardObservation(makeBoardObservation(validLevel2), GAME_CONTEXT))
+			.toBeGreaterThan(scoreInitialBoardObservation(makeBoardObservation(missingTargets), GAME_CONTEXT));
+	});
+
 	it("locks mission topology and only merges later P/B dynamics", () => {
 		const initial = [
 			"######",
 			"#P..T#",
 			"#..B.#",
-			"#.T..#",
+			"#.TB.#",
 			"######",
 		].join("\n");
 		const laterMissingTargets = [
 			"######",
 			"#...P#",
 			"#...B#",
-			"#....#",
+			"#..B.#",
 			"######",
 		].join("\n");
 		const mission = {
@@ -120,7 +146,7 @@ describe("canonical Sokoban board reconciliation", () => {
 			"######",
 			"#...+#",
 			"#...B#",
-			"#.T..#",
+			"#.TB.#",
 			"######",
 		].join("\n"));
 		expect(result.ambiguities.join(" ")).toContain("topology differed");

@@ -201,4 +201,9 @@ Use these symbols exactly:
 Ignore page chrome, ads, buttons, and background outside the board.
 If a reset button is visible, do not include it in the grid.
 Count rows and columns carefully. If the board is non-rectangular, keep the visible room shape with # walls and . floor; do not invent extra gameplay cells.
+Sokoban validity invariants:
+  - There must be exactly one player tile: P or +.
+  - There must be at least one box tile: B or *.
+  - The number of target tiles (T + * + +) must equal the number of boxes (B + *).
+If these invariants are not satisfied, set confidence to low and list the missing/contradictory counts in ambiguities.
 If any P/B/T/# cell is uncertain, set confidence to low and explain the ambiguity."""

@@ -192,11 +192,12 @@ export async function runDelegatedTaskLoop(input: {
 	const missionProbeTools = buildAllowedTools(config.allowedTools, candidateGameContext, runtimeToolNames);
 	const missionSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
 	const preMissionObservation = candidateGameContext
-		? await captureBoardObservation(
+		? await captureInitialBoardObservation(
 			missionSnapshot,
 			input.target,
 			buildPreMissionForObservation(input.taskText),
 			config,
+			candidateGameContext,
 		)
 		: emptyBoardObservation(missionSnapshot);
 	const missionRaw = await requestMissionAnalystDecision({
@@ -2729,6 +2730,41 @@ async function captureBoardObservation(
 	}
 }
 
+async function captureInitialBoardObservation(
+	snapshot: CapturedTargetSnapshot,
+	target: FunctionalTarget,
+	mission: MissionAnalysisDecision,
+	config: DelegatedTaskProfileConfig,
+	gameContext: DelegatedGameContext,
+): Promise<BoardObservation> {
+	const maxAttempts = gameContext.gameId === "sokoban" ? 3 : 1;
+	let bestObservation: BoardObservation | null = null;
+	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+		const observation = await captureBoardObservation(snapshot, target, mission, config);
+		if (!bestObservation || scoreInitialBoardObservation(observation, gameContext) > scoreInitialBoardObservation(bestObservation, gameContext)) {
+			bestObservation = observation;
+		}
+		if (canLockInitialBoardTopology(gameContext, observation.boardGrid)) {
+			if (attempt > 1) {
+				log.info("[diag] initial board observation accepted after retry", {
+					gameId: gameContext.gameId,
+					attempt,
+					gridPreview: observation.boardGrid.slice(0, 200),
+				});
+			}
+			return observation;
+		}
+		log.warn("[diag] initial board observation not lockable", {
+			gameId: gameContext.gameId,
+			attempt,
+			maxAttempts,
+			reason: describeInitialBoardLockIssue(gameContext, observation.boardGrid),
+			gridPreview: observation.boardGrid.slice(0, 200),
+		});
+	}
+	return bestObservation ?? emptyBoardObservation(snapshot);
+}
+
 function emptyBoardObservation(snapshot: CapturedTargetSnapshot): BoardObservation {
 	return {
 		boardGrid: "",
@@ -2771,6 +2807,7 @@ interface SokobanBoardState {
 	topology: string;
 	currentBoard: string;
 	player: string | null;
+	playerCount: number;
 	boxes: string[];
 	targetCount: number;
 	boxCount: number;
@@ -2788,10 +2825,60 @@ function buildInitialCanonicalBoard(
 	const missionGrid = normalizeBoardGridLines(mission.initialStateSketch).join("\n");
 	const sourceGrid = missionGrid || observation.boardGrid;
 	const parsed = parseSokobanBoardState(sourceGrid);
-	if (!parsed) {
+	if (!parsed || !isLockableSokobanBoardState(parsed)) {
+		log.warn("[diag] initial Sokoban topology lock skipped", {
+			reason: describeSokobanBoardLockIssue(parsed),
+			missionGridPreview: missionGrid.slice(0, 200),
+			observationGridPreview: observation.boardGrid.slice(0, 200),
+		});
 		return null;
 	}
 	return parsed;
+}
+
+function canLockInitialBoardTopology(gameContext: DelegatedGameContext | null, boardGrid: string): boolean {
+	if (gameContext?.gameId !== "sokoban") {
+		return Boolean(boardGrid);
+	}
+	return isLockableSokobanBoardState(parseSokobanBoardState(boardGrid));
+}
+
+function scoreInitialBoardObservation(observation: BoardObservation, gameContext: DelegatedGameContext | null): number {
+	if (gameContext?.gameId !== "sokoban") {
+		return observation.boardGrid ? 1 : 0;
+	}
+	const parsed = parseSokobanBoardState(observation.boardGrid);
+	if (!parsed) {
+		return 0;
+	}
+	let score = 0;
+	if (parsed.playerCount === 1) score += 3;
+	if (parsed.boxCount >= 1) score += 2;
+	if (parsed.targetCount === parsed.boxCount && parsed.boxCount >= 1) score += 4;
+	score += Math.min(parsed.targetCount, parsed.boxCount);
+	return score;
+}
+
+function describeInitialBoardLockIssue(gameContext: DelegatedGameContext | null, boardGrid: string): string {
+	if (gameContext?.gameId !== "sokoban") {
+		return boardGrid ? "" : "empty board";
+	}
+	return describeSokobanBoardLockIssue(parseSokobanBoardState(boardGrid));
+}
+
+function isLockableSokobanBoardState(state: SokobanBoardState | null): boolean {
+	return Boolean(state && state.playerCount === 1 && state.boxCount >= 1 && state.targetCount === state.boxCount);
+}
+
+function describeSokobanBoardLockIssue(state: SokobanBoardState | null): string {
+	if (!state) {
+		return "invalid or empty Sokoban board";
+	}
+	const issues: string[] = [];
+	if (state.playerCount !== 1) issues.push(`expected 1 player but saw ${state.playerCount}`);
+	if (state.boxCount < 1) issues.push(`expected at least 1 box but saw ${state.boxCount}`);
+	if (state.targetCount !== state.boxCount) issues.push(`expected targets (${state.targetCount}) to equal boxes (${state.boxCount})`);
+	return issues.join("; ") || "none";
 }
 
 function reconcileBoardObservationWithRouteState(
@@ -2892,6 +2979,7 @@ function parseSokobanBoardState(boardGrid: string): SokobanBoardState | null {
 	const topologyRows: string[] = [];
 	const boxes: string[] = [];
 	let player: string | null = null;
+	let playerCount = 0;
 	let targetCount = 0;
 	const warnings: string[] = [];
 	for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
@@ -2911,6 +2999,7 @@ function parseSokobanBoardState(boardGrid: string): SokobanBoardState | null {
 				topologyRow += ".";
 			}
 			if (char === "P" || char === "+") {
+				playerCount += 1;
 				if (player) {
 					warnings.push("multiple players detected");
 				}
@@ -2926,6 +3015,7 @@ function parseSokobanBoardState(boardGrid: string): SokobanBoardState | null {
 		topology: topologyRows.join("\n"),
 		currentBoard: composeSokobanBoard(topologyRows.join("\n"), player, boxes),
 		player,
+		playerCount,
 		boxes,
 		targetCount,
 		boxCount: boxes.length,
@@ -4326,6 +4416,8 @@ export const __test = {
 	buildStrategyLesson,
 	resolveOperationsNarration,
 	buildInitialCanonicalBoard,
+	canLockInitialBoardTopology,
+	scoreInitialBoardObservation,
 	reconcileBoardObservationWithRouteState,
 	reconcileSokobanDynamicBoard,
 	parseSokobanBoardState,
