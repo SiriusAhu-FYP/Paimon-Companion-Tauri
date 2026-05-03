@@ -192,7 +192,7 @@ export async function runDelegatedTaskLoop(input: {
 	const runtimeToolNames = await resolveRuntimeToolNames(input.traceId);
 	const missionProbeTools = buildAllowedTools(config.allowedTools, candidateGameContext, runtimeToolNames);
 	const missionSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
-	const preMissionObservation = candidateGameContext
+	const preMissionObservation = candidateGameContext && !longSequenceMode
 		? await captureInitialBoardObservation(
 			missionSnapshot,
 			input.target,
@@ -336,12 +336,14 @@ export async function runDelegatedTaskLoop(input: {
 			promptLength: config.boardPerceptionPrompt?.length ?? 0,
 			promptPreview: config.boardPerceptionPrompt?.slice(0, 120) ?? "(empty)",
 		});
-		const rawRoundBoardObservation = await captureBoardObservation(
-			currentSnapshot,
-			input.target,
-			mission,
-			config,
-		);
+		const rawRoundBoardObservation = longSequenceMode
+			? emptyBoardObservation(currentSnapshot)
+			: await captureBoardObservation(
+				currentSnapshot,
+				input.target,
+				mission,
+				config,
+			);
 		roundBoardObservation = reconcileBoardObservationWithRouteState(
 			routeState,
 			rawRoundBoardObservation,
@@ -433,6 +435,7 @@ export async function runDelegatedTaskLoop(input: {
 			const plannerSnapshot = longSequenceMode
 				? await preprocessSnapshotForRoleVision(currentSnapshot, config)
 				: currentSnapshot;
+			const plannerMaxTokens = longSequenceMode ? 2500 : undefined;
 			const plannerRaw = await requestPlannerDecision({
 				config,
 				systemPrompt: plannerSystemPrompt,
@@ -441,6 +444,7 @@ export async function runDelegatedTaskLoop(input: {
 				boardObservation: roundBoardObservation,
 				taskKind: gameContext?.gameId ?? mission.taskMode,
 				forceVision: longSequenceMode,
+				maxTokens: plannerMaxTokens,
 			});
 			const nextPlanner = normalizeOperationsPlannerDecision(
 				plannerRaw,
@@ -690,12 +694,14 @@ export async function runDelegatedTaskLoop(input: {
 			}
 		}
 
-		const rawAfterBoardObservation = await captureBoardObservation(
-			batchAfterSnapshot,
-			input.target,
-			mission,
-			config,
-		);
+		const rawAfterBoardObservation = longSequenceMode
+			? emptyBoardObservation(batchAfterSnapshot)
+			: await captureBoardObservation(
+				batchAfterSnapshot,
+				input.target,
+				mission,
+				config,
+			);
 		const afterBoardObservation = reconcileBoardObservationWithRouteState(
 			routeState,
 			rawAfterBoardObservation,
@@ -1143,6 +1149,7 @@ async function requestPlannerDecision(input: {
 	boardObservation: BoardObservation;
 	taskKind: string;
 	forceVision?: boolean;
+	maxTokens?: number;
 }): Promise<string> {
 	if (!input.forceVision && isUsableBoardObservation(input.boardObservation)) {
 		try {
@@ -1157,7 +1164,7 @@ async function requestPlannerDecision(input: {
 				userPrompt: input.userPrompt,
 				temperature: input.config.operationsPlannerTemperature,
 				thinkingMode: input.config.operationsPlannerThinkingMode,
-				maxTokens: 900,
+				maxTokens: input.maxTokens ?? 900,
 				jsonResponse: true,
 				timeoutMs: 35_000,
 				telemetry: {
@@ -1184,7 +1191,7 @@ async function requestPlannerDecision(input: {
 		imageDataUrls: [input.snapshot.dataUrl],
 		temperature: input.config.operationsPlannerTemperature,
 		thinkingMode: input.config.operationsPlannerThinkingMode,
-		maxTokens: 700,
+		maxTokens: input.maxTokens ?? 700,
 		jsonResponse: true,
 		timeoutMs: 30_000,
 		telemetry: {
@@ -1334,7 +1341,9 @@ function buildOperationsPlannerSystemPrompt(input: {
 		`hardConstraints: ${input.mission.hardConstraints.join(" | ") || "(none)"}`,
 		`completionSignals: ${input.mission.completionSignals.join(" | ") || "(none)"}`,
 		`allowedTools: ${input.allowedTools.join(", ")}`,
-		`每轮最多输出 ${input.maxActionsPerRound} 个动作，动作粒度越小越好。`,
+		input.longSequenceMode
+			? `长序列模式每轮最多输出 ${input.maxActionsPerRound} 个动作；目标是一次给出完整或尽可能长的连续通关序列。`
+			: `每轮最多输出 ${input.maxActionsPerRound} 个动作，动作粒度越小越好。`,
 		"每轮都要先复盘上一轮“预期结果”与“实际达成”，再决定本轮动作；若上一轮未达成，优先给出纠偏动作链。",
 		"当 goalReached=false 时，reply 只能描述“下一步要做什么”，禁止直接回答任务问题本身。",
 		"当 goalReached=false 时，必须输出 expectedOutcome（本轮动作执行后应看到的可验证状态变化）。",
@@ -1344,7 +1353,9 @@ function buildOperationsPlannerSystemPrompt(input: {
 		"若 latestHint 要求“Ctrl+L 后输入 URL 并回车”，actions 不能只给 Ctrl+L，必须给完整动作链。",
 		"点击类动作：定位特定 UI 元素（按钮、tile、图标等）时，必须在 host.send_mouse 的 args 中提供 locatorHint 描述目标元素，不要自己猜测 x/y/xNorm/yNorm 坐标；系统会通过本地视觉定位阶梯自动解析精确坐标。",
 		"只有点击通用位置（游戏棋盘中心、窗口中央等不需要精确定位的地方），才允许直接使用 xNorm/yNorm 而不带 locatorHint。",
-		"根据 Mission 的 subtaskChain 分阶段推进，每轮只推进一个最小可验证状态变化。",
+		input.longSequenceMode
+			? "根据 Mission 的 subtaskChain 先完整解题，再把路线展开为连续单步 actions；不要只输出一个最小可验证动作。"
+			: "根据 Mission 的 subtaskChain 分阶段推进，每轮只推进一个最小可验证状态变化。",
 		"对复杂棋盘任务，必须显式维护 currentPhaseGoal / whyThisPhase / abortCondition。phaseGoal 应描述当前阶段要创造的中间态，而不只是最终目标。",
 		"对复杂棋盘任务，必须维护 committedRoute / currentRouteStep / routeSelfCheck：先说明当前承诺路线，再自检这一轮动作是否服务于该路线，最后才给 actions。",
 		"如果 committedRoute 与当前棋盘或失败经验冲突，必须在 strategyRevision 中改路线；不要只跟随 latestHint 做局部动作。",
