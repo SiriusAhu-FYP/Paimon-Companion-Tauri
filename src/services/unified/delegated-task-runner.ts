@@ -264,6 +264,7 @@ export async function runDelegatedTaskLoop(input: {
 		gameContext: gameContext?.gameId ?? null,
 		longSequenceMode,
 		longSequenceMaxActions: config.longSequence.maxActions,
+		longSequenceMinActions: config.longSequence.minActions,
 		longSequenceStepWaitMs: config.longSequence.stepWaitMs,
 		replyLanguageMode,
 		allowedTools,
@@ -451,6 +452,7 @@ export async function runDelegatedTaskLoop(input: {
 				boardPositionsText: longSequenceMode ? undefined : formatBoardObservationForPlanner(roundBoardObservation) || undefined,
 				longSequenceMode,
 				longSequenceMaxActions: config.longSequence.maxActions,
+				longSequenceMinActions: config.longSequence.minActions,
 			});
 			const plannerSnapshot = longSequenceMode
 				? await preprocessSnapshotForRoleVision(currentSnapshot, config)
@@ -470,6 +472,7 @@ export async function runDelegatedTaskLoop(input: {
 			log.info("delegated operations planner raw action count", {
 				round,
 				rawActionCount: countRawPlannerActions(plannerRaw),
+				rawActionIds: extractRawPlannerActionIds(plannerRaw).slice(0, 30),
 				normalizedActionLimit: longSequenceMode ? config.longSequence.maxActions : config.maxActionsPerRound,
 				longSequenceMode,
 			});
@@ -481,7 +484,15 @@ export async function runDelegatedTaskLoop(input: {
 				gameContext,
 			);
 			const invalidatedStrategyIssue = detectInvalidatedStrategyReuse(nextPlanner.activeStrategy, invalidatedStrategies);
-			const policyIssue = invalidatedStrategyIssue ?? detectPlannerPolicyIssue({
+			const longSequenceIssue = longSequenceMode
+				? detectLongSequencePlannerIssue({
+					actions: nextPlanner.actions,
+					minActions: config.longSequence.minActions,
+					round,
+					maxActions: config.longSequence.maxActions,
+				})
+				: "";
+			const policyIssue = invalidatedStrategyIssue ?? longSequenceIssue ?? detectPlannerPolicyIssue({
 				goalReached: nextPlanner.goalReached,
 				expectedOutcome: nextPlanner.expectedOutcome,
 				actions: nextPlanner.actions,
@@ -703,6 +714,7 @@ export async function runDelegatedTaskLoop(input: {
 					`failedAction=${executionPlan.actionForEvaluation.tool}(${JSON.stringify(executionPlan.actionForEvaluation.args)})`,
 					`executedPrefix=${executedActions.map((item) => item.plan.actionForEvaluation.tool + "(" + JSON.stringify(item.plan.actionForEvaluation.args) + ")").join(" -> ")}`,
 					`remainingActions=${remainingActions}`,
+					"Next planner turn must rebuild a full long-sequence route from the current screenshot; do not respond with a single corrective move.",
 				].join(" ");
 				batchExecutionError = longSequenceFailureDetail;
 				log.warn("long sequence stopped on unchanged snapshot", {
@@ -819,15 +831,20 @@ export async function runDelegatedTaskLoop(input: {
 				beforeStateSketch: reflection.beforeStateSketch || "",
 				afterStateSketch: reflection.afterStateSketch || "",
 				stateDelta: reflection.stateDelta || "",
-				nextHint: combineHints(
-					reflection.nextHint,
-					pickReplyLanguageText(
-						`动作执行报错：${batchExecutionError}。下一轮先修正动作参数或先做聚焦/定位校准。`,
-						`Action execution error: ${batchExecutionError}. Next round, fix the action parameters or redo focus/locator calibration.`,
+					nextHint: combineHints(
+						reflection.nextHint,
+						longSequenceMode
+							? pickReplyLanguageText(
+								`长序列执行中断：${batchExecutionError}。下一轮必须从当前截图重新生成完整长序列，不要只给单步纠偏。`,
+								`Long sequence interrupted: ${batchExecutionError}. Next round must rebuild a full long-sequence route from the current screenshot, not a single corrective move.`,
+							)
+							: pickReplyLanguageText(
+								`动作执行报错：${batchExecutionError}。下一轮先修正动作参数或先做聚焦/定位校准。`,
+								`Action execution error: ${batchExecutionError}. Next round, fix the action parameters or redo focus/locator calibration.`,
+							),
 					),
-				),
-			};
-		}
+				};
+			}
 		log.info("delegated progress evaluator", {
 			round,
 			batchSize: executedActions.length,
@@ -1458,6 +1475,7 @@ function buildOperationsPlannerUserPrompt(input: {
 	boardPositionsText?: string;
 	longSequenceMode?: boolean;
 	longSequenceMaxActions?: number;
+	longSequenceMinActions?: number;
 }): string {
 	const historyText = input.history.length ? input.history.map((item) => `- ${item}`).join("\n") : "- (empty)";
 	const positionLines: string[] = [];
@@ -1477,6 +1495,7 @@ function buildOperationsPlannerUserPrompt(input: {
 			gameContextText,
 			historyText,
 			maxActions: input.longSequenceMaxActions ?? input.allowedTools.length,
+			minActions: input.longSequenceMinActions ?? 1,
 		});
 	}
 	return [
@@ -1561,6 +1580,7 @@ function buildLongSequencePlannerUserPrompt(input: {
 	gameContextText: string;
 	historyText: string;
 	maxActions: number;
+	minActions: number;
 }): string {
 	const failureContext = [
 		`previousExpectedOutcome: ${input.previousExpectedOutcome || "(none)"}`,
@@ -1589,6 +1609,7 @@ function buildLongSequencePlannerUserPrompt(input: {
 		"- The actions array is the execution plan. It must not stop at a setup position, a stance correction, or a partial milestone.",
 		"- If the level is visible and solvable, output the full solution sequence or the longest contiguous prefix you genuinely believe will solve it.",
 		`- You may output up to ${input.maxActions} actions. A short sequence is acceptable only when it genuinely completes the level, performs a required reset, or the board is unreadable; explain that in abortCondition.`,
+		`- Engineering acceptance: for this game profile, fewer than ${input.minActions} actions is treated as suspiciously short unless the level is visibly solved by that exact sequence. Do not stop after a setup move.`,
 		"- Prefer game.perform_action only. Do not insert evaluator checkpoints; the runner will execute each step and stop automatically on no-change.",
 		"- For Sokoban, compare multiple route ideas before committing. Do not assume boxes are solved linearly or permanently once they touch a target.",
 		"- Temporary placements, moving a box off a target, and interleaving boxes are allowed when they preserve global solvability.",
@@ -1832,6 +1853,52 @@ function countRawPlannerActions(rawText: string): number {
 	} catch {
 		return 0;
 	}
+}
+
+function extractRawPlannerActionIds(rawText: string): string[] {
+	try {
+		const parsed = parseJsonObject(rawText);
+		if (!Array.isArray(parsed.actions)) {
+			return [];
+		}
+		return parsed.actions
+			.map((item) => {
+				if (!item || typeof item !== "object") {
+					return "";
+				}
+				const args = (item as { args?: unknown }).args;
+				if (!args || typeof args !== "object" || Array.isArray(args)) {
+					return "";
+				}
+				return toText((args as { actionId?: unknown }).actionId);
+			})
+			.filter(Boolean);
+	} catch {
+		return [];
+	}
+}
+
+function detectLongSequencePlannerIssue(input: {
+	actions: DelegatedTaskAction[];
+	minActions: number;
+	maxActions: number;
+	round: number;
+}): string {
+	if (input.minActions <= 1 || input.actions.length >= input.minActions) {
+		return "";
+	}
+	const actionIds = input.actions
+		.map((action) => toText(action.args.actionId))
+		.filter(Boolean)
+		.join(" -> ");
+	return [
+		`Long sequence mode requires a complete or near-complete solve attempt, but only ${input.actions.length}/${input.minActions} actions were produced.`,
+		`Regenerate the plan with a full contiguous action sequence up to ${input.maxActions} actions.`,
+		"Do not stop at setup, stance correction, or a partial milestone.",
+		"Only output fewer actions if those exact actions visibly complete the level; otherwise continue the route.",
+		actionIds ? `Previous too-short sequence was: ${actionIds}.` : "",
+		`This is round ${input.round}; treat this as an engineering rejection before execution, not as evaluator feedback.`,
+	].filter(Boolean).join(" ");
 }
 
 function normalizeAction(
@@ -3824,6 +3891,7 @@ function mergeDelegatedConfigForGame(
 			? {
 				enabled: gameProfile.longSequence.enabled ?? baseConfig.longSequence.enabled,
 				maxActions: gameProfile.longSequence.maxActions ?? baseConfig.longSequence.maxActions,
+				minActions: gameProfile.longSequence.minActions ?? baseConfig.longSequence.minActions,
 				stepWaitMs: gameProfile.longSequence.stepWaitMs ?? baseConfig.longSequence.stepWaitMs,
 				stopOnUnchangedSnapshot: gameProfile.longSequence.stopOnUnchangedSnapshot ?? baseConfig.longSequence.stopOnUnchangedSnapshot,
 			}
@@ -4665,4 +4733,6 @@ export const __test = {
 	buildOperationsPlannerUserPrompt,
 	buildOperationsPlannerSystemPrompt,
 	countRawPlannerActions,
+	extractRawPlannerActionIds,
+	detectLongSequencePlannerIssue,
 } as const;

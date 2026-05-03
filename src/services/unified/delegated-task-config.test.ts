@@ -38,6 +38,7 @@ describe("delegated task config", () => {
 
 		expect(config.longSequence.enabled).toBe(false);
 		expect(config.longSequence.maxActions).toBe(100);
+		expect(config.longSequence.minActions).toBe(1);
 		expect(config.longSequence.stepWaitMs).toBe(500);
 		expect(config.longSequence.stopOnUnchangedSnapshot).toBe(true);
 	});

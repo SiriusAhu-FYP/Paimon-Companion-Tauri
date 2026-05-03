@@ -63,6 +63,7 @@ export interface SemanticDelegationProfileConfig {
 	longSequence?: {
 		enabled?: boolean;
 		maxActions?: number;
+		minActions?: number;
 		stepWaitMs?: number;
 		stopOnUnchangedSnapshot?: boolean;
 	};

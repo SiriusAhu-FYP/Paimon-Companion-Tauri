@@ -32,6 +32,8 @@ const {
 	inferDelegationReplyLanguageMode,
 	buildOperationsPlannerUserPrompt,
 	countRawPlannerActions,
+	extractRawPlannerActionIds,
+	detectLongSequencePlannerIssue,
 } = __test;
 
 const GAME_CONTEXT = { gameId: "sokoban" as const, displayName: "Sokoban", actionIds: ["move_up"] };
@@ -83,11 +85,13 @@ describe("delegation long sequence planning helpers", () => {
 			strategyLessons: [],
 			longSequenceMode: true,
 			longSequenceMaxActions: 100,
+			longSequenceMinActions: 12,
 		});
 
 		expect(prompt).toContain("LONG SEQUENCE MODE");
 		expect(prompt).toContain("must not stop at a setup position");
 		expect(prompt).toContain("up to 100 actions");
+		expect(prompt).toContain("fewer than 12 actions");
 	});
 
 	it("counts raw planner actions before normalization", () => {
@@ -98,6 +102,22 @@ describe("delegation long sequence planning helpers", () => {
 			],
 		});
 		expect(countRawPlannerActions(raw)).toBe(2);
+		expect(extractRawPlannerActionIds(raw)).toEqual(["move_left", "move_down"]);
+	});
+
+	it("rejects suspiciously short long-sequence plans before execution", () => {
+		const actions = [
+			{ tool: "game.perform_action", args: { actionId: "move_left", gameId: "sokoban" } },
+			{ tool: "game.perform_action", args: { actionId: "move_right", gameId: "sokoban" } },
+		];
+		const issue = detectLongSequencePlannerIssue({
+			actions,
+			minActions: 12,
+			maxActions: 100,
+			round: 1,
+		});
+		expect(issue).toContain("only 2/12 actions");
+		expect(issue).toContain("move_left -> move_right");
 	});
 });
 

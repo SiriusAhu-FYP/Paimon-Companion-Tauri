@@ -24,6 +24,7 @@ export interface DelegatedVisionPreprocessConfig {
 export interface DelegatedLongSequenceConfig {
 	enabled: boolean;
 	maxActions: number;
+	minActions: number;
 	stepWaitMs: number;
 	stopOnUnchangedSnapshot: boolean;
 }
@@ -141,6 +142,7 @@ const DEFAULT_PROFILE_CONFIG: DelegatedTaskProfileConfig = {
 	longSequence: {
 		enabled: false,
 		maxActions: 100,
+		minActions: 1,
 		stepWaitMs: 500,
 		stopOnUnchangedSnapshot: true,
 	},
@@ -308,6 +310,7 @@ function sanitizeLongSequence(
 	return {
 		enabled: sanitizeBoolean(parsed.enabled, fallback.enabled),
 		maxActions: Math.round(sanitizeNumber(parsed.maxActions, fallback.maxActions, 1, 100)),
+		minActions: Math.round(sanitizeNumber(parsed.minActions, fallback.minActions, 1, 100)),
 		stepWaitMs: Math.round(sanitizeNumber(parsed.stepWaitMs, fallback.stepWaitMs, 100, 5000)),
 		stopOnUnchangedSnapshot: sanitizeBoolean(parsed.stopOnUnchangedSnapshot, fallback.stopOnUnchangedSnapshot),
 	};

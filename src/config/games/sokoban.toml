@@ -68,6 +68,7 @@ allowedTools = [
 # and stops when a step produces no screenshot delta.
 enabled = true
 maxActions = 100
+minActions = 12
 stepWaitMs = 500
 stopOnUnchangedSnapshot = true
 

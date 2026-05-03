@@ -247,6 +247,7 @@ function validateDelegationProfile(value: unknown): SemanticDelegationProfileCon
 			? {
 				enabled: toOptionalBoolean(longSequence.enabled),
 				maxActions: toOptionalNumber(longSequence.maxActions),
+				minActions: toOptionalNumber(longSequence.minActions),
 				stepWaitMs: toOptionalNumber(longSequence.stepWaitMs),
 				stopOnUnchangedSnapshot: toOptionalBoolean(longSequence.stopOnUnchangedSnapshot),
 			}
