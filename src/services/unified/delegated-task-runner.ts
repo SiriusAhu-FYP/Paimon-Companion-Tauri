@@ -117,6 +117,13 @@ interface ProgressEvaluatorDecision {
 	planAssessment: string;
 	routeStateUpdate?: string;
 	latestDiagnosis?: string;
+	failedPrefix?: string;
+	failedStep?: string;
+	failureGeometry?: string;
+	routeLesson?: string;
+	nextAttemptConstraint?: string;
+	preserveStrategy?: string[];
+	abandonStrategy?: string[];
 }
 
 interface DelegationRouteState {
@@ -905,6 +912,12 @@ export async function runDelegatedTaskLoop(input: {
 			replyLanguageMode,
 		});
 		let reflection = normalizeProgressEvaluatorDecision(reflectionRaw);
+		reflection = enrichEvaluatorLearningFromExecutionError(
+			reflection,
+			longSequenceFailureDetail || batchExecutionError,
+			planner,
+			batchActionSummary,
+		);
 		reflection = applyBoardTaskConsistencyGuard(reflection, gameContext);
 		reflection = applyBoardTaskProgressGuard(reflection, gameContext);
 		reflection = applyPhasePlanProgressGuard(reflection, gameContext);
@@ -1125,6 +1138,13 @@ export async function runDelegatedTaskLoop(input: {
 			committedRoute: routeState?.committedRoute ?? "",
 			currentRouteStep: routeState?.currentRouteStep ?? "",
 			routeDiagnosis: routeState?.latestDiagnosis ?? "",
+			evaluatorFailedPrefix: reflection.failedPrefix ?? "",
+			evaluatorFailedStep: reflection.failedStep ?? "",
+			evaluatorFailureGeometry: reflection.failureGeometry ?? "",
+			evaluatorRouteLesson: reflection.routeLesson ?? "",
+			evaluatorNextAttemptConstraint: reflection.nextAttemptConstraint ?? "",
+			evaluatorPreserveStrategy: reflection.preserveStrategy ?? [],
+			evaluatorAbandonStrategy: reflection.abandonStrategy ?? [],
 			boardGrid: routeState?.currentBoard ?? "",
 			actionTool: executedActions.map((a) => a.plan.actionForEvaluation.tool).join("+"),
 			actionSummary: batchActionSummary,
@@ -2025,6 +2045,12 @@ function buildProgressEvaluatorSystemPrompt(
 		options.longSequenceMode
 			? "若 history 显示同签名动作已连续失败 >=2 轮，你必须先区分失败的是高层路线、动作前缀、站位，还是具体方向；不要把“某方向在某个站位失败”泛化成永远禁止该方向。"
 			: "若 history 显示同签名动作已连续失败 >=2 轮，你必须判定 wasActionCorrect=false 且 goalAlignment=deviated，并在 nextHint 强制要求“换策略/换动作链，不得重复同动作”。",
+		options.longSequenceMode
+			? "长序列失败时，你的核心职责是提取可复用的失败前缀经验：failedPrefix、failedStep、failureGeometry、routeLesson、nextAttemptConstraint 必须具体，说明哪一段路线真的被证伪、下一轮哪些高层策略应保留或放弃。"
+			: "",
+		options.longSequenceMode
+			? "不要只输出 failed/blocked/none；要回答“这次失败让下一轮更接近成功的知识是什么”。如果某路线走得更远但最后失败，应明确 preserveStrategy 中保留有效部分，abandonStrategy 中放弃错误后缀。"
+			: "",
 		`missionGoal: ${mission.missionGoal}`,
 		`initialState: ${mission.initialStateSummary || "(none)"}`,
 		`hardConstraints: ${mission.hardConstraints.join(" | ") || "(none)"}`,
@@ -2107,7 +2133,14 @@ function buildProgressEvaluatorUserPrompt(input: {
 		'  "planViability": "strengthened|unchanged|weakened|invalidated",',
 		'  "planAssessment": "string",',
 		'  "routeStateUpdate": "string（本轮对 committedRoute/currentRouteStep/失败经验的更新）",',
-		'  "latestDiagnosis": "string（给下一轮 Planner 的诊断，不是命令）"',
+		'  "latestDiagnosis": "string（给下一轮 Planner 的诊断，不是命令）",',
+		'  "failedPrefix": "string（长序列失败时必填：失败前已执行的动作前缀）",',
+		'  "failedStep": "string（长序列失败时必填：第几步、哪个动作失败）",',
+		'  "failureGeometry": "string（长序列失败时必填：站位/墙/箱子/路径几何为什么错）",',
+		'  "routeLesson": "string（长序列失败时必填：这次失败证明了什么可复用经验）",',
+		'  "nextAttemptConstraint": "string（长序列失败时必填：下一轮路线必须如何不同）",',
+		'  "preserveStrategy": ["string（本轮证明仍值得保留的高层路线/有效前缀）"],',
+		'  "abandonStrategy": ["string（本轮证伪的路线假设/错误后缀）"]',
 		"}",
 	);
 	return lines.join("\n");
@@ -2434,6 +2467,13 @@ function normalizeProgressEvaluatorDecision(rawText: string): ProgressEvaluatorD
 		planAssessment: toText(parsed.planAssessment || parsed.phaseAssessment || parsed.expectationReview),
 		routeStateUpdate: toText(parsed.routeStateUpdate),
 		latestDiagnosis: toText(parsed.latestDiagnosis || parsed.nextHint || parsed.expectationReview),
+		failedPrefix: toText(parsed.failedPrefix),
+		failedStep: toText(parsed.failedStep),
+		failureGeometry: toText(parsed.failureGeometry),
+		routeLesson: toText(parsed.routeLesson),
+		nextAttemptConstraint: toText(parsed.nextAttemptConstraint),
+		preserveStrategy: toStringArray(parsed.preserveStrategy),
+		abandonStrategy: toStringArray(parsed.abandonStrategy),
 	};
 }
 
@@ -4563,6 +4603,13 @@ function formatEvaluatorScratchpadNote(input: {
 		`planAssessment=${input.reflection.planAssessment || "(none)"}`,
 		`routeStateUpdate=${input.reflection.routeStateUpdate || "(none)"}`,
 		`latestDiagnosis=${input.reflection.latestDiagnosis || "(none)"}`,
+		`failedPrefix=${input.reflection.failedPrefix || "(none)"}`,
+		`failedStep=${input.reflection.failedStep || "(none)"}`,
+		`failureGeometry=${input.reflection.failureGeometry || "(none)"}`,
+		`routeLesson=${input.reflection.routeLesson || "(none)"}`,
+		`nextAttemptConstraint=${input.reflection.nextAttemptConstraint || "(none)"}`,
+		`preserveStrategy=${input.reflection.preserveStrategy?.join(" || ") || "(none)"}`,
+		`abandonStrategy=${input.reflection.abandonStrategy?.join(" || ") || "(none)"}`,
 		`beforeStateSketch=${input.reflection.beforeStateSketch || "(none)"}`,
 		`afterStateSketch=${input.reflection.afterStateSketch || "(none)"}`,
 		`stateDelta=${input.reflection.stateDelta || "(none)"}`,
@@ -4618,12 +4665,107 @@ function buildLongSequenceAttemptLesson(input: {
 		input.planner.committedRoute ? `里程碑=${input.planner.committedRoute}` : "",
 		input.actionSummary ? `执行前缀=${input.actionSummary}` : "",
 		input.failureDetail ? `失败点=${input.failureDetail}` : "",
+		input.reflection.failedPrefix ? `失败前缀=${input.reflection.failedPrefix}` : "",
+		input.reflection.failedStep ? `失败步=${input.reflection.failedStep}` : "",
+		input.reflection.failureGeometry ? `几何原因=${input.reflection.failureGeometry}` : "",
+		input.reflection.routeLesson ? `路线经验=${input.reflection.routeLesson}` : "",
+		input.reflection.nextAttemptConstraint ? `下轮约束=${input.reflection.nextAttemptConstraint}` : "",
+		input.reflection.preserveStrategy?.length ? `保留=${input.reflection.preserveStrategy.join(" || ")}` : "",
+		input.reflection.abandonStrategy?.length ? `放弃=${input.reflection.abandonStrategy.join(" || ")}` : "",
 		input.reflection.latestDiagnosis ? `诊断=${input.reflection.latestDiagnosis}` : "",
 		input.reflection.planAssessment ? `路线评估=${input.reflection.planAssessment}` : "",
 		input.reflection.nextHint ? `前缀修正=${input.reflection.nextHint}` : "",
 		"下一轮从重开后的初始局面重新规划；不要把本轮局部进展当成当前进度；不要仅因某个方向在本前缀失败就禁用该方向。",
 	].filter(Boolean);
 	return parts.join(" | ").slice(0, 900);
+}
+
+function formatEvaluatorLearning(reflection: ProgressEvaluatorDecision): string {
+	const parts = [
+		reflection.failedPrefix ? `failedPrefix=${reflection.failedPrefix}` : "",
+		reflection.failedStep ? `failedStep=${reflection.failedStep}` : "",
+		reflection.failureGeometry ? `failureGeometry=${reflection.failureGeometry}` : "",
+		reflection.routeLesson ? `routeLesson=${reflection.routeLesson}` : "",
+		reflection.nextAttemptConstraint ? `nextAttemptConstraint=${reflection.nextAttemptConstraint}` : "",
+		reflection.preserveStrategy?.length ? `preserveStrategy=${reflection.preserveStrategy.join(" || ")}` : "",
+		reflection.abandonStrategy?.length ? `abandonStrategy=${reflection.abandonStrategy.join(" || ")}` : "",
+	].filter(Boolean);
+	return parts.join(" | ");
+}
+
+function enrichEvaluatorLearningFromExecutionError(
+	reflection: ProgressEvaluatorDecision,
+	executionError: string,
+	planner: OperationsPlannerDecision,
+	actionSummary: string,
+): ProgressEvaluatorDecision {
+	if (!executionError || !/Long sequence stopped/i.test(executionError)) {
+		return reflection;
+	}
+	const failedStep = reflection.failedStep || extractLongSequenceFailureStep(executionError);
+	const failedPrefix = reflection.failedPrefix || extractLongSequenceExecutedPrefix(executionError) || actionSummary;
+	const failedAction = extractLongSequenceFailedAction(executionError);
+	const failureGeometry = reflection.failureGeometry || (
+		failedAction
+			? `The board did not change after ${failedAction}; the player was not in a valid stance for that move, or the route prefix reached a blocked cell.`
+			: "The board did not change after the failed step, so the route prefix reached an invalid stance or blocked cell."
+	);
+	const routeLesson = reflection.routeLesson || (
+		failedPrefix
+			? `This exact prefix is not a proven route from the reset board; keep useful earlier geometry only if the next attempt changes the failed stance.`
+			: "The failed long sequence proves the current route geometry needs revision before retrying."
+	);
+	const nextAttemptConstraint = reflection.nextAttemptConstraint || (
+		failedAction
+			? `Next attempt may reuse ${failedAction} only after changing the prefix or stance that led to this failure.`
+			: "Next attempt must change the failed prefix or stance, not merely repeat the same sequence."
+	);
+	return {
+		...reflection,
+		failedStep,
+		failedPrefix,
+		failureGeometry,
+		routeLesson,
+		nextAttemptConstraint,
+		preserveStrategy: reflection.preserveStrategy?.length
+			? reflection.preserveStrategy
+			: planner.committedRoute
+				? [`Keep any part of the route that produced real movement before the failed step: ${planner.committedRoute}`]
+				: [],
+		abandonStrategy: reflection.abandonStrategy?.length
+			? reflection.abandonStrategy
+			: failedPrefix
+				? [`Do not repeat the same failed prefix unchanged: ${failedPrefix}`]
+				: [],
+		latestDiagnosis: combineHints(
+			reflection.latestDiagnosis || "",
+			routeLesson,
+		),
+		routeStateUpdate: combineHints(
+			reflection.routeStateUpdate || "",
+			[
+				failedStep ? `failedStep=${failedStep}` : "",
+				failedPrefix ? `failedPrefix=${failedPrefix}` : "",
+				routeLesson ? `routeLesson=${routeLesson}` : "",
+				nextAttemptConstraint ? `nextAttemptConstraint=${nextAttemptConstraint}` : "",
+			].filter(Boolean).join(" | "),
+		),
+	};
+}
+
+function extractLongSequenceFailureStep(text: string): string {
+	const match = text.match(/Long sequence stopped at step\s+([^:]+):/i);
+	return match?.[1]?.trim() ?? "";
+}
+
+function extractLongSequenceExecutedPrefix(text: string): string {
+	const match = text.match(/executedPrefix=(.+?)\s+remainingActions=/i);
+	return match?.[1]?.trim() ?? "";
+}
+
+function extractLongSequenceFailedAction(text: string): string {
+	const match = text.match(/failedAction=(.+?)\s+executedPrefix=/i);
+	return match?.[1]?.trim() ?? "";
 }
 
 function normalizeStrategyIdentity(value: string): string {
@@ -4800,8 +4942,12 @@ function updateRouteStateFromEvaluator(
 		return null;
 	}
 	const nextLessons = [...routeState.invalidatedRouteLessons];
+	const evaluatorLearning = formatEvaluatorLearning(reflection);
 	if (reflection.planViability === "invalidated") {
 		pushStrategyLesson(nextLessons, reflection.routeStateUpdate || reflection.planAssessment || reflection.latestDiagnosis || "", 8);
+	}
+	if (evaluatorLearning) {
+		pushStrategyLesson(nextLessons, evaluatorLearning, 8);
 	}
 	const resetSucceeded = didRestartActionSucceed(action, reflection);
 	return {
@@ -4816,7 +4962,7 @@ function updateRouteStateFromEvaluator(
 		latestRawBoard: rawAfterObservation.boardGrid || routeState.latestRawBoard,
 		boardObservationWarnings: afterObservation.ambiguities,
 		invalidatedRouteLessons: nextLessons,
-		latestDiagnosis: reflection.latestDiagnosis || reflection.routeStateUpdate || reflection.nextHint || routeState.latestDiagnosis,
+		latestDiagnosis: evaluatorLearning || reflection.latestDiagnosis || reflection.routeStateUpdate || reflection.nextHint || routeState.latestDiagnosis,
 	};
 }
 
@@ -5192,6 +5338,8 @@ export const __test = {
 	didBoardTaskMakeProgress,
 	normalizeStateSketchText,
 	buildStrategyLesson,
+	formatEvaluatorLearning,
+	enrichEvaluatorLearningFromExecutionError,
 	resolveOperationsNarration,
 	resolveReflectionNarration,
 	buildInitialCanonicalBoard,

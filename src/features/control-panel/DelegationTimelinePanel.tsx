@@ -164,6 +164,45 @@ function RoundCard({ entry, isLatest }: { entry: DelegationRoundEntry; isLatest:
 								{entry.evaluatorHint}
 							</Typography>
 						)}
+						{(entry.evaluatorFailedPrefix || entry.evaluatorFailedStep || entry.evaluatorFailureGeometry || entry.evaluatorRouteLesson || entry.evaluatorNextAttemptConstraint || entry.evaluatorPreserveStrategy?.length || entry.evaluatorAbandonStrategy?.length) && (
+							<Box sx={{ mt: 0.5, display: "flex", flexDirection: "column", gap: 0.25 }}>
+								{entry.evaluatorFailedStep && (
+									<Typography variant="body2" sx={{ fontSize: "0.76rem" }}>
+										{t("失败步", "Failed Step")}: {entry.evaluatorFailedStep}
+									</Typography>
+								)}
+								{entry.evaluatorFailedPrefix && (
+									<Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.7rem", wordBreak: "break-all", color: "text.secondary" }}>
+										{t("失败前缀", "Failed Prefix")}: {entry.evaluatorFailedPrefix}
+									</Typography>
+								)}
+								{entry.evaluatorFailureGeometry && (
+									<Typography variant="body2" color="warning.main" sx={{ fontSize: "0.76rem" }}>
+										{t("几何原因", "Failure Geometry")}: {entry.evaluatorFailureGeometry}
+									</Typography>
+								)}
+								{entry.evaluatorRouteLesson && (
+									<Typography variant="body2" color="info.main" sx={{ fontSize: "0.76rem" }}>
+										{t("路线经验", "Route Lesson")}: {entry.evaluatorRouteLesson}
+									</Typography>
+								)}
+								{entry.evaluatorNextAttemptConstraint && (
+									<Typography variant="body2" sx={{ fontSize: "0.76rem" }}>
+										{t("下轮约束", "Next Attempt Constraint")}: {entry.evaluatorNextAttemptConstraint}
+									</Typography>
+								)}
+								{entry.evaluatorPreserveStrategy?.length ? (
+									<Typography variant="body2" color="success.main" sx={{ fontSize: "0.76rem" }}>
+										{t("保留策略", "Preserve Strategy")}: {entry.evaluatorPreserveStrategy.join(" / ")}
+									</Typography>
+								) : null}
+								{entry.evaluatorAbandonStrategy?.length ? (
+									<Typography variant="body2" color="error.main" sx={{ fontSize: "0.76rem" }}>
+										{t("放弃策略", "Abandon Strategy")}: {entry.evaluatorAbandonStrategy.join(" / ")}
+									</Typography>
+								) : null}
+							</Box>
+						)}
 					</Section>
 				</Box>
 			</AccordionDetails>
