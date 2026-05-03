@@ -2694,6 +2694,7 @@ async function captureBoardObservation(
 			processedWidth: observation.processedWidth,
 			processedHeight: observation.processedHeight,
 			preprocessed: observation.preprocessed,
+			preprocessMode: config.visionPreprocess.mode,
 		});
 		return observation;
 	} catch (err) {
@@ -2744,7 +2745,7 @@ async function preprocessSnapshotForVision(
 	snapshot: CapturedTargetSnapshot,
 	config: DelegatedTaskProfileConfig,
 ): Promise<{ dataUrl: string; width: number; height: number; preprocessed: boolean }> {
-	if (!config.visionPreprocess.enabled) {
+	if (!config.visionPreprocess.enabled || config.visionPreprocess.mode === "none") {
 		return {
 			dataUrl: snapshot.dataUrl,
 			width: snapshot.width,
@@ -2767,11 +2768,13 @@ async function preprocessSnapshotForVision(
 	const sourceY = Math.round(snapshot.height * crop.yNorm);
 	const sourceWidth = Math.max(1, Math.round(snapshot.width * Math.min(crop.widthNorm, 1 - crop.xNorm)));
 	const sourceHeight = Math.max(1, Math.round(snapshot.height * Math.min(crop.heightNorm, 1 - crop.yNorm)));
-	const scale = Math.min(
-		1,
-		config.visionPreprocess.maxWidth / sourceWidth,
-		config.visionPreprocess.maxHeight / sourceHeight,
-	);
+	const scale = config.visionPreprocess.mode === "crop-resize"
+		? Math.min(
+			1,
+			config.visionPreprocess.maxWidth / sourceWidth,
+			config.visionPreprocess.maxHeight / sourceHeight,
+		)
+		: 1;
 	const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
 	const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
 	const canvas = document.createElement("canvas");

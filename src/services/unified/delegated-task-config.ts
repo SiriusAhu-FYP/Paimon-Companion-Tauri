@@ -4,9 +4,11 @@ import { parse } from "smol-toml";
 export type DelegatedThinkingMode = "off" | "low" | "medium" | "high";
 export type DelegatedTaskProfileId = "delegation";
 export type DelegatedVisionPreprocessFormat = "png" | "jpeg";
+export type DelegatedVisionPreprocessMode = "none" | "crop-only" | "crop-resize";
 
 export interface DelegatedVisionPreprocessConfig {
 	enabled: boolean;
+	mode: DelegatedVisionPreprocessMode;
 	crop: {
 		xNorm: number;
 		yNorm: number;
@@ -120,6 +122,7 @@ const DEFAULT_PROFILE_CONFIG: DelegatedTaskProfileConfig = {
 	boardPerceptionPrompt: "",
 	visionPreprocess: {
 		enabled: false,
+		mode: "none",
 		crop: { xNorm: 0, yNorm: 0, widthNorm: 1, heightNorm: 1 },
 		maxWidth: 960,
 		maxHeight: 960,
@@ -168,6 +171,13 @@ function sanitizeThinkingMode(value: unknown, fallback: DelegatedThinkingMode): 
 
 function sanitizeVisionFormat(value: unknown, fallback: DelegatedVisionPreprocessFormat): DelegatedVisionPreprocessFormat {
 	if (value === "png" || value === "jpeg") {
+		return value;
+	}
+	return fallback;
+}
+
+function sanitizeVisionMode(value: unknown, fallback: DelegatedVisionPreprocessMode): DelegatedVisionPreprocessMode {
+	if (value === "none" || value === "crop-only" || value === "crop-resize") {
 		return value;
 	}
 	return fallback;
@@ -281,6 +291,7 @@ function sanitizeVisionPreprocess(
 	const crop = isObjectRecord(parsed.crop) ? parsed.crop : {};
 	return {
 		enabled: sanitizeBoolean(parsed.enabled, fallback.enabled),
+		mode: sanitizeVisionMode(parsed.mode, fallback.mode),
 		crop: {
 			xNorm: sanitizeNumber(crop.xNorm, fallback.crop.xNorm, 0, 1),
 			yNorm: sanitizeNumber(crop.yNorm, fallback.crop.yNorm, 0, 1),

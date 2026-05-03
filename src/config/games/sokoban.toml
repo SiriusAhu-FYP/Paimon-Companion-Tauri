@@ -78,10 +78,11 @@ locatorMinConfidence = 0.6
 
 [delegationProfile.visionPreprocess]
 enabled = true
+mode = "crop-only"
 maxWidth = 960
 maxHeight = 720
-format = "jpeg"
-quality = 0.82
+format = "png"
+quality = 1.0
 crop = { xNorm = 0.05, yNorm = 0.06, widthNorm = 0.9, heightNorm = 0.82 }
 
 [delegationProfile.roles.missionAnalyst]

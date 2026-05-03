@@ -175,6 +175,7 @@ function validateDelegationProfile(value: unknown): SemanticDelegationProfileCon
 	const boardPerception = isObjectRecord(value.boardPerception) ? value.boardPerception : {};
 	const visionPreprocess = isObjectRecord(value.visionPreprocess) ? value.visionPreprocess : {};
 	const visionPreprocessCrop = isObjectRecord(visionPreprocess.crop) ? visionPreprocess.crop : {};
+	const visionPreprocessMode = visionPreprocess.mode;
 	const thinkingMode = missionAnalyst.missionAnalystThinkingMode;
 	const plannerThinkingMode = operationsPlanner.operationsPlannerThinkingMode;
 	const evaluatorThinkingMode = progressEvaluator.progressEvaluatorThinkingMode;
@@ -223,6 +224,13 @@ function validateDelegationProfile(value: unknown): SemanticDelegationProfileCon
 		boardPerceptionPrompt: typeof boardPerception.boardPerceptionPrompt === "string" ? (boardPerception.boardPerceptionPrompt as string) : undefined,
 		visionPreprocess: {
 			enabled: toOptionalBoolean(visionPreprocess.enabled),
+			mode: (
+				visionPreprocessMode === "none"
+				|| visionPreprocessMode === "crop-only"
+				|| visionPreprocessMode === "crop-resize"
+			)
+				? visionPreprocessMode
+				: undefined,
 			crop: {
 				xNorm: toOptionalNumber(visionPreprocessCrop.xNorm),
 				yNorm: toOptionalNumber(visionPreprocessCrop.yNorm),

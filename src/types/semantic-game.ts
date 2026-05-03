@@ -48,6 +48,7 @@ export interface SemanticDelegationProfileConfig {
 	boardPerceptionPrompt?: string;
 	visionPreprocess?: {
 		enabled?: boolean;
+		mode?: "none" | "crop-only" | "crop-resize";
 		crop?: {
 			xNorm?: number;
 			yNorm?: number;

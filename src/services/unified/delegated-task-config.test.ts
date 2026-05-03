@@ -23,6 +23,7 @@ describe("delegated task config", () => {
 		const config = getDelegatedBrowserTaskConfig();
 
 		expect(config.visionPreprocess.enabled).toBe(false);
+		expect(config.visionPreprocess.mode).toBe("none");
 		expect(config.visionPreprocess.crop).toEqual({
 			xNorm: 0,
 			yNorm: 0,
