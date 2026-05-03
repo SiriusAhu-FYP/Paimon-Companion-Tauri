@@ -226,6 +226,22 @@ describe("applyMissionCompletionGuard", () => {
 		expect(result.goalAlignment).toBe("achieved");
 		expect(result.goalProgress).toBe("done");
 	});
+
+	it("does not treat player standing on a target as completed", () => {
+		const reflection = makeReflection({
+			actionSucceeded: true,
+			wasActionCorrect: true,
+			expectedMet: true,
+			goalAlignment: "achieved",
+			goalProgress: "done",
+			afterStateSketch: "#####\n#...#\n#.+.#\n#####",
+			stateDelta: "The player is standing on the only visible target as +, but no box is on a target.",
+		});
+		const result = applyMissionCompletionGuard(reflection, GAME_CONTEXT);
+		expect(result.goalAlignment).toBe("closer");
+		expect(result.goalProgress).toBe("partial");
+		expect(result.nextHint).toContain("整关尚未完成");
+	});
 });
 
 describe("applySokobanDeadlockGuard", () => {
@@ -263,6 +279,18 @@ describe("applySokobanDeadlockGuard", () => {
 		const result = applySokobanDeadlockGuard(reflection, GAME_CONTEXT);
 		expect(result.goalAlignment).toBe("achieved");
 		expect(result.goalProgress).toBe("done");
+	});
+
+	it("does not treat + alone as solved mission state", () => {
+		const reflection = makeReflection({
+			actionSucceeded: true,
+			wasActionCorrect: true,
+			expectedMet: true,
+			goalAlignment: "achieved",
+			goalProgress: "done",
+			afterStateSketch: "#####\n#.+.#\n#####",
+		});
+		expect(isSokobanMissionComplete(reflection)).toBe(false);
 	});
 
 	it("does not trigger deadlock on pure player repositioning with unchanged boxes", () => {

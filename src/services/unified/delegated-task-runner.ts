@@ -1815,8 +1815,8 @@ function isSokobanMissionComplete(reflection: ProgressEvaluatorDecision): boolea
 		return false;
 	}
 	const remainingTargets = (afterGrid.match(/t/g) ?? []).length;
-	const occupiedTargets = (afterGrid.match(/[*+]/g) ?? []).length;
-	return remainingTargets === 0 && occupiedTargets > 0;
+	const boxCoveredTargets = (afterGrid.match(/\*/g) ?? []).length;
+	return remainingTargets === 0 && boxCoveredTargets > 0;
 }
 
 function detectSokobanDeadlock(
