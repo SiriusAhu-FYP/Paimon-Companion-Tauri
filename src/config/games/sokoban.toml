@@ -83,7 +83,7 @@ maxWidth = 960
 maxHeight = 720
 format = "png"
 quality = 1.0
-crop = { xNorm = 0.05, yNorm = 0.06, widthNorm = 0.9, heightNorm = 0.82 }
+crop = { xNorm = 0.36, yNorm = 0.08, widthNorm = 0.32, heightNorm = 0.88 }
 
 [delegationProfile.roles.missionAnalyst]
 missionAnalystTemperature = 0.1
