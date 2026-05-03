@@ -23,9 +23,29 @@ const {
 	didBoardTaskMakeProgress,
 	buildStrategyLesson,
 	resolveOperationsNarration,
+	buildInitialCanonicalBoard,
+	reconcileBoardObservationWithRouteState,
+	reconcileSokobanDynamicBoard,
+	parseSokobanBoardState,
 } = __test;
 
 const GAME_CONTEXT = { gameId: "sokoban" as const, displayName: "Sokoban", actionIds: ["move_up"] };
+
+function makeBoardObservation(boardGrid: string, overrides: Record<string, unknown> = {}) {
+	return {
+		boardGrid,
+		entities: [],
+		confidence: "high" as const,
+		ambiguities: [],
+		source: "cloud" as const,
+		originalWidth: 100,
+		originalHeight: 100,
+		processedWidth: 100,
+		processedHeight: 100,
+		preprocessed: false,
+		...overrides,
+	};
+}
 
 function makeReflection(overrides: Record<string, unknown> = {}) {
 	return {
@@ -47,6 +67,111 @@ function makeReflection(overrides: Record<string, unknown> = {}) {
 		...overrides,
 	};
 }
+
+describe("canonical Sokoban board reconciliation", () => {
+	it("locks mission topology and only merges later P/B dynamics", () => {
+		const initial = [
+			"######",
+			"#P..T#",
+			"#..B.#",
+			"#.T..#",
+			"######",
+		].join("\n");
+		const laterMissingTargets = [
+			"######",
+			"#...P#",
+			"#...B#",
+			"#....#",
+			"######",
+		].join("\n");
+		const mission = {
+			initialStateSketch: initial,
+		};
+		const canonical = buildInitialCanonicalBoard(GAME_CONTEXT, mission as never, makeBoardObservation(""));
+		expect(canonical?.topology).toBe([
+			"######",
+			"#...T#",
+			"#....#",
+			"#.T..#",
+			"######",
+		].join("\n"));
+
+		const routeState = {
+			currentBoard: canonical?.currentBoard ?? "",
+			canonicalInitialBoard: canonical?.currentBoard,
+			canonicalTopology: canonical?.topology,
+			topologyLocked: true,
+			latestRawBoard: initial,
+			boardObservationWarnings: [],
+			routeHypotheses: [],
+			committedRoute: "",
+			currentRouteStep: "",
+			routeRisks: [],
+			invalidatedRouteLessons: [],
+			latestDiagnosis: "",
+		};
+		const result = reconcileBoardObservationWithRouteState(
+			routeState,
+			makeBoardObservation(laterMissingTargets),
+			GAME_CONTEXT,
+		);
+
+		expect(result.boardGrid).toBe([
+			"######",
+			"#...+#",
+			"#...B#",
+			"#.T..#",
+			"######",
+		].join("\n"));
+		expect(result.ambiguities.join(" ")).toContain("topology differed");
+	});
+
+	it("rejects later boards that lose the player or change dimensions", () => {
+		const routeState = {
+			currentBoard: [
+				"######",
+				"#P..T#",
+				"#..B.#",
+				"#.T..#",
+				"######",
+			].join("\n"),
+			canonicalInitialBoard: [
+				"######",
+				"#P..T#",
+				"#..B.#",
+				"#.T..#",
+				"######",
+			].join("\n"),
+			canonicalTopology: [
+				"######",
+				"#...T#",
+				"#....#",
+				"#.T..#",
+				"######",
+			].join("\n"),
+			topologyLocked: true,
+			latestRawBoard: "",
+			boardObservationWarnings: [],
+			routeHypotheses: [],
+			committedRoute: "",
+			currentRouteStep: "",
+			routeRisks: [],
+			invalidatedRouteLessons: [],
+			latestDiagnosis: "",
+		};
+
+		expect(reconcileSokobanDynamicBoard(routeState, "###\n#B#\n###").boardGrid).toBe(routeState.currentBoard);
+		expect(reconcileSokobanDynamicBoard(routeState, "######\n#...T#\n#..B.#\n#.T..#\n######").boardGrid).toBe(routeState.currentBoard);
+	});
+
+	it("parses player/box-on-target as dynamic entities over target topology", () => {
+		const parsed = parseSokobanBoardState("#####\n#+*.#\n#####");
+		expect(parsed?.topology).toBe("#####\n#TT.#\n#####");
+		expect(parsed?.currentBoard).toBe("#####\n#+*.#\n#####");
+		expect(parsed?.player).toBe("1:1");
+		expect(parsed?.boxes).toEqual(["1:2"]);
+	});
+});
 
 describe("applyBoardTaskConsistencyGuard", () => {
 	it("does nothing when gameContext is null", () => {

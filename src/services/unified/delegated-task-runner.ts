@@ -105,6 +105,11 @@ interface ProgressEvaluatorDecision {
 
 interface DelegationRouteState {
 	currentBoard: string;
+	canonicalInitialBoard?: string;
+	canonicalTopology?: string;
+	topologyLocked?: boolean;
+	latestRawBoard?: string;
+	boardObservationWarnings?: string[];
 	routeHypotheses: string[];
 	committedRoute: string;
 	currentRouteStep: string;
@@ -206,9 +211,15 @@ export async function runDelegatedTaskLoop(input: {
 	const mission = normalizeMissionAnalysisDecision(missionRaw, input.taskText, input.target);
 	const gameContext = resolveOperationalGameContext(candidateGameContext, mission.taskMode, input.taskText);
 	const allowedTools = buildAllowedTools(config.allowedTools, gameContext, runtimeToolNames);
+	const initialCanonicalBoard = buildInitialCanonicalBoard(gameContext, mission, preMissionObservation);
 	routeState = gameContext
 		? {
-			currentBoard: preMissionObservation.boardGrid || mission.initialStateSketch,
+			currentBoard: initialCanonicalBoard?.currentBoard || preMissionObservation.boardGrid || mission.initialStateSketch,
+			canonicalInitialBoard: initialCanonicalBoard?.currentBoard,
+			canonicalTopology: initialCanonicalBoard?.topology,
+			topologyLocked: Boolean(initialCanonicalBoard?.topology),
+			latestRawBoard: preMissionObservation.boardGrid,
+			boardObservationWarnings: initialCanonicalBoard?.warnings ?? [],
 			routeHypotheses: [...mission.candidateStrategies],
 			committedRoute: "",
 			currentRouteStep: "",
@@ -323,11 +334,21 @@ export async function runDelegatedTaskLoop(input: {
 			promptLength: config.boardPerceptionPrompt?.length ?? 0,
 			promptPreview: config.boardPerceptionPrompt?.slice(0, 120) ?? "(empty)",
 		});
-		roundBoardObservation = await captureBoardObservation(
+		const rawRoundBoardObservation = await captureBoardObservation(
 			currentSnapshot,
 			input.target,
 			mission,
 			config,
+		);
+		roundBoardObservation = reconcileBoardObservationWithRouteState(
+			routeState,
+			rawRoundBoardObservation,
+			gameContext,
+		);
+		routeState = updateRouteStateFromObservation(
+			routeState,
+			roundBoardObservation,
+			rawRoundBoardObservation,
 		);
 		const sharedScratchpadContext = buildSharedScratchpadContext({
 			taskText: input.taskText,
@@ -641,11 +662,16 @@ export async function runDelegatedTaskLoop(input: {
 			}
 		}
 
-		const afterBoardObservation = await captureBoardObservation(
+		const rawAfterBoardObservation = await captureBoardObservation(
 			batchAfterSnapshot,
 			input.target,
 			mission,
 			config,
+		);
+		const afterBoardObservation = reconcileBoardObservationWithRouteState(
+			routeState,
+			rawAfterBoardObservation,
+			gameContext,
 		);
 		const batchActionSummary = executedActions
 			.map((item) => `${item.plan.actionForEvaluation.tool}(${JSON.stringify(item.plan.actionForEvaluation.args)})`)
@@ -851,7 +877,7 @@ export async function runDelegatedTaskLoop(input: {
 			latestExpectedOutcome = "";
 			latestExpectedMet = null;
 		}
-		routeState = updateRouteStateFromEvaluator(routeState, reflection, afterBoardObservation, lastExecutedAction);
+		routeState = updateRouteStateFromEvaluator(routeState, reflection, afterBoardObservation, rawAfterBoardObservation, lastExecutedAction);
 		hasExecutionEvidence = true;
 		const evaluatorNote = formatEvaluatorScratchpadNote({
 			round,
@@ -2741,6 +2767,192 @@ function normalizeBoardConfidence(rawConfidence: string, boardGrid: string): Boa
 	return "medium";
 }
 
+interface SokobanBoardState {
+	topology: string;
+	currentBoard: string;
+	player: string | null;
+	boxes: string[];
+	targetCount: number;
+	boxCount: number;
+	warnings: string[];
+}
+
+function buildInitialCanonicalBoard(
+	gameContext: DelegatedGameContext | null,
+	mission: MissionAnalysisDecision,
+	observation: BoardObservation,
+): SokobanBoardState | null {
+	if (gameContext?.gameId !== "sokoban") {
+		return null;
+	}
+	const missionGrid = normalizeBoardGridLines(mission.initialStateSketch).join("\n");
+	const sourceGrid = missionGrid || observation.boardGrid;
+	const parsed = parseSokobanBoardState(sourceGrid);
+	if (!parsed) {
+		return null;
+	}
+	return parsed;
+}
+
+function reconcileBoardObservationWithRouteState(
+	routeState: DelegationRouteState | null,
+	observation: BoardObservation,
+	gameContext: DelegatedGameContext | null,
+): BoardObservation {
+	if (gameContext?.gameId !== "sokoban" || !routeState?.topologyLocked || !routeState.canonicalTopology) {
+		return observation;
+	}
+	const reconciled = reconcileSokobanDynamicBoard(routeState, observation.boardGrid);
+	const warnings = [
+		...observation.ambiguities,
+		...reconciled.warnings,
+	].slice(0, 12);
+	if (reconciled.warnings.length > 0) {
+		log.info("[diag] board observation reconciled with locked topology", {
+			gameId: gameContext.gameId,
+			warnings: reconciled.warnings,
+			rawPreview: observation.boardGrid.slice(0, 200),
+			canonicalPreview: (reconciled.boardGrid || routeState.currentBoard).slice(0, 200),
+		});
+	}
+	return {
+		...observation,
+		boardGrid: reconciled.boardGrid || routeState.currentBoard,
+		confidence: reconciled.boardGrid ? observation.confidence : "low",
+		ambiguities: warnings,
+	};
+}
+
+function updateRouteStateFromObservation(
+	routeState: DelegationRouteState | null,
+	reconciledObservation: BoardObservation,
+	rawObservation: BoardObservation,
+): DelegationRouteState | null {
+	if (!routeState) {
+		return null;
+	}
+	if (!routeState.topologyLocked) {
+		return {
+			...routeState,
+			currentBoard: reconciledObservation.boardGrid || routeState.currentBoard,
+			latestRawBoard: rawObservation.boardGrid || routeState.latestRawBoard,
+			boardObservationWarnings: reconciledObservation.ambiguities,
+		};
+	}
+	return {
+		...routeState,
+		currentBoard: reconciledObservation.boardGrid || routeState.currentBoard,
+		latestRawBoard: rawObservation.boardGrid || routeState.latestRawBoard,
+		boardObservationWarnings: reconciledObservation.ambiguities,
+	};
+}
+
+function reconcileSokobanDynamicBoard(
+	routeState: DelegationRouteState,
+	rawBoardGrid: string,
+): { boardGrid: string; warnings: string[] } {
+	const warnings: string[] = [];
+	if (!routeState.canonicalTopology) {
+		return { boardGrid: rawBoardGrid, warnings };
+	}
+	const rawState = parseSokobanBoardState(rawBoardGrid);
+	const currentState = parseSokobanBoardState(routeState.currentBoard);
+	if (!rawState) {
+		warnings.push("raw board rejected: parser output is not a valid Sokoban grid; keeping canonical dynamic state");
+		return { boardGrid: routeState.currentBoard, warnings };
+	}
+	const topologyRows = routeState.canonicalTopology.split("\n");
+	const rawRows = rawState.currentBoard.split("\n");
+	if (rawRows.length !== topologyRows.length || rawRows.some((line, index) => line.length !== topologyRows[index]?.length)) {
+		warnings.push("raw board rejected: dimensions differ from locked mission topology");
+		return { boardGrid: routeState.currentBoard, warnings };
+	}
+	const expectedBoxes = currentState?.boxCount || parseSokobanBoardState(routeState.canonicalInitialBoard || "")?.boxCount || rawState.boxCount;
+	if (!rawState.player) {
+		warnings.push("raw board rejected: missing player");
+		return { boardGrid: routeState.currentBoard, warnings };
+	}
+	if (expectedBoxes > 0 && rawState.boxCount !== expectedBoxes) {
+		warnings.push(`raw board rejected: expected ${expectedBoxes} boxes but saw ${rawState.boxCount}`);
+		return { boardGrid: routeState.currentBoard, warnings };
+	}
+	const canonical = composeSokobanBoard(routeState.canonicalTopology, rawState.player, rawState.boxes);
+	const rawTopology = rawState.topology;
+	if (rawTopology !== routeState.canonicalTopology) {
+		warnings.push("raw board topology differed; kept mission topology and only merged P/B dynamics");
+	}
+	return { boardGrid: canonical, warnings };
+}
+
+function parseSokobanBoardState(boardGrid: string): SokobanBoardState | null {
+	const rows = normalizeBoardGridLines(boardGrid);
+	if (!rows.length || rows.some((row) => !/^[#.PBT*+]+$/.test(row))) {
+		return null;
+	}
+	const topologyRows: string[] = [];
+	const boxes: string[] = [];
+	let player: string | null = null;
+	let targetCount = 0;
+	const warnings: string[] = [];
+	for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+		const row = rows[rowIndex] ?? "";
+		let topologyRow = "";
+		for (let columnIndex = 0; columnIndex < row.length; columnIndex += 1) {
+			const char = row[columnIndex];
+			const position = `${rowIndex}:${columnIndex}`;
+			if (char === "#") {
+				topologyRow += "#";
+				continue;
+			}
+			if (char === "T" || char === "*" || char === "+") {
+				targetCount += 1;
+				topologyRow += "T";
+			} else {
+				topologyRow += ".";
+			}
+			if (char === "P" || char === "+") {
+				if (player) {
+					warnings.push("multiple players detected");
+				}
+				player = position;
+			}
+			if (char === "B" || char === "*") {
+				boxes.push(position);
+			}
+		}
+		topologyRows.push(topologyRow);
+	}
+	return {
+		topology: topologyRows.join("\n"),
+		currentBoard: composeSokobanBoard(topologyRows.join("\n"), player, boxes),
+		player,
+		boxes,
+		targetCount,
+		boxCount: boxes.length,
+		warnings,
+	};
+}
+
+function composeSokobanBoard(topology: string, player: string | null, boxes: string[]): string {
+	const boxSet = new Set(boxes);
+	const rows = topology.split("\n");
+	return rows.map((row, rowIndex) => {
+		let result = "";
+		for (let columnIndex = 0; columnIndex < row.length; columnIndex += 1) {
+			const position = `${rowIndex}:${columnIndex}`;
+			const topologyChar = row[columnIndex] === "#" ? "#" : row[columnIndex] === "T" ? "T" : ".";
+			if (boxSet.has(position)) {
+				result += topologyChar === "T" ? "*" : "B";
+			} else if (player === position) {
+				result += topologyChar === "T" ? "+" : "P";
+			} else {
+				result += topologyChar;
+			}
+		}
+		return result;
+	}).join("\n");
+}
+
 async function preprocessSnapshotForVision(
 	snapshot: CapturedTargetSnapshot,
 	config: DelegatedTaskProfileConfig,
@@ -2818,8 +3030,8 @@ function formatBoardObservationForPlanner(observation: BoardObservation): string
 	if (!isUsableBoardObservation(observation)) return "";
 	return [
 		"========== BOARD ANALYSIS (PROGRAMMATIC GRID SCANNER) ==========",
-		"权威数据：以下棋盘由云端视觉解析得到；三角色后续应基于该文本棋盘思考。",
-		"必须在 stateSketch 中使用以下棋盘布局，不可用视觉印象覆盖。",
+		"权威数据：以下棋盘是融合后的 canonical board；若启用拓扑锁，墙/地面/目标点来自 Mission Analyst 的初始判断，后续视觉只更新 P/B 动态位置。",
+		"必须在 stateSketch 中使用以下棋盘布局，不可用单轮视觉印象覆盖固定拓扑。",
 		`confidence=${observation.confidence}`,
 		`entities=${observation.entities.join(", ") || "(none)"}`,
 		`ambiguities=${observation.ambiguities.join(" | ") || "(none)"}`,
@@ -2838,7 +3050,7 @@ function formatBoardObservationForEvaluator(before: BoardObservation, after: Boa
 		: "棋盘完全相同——动作未能产生任何实质位移。";
 	return [
 		"========== BOARD ANALYSIS (PROGRAMMATIC GRID SCANNER) ==========",
-		"权威数据：以下前后棋盘由云端视觉解析。",
+		"权威数据：以下前后棋盘是融合后的 canonical board；若启用拓扑锁，静态地图不会被单轮视觉覆盖。",
 		`beforeConfidence=${before.confidence}; afterConfidence=${after.confidence}`,
 		"",
 		"动作前:",
@@ -3709,7 +3921,7 @@ function updateRouteStateFromPlanner(
 	}
 	return {
 		...routeState,
-		currentBoard: observation.boardGrid || planner.stateSketch || routeState.currentBoard,
+		currentBoard: observation.boardGrid || (routeState.topologyLocked ? routeState.currentBoard : planner.stateSketch || routeState.currentBoard),
 		committedRoute: planner.committedRoute || planner.activeStrategy || routeState.committedRoute,
 		currentRouteStep: planner.currentRouteStep || planner.currentPhaseGoal || routeState.currentRouteStep,
 		routeRisks: planner.routeRisks?.length ? planner.routeRisks : routeState.routeRisks,
@@ -3720,6 +3932,7 @@ function updateRouteStateFromEvaluator(
 	routeState: DelegationRouteState | null,
 	reflection: ProgressEvaluatorDecision,
 	afterObservation: BoardObservation,
+	rawAfterObservation: BoardObservation,
 	action: DelegatedTaskAction,
 ): DelegationRouteState | null {
 	if (!routeState) {
@@ -3732,11 +3945,15 @@ function updateRouteStateFromEvaluator(
 	const resetSucceeded = didRestartActionSucceed(action, reflection);
 	return {
 		...routeState,
-		currentBoard: afterObservation.boardGrid || reflection.afterStateSketch || (resetSucceeded ? "" : routeState.currentBoard),
+		currentBoard: afterObservation.boardGrid
+			|| (resetSucceeded ? routeState.canonicalInitialBoard || "" : "")
+			|| (routeState.topologyLocked ? routeState.currentBoard : reflection.afterStateSketch || routeState.currentBoard),
 		committedRoute: resetSucceeded || reflection.planViability === "invalidated" ? "" : routeState.committedRoute,
 		currentRouteStep: resetSucceeded || reflection.phaseStatus === "completed" || reflection.planViability === "invalidated"
 			? ""
 			: routeState.currentRouteStep,
+		latestRawBoard: rawAfterObservation.boardGrid || routeState.latestRawBoard,
+		boardObservationWarnings: afterObservation.ambiguities,
 		invalidatedRouteLessons: nextLessons,
 		latestDiagnosis: reflection.latestDiagnosis || reflection.routeStateUpdate || reflection.nextHint || routeState.latestDiagnosis,
 	};
@@ -3745,6 +3962,10 @@ function updateRouteStateFromEvaluator(
 function formatRouteStateForPrompt(routeState: DelegationRouteState): string {
 	return [
 		`currentBoard=${routeState.currentBoard || "(none)"}`,
+		`topologyLocked=${routeState.topologyLocked ? "yes" : "no"}`,
+		`canonicalTopology=${routeState.canonicalTopology || "(none)"}`,
+		`latestRawBoard=${routeState.latestRawBoard || "(none)"}`,
+		`boardObservationWarnings=${routeState.boardObservationWarnings?.join(" || ") || "(none)"}`,
 		`routeHypotheses=${routeState.routeHypotheses.join(" || ") || "(none)"}`,
 		`committedRoute=${routeState.committedRoute || "(none)"}`,
 		`currentRouteStep=${routeState.currentRouteStep || "(none)"}`,
@@ -4104,4 +4325,8 @@ export const __test = {
 	normalizeStateSketchText,
 	buildStrategyLesson,
 	resolveOperationsNarration,
+	buildInitialCanonicalBoard,
+	reconcileBoardObservationWithRouteState,
+	reconcileSokobanDynamicBoard,
+	parseSokobanBoardState,
 } as const;
