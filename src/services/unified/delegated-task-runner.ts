@@ -1,5 +1,6 @@
 import { getConfig } from "@/services/config";
 import { requestActiveTextDecision, requestActiveVisionDecision } from "@/services/games/cloud-decision";
+import { estimateSnapshotChange } from "@/services/games/game-utils";
 import { findSemanticGameByTargetTitle, getSemanticGameManifest } from "@/services/games/semantic-game-registry";
 import { createLogger } from "@/services/logger";
 import { callLocalMcpTool, callLocalMcpToolJson, listLocalMcpTools } from "@/services/mcp/local-mcp-client";
@@ -11,6 +12,9 @@ import { pickReplyLanguageText, type ReplyLanguageMode } from "@/services/config
 import { getDelegatedTaskConfig, type DelegatedTaskProfileConfig } from "./delegated-task-config";
 
 const log = createLogger("delegated-task-runner");
+const LONG_SEQUENCE_UNCHANGED_THRESHOLD = 0.0025;
+const LONG_SEQUENCE_UNCHANGED_SAMPLE_SIZE = 72;
+const LONG_SEQUENCE_UNCHANGED_CROP_SCALE = 0.6;
 
 interface DelegatedTaskAction {
 	tool: string;
@@ -202,6 +206,7 @@ export async function runDelegatedTaskLoop(input: {
 	let hasExecutionEvidence = false;
 	const strategyLessons: string[] = [];
 	const longSequenceMode = config.longSequence.enabled && candidateGameContext?.gameId === "sokoban";
+	let pendingLongSequenceRecoveryReason = "";
 	const runtimeToolNames = await resolveRuntimeToolNames(input.traceId);
 	const missionProbeTools = buildAllowedTools(config.allowedTools, candidateGameContext, runtimeToolNames);
 	const missionSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
@@ -347,6 +352,57 @@ export async function runDelegatedTaskLoop(input: {
 				summary: pickReplyLanguageText("任务被手动停止。", "Task was stopped manually."),
 				timeline: buildTimeline(),
 			};
+		}
+
+		if (longSequenceMode && pendingLongSequenceRecoveryReason) {
+			const recovery = await executeLongSequenceRecoveryReset({
+				orchestrator: input.orchestrator,
+				target: input.target,
+				config,
+				mission,
+				reason: pendingLongSequenceRecoveryReason,
+				round,
+				traceId: input.traceId,
+			});
+			pendingLongSequenceRecoveryReason = "";
+			if (!recovery.succeeded) {
+				const summary = pickReplyLanguageText(
+					`长序列失败后需要重开，但自动点击重置失败：${recovery.error || "重置后画面没有变化"}`,
+					`Long-sequence recovery required a restart, but automatic reset failed: ${recovery.error || "no visible change after reset"}`,
+				);
+				log.warn("long sequence recovery reset failed", {
+					round,
+					error: recovery.error,
+					changeScore: recovery.changeScore,
+				});
+				return {
+					status: "failed",
+					rounds: round - 1,
+					summary,
+					timeline: buildTimeline(),
+				};
+			}
+			latestHint = combineHints(
+				latestHint,
+				pickReplyLanguageText(
+					"系统已强制重开本关；保留上一条失败经验，但下一轮必须从初始局面重新生成完整长序列。",
+					"The runner has restarted the level; keep the previous failure lesson, but the next planner turn must generate a fresh full long sequence from the initial board.",
+				),
+			);
+			latestExpectedOutcome = "";
+			latestExpectedMet = null;
+			latestPhaseGoal = "";
+			latestPhaseReason = "";
+			latestPhaseAbortCondition = "";
+			latestPhaseStatus = "";
+			latestPhaseAssessment = "";
+			latestActiveStrategy = "";
+			latestStrategyRevision = "";
+			latestPlanViability = "";
+			latestPlanAssessment = "";
+			routeState = resetRouteStateAfterLongSequenceRecovery(routeState);
+			await persistRouteState(input.scratchpad, routeState);
+			await sleep(config.afterActionWaitMs);
 		}
 
 		const currentSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
@@ -718,22 +774,40 @@ export async function runDelegatedTaskLoop(input: {
 				target: input.target,
 				beforeSnapshot,
 				baseWaitMs: longSequenceMode ? config.longSequence.stepWaitMs : config.afterActionWaitMs,
-				skipUnchangedRetries: longSequenceMode,
 			});
 			executedActions.push({ plan: executionPlan, error: actionExecutionError });
 			if (actionExecutionError) {
 				batchExecutionError = actionExecutionError;
 				break;
 			}
-			if (longSequenceMode && config.longSequence.stopOnUnchangedSnapshot && isSnapshotLikelyUnchanged(beforeSnapshot, batchAfterSnapshot)) {
+			const snapshotChange = longSequenceMode
+				? await assessSnapshotChange(
+					await preprocessSnapshotForRoleVision(beforeSnapshot, config),
+					await preprocessSnapshotForRoleVision(batchAfterSnapshot, config),
+				)
+				: null;
+			if (snapshotChange) {
+				log.info("long sequence step snapshot change", {
+					round,
+					stepIndex: actionIndex + 1,
+					totalActions: effectivePlannerActions.length,
+					action: executionPlan.actionForEvaluation,
+					changeScore: snapshotChange.score,
+					threshold: LONG_SEQUENCE_UNCHANGED_THRESHOLD,
+					unchanged: snapshotChange.unchanged,
+					reason: snapshotChange.reason,
+				});
+			}
+			if (longSequenceMode && config.longSequence.stopOnUnchangedSnapshot && snapshotChange?.unchanged) {
 				const failedStepIndex = actionIndex + 1;
 				const remainingActions = effectivePlannerActions.length - failedStepIndex;
 				longSequenceFailureDetail = [
-					`Long sequence stopped at step ${failedStepIndex}/${effectivePlannerActions.length}: screenshot unchanged after ${config.longSequence.stepWaitMs}ms.`,
+					`Long sequence stopped at step ${failedStepIndex}/${effectivePlannerActions.length}: board screenshot did not meaningfully change after ${config.longSequence.stepWaitMs}ms.`,
+					`changeScore=${snapshotChange.score === null ? "unknown" : snapshotChange.score.toFixed(6)} threshold=${LONG_SEQUENCE_UNCHANGED_THRESHOLD}`,
 					`failedAction=${executionPlan.actionForEvaluation.tool}(${JSON.stringify(executionPlan.actionForEvaluation.args)})`,
 					`executedPrefix=${executedActions.map((item) => item.plan.actionForEvaluation.tool + "(" + JSON.stringify(item.plan.actionForEvaluation.args) + ")").join(" -> ")}`,
 					`remainingActions=${remainingActions}`,
-					"Next planner turn must rebuild a full long-sequence route from the current screenshot; do not respond with a single corrective move.",
+					"Runner will restart the level before the next planner turn; the next planner must generate a fresh full long-sequence route from the clean initial board.",
 				].join(" ");
 				batchExecutionError = longSequenceFailureDetail;
 				log.warn("long sequence stopped on unchanged snapshot", {
@@ -742,6 +816,9 @@ export async function runDelegatedTaskLoop(input: {
 					totalActions: effectivePlannerActions.length,
 					remainingActions,
 					action: executionPlan.actionForEvaluation,
+					changeScore: snapshotChange.score,
+					threshold: LONG_SEQUENCE_UNCHANGED_THRESHOLD,
+					reason: snapshotChange.reason,
 				});
 				break;
 			}
@@ -982,6 +1059,35 @@ export async function runDelegatedTaskLoop(input: {
 			latestExpectedOutcome = "";
 			latestExpectedMet = null;
 		}
+		const longSequenceRecoveryReason = longSequenceMode && !isBoardMissionCompleted(reflection, planner)
+			? detectLongSequenceRecoveryReason({
+				executionError: longSequenceFailureDetail || batchExecutionError,
+				reflection,
+			})
+			: "";
+		if (longSequenceRecoveryReason) {
+			pendingLongSequenceRecoveryReason = longSequenceRecoveryReason;
+			latestHint = combineHints(
+				latestHint,
+				pickReplyLanguageText(
+					`长序列尝试失败，下一轮开始前系统会先重开本关。原因：${longSequenceRecoveryReason}`,
+					`The long-sequence attempt failed; the runner will restart the level before the next planner turn. Reason: ${longSequenceRecoveryReason}`,
+				),
+			);
+			latestActiveStrategy = "";
+			latestPhaseGoal = "";
+			latestPhaseReason = "";
+			latestPhaseAbortCondition = "";
+			latestPlanViability = "invalidated";
+			latestPlanAssessment = combineHints(latestPlanAssessment, longSequenceRecoveryReason);
+			log.warn("long sequence recovery scheduled", {
+				round,
+				reason: longSequenceRecoveryReason,
+				executionError: longSequenceFailureDetail || batchExecutionError,
+				planViability: reflection.planViability,
+				phaseStatus: reflection.phaseStatus,
+			});
+		}
 		routeState = updateRouteStateFromEvaluator(routeState, reflection, afterBoardObservation, rawAfterBoardObservation, lastExecutedAction);
 		hasExecutionEvidence = true;
 		const evaluatorNote = formatEvaluatorScratchpadNote({
@@ -1095,15 +1201,12 @@ async function capturePostActionSnapshot(input: {
 	target: FunctionalTarget;
 	beforeSnapshot: CapturedTargetSnapshot;
 	baseWaitMs: number;
-	skipUnchangedRetries?: boolean;
 }): Promise<CapturedTargetSnapshot> {
 	await sleep(input.baseWaitMs);
 	let afterSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
-	if (input.skipUnchangedRetries) {
-		return afterSnapshot;
-	}
 	for (let attempt = 0; attempt < 2; attempt += 1) {
-		if (!isSnapshotLikelyUnchanged(input.beforeSnapshot, afterSnapshot)) {
+		const assessment = await assessSnapshotChange(input.beforeSnapshot, afterSnapshot);
+		if (!assessment.unchanged) {
 			return afterSnapshot;
 		}
 		await sleep(320);
@@ -1112,11 +1215,188 @@ async function capturePostActionSnapshot(input: {
 	return afterSnapshot;
 }
 
-function isSnapshotLikelyUnchanged(beforeSnapshot: CapturedTargetSnapshot, afterSnapshot: CapturedTargetSnapshot): boolean {
+async function assessSnapshotChange(
+	beforeSnapshot: CapturedTargetSnapshot,
+	afterSnapshot: CapturedTargetSnapshot,
+): Promise<{ unchanged: boolean; score: number | null; reason: string }> {
 	if (beforeSnapshot.width !== afterSnapshot.width || beforeSnapshot.height !== afterSnapshot.height) {
-		return false;
+		return { unchanged: false, score: 1, reason: "size-changed" };
 	}
-	return beforeSnapshot.dataUrl === afterSnapshot.dataUrl;
+	if (beforeSnapshot.dataUrl === afterSnapshot.dataUrl) {
+		return { unchanged: true, score: 0, reason: "identical-data-url" };
+	}
+	try {
+		const score = await estimateSnapshotChange(
+			toPerceptionSnapshot(beforeSnapshot),
+			toPerceptionSnapshot(afterSnapshot),
+			{
+				sampleSize: LONG_SEQUENCE_UNCHANGED_SAMPLE_SIZE,
+				cropScale: LONG_SEQUENCE_UNCHANGED_CROP_SCALE,
+			},
+		);
+		return {
+			unchanged: classifySnapshotChangeScore(score),
+			score,
+			reason: "pixel-diff",
+		};
+	} catch (error) {
+		log.warn("snapshot change estimation failed; treating snapshots as changed", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+		return { unchanged: false, score: null, reason: "pixel-diff-error" };
+	}
+}
+
+function classifySnapshotChangeScore(score: number, threshold = LONG_SEQUENCE_UNCHANGED_THRESHOLD): boolean {
+	return score <= threshold;
+}
+
+function toPerceptionSnapshot(snapshot: CapturedTargetSnapshot) {
+	return {
+		targetHandle: "",
+		targetTitle: "",
+		width: snapshot.width,
+		height: snapshot.height,
+		dataUrl: snapshot.dataUrl,
+		capturedAt: Date.now(),
+		captureMethod: "delegated-capture",
+		qualityScore: 1,
+		lowConfidence: false,
+	};
+}
+
+async function executeLongSequenceRecoveryReset(input: {
+	orchestrator: OrchestratorService;
+	target: FunctionalTarget;
+	config: DelegatedTaskProfileConfig;
+	mission: MissionAnalysisDecision;
+	reason: string;
+	round: number;
+	traceId?: string;
+}): Promise<{ succeeded: boolean; error: string; changeScore: number | null }> {
+	let lastError = "";
+	let lastChangeScore: number | null = null;
+	for (let attempt = 1; attempt <= 2; attempt += 1) {
+		const beforeSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
+		const resetAction = buildLongSequenceResetAction(input.target);
+		const resolvedAction = await resolveActionWithLocator({
+			action: resetAction,
+			config: input.config,
+			target: input.target,
+			mission: input.mission,
+			beforeSnapshot,
+			round: input.round,
+		});
+		const executionPlan = buildExecutableActionPlan(resolvedAction, input.target);
+		try {
+			log.warn("long sequence recovery reset executing", {
+				round: input.round,
+				attempt,
+				reason: input.reason,
+				action: executionPlan.actionForEvaluation,
+			});
+			await callLocalMcpTool(executionPlan.primary.tool, executionPlan.primary.args, {
+				timeoutMs: 45_000,
+				traceId: input.traceId,
+			});
+			for (const followUpAction of executionPlan.followUps) {
+				await callLocalMcpTool(followUpAction.tool, followUpAction.args, {
+					timeoutMs: 45_000,
+					traceId: input.traceId,
+				});
+			}
+		} catch (error) {
+			lastError = error instanceof Error ? error.message : String(error);
+			log.warn("long sequence recovery reset action failed", {
+				round: input.round,
+				attempt,
+				error: lastError,
+			});
+			continue;
+		}
+		const afterSnapshot = await capturePostActionSnapshot({
+			orchestrator: input.orchestrator,
+			target: input.target,
+			beforeSnapshot,
+			baseWaitMs: Math.max(input.config.afterActionWaitMs, input.config.longSequence.stepWaitMs),
+		});
+		const change = await assessSnapshotChange(beforeSnapshot, afterSnapshot);
+		lastChangeScore = change.score;
+		log.info("long sequence recovery reset change", {
+			round: input.round,
+			attempt,
+			changeScore: change.score,
+			threshold: LONG_SEQUENCE_UNCHANGED_THRESHOLD,
+			unchanged: change.unchanged,
+			reason: change.reason,
+		});
+		if (!change.unchanged) {
+			return { succeeded: true, error: "", changeScore: change.score };
+		}
+		lastError = "reset click produced no meaningful screenshot change";
+	}
+	return { succeeded: false, error: lastError, changeScore: lastChangeScore };
+}
+
+function buildLongSequenceResetAction(target: FunctionalTarget): DelegatedTaskAction {
+	return {
+		tool: "host.send_mouse",
+		args: {
+			button: "left",
+			targetHandle: target.handle,
+			targetTitle: target.title,
+			locatorHint: "purple-pink circular restart/reset button in the upper-right corner of the Sokoban game; do not click the green undo button",
+		},
+	};
+}
+
+function resetRouteStateAfterLongSequenceRecovery(routeState: DelegationRouteState | null): DelegationRouteState | null {
+	if (!routeState) {
+		return null;
+	}
+	return {
+		...routeState,
+		currentBoard: routeState.canonicalInitialBoard || routeState.currentBoard,
+		committedRoute: "",
+		currentRouteStep: "",
+		routeRisks: routeState.routeRisks,
+		latestDiagnosis: pickReplyLanguageText(
+			"长序列失败后已重开；保留失败经验，但清除死局中的临时棋盘和路线。",
+			"Restarted after long-sequence failure; preserved failure lessons but cleared the deadlocked temporary route.",
+		),
+	};
+}
+
+function isBoardMissionCompleted(
+	reflection: ProgressEvaluatorDecision,
+	planner: OperationsPlannerDecision,
+): boolean {
+	const evaluatorDeclaresDone = reflection.goalProgress === "done" || reflection.goalAlignment === "achieved";
+	const strongEvidence = reflection.expectedMet && reflection.actionSucceeded && reflection.wasActionCorrect;
+	return evaluatorDeclaresDone && (planner.goalReached || strongEvidence);
+}
+
+function detectLongSequenceRecoveryReason(input: {
+	executionError: string;
+	reflection: ProgressEvaluatorDecision;
+}): string {
+	if (input.executionError) {
+		return input.executionError;
+	}
+	const joined = [
+		input.reflection.nextHint,
+		input.reflection.planAssessment,
+		input.reflection.phaseAssessment,
+		input.reflection.latestDiagnosis,
+		input.reflection.routeStateUpdate,
+	].join(" ");
+	if (/deadlock|死局|restart|reset|重开|重新开始|unrecoverable|无法恢复|卡死/i.test(joined)) {
+		return joined.slice(0, 500);
+	}
+	if (input.reflection.planViability === "invalidated" && input.reflection.phaseStatus === "blocked") {
+		return input.reflection.planAssessment || input.reflection.phaseAssessment || "long sequence route invalidated";
+	}
+	return "";
 }
 
 function buildPreMissionForObservation(taskText: string): MissionAnalysisDecision {
@@ -1631,6 +1911,8 @@ function buildLongSequencePlannerUserPrompt(input: {
 		`- You may output up to ${input.maxActions} actions. A short sequence is acceptable only when it genuinely completes the level, performs a required reset, or the board is unreadable; explain that in abortCondition.`,
 		`- Engineering acceptance: for this game profile, fewer than ${input.minActions} actions is treated as suspiciously short unless the level is visibly solved by that exact sequence. Do not stop after a setup move.`,
 		"- Prefer game.perform_action only. Do not insert evaluator checkpoints; the runner will execute each step and stop automatically on no-change.",
+		"- If a prior attempt failed or deadlocked, the runner restarts the level before asking you again. Do not continue patching the corrupted board unless the current screenshot clearly shows a non-initial board.",
+		"- Treat each planner turn as a fresh complete solve attempt from the visible board. Do not output a short local repair sequence after a failed long sequence.",
 		"- For Sokoban, compare multiple route ideas before committing. Do not assume boxes are solved linearly or permanently once they touch a target.",
 		"- Temporary placements, moving a box off a target, and interleaving boxes are allowed when they preserve global solvability.",
 		"- Before any push in the sequence, internally verify push geometry: player side, push direction, destination cell, and later access.",
@@ -4767,4 +5049,7 @@ export const __test = {
 	countRawPlannerActions,
 	extractRawPlannerActionIds,
 	detectLongSequencePlannerIssue,
+	classifySnapshotChangeScore,
+	detectLongSequenceRecoveryReason,
+	resetRouteStateAfterLongSequenceRecovery,
 } as const;

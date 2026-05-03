@@ -35,6 +35,9 @@ const {
 	countRawPlannerActions,
 	extractRawPlannerActionIds,
 	detectLongSequencePlannerIssue,
+	classifySnapshotChangeScore,
+	detectLongSequenceRecoveryReason,
+	resetRouteStateAfterLongSequenceRecovery,
 } = __test;
 
 const GAME_CONTEXT = { gameId: "sokoban" as const, displayName: "Sokoban", actionIds: ["move_up"] };
@@ -147,6 +150,50 @@ describe("delegation long sequence planning helpers", () => {
 		});
 		expect(issue).toContain("only 2/12 actions");
 		expect(issue).toContain("move_left -> move_right");
+	});
+
+	it("classifies tiny screenshot diffs as unchanged for long-sequence step verification", () => {
+		expect(classifySnapshotChangeScore(0)).toBe(true);
+		expect(classifySnapshotChangeScore(0.001)).toBe(true);
+		expect(classifySnapshotChangeScore(0.01)).toBe(false);
+	});
+
+	it("schedules long-sequence recovery for interrupted or deadlocked attempts", () => {
+		expect(detectLongSequenceRecoveryReason({
+			executionError: "Long sequence stopped at step 4/12: board screenshot did not meaningfully change",
+			reflection: makeReflection(),
+		})).toContain("Long sequence stopped");
+
+		expect(detectLongSequenceRecoveryReason({
+			executionError: "",
+			reflection: makeReflection({
+				phaseStatus: "blocked",
+				planViability: "invalidated",
+				nextHint: "Sokoban deadlock detected; click restart.",
+			}),
+		})).toContain("deadlock");
+	});
+
+	it("clears active long-sequence route state after forced recovery reset", () => {
+		const routeState = {
+			currentBoard: "deadlocked-board",
+			canonicalInitialBoard: "initial-board",
+			canonicalTopology: "topology",
+			topologyLocked: true,
+			latestRawBoard: "deadlocked-board",
+			boardObservationWarnings: [],
+			routeHypotheses: ["route"],
+			committedRoute: "bad route",
+			currentRouteStep: "bad step",
+			routeRisks: ["risk"],
+			invalidatedRouteLessons: ["lesson"],
+			latestDiagnosis: "deadlocked",
+		};
+		const result = resetRouteStateAfterLongSequenceRecovery(routeState);
+		expect(result?.currentBoard).toBe("initial-board");
+		expect(result?.committedRoute).toBe("");
+		expect(result?.currentRouteStep).toBe("");
+		expect(result?.invalidatedRouteLessons).toEqual(["lesson"]);
 	});
 });
 
