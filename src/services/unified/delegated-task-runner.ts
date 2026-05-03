@@ -1,6 +1,6 @@
 import { getConfig } from "@/services/config";
 import { requestActiveTextDecision, requestActiveVisionDecision } from "@/services/games/cloud-decision";
-import { estimateSnapshotChange } from "@/services/games/game-utils";
+import { estimateSnapshotChange, type SnapshotChangeCrop } from "@/services/games/game-utils";
 import { findSemanticGameByTargetTitle, getSemanticGameManifest } from "@/services/games/semantic-game-registry";
 import { createLogger } from "@/services/logger";
 import { callLocalMcpTool, callLocalMcpToolJson, listLocalMcpTools } from "@/services/mcp/local-mcp-client";
@@ -12,7 +12,7 @@ import { pickReplyLanguageText, type ReplyLanguageMode } from "@/services/config
 import { getDelegatedTaskConfig, type DelegatedTaskProfileConfig } from "./delegated-task-config";
 
 const log = createLogger("delegated-task-runner");
-const LONG_SEQUENCE_UNCHANGED_THRESHOLD = 0.0025;
+const LONG_SEQUENCE_UNCHANGED_THRESHOLD = 0.00075;
 const LONG_SEQUENCE_UNCHANGED_SAMPLE_SIZE = 72;
 const LONG_SEQUENCE_UNCHANGED_CROP_SCALE = 0.6;
 
@@ -552,6 +552,7 @@ export async function runDelegatedTaskLoop(input: {
 				actions: nextPlanner.actions,
 				latestHint,
 				recentActionOutcomes,
+				longSequenceMode,
 			});
 			planner = nextPlanner;
 			if (!policyIssue || plannerRetryCount >= maxPlannerRetries) {
@@ -665,7 +666,7 @@ export async function runDelegatedTaskLoop(input: {
 			...planner,
 			actions: effectivePlannerActions,
 		};
-		const plannerReply = resolveOperationsNarration(plannerView, canPlannerFinish);
+		const plannerReply = resolveOperationsNarration(plannerView, canPlannerFinish, replyLanguageMode);
 		if (plannerReply) {
 			await input.onAssistantReply?.(plannerReply, "planner");
 		}
@@ -770,6 +771,7 @@ export async function runDelegatedTaskLoop(input: {
 				target: input.target,
 				beforeSnapshot,
 				baseWaitMs: longSequenceMode ? config.longSequence.stepWaitMs : config.afterActionWaitMs,
+				changeOptions: longSequenceMode ? buildLongSequenceSnapshotChangeOptions(config) : undefined,
 			});
 			executedActions.push({ plan: executionPlan, error: actionExecutionError });
 			if (actionExecutionError) {
@@ -777,10 +779,7 @@ export async function runDelegatedTaskLoop(input: {
 				break;
 			}
 			const snapshotChange = longSequenceMode
-				? await assessSnapshotChange(
-					await preprocessSnapshotForRoleVision(beforeSnapshot, config),
-					await preprocessSnapshotForRoleVision(batchAfterSnapshot, config),
-				)
+				? await assessSnapshotChange(beforeSnapshot, batchAfterSnapshot, buildLongSequenceSnapshotChangeOptions(config))
 				: null;
 			if (snapshotChange) {
 				log.info("long sequence step snapshot change", {
@@ -789,9 +788,10 @@ export async function runDelegatedTaskLoop(input: {
 					totalActions: effectivePlannerActions.length,
 					action: executionPlan.actionForEvaluation,
 					changeScore: snapshotChange.score,
-					threshold: LONG_SEQUENCE_UNCHANGED_THRESHOLD,
+					threshold: snapshotChange.threshold,
 					unchanged: snapshotChange.unchanged,
 					reason: snapshotChange.reason,
+					crop: snapshotChange.crop,
 				});
 			}
 			if (longSequenceMode && config.longSequence.stopOnUnchangedSnapshot && snapshotChange?.unchanged) {
@@ -799,12 +799,13 @@ export async function runDelegatedTaskLoop(input: {
 				const remainingActions = effectivePlannerActions.length - failedStepIndex;
 				longSequenceFailureDetail = [
 					`Long sequence stopped at step ${failedStepIndex}/${effectivePlannerActions.length}: board screenshot did not meaningfully change after ${config.longSequence.stepWaitMs}ms.`,
-					`changeScore=${snapshotChange.score === null ? "unknown" : snapshotChange.score.toFixed(6)} threshold=${LONG_SEQUENCE_UNCHANGED_THRESHOLD}`,
+					`changeScore=${snapshotChange.score === null ? "unknown" : snapshotChange.score.toFixed(6)} threshold=${snapshotChange.threshold}`,
+					snapshotChange.crop ? `crop=${formatSnapshotChangeCrop(snapshotChange.crop)}` : "",
 					`failedAction=${executionPlan.actionForEvaluation.tool}(${JSON.stringify(executionPlan.actionForEvaluation.args)})`,
 					`executedPrefix=${executedActions.map((item) => item.plan.actionForEvaluation.tool + "(" + JSON.stringify(item.plan.actionForEvaluation.args) + ")").join(" -> ")}`,
 					`remainingActions=${remainingActions}`,
-					"Evaluator must diagnose why this prefix failed and record a failed-route lesson. This attempt will be reset before the next planner turn; do not treat any partial progress as current progress.",
-				].join(" ");
+					"Evaluator must diagnose why this exact prefix/position failed and record a failed-route lesson. This attempt will be reset before the next planner turn; do not treat any partial progress as current progress.",
+				].filter(Boolean).join(" ");
 				batchExecutionError = longSequenceFailureDetail;
 				log.warn("long sequence stopped on unchanged snapshot", {
 					round,
@@ -813,8 +814,9 @@ export async function runDelegatedTaskLoop(input: {
 					remainingActions,
 					action: executionPlan.actionForEvaluation,
 					changeScore: snapshotChange.score,
-					threshold: LONG_SEQUENCE_UNCHANGED_THRESHOLD,
+					threshold: snapshotChange.threshold,
 					reason: snapshotChange.reason,
+					crop: snapshotChange.crop,
 				});
 				break;
 			}
@@ -844,7 +846,7 @@ export async function runDelegatedTaskLoop(input: {
 		const lastExecutedAction = executedActions[executedActions.length - 1]?.plan.actionForEvaluation
 			?? effectivePlannerActions[0];
 
-		const evaluatorSystemPrompt = buildProgressEvaluatorSystemPrompt(config.progressEvaluatorRules, mission);
+		const evaluatorSystemPrompt = buildProgressEvaluatorSystemPrompt(config.progressEvaluatorRules, mission, { longSequenceMode });
 		const evaluatorUserPrompt = buildProgressEvaluatorUserPrompt({
 				taskText: input.taskText,
 				round,
@@ -948,7 +950,11 @@ export async function runDelegatedTaskLoop(input: {
 			goalProgress: reflection.goalProgress,
 			phaseStatus: reflection.phaseStatus,
 		});
-		const reflectionReply = normalizeDelegatedCompanionReply(reflection.reply, "reflection", replyLanguageMode);
+		const reflectionReply = resolveReflectionNarration(
+			reflection,
+			longSequenceFailureDetail || batchExecutionError,
+			replyLanguageMode,
+		);
 		if (reflectionReply) {
 			await input.onAssistantReply?.(reflectionReply, "reflection");
 		}
@@ -982,7 +988,7 @@ export async function runDelegatedTaskLoop(input: {
 		if (shouldInvalidateStrategy(planner, reflection, gameContext)) {
 			pushInvalidatedStrategy(invalidatedStrategies, planner.activeStrategy);
 		}
-		const repeatedFailureHint = buildRepeatedFailureHint(recentActionOutcomes);
+		const repeatedFailureHint = buildRepeatedFailureHint(recentActionOutcomes, { longSequenceMode });
 		const boardStagnationHint = buildBoardStagnationHint(gameContext, recentActionOutcomes);
 		if (repeatedFailureHint && !didBoardTaskMakeProgress(reflection)) {
 			reflection = {
@@ -1078,8 +1084,8 @@ export async function runDelegatedTaskLoop(input: {
 			latestHint = combineHints(
 				latestHint,
 				pickReplyLanguageText(
-					`长序列尝试失败，下一轮开始前系统会先重开本关。原因：${longSequenceRecoveryReason}`,
-					`The long-sequence attempt failed; the runner will restart the level before the next planner turn. Reason: ${longSequenceRecoveryReason}`,
+					`长序列尝试失败，下一轮开始前系统会先重开本关。原因：${longSequenceRecoveryReason}。下一轮可以继续使用必要方向，但必须修正失败前缀、站位或路线几何。`,
+					`The long-sequence attempt failed; the runner will restart the level before the next planner turn. Reason: ${longSequenceRecoveryReason}. Next round may reuse necessary directions, but must fix the failed prefix, stance, or route geometry.`,
 				),
 			);
 			latestActiveStrategy = "";
@@ -1209,11 +1215,12 @@ async function capturePostActionSnapshot(input: {
 	target: FunctionalTarget;
 	beforeSnapshot: CapturedTargetSnapshot;
 	baseWaitMs: number;
+	changeOptions?: SnapshotChangeAssessmentOptions;
 }): Promise<CapturedTargetSnapshot> {
 	await sleep(input.baseWaitMs);
 	let afterSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
 	for (let attempt = 0; attempt < 2; attempt += 1) {
-		const assessment = await assessSnapshotChange(input.beforeSnapshot, afterSnapshot);
+		const assessment = await assessSnapshotChange(input.beforeSnapshot, afterSnapshot, input.changeOptions);
 		if (!assessment.unchanged) {
 			return afterSnapshot;
 		}
@@ -1226,37 +1233,82 @@ async function capturePostActionSnapshot(input: {
 async function assessSnapshotChange(
 	beforeSnapshot: CapturedTargetSnapshot,
 	afterSnapshot: CapturedTargetSnapshot,
-): Promise<{ unchanged: boolean; score: number | null; reason: string }> {
+	options: SnapshotChangeAssessmentOptions = {},
+): Promise<SnapshotChangeAssessment> {
+	const threshold = options.threshold ?? LONG_SEQUENCE_UNCHANGED_THRESHOLD;
 	if (beforeSnapshot.width !== afterSnapshot.width || beforeSnapshot.height !== afterSnapshot.height) {
-		return { unchanged: false, score: 1, reason: "size-changed" };
+		return { unchanged: false, score: 1, reason: "size-changed", threshold, crop: options.crop ?? null };
 	}
 	if (beforeSnapshot.dataUrl === afterSnapshot.dataUrl) {
-		return { unchanged: true, score: 0, reason: "identical-data-url" };
+		return { unchanged: true, score: 0, reason: "identical-data-url", threshold, crop: options.crop ?? null };
 	}
 	try {
 		const score = await estimateSnapshotChange(
 			toPerceptionSnapshot(beforeSnapshot),
 			toPerceptionSnapshot(afterSnapshot),
 			{
-				sampleSize: LONG_SEQUENCE_UNCHANGED_SAMPLE_SIZE,
-				cropScale: LONG_SEQUENCE_UNCHANGED_CROP_SCALE,
+				sampleSize: options.sampleSize ?? LONG_SEQUENCE_UNCHANGED_SAMPLE_SIZE,
+				cropScale: options.cropScale ?? LONG_SEQUENCE_UNCHANGED_CROP_SCALE,
+				crop: options.crop,
 			},
 		);
 		return {
-			unchanged: classifySnapshotChangeScore(score),
+			unchanged: classifySnapshotChangeScore(score, threshold),
 			score,
 			reason: "pixel-diff",
+			threshold,
+			crop: options.crop ?? null,
 		};
 	} catch (error) {
 		log.warn("snapshot change estimation failed; treating snapshots as changed", {
 			error: error instanceof Error ? error.message : String(error),
 		});
-		return { unchanged: false, score: null, reason: "pixel-diff-error" };
+		return { unchanged: false, score: null, reason: "pixel-diff-error", threshold, crop: options.crop ?? null };
 	}
 }
 
 function classifySnapshotChangeScore(score: number, threshold = LONG_SEQUENCE_UNCHANGED_THRESHOLD): boolean {
 	return score <= threshold;
+}
+
+interface SnapshotChangeAssessmentOptions {
+	threshold?: number;
+	sampleSize?: number;
+	cropScale?: number;
+	crop?: SnapshotChangeCrop;
+}
+
+interface SnapshotChangeAssessment {
+	unchanged: boolean;
+	score: number | null;
+	reason: string;
+	threshold: number;
+	crop: SnapshotChangeCrop | null;
+}
+
+function buildLongSequenceSnapshotChangeOptions(config: DelegatedTaskProfileConfig): SnapshotChangeAssessmentOptions {
+	return {
+		threshold: LONG_SEQUENCE_UNCHANGED_THRESHOLD,
+		sampleSize: LONG_SEQUENCE_UNCHANGED_SAMPLE_SIZE,
+		cropScale: LONG_SEQUENCE_UNCHANGED_CROP_SCALE,
+		crop: getVisionPreprocessCrop(config),
+	};
+}
+
+function getVisionPreprocessCrop(config: DelegatedTaskProfileConfig): SnapshotChangeCrop | undefined {
+	if (!config.visionPreprocess.enabled || config.visionPreprocess.mode === "none") {
+		return undefined;
+	}
+	return {
+		xNorm: config.visionPreprocess.crop.xNorm,
+		yNorm: config.visionPreprocess.crop.yNorm,
+		widthNorm: config.visionPreprocess.crop.widthNorm,
+		heightNorm: config.visionPreprocess.crop.heightNorm,
+	};
+}
+
+function formatSnapshotChangeCrop(crop: SnapshotChangeCrop): string {
+	return `x=${crop.xNorm.toFixed(3)},y=${crop.yNorm.toFixed(3)},w=${crop.widthNorm.toFixed(3)},h=${crop.heightNorm.toFixed(3)}`;
 }
 
 function toPerceptionSnapshot(snapshot: CapturedTargetSnapshot) {
@@ -1316,15 +1368,17 @@ async function executeLongSequenceRecoveryReset(input: {
 		target: input.target,
 		beforeSnapshot,
 		baseWaitMs: Math.max(input.config.afterActionWaitMs, input.config.longSequence.stepWaitMs),
+		changeOptions: buildLongSequenceSnapshotChangeOptions(input.config),
 	});
-	const change = await assessSnapshotChange(beforeSnapshot, afterSnapshot);
+	const change = await assessSnapshotChange(beforeSnapshot, afterSnapshot, buildLongSequenceSnapshotChangeOptions(input.config));
 	lastChangeScore = change.score;
 	log.info("long sequence recovery reset change", {
 		round: input.round,
 		changeScore: change.score,
-		threshold: LONG_SEQUENCE_UNCHANGED_THRESHOLD,
+		threshold: change.threshold,
 		unchanged: change.unchanged,
 		reason: change.reason,
+		crop: change.crop,
 	});
 	if (!change.unchanged) {
 		return { succeeded: true, error: "", changeScore: change.score };
@@ -1949,7 +2003,11 @@ function buildLongSequencePlannerUserPrompt(input: {
 	].join("\n");
 }
 
-function buildProgressEvaluatorSystemPrompt(rules: string[], mission: MissionAnalysisDecision): string {
+function buildProgressEvaluatorSystemPrompt(
+	rules: string[],
+	mission: MissionAnalysisDecision,
+	options: { longSequenceMode?: boolean } = {},
+): string {
 	const baseRules = [
 		"你是 Progress Evaluator。你会收到 before/after 两张图。",
 		"你不仅要判断是否有变化，还要判断动作是否做对、是否朝 mission 目标推进。",
@@ -1964,7 +2022,9 @@ function buildProgressEvaluatorSystemPrompt(rules: string[], mission: MissionAna
 		"你必须输出 routeStateUpdate 和 latestDiagnosis：只诊断路线状态如何变化，不要把 nextHint 写成强制命令。",
 		"如果这一步虽然没完成局部 expectedOutcome，但让当前路线更可行、释放了空间、或验证了某条路线错误，也必须在 planViability / phaseAssessment 中明确指出。",
 		"你还要检查 executedAction 是否拆成“单步可执行动作”；若动作过于抽象或一步里混了多步，判定 wasActionCorrect=false 并在 nextHint 指出应拆成的最小动作。",
-		"若 history 显示同签名动作已连续失败 >=2 轮，你必须判定 wasActionCorrect=false 且 goalAlignment=deviated，并在 nextHint 强制要求“换策略/换动作链，不得重复同动作”。",
+		options.longSequenceMode
+			? "若 history 显示同签名动作已连续失败 >=2 轮，你必须先区分失败的是高层路线、动作前缀、站位，还是具体方向；不要把“某方向在某个站位失败”泛化成永远禁止该方向。"
+			: "若 history 显示同签名动作已连续失败 >=2 轮，你必须判定 wasActionCorrect=false 且 goalAlignment=deviated，并在 nextHint 强制要求“换策略/换动作链，不得重复同动作”。",
 		`missionGoal: ${mission.missionGoal}`,
 		`initialState: ${mission.initialStateSummary || "(none)"}`,
 		`hardConstraints: ${mission.hardConstraints.join(" | ") || "(none)"}`,
@@ -4246,9 +4306,82 @@ function resolveOperationalGameContext(
 	return inferTaskModeFromTaskText(taskText) === "game" ? candidateGameContext : null;
 }
 
-function resolveOperationsNarration(_planner: OperationsPlannerDecision, _canPlannerFinish: boolean): string {
-		return "";
+function resolveOperationsNarration(
+	planner: OperationsPlannerDecision,
+	canPlannerFinish: boolean,
+	languageMode: ReplyLanguageMode,
+): string {
+	const raw = planner.reply.trim();
+	if (raw) {
+		const normalized = normalizeDelegatedCompanionReply(raw, "planner", languageMode);
+		if (normalized) {
+			return normalized;
+		}
 	}
+	if (canPlannerFinish) {
+		return languageMode === "en"
+			? "I think the task is complete now."
+			: "派蒙认为这次任务已经完成了。";
+	}
+	const firstAction = planner.actions[0];
+	const actionId = toText(firstAction?.args.actionId || firstAction?.args.key);
+	if (actionId) {
+		return languageMode === "en"
+			? `I’ll try ${formatActionForNarration(actionId)} first.`
+			: `派蒙先试试${formatActionForNarration(actionId)}。`;
+	}
+	return languageMode === "en"
+		? "I’ll try the next step now."
+		: "派蒙先试试下一步。";
+}
+
+function resolveReflectionNarration(
+	reflection: ProgressEvaluatorDecision,
+	executionError: string,
+	languageMode: ReplyLanguageMode,
+): string {
+	const raw = reflection.reply.trim();
+	if (raw) {
+		const normalized = normalizeDelegatedCompanionReply(raw, "reflection", languageMode);
+		if (normalized) {
+			return normalized;
+		}
+	}
+	if (executionError) {
+		return languageMode === "en"
+			? "That attempt stopped early, so I’ll revise the route."
+			: "这次尝试提前停住了，派蒙会重新修正路线。";
+	}
+	if (reflection.expectedMet || reflection.actionSucceeded || didBoardTaskMakeProgress(reflection)) {
+		return languageMode === "en"
+			? "That step changed the board, so I’ll continue from here."
+			: "这一步棋盘有变化，派蒙继续推进。";
+	}
+	return languageMode === "en"
+		? "That step did not clearly work, so I’ll adjust."
+		: "这一步没有明显成功，派蒙调整一下。";
+}
+
+function formatActionForNarration(actionId: string): string {
+	switch (actionId) {
+		case "move_up":
+		case "Up":
+			return "up";
+		case "move_down":
+		case "Down":
+			return "down";
+		case "move_left":
+		case "Left":
+			return "left";
+		case "move_right":
+		case "Right":
+			return "right";
+		case "reset_level":
+			return "reset";
+		default:
+			return actionId.replace(/_/g, " ");
+	}
+}
 
 function resolveMissionAckReply(mission: MissionAnalysisDecision, taskText: string, languageMode: ReplyLanguageMode): string {
 	const fallback = languageMode === "en"
@@ -4487,8 +4620,8 @@ function buildLongSequenceAttemptLesson(input: {
 		input.failureDetail ? `失败点=${input.failureDetail}` : "",
 		input.reflection.latestDiagnosis ? `诊断=${input.reflection.latestDiagnosis}` : "",
 		input.reflection.planAssessment ? `路线评估=${input.reflection.planAssessment}` : "",
-		input.reflection.nextHint ? `下一轮避开=${input.reflection.nextHint}` : "",
-		"下一轮从重开后的初始局面重新规划；不要把本轮局部进展当成当前进度。",
+		input.reflection.nextHint ? `前缀修正=${input.reflection.nextHint}` : "",
+		"下一轮从重开后的初始局面重新规划；不要把本轮局部进展当成当前进度；不要仅因某个方向在本前缀失败就禁用该方向。",
 	].filter(Boolean);
 	return parts.join(" | ").slice(0, 900);
 }
@@ -4598,11 +4731,14 @@ function shouldInvalidateStrategy(
 }
 
 function isRestartAction(action: DelegatedTaskAction): boolean {
-	if (action.tool !== "host.send_mouse") {
-		return false;
+	if (action.tool === "game.perform_action") {
+		return toText(action.args.actionId) === "reset_level";
 	}
-	const argsText = normalizeStateSketchText(JSON.stringify(action.args));
-	return /restart|reset|重开|重新开始|紫红|粉红/.test(argsText);
+	if (action.tool === "host.send_mouse") {
+		const argsText = normalizeStateSketchText(JSON.stringify(action.args));
+		return /restart|reset|重开|重新开始|紫红|粉红/.test(argsText);
+	}
+	return false;
 }
 
 function didRestartActionSucceed(
@@ -4850,6 +4986,7 @@ function detectPlannerPolicyIssue(input: {
 	actions: DelegatedTaskAction[];
 	latestHint: string;
 	recentActionOutcomes: ActionOutcomeRecord[];
+	longSequenceMode?: boolean;
 }): string {
 	if (!input.goalReached && !input.expectedOutcome.trim()) {
 		return "你漏掉了 expectedOutcome。请明确本轮动作执行后应观察到的可验证状态变化。";
@@ -4860,7 +4997,7 @@ function detectPlannerPolicyIssue(input: {
 	const firstAction = input.actions[0];
 	const firstSignature = buildActionSignature(firstAction);
 	const consecutiveSameFailures = countRecentConsecutiveFailures(input.recentActionOutcomes, firstSignature);
-	if (consecutiveSameFailures >= 2) {
+	if (!input.longSequenceMode && consecutiveSameFailures >= 2) {
 		return `动作 ${firstSignature} 已连续失败 ${consecutiveSameFailures} 轮。必须更换动作策略，禁止再次输出同签名动作。`;
 	}
 	const latestHintNormalized = input.latestHint.toLowerCase();
@@ -4925,7 +5062,7 @@ function countRecentConsecutiveFailures(
 	return count;
 }
 
-function buildRepeatedFailureHint(outcomes: readonly ActionOutcomeRecord[]): string {
+function buildRepeatedFailureHint(outcomes: readonly ActionOutcomeRecord[], options: { longSequenceMode?: boolean } = {}): string {
 	if (outcomes.length < 2) {
 		return "";
 	}
@@ -4939,6 +5076,12 @@ function buildRepeatedFailureHint(outcomes: readonly ActionOutcomeRecord[]): str
 	}
 	if (last.actionSucceeded || previous.actionSucceeded) {
 		return "";
+	}
+	if (options.longSequenceMode) {
+		return pickReplyLanguageText(
+			`相同动作“${last.signature}”在最近失败前缀中重复失败。不要禁用这个方向；下一轮必须修正失败前缀、站位或路线几何，并说明这次为何不同。`,
+			`Same action “${last.signature}” failed in recent prefixes. Do not ban that direction; next round must fix the failed prefix, stance, or route geometry and explain why this attempt differs.`,
+		);
 	}
 	return pickReplyLanguageText(
 		`相同动作“${last.signature}”连续失败。下一轮必须换策略，不得重复同动作；优先改为可直接推进目标状态的动作链。`,
@@ -5050,6 +5193,7 @@ export const __test = {
 	normalizeStateSketchText,
 	buildStrategyLesson,
 	resolveOperationsNarration,
+	resolveReflectionNarration,
 	buildInitialCanonicalBoard,
 	canLockInitialBoardTopology,
 	scoreInitialBoardObservation,
@@ -5059,10 +5203,14 @@ export const __test = {
 	inferDelegationReplyLanguageMode,
 	buildOperationsPlannerUserPrompt,
 	buildOperationsPlannerSystemPrompt,
+	buildProgressEvaluatorSystemPrompt,
 	countRawPlannerActions,
 	extractRawPlannerActionIds,
 	detectLongSequencePlannerIssue,
+	detectPlannerPolicyIssue,
+	buildRepeatedFailureHint,
 	classifySnapshotChangeScore,
+	buildLongSequenceSnapshotChangeOptions,
 	detectLongSequenceRecoveryReason,
 	resetRouteStateAfterLongSequenceRecovery,
 } as const;

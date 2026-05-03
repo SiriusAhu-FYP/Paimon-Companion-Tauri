@@ -23,6 +23,7 @@ const {
 	didBoardTaskMakeProgress,
 	buildStrategyLesson,
 	resolveOperationsNarration,
+	resolveReflectionNarration,
 	buildInitialCanonicalBoard,
 	reconcileBoardObservationWithRouteState,
 	reconcileSokobanDynamicBoard,
@@ -32,10 +33,14 @@ const {
 	inferDelegationReplyLanguageMode,
 	buildOperationsPlannerUserPrompt,
 	buildOperationsPlannerSystemPrompt,
+	buildProgressEvaluatorSystemPrompt,
 	countRawPlannerActions,
 	extractRawPlannerActionIds,
 	detectLongSequencePlannerIssue,
+	detectPlannerPolicyIssue,
+	buildRepeatedFailureHint,
 	classifySnapshotChangeScore,
+	buildLongSequenceSnapshotChangeOptions,
 	detectLongSequenceRecoveryReason,
 	resetRouteStateAfterLongSequenceRecovery,
 } = __test;
@@ -154,8 +159,114 @@ describe("delegation long sequence planning helpers", () => {
 
 	it("classifies tiny screenshot diffs as unchanged for long-sequence step verification", () => {
 		expect(classifySnapshotChangeScore(0)).toBe(true);
-		expect(classifySnapshotChangeScore(0.001)).toBe(true);
+		expect(classifySnapshotChangeScore(0.0007)).toBe(true);
+		expect(classifySnapshotChangeScore(0.001)).toBe(false);
+		expect(classifySnapshotChangeScore(0.002)).toBe(false);
 		expect(classifySnapshotChangeScore(0.01)).toBe(false);
+	});
+
+	it("does not ban repeated movement directions in long-sequence planner policy", () => {
+		const actions = [
+			{ tool: "game.perform_action", args: { actionId: "move_right", gameId: "sokoban" } },
+		];
+		const recentActionOutcomes = [
+			makeActionOutcome("game.perform_action|actionId=move_right"),
+			makeActionOutcome("game.perform_action|actionId=move_right"),
+		];
+
+		expect(detectPlannerPolicyIssue({
+			goalReached: false,
+			expectedOutcome: "try a corrected route",
+			actions,
+			latestHint: "",
+			recentActionOutcomes,
+			longSequenceMode: true,
+		})).toBe("");
+		expect(detectPlannerPolicyIssue({
+			goalReached: false,
+			expectedOutcome: "try a corrected route",
+			actions,
+			latestHint: "",
+			recentActionOutcomes,
+			longSequenceMode: false,
+		})).toContain("禁止再次输出同签名动作");
+	});
+
+	it("turns repeated long-sequence action failures into prefix lessons instead of direction bans", () => {
+		const hint = buildRepeatedFailureHint([
+			makeActionOutcome("game.perform_action|actionId=move_right"),
+			makeActionOutcome("game.perform_action|actionId=move_right"),
+		], { longSequenceMode: true });
+
+		expect(hint).toContain("不要禁用这个方向");
+		expect(hint).toContain("修正失败前缀");
+		expect(hint).not.toContain("不得重复同动作");
+	});
+
+	it("keeps repeated-action bans in normal step-by-step mode", () => {
+		const hint = buildRepeatedFailureHint([
+			makeActionOutcome("game.perform_action|actionId=move_right"),
+			makeActionOutcome("game.perform_action|actionId=move_right"),
+		], { longSequenceMode: false });
+
+		expect(hint).toContain("不得重复同动作");
+	});
+
+	it("uses the configured vision crop for long-sequence snapshot change checks", () => {
+		const options = buildLongSequenceSnapshotChangeOptions({
+			visionPreprocess: {
+				enabled: true,
+				mode: "crop-only",
+				crop: { xNorm: 0.36, yNorm: 0.08, widthNorm: 0.32, heightNorm: 0.88 },
+				maxWidth: 960,
+				maxHeight: 720,
+				format: "png",
+				quality: 1,
+			},
+		} as never);
+
+		expect(options.threshold).toBe(0.00075);
+		expect(options.crop).toEqual({ xNorm: 0.36, yNorm: 0.08, widthNorm: 0.32, heightNorm: 0.88 });
+	});
+
+	it("falls back to spoken planner narration when the model reply is empty", () => {
+		const narration = resolveOperationsNarration({
+			goalReached: false,
+			reasoning: "",
+			reply: "",
+			expectedOutcome: "",
+			stateSketch: "",
+			currentPhaseGoal: "",
+			whyThisPhase: "",
+			abortCondition: "",
+			activeStrategy: "",
+			strategyRevision: "",
+			routeSelfCheck: "",
+			committedRoute: "",
+			currentRouteStep: "",
+			routeRisks: [],
+			actions: [{ tool: "game.perform_action", args: { actionId: "move_right", gameId: "sokoban" } }],
+		}, false, "en");
+
+		expect(narration).toContain("right");
+	});
+
+	it("falls back to spoken evaluator narration when interrupted reflection has no reply", () => {
+		const narration = resolveReflectionNarration(
+			makeReflection({ reply: "", expectedMet: false, actionSucceeded: false }),
+			"Long sequence stopped at step 1/12",
+			"en",
+		);
+
+		expect(narration).toContain("stopped early");
+	});
+
+	it("uses a long-sequence evaluator prompt that diagnoses failed prefixes without banning directions", () => {
+		const prompt = buildProgressEvaluatorSystemPrompt([], makeMission(), { longSequenceMode: true });
+
+		expect(prompt).toContain("动作前缀");
+		expect(prompt).toContain("不要把“某方向在某个站位失败”泛化成永远禁止该方向");
+		expect(prompt).not.toContain("不得重复同动作");
 	});
 
 	it("resets after an interrupted long sequence attempt", () => {
@@ -198,6 +309,34 @@ describe("delegation long sequence planning helpers", () => {
 		expect(result?.invalidatedRouteLessons).toEqual(["lesson"]);
 	});
 });
+
+function makeActionOutcome(signature: string) {
+	return {
+		signature,
+		actionSucceeded: false,
+		wasActionCorrect: false,
+		goalAlignment: "unchanged" as const,
+		goalProgress: "none" as const,
+		madeProgress: false,
+	};
+}
+
+function makeMission() {
+	return {
+		taskMode: "game" as const,
+		missionGoal: "Solve the current Sokoban level.",
+		hardConstraints: [],
+		subtaskChain: [],
+		completionSignals: [],
+		candidateStrategies: [],
+		strategyWarnings: [],
+		initialStateSummary: "",
+		initialStateSketch: "",
+		analysisReply: "",
+		ackReply: "",
+		reply: "",
+	};
+}
 
 function makeBoardObservation(boardGrid: string, overrides: Record<string, unknown> = {}) {
 	return {
@@ -980,7 +1119,7 @@ describe("buildStrategyLesson", () => {
 });
 
 describe("resolveOperationsNarration", () => {
-		it("returns empty string (narrations are now silent)", () => {
+		it("falls back to a spoken first-action narration", () => {
 			const planner = {
 				goalReached: false,
 				reasoning: "",
@@ -994,11 +1133,11 @@ describe("resolveOperationsNarration", () => {
 				strategyRevision: "",
 				actions: [{ tool: "host.send_key", args: { key: "Left" } }],
 			};
-			const result = resolveOperationsNarration(planner, false);
-			expect(result).toBe("");
+			const result = resolveOperationsNarration(planner, false, "en");
+			expect(result).toContain("left");
 		});
 
-		it("returns empty string even when goalReached and canFinish", () => {
+		it("uses planner reply when goalReached and canFinish", () => {
 			const planner = {
 				goalReached: true,
 				reasoning: "",
@@ -1012,11 +1151,11 @@ describe("resolveOperationsNarration", () => {
 				strategyRevision: "",
 				actions: [],
 			};
-			const result = resolveOperationsNarration(planner, true);
-			expect(result).toBe("");
+			const result = resolveOperationsNarration(planner, true, "zh");
+			expect(result).toBe("任务已完成");
 		});
 
-		it("returns empty string for game.perform_action tool", () => {
+		it("falls back to a game.perform_action narration", () => {
 			const planner = {
 				goalReached: false,
 				reasoning: "",
@@ -1030,7 +1169,7 @@ describe("resolveOperationsNarration", () => {
 				strategyRevision: "",
 				actions: [{ tool: "game.perform_action", args: { actionId: "move_up" } }],
 			};
-			const result = resolveOperationsNarration(planner, false);
-			expect(result).toBe("");
+			const result = resolveOperationsNarration(planner, false, "en");
+			expect(result).toContain("up");
 		});
 	});
