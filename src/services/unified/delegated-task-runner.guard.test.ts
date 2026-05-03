@@ -31,6 +31,7 @@ const {
 	scoreInitialBoardObservation,
 	inferDelegationReplyLanguageMode,
 	buildOperationsPlannerUserPrompt,
+	buildOperationsPlannerSystemPrompt,
 	countRawPlannerActions,
 	extractRawPlannerActionIds,
 	detectLongSequencePlannerIssue,
@@ -92,6 +93,34 @@ describe("delegation long sequence planning helpers", () => {
 		expect(prompt).toContain("must not stop at a setup position");
 		expect(prompt).toContain("up to 100 actions");
 		expect(prompt).toContain("fewer than 12 actions");
+	});
+
+	it("puts long-sequence min/max action counts in the planner system prompt", () => {
+		const prompt = buildOperationsPlannerSystemPrompt({
+			allowedTools: ["game.perform_action"],
+			maxActionsPerRound: 100,
+			minActionsPerRound: 12,
+			rules: [],
+			gameContext: GAME_CONTEXT,
+			longSequenceMode: true,
+			mission: {
+				taskMode: "game",
+				missionGoal: "Solve the current Sokoban level.",
+				hardConstraints: [],
+				subtaskChain: [],
+				completionSignals: [],
+				candidateStrategies: [],
+				strategyWarnings: [],
+				initialStateSummary: "",
+				initialStateSketch: "",
+				analysisReply: "",
+				ackReply: "",
+				reply: "",
+			},
+		});
+
+		expect(prompt).toContain("12 到 100");
+		expect(prompt).toContain("actions 不应少于 12");
 	});
 
 	it("counts raw planner actions before normalization", () => {
