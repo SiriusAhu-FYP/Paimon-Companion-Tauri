@@ -667,6 +667,8 @@ export async function runDelegatedTaskLoop(input: {
 		reflection = applyMissionCompletionGuard(reflection, gameContext);
 		reflection = applySokobanDeadlockGuard(reflection, gameContext);
 		reflection = applySokobanPushTargetDirectionGuard(reflection, gameContext, lastExecutedAction, planner);
+		reflection = applySokobanPushIntentOutcomeGuard(reflection, gameContext, lastExecutedAction, planner);
+		reflection = applyEvaluatorHierarchyGuard(reflection, gameContext);
 		if (batchExecutionError) {
 			reflection = {
 				...reflection,
@@ -718,7 +720,7 @@ export async function runDelegatedTaskLoop(input: {
 			reflection,
 		});
 		pushStrategyLesson(strategyLessons, strategyLesson, 4);
-		if (shouldInvalidateStrategy(planner, reflection)) {
+		if (shouldInvalidateStrategy(planner, reflection, gameContext)) {
 			pushInvalidatedStrategy(invalidatedStrategies, planner.activeStrategy);
 		}
 		const repeatedFailureHint = buildRepeatedFailureHint(recentActionOutcomes);
@@ -765,7 +767,7 @@ export async function runDelegatedTaskLoop(input: {
 		latestStrategyRevision = planner.strategyRevision || latestStrategyRevision;
 		latestPlanViability = reflection.planViability;
 		latestPlanAssessment = reflection.planAssessment || latestPlanAssessment;
-		if (shouldInvalidateStrategy(planner, reflection)) {
+		if (shouldInvalidateStrategy(planner, reflection, gameContext)) {
 			latestHint = combineHints(
 				latestHint,
 				pickReplyLanguageText(
@@ -1011,6 +1013,9 @@ function buildOperationsPlannerSystemPrompt(input: {
 		"根据 Mission 的 subtaskChain 分阶段推进，每轮只推进一个最小可验证状态变化。",
 		"对复杂棋盘任务，必须显式维护 currentPhaseGoal / whyThisPhase / abortCondition。phaseGoal 应描述当前阶段要创造的中间态，而不只是最终目标。",
 		"对复杂推箱子任务，优先围绕“释放空间、调整箱子相对关系、验证候选路线”选择 activeStrategy，而不是贪心地先完成看起来最近的箱子。",
+		"对推箱子任务，任何推动箱子的动作都必须在 reasoning 或 expectedOutcome 中显式写清：目标箱子、箱子要移动的方向、P 必须站在箱子的哪一侧、P 当前是否已经在该侧、最终 actionId。若 P 不在正确侧，本轮只能先走位，不能假装已经能推。",
+		"推箱几何硬规则：箱子向左，P 必须在箱子右侧并执行 move_left；箱子向右，P 必须在箱子左侧并执行 move_right；箱子向上，P 必须在箱子下侧并执行 move_up；箱子向下，P 必须在箱子上侧并执行 move_down。",
+		"不要把“高层策略失败”和“站位/方向执行失败”混为一谈。若 lower-box-first 这类高层路线还可能成立，只修正具体站位或动作方向，不要把整类路线写进 invalidatedStrategies。",
 		"activeStrategy 应代表当前正在验证的高层路线；strategyRevision 用一句话说明本轮是否维持、修正或放弃原路线。",
 		"若 scratchpadContext 中已经列出 invalidatedStrategies，禁止继续复用这些已被否决的高层路线，必须改选候选路线或明确修正原路线。",
 		"允许为了更优解暂时把箱子推离目标点，只要这个中间态明确服务于后续解题；不要把“某箱已经在目标点上”自动等同于整个策略结束。",
@@ -1123,6 +1128,9 @@ function buildProgressEvaluatorSystemPrompt(rules: string[], mission: MissionAna
 		"你是 Progress Evaluator。你会收到 before/after 两张图。",
 		"你不仅要判断是否有变化，还要判断动作是否做对、是否朝 mission 目标推进。",
 		"你必须检查 preExpectedOutcome 是否达成，并输出 expectedMet（布尔）与 expectationReview（一句话）。",
+		"层级判定规则：expectedMet 是本轮动作正确性的主判定。若 expectedMet=false，wasActionCorrect 默认必须为 false；除非 after 图显示了一个明确、非预期但有价值的替代中间态，也只能在 planViability/phaseAssessment 里说明，不能把原动作判为正确。",
+		"actionSucceeded 只表示动作是否造成可见执行结果；wasActionCorrect 表示该执行是否符合本轮预期；goalProgress 表示整关目标是否推进。三者不得混用。",
+		"如果本轮预期是推动箱子，但 after 图显示只有 P 移动、箱子没有移动，则 expectedMet=false、wasActionCorrect=false、goalProgress=none；除非该纯走位正好是 currentPhaseGoal 明确要求的站位。",
 		"若 preExpectedOutcome 未达成，nextHint 必须明确给出修正动作链，不能只给抽象建议。",
 		"你还必须判断当前阶段目标是否推进，输出 phaseStatus（advanced|stalled|blocked|completed）和 phaseAssessment（一句话）。",
 		"phaseStatus=completed 只表示当前阶段完成，不等于整个 mission 完成；mission 是否完成仍必须严格服从 completionSignals。",
@@ -1653,7 +1661,7 @@ function applySokobanPushTargetDirectionGuard(
 		goalAlignment: "deviated",
 		goalProgress: "none",
 		phaseStatus: "blocked",
-		planViability: "invalidated",
+		planViability: reflection.planViability === "invalidated" ? "invalidated" : "weakened",
 		phaseAssessment: combineHints(
 			reflection.phaseAssessment,
 			pickReplyLanguageText(
@@ -1664,12 +1672,105 @@ function applySokobanPushTargetDirectionGuard(
 		planAssessment: combineHints(
 			reflection.planAssessment,
 			pickReplyLanguageText(
-				"当前收尾路线已失效：不能站在目标格一侧把相邻箱子继续向外推。",
-				"The current finishing route is invalid: do not stand on the target side and push the adjacent box outward.",
+				"当前具体收尾推法已失效：不能站在目标格一侧把相邻箱子继续向外推；但不要因此否掉整个箱子-目标分配策略，先修正站位和推向。",
+				"The current concrete finishing push is invalid: do not stand on the target side and push the adjacent box outward; do not invalidate the whole box-target strategy just because the stance/direction was wrong.",
 			),
 		),
 		nextHint: combineHints(reflection.nextHint, correction),
 	};
+}
+
+function applySokobanPushIntentOutcomeGuard(
+	reflection: ProgressEvaluatorDecision,
+	gameContext: DelegatedGameContext | null,
+	action: DelegatedTaskAction,
+	planner: OperationsPlannerDecision,
+): ProgressEvaluatorDecision {
+	if (gameContext?.gameId !== "sokoban" || isSokobanMissionComplete(reflection)) {
+		return reflection;
+	}
+	const actionId = getSokobanMoveActionId(action);
+	if (!actionId || reflection.expectedMet) {
+		return reflection;
+	}
+	const intentText = normalizeStateSketchText([
+		planner.expectedOutcome,
+		planner.currentPhaseGoal,
+		planner.whyThisPhase,
+	].join(" "));
+	const intendedBoxPush = /box|boxes|push|pushed|箱子|推/.test(intentText);
+	if (!intendedBoxPush) {
+		return reflection;
+	}
+	const outcomeText = normalizeStateSketchText([
+		reflection.expectationReview,
+		reflection.phaseAssessment,
+		reflection.planAssessment,
+		reflection.stateDelta,
+	].join(" "));
+	const onlyPlayerMoved = /only.*player.*moved|onlytheplayermoved|p\s*moved|playermoved|玩家.*移动|只.*玩家/.test(outcomeText)
+		&& /nobox|box.*didnotmove|box.*stayed|boxes.*stayed|box.*not.*pushed|箱子.*未|箱子.*没有|没有推/.test(outcomeText);
+	if (!onlyPlayerMoved) {
+		return reflection;
+	}
+	return {
+		...reflection,
+		actionSucceeded: true,
+		wasActionCorrect: false,
+		expectedMet: false,
+		goalAlignment: reflection.goalAlignment === "achieved" ? "deviated" : "unchanged",
+		goalProgress: "none",
+		phaseStatus: reflection.phaseStatus === "completed" ? "blocked" : reflection.phaseStatus,
+		planViability: reflection.planViability === "strengthened" ? "weakened" : reflection.planViability,
+		phaseAssessment: combineHints(
+			reflection.phaseAssessment,
+			pickReplyLanguageText(
+				"本轮预期是推箱，但实际只移动了玩家；这是站位或推向错误，不是目标进展。",
+				"This round intended a box push, but only the player moved; this is a stance/direction error, not goal progress.",
+			),
+		),
+		nextHint: combineHints(
+			reflection.nextHint,
+			buildSokobanPushGeometryHint(actionId),
+		),
+	};
+}
+
+function applyEvaluatorHierarchyGuard(
+	reflection: ProgressEvaluatorDecision,
+	gameContext: DelegatedGameContext | null,
+): ProgressEvaluatorDecision {
+	if (!gameContext || hasBoardTaskCompletionEvidence(reflection) || isSokobanMissionComplete(reflection)) {
+		return reflection;
+	}
+	let next = { ...reflection };
+	if (!next.expectedMet) {
+		next.wasActionCorrect = false;
+		if (next.goalProgress === "done") {
+			next.goalProgress = "partial";
+		}
+		if (next.goalAlignment === "achieved") {
+			next.goalAlignment = next.actionSucceeded ? "closer" : "unchanged";
+		}
+	}
+	const joinedAssessment = normalizeStateSketchText([
+		next.expectationReview,
+		next.phaseAssessment,
+		next.planAssessment,
+		next.stateDelta,
+	].join(" "));
+	const saysDidNotAdvance = /didnotadvance|notadvance|notprogress|lostsetup|setup.*lost|phase.*didnot|没有推进|未推进|没有达成|未达成|站位.*丢失/.test(joinedAssessment);
+	if (!next.expectedMet && saysDidNotAdvance) {
+		next = {
+			...next,
+			wasActionCorrect: false,
+			goalAlignment: next.goalAlignment === "deviated" ? "deviated" : "unchanged",
+			goalProgress: "none",
+			phaseStatus: next.phaseStatus === "blocked" ? "blocked" : "stalled",
+			planViability: next.planViability === "invalidated" ? "invalidated" : "weakened",
+		};
+	}
+	return next;
 }
 
 function getSokobanMoveActionId(action: DelegatedTaskAction): string {
@@ -1732,8 +1833,8 @@ function isPushingAwayFromPlayerTarget(sketch: string, actionId: string): boolea
 
 function buildSokobanPushTargetDirectionHint(actionId: string): string {
 	const suffix = pickReplyLanguageText(
-		"当前收尾路线已被否决；不要继续修补同一最后推法。若无法立即绕到正确推箱侧，请点击右上角紫红色/偏粉红色重置按钮重开。",
-		"The current finishing route is invalidated; do not keep patching the same final push. If you cannot immediately route to the correct push side, click the purple-pink restart button in the upper-right corner.",
+		"当前具体收尾推法已被否决；不要继续修补同一最后推法。若无法立即绕到正确推箱侧，请点击右上角紫红色/偏粉红色重置按钮重开。",
+		"The current concrete finishing push is invalidated; do not keep patching the same final push. If you cannot immediately route to the correct push side, click the purple-pink restart button in the upper-right corner.",
 	);
 	if (actionId === "move_right") {
 		return pickReplyLanguageText(
@@ -1762,6 +1863,37 @@ function buildSokobanPushTargetDirectionHint(actionId: string): string {
 	return pickReplyLanguageText(
 		`重新确认目标、P、箱子的相对位置：要把箱子推到目标上，P 必须站在箱子与目标相反的一侧，然后朝目标方向推。${suffix}`,
 		`Reconfirm target/P/box geometry: to push a box onto a target, P must stand on the opposite side of the box and push toward the target. ${suffix}`,
+	);
+}
+
+function buildSokobanPushGeometryHint(actionId: string): string {
+	const directionRule = actionId === "move_left"
+		? pickReplyLanguageText(
+			"若要让箱子向左，P 必须先站到箱子右侧，再执行 move_left。",
+			"To move a box left, P must first stand on the box's right side, then execute move_left.",
+		)
+		: actionId === "move_right"
+			? pickReplyLanguageText(
+				"若要让箱子向右，P 必须先站到箱子左侧，再执行 move_right。",
+				"To move a box right, P must first stand on the box's left side, then execute move_right.",
+			)
+			: actionId === "move_up"
+				? pickReplyLanguageText(
+					"若要让箱子向上，P 必须先站到箱子下方，再执行 move_up。",
+					"To move a box up, P must first stand below the box, then execute move_up.",
+				)
+				: actionId === "move_down"
+					? pickReplyLanguageText(
+						"若要让箱子向下，P 必须先站到箱子上方，再执行 move_down。",
+						"To move a box down, P must first stand above the box, then execute move_down.",
+					)
+					: pickReplyLanguageText(
+						"推箱前必须重新确认 P、箱子、目标三者方向关系。",
+						"Before pushing, reconfirm the directional relationship between P, the box, and the target.",
+					);
+	return pickReplyLanguageText(
+		`${directionRule} 下一轮先写清“目标箱子、目标方向、P 所需站位、P 当前站位”，若当前站位不满足，只做走位，不要把整条高层路线判死。`,
+		`${directionRule} Next round, explicitly state target box, target direction, required P side, and current P side. If the current stance is wrong, only reposition; do not invalidate the whole high-level route.`,
 	);
 }
 
@@ -3041,8 +3173,13 @@ function detectInvalidatedStrategyReuse(strategy: string, invalidatedStrategies:
 		if (!concepts.length) {
 			return false;
 		}
+		const invalidatedText = normalizeStrategyIdentity(item);
+		const hardInvalidated = /deadlock|restart|reset|unrecoverable|死局|重置|重开|无法恢复/.test(invalidatedText);
+		if (!hardInvalidated) {
+			return false;
+		}
 		const overlap = strategyConcepts.filter((concept) => concepts.includes(concept));
-		return overlap.length >= 2;
+		return overlap.length >= 3;
 	});
 	if (!fuzzyMatched) {
 		return "";
@@ -3056,18 +3193,26 @@ function detectInvalidatedStrategyReuse(strategy: string, invalidatedStrategies:
 function shouldInvalidateStrategy(
 	planner: OperationsPlannerDecision,
 	reflection: ProgressEvaluatorDecision,
+	gameContext: DelegatedGameContext | null = null,
 ): boolean {
 	if (!normalizeStrategyIdentity(planner.activeStrategy)) {
 		return false;
-	}
-	if (reflection.planViability === "invalidated") {
-		return true;
 	}
 	const joined = normalizeStateSketchText([
 		reflection.phaseAssessment,
 		reflection.planAssessment,
 		reflection.nextHint,
 	].join(" "));
+	if (gameContext?.gameId === "sokoban") {
+		const hardInvalidation = /死局|deadlock|重置|restart|unrecoverable|无法恢复/.test(joined);
+		if (reflection.planViability === "invalidated") {
+			return hardInvalidation;
+		}
+		return hardInvalidation && /错误路线|invalidated|不要重复|avoidrepeating/.test(joined);
+	}
+	if (reflection.planViability === "invalidated") {
+		return true;
+	}
 	return /死局|deadlock|重置|restart|不要重复|avoidrepeating|错误路线|invalidated/.test(joined);
 }
 
@@ -3426,6 +3571,8 @@ export const __test = {
 	applyMissionCompletionGuard,
 	applySokobanDeadlockGuard,
 	applySokobanPushTargetDirectionGuard,
+	applySokobanPushIntentOutcomeGuard,
+	applyEvaluatorHierarchyGuard,
 	detectInvalidatedStrategyReuse,
 	didRestartActionSucceed,
 	shouldInvalidateStrategy,

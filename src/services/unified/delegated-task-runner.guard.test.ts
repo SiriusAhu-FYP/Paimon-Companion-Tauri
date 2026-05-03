@@ -8,6 +8,8 @@ const {
 	applyMissionCompletionGuard,
 	applySokobanDeadlockGuard,
 	applySokobanPushTargetDirectionGuard,
+	applySokobanPushIntentOutcomeGuard,
+	applyEvaluatorHierarchyGuard,
 	detectInvalidatedStrategyReuse,
 	didRestartActionSucceed,
 	shouldInvalidateStrategy,
@@ -319,10 +321,18 @@ describe("strategy invalidation helpers", () => {
 		expect(issue).toContain("错误");
 	});
 
-	it("blocks planner from reusing a semantically similar invalidated route", () => {
+	it("does not block broad strategy families after a non-hard invalidation", () => {
 		const issue = detectInvalidatedStrategyReuse(
 			"Use the upper box for the upper-right target first, then finish the lower box.",
 			["Convert the current staged position into the safe partial completion: upper box to upper-right target first, then use the remaining space to finish the lower box onto the lower-left target."],
+		);
+		expect(issue).toBe("");
+	});
+
+	it("blocks semantically similar strategies only after hard deadlock/restart evidence", () => {
+		const issue = detectInvalidatedStrategyReuse(
+			"Use the upper box for the upper-right target first, then finish the lower box.",
+			["Deadlock restart route: upper box to upper-right target first, then finish the lower box onto the lower-left target."],
 		);
 		expect(issue).toContain("相似");
 	});
@@ -502,7 +512,7 @@ describe("applySokobanPushTargetDirectionGuard", () => {
 		);
 
 		expect(result.wasActionCorrect).toBe(false);
-		expect(result.planViability).toBe("invalidated");
+		expect(result.planViability).toBe("weakened");
 		expect(result.nextHint).toContain("move_left");
 	});
 
@@ -560,8 +570,67 @@ describe("applySokobanPushTargetDirectionGuard", () => {
 		);
 
 		expect(result.wasActionCorrect).toBe(false);
-		expect(result.planViability).toBe("invalidated");
+		expect(result.planViability).toBe("weakened");
 		expect(result.nextHint).toContain("重置按钮");
+	});
+});
+
+describe("push intent and evaluator hierarchy guards", () => {
+	it("downgrades box-push intent when only the player moved", () => {
+		const result = applySokobanPushIntentOutcomeGuard(
+			makeReflection({
+				expectedMet: false,
+				actionSucceeded: true,
+				wasActionCorrect: true,
+				goalAlignment: "closer",
+				goalProgress: "partial",
+				phaseStatus: "advanced",
+				planViability: "strengthened",
+				stateDelta: "Only the player moved one tile right; both boxes stayed fixed and no box was pushed.",
+				expectationReview: "The lower box did not move onto the lower-left target.",
+			}),
+			GAME_CONTEXT,
+			{ tool: "game.perform_action", args: { actionId: "move_right" } },
+			{
+				goalReached: false,
+				reasoning: "",
+				reply: "",
+				expectedOutcome: "The lower box moves one tile left onto the lower-left target.",
+				stateSketch: "",
+				currentPhaseGoal: "Place the lower box onto the lower target while keeping the upper box movable.",
+				whyThisPhase: "",
+				abortCondition: "",
+				activeStrategy: "Solve the lower target first.",
+				strategyRevision: "",
+				actions: [],
+			},
+		);
+
+		expect(result.actionSucceeded).toBe(true);
+		expect(result.wasActionCorrect).toBe(false);
+		expect(result.goalProgress).toBe("none");
+		expect(result.planViability).toBe("weakened");
+		expect(result.nextHint).toContain("P 必须先站到箱子左侧");
+	});
+
+	it("keeps physical execution success but rejects correctness when expectedMet is false", () => {
+		const result = applyEvaluatorHierarchyGuard(
+			makeReflection({
+				expectedMet: false,
+				actionSucceeded: true,
+				wasActionCorrect: true,
+				goalAlignment: "closer",
+				goalProgress: "partial",
+				phaseStatus: "advanced",
+				phaseAssessment: "The phase did not advance because the lower box was not placed on target and setup was lost.",
+			}),
+			GAME_CONTEXT,
+		);
+
+		expect(result.actionSucceeded).toBe(true);
+		expect(result.wasActionCorrect).toBe(false);
+		expect(result.goalProgress).toBe("none");
+		expect(result.phaseStatus).toBe("stalled");
 	});
 });
 

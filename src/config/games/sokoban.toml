@@ -103,6 +103,8 @@ operationsPlannerRules = [
 	"stateSketch 中必须逐行标注 P/B/T 的行列位置；sparse 棋盘上一行之差会导致无效动作，不得跨行推定。",
 	"棋盘表示必须使用标准符号：# 墙, . 地砖, P 玩家, B 箱子, T 目标点, * 箱子在目标点, + 玩家在目标点。不要使用 W/_ 等非标准符号。",
 	"下一个动作必须明确对应具体局面目标，例如让 P 靠近哪个 B、把哪个 B 推向哪个 T、或把 B 推到 T 上。",
+	"任何推箱动作必须先做推箱几何校验：写清目标箱子、箱子要移动方向、P 必须站在箱子的哪一侧、P 当前是否已经在该侧、最终 actionId。若 P 不在正确侧，本轮只能先走位。",
+	"推箱方向规则：箱子向左=P 在箱子右侧并 move_left；箱子向右=P 在箱子左侧并 move_right；箱子向上=P 在箱子下方并 move_up；箱子向下=P 在箱子上方并 move_down。",
 	"推动箱子前必须检查箱子后方一格是否可走；若后方是墙、箱子或棋盘外区域，则不要选择该推动。",
 	"如果最近连续两轮都没有确认 stateDelta，就先重建 stateSketch，并明确换一个局面目标；不要沿用同一套方向套路。",
 	"如果普通箱子 B 被推到贴墙且相邻方向又被墙/已完成箱子封住，导致剩余目标无法继续推进，应停止继续乱走，直接规划重置本关。",
@@ -111,6 +113,7 @@ operationsPlannerRules = [
 	"whyThisPhase 必须解释为什么当前阶段能改善整体可解空间；abortCondition 必须说明什么迹象代表这条路线正在堵死通道、损害其他箱子可达性或需要重开。",
 	"允许在多个箱子之间交错推进：某个箱子可以先移动到让路位置或临时位置，随后切换处理另一个箱子，再回到前一个箱子；不要要求一个箱子彻底完成后才处理另一个。",
 	"如果某条路线让另一个箱子后续无路可走、玩家无法绕到必要推位、或关键通道被堵死，应尽早否掉这条路线；不要在证明错误后继续尝试同一路线。",
+	"区分“高层路线失败”和“具体动作/站位失败”：如果只是 P 没站到正确推箱侧或 actionId 与箱子目标方向不匹配，只修正站位/方向，不要把 lower-box-first、upper-box-first 这类整类路线直接判死。",
 ]
 
 [delegationProfile.roles.progressEvaluator]
@@ -118,12 +121,15 @@ progressEvaluatorTemperature = 0.1
 progressEvaluatorThinkingMode = "medium"
 progressEvaluatorRules = [
 	"判断动作是否让玩家或箱子状态发生了有效推进。",
+	"expectedMet 是本轮动作正确性的主判定。若 expectedMet=false，wasActionCorrect 默认必须为 false；不要因为玩家移动了就把动作判为 correct。",
+	"actionSucceeded 只表示动作产生了可见执行结果；wasActionCorrect 表示是否符合 planner 本轮预期；goalProgress 表示整关目标是否推进。三者必须分开。",
 	"棋盘表示必须使用标准符号：# 墙, . 地砖, P 玩家, B 箱子, T 目标点, * 箱子在目标点, + 玩家在目标点。不要使用 W/_ 等非标准符号。",
 	"beforeStateSketch 与 afterStateSketch 必须用纯文本画出识别到的棋盘局面，至少标清 P/B/T/#/./*/+ 这些元素里能确认的部分。",
 	"stateDelta 必须明确说明哪些格子或相对位置发生了变化；如果棋盘基本没变，就明确写“无可确认变化”。",
 	"如果箱子从普通位置移动到绿色菱形目标点上，afterStateSketch 中应把该格标记为 *。",
 	"即使 stateDelta 中声称了变化，如果 beforeStateSketch 和 afterStateSketch 在网格级别完全相同，仍必须判定 actionSucceeded=false。",
 	"如果 before/after 没有可确认变化，则 actionSucceeded=false、expectedMet=false、goalProgress=none，不得判成功。",
+	"如果 planner 本轮预期是推动箱子或把箱子推到目标，但 after 图显示只有 P 移动、箱子没有移动，则 expectedMet=false、wasActionCorrect=false、goalProgress=none；nextHint 必须说明正确推箱侧和下一步站位。",
 	"不要从“按了某个方向键”反推出玩家或箱子已经移动；只有在 after 局面中可见变化时才算移动成立。",
 	"如果局面连续两轮没有可确认变化，nextHint 必须要求重新定位 P/B/T/# 并换一个局面目标，不能只说“再试一次”。",
 	"若 before/after 棋盘完全一致且有证据表明按键已发出（actionSucceeded 记录中可以看到），应优先判定移动被墙阻挡、站位错误或棋盘识别仍有歧义，而不是立刻归因于窗口焦点丢失。",
@@ -132,6 +138,7 @@ progressEvaluatorRules = [
 	"phaseStatus 必须反映当前阶段目标是否推进：advanced=更接近当前阶段中间态，stalled=没推进，blocked=当前阶段已走死或应放弃，completed=当前阶段目标完成但整关未必完成。",
 	"如果 currentPhaseGoal 完成了，但棋盘仍有未完成目标或下一步还必须继续移动其他箱子，goalProgress 只能是 partial，phaseStatus 可以是 completed；不要把阶段完成误判成整关完成。",
 	"planViability 必须评估当前整体路线是否更可信：strengthened=整体可达性更好，weakened=虽然有变化但通道/绕位/其他箱子可达性变差，invalidated=这条路线应放弃，unchanged=还不足以下结论。",
+	"只有死局、重置、关键通道被不可恢复地堵死时，才把高层路线判为 invalidated。单次站位错误、推向错误、或 actionId 与目标方向不匹配，应判为 weakened/blocked，并要求修正具体推法。",
 	"评估路线时必须考虑所有未完成箱子之后是否仍可达、玩家是否仍能绕到关键推位、关键通道是否被打开或堵死；不要只因为一个箱子更接近目标就给正面评价。",
 ]
 
