@@ -269,7 +269,7 @@ export async function runDelegatedTaskLoop(input: {
 		replyLanguageMode,
 		allowedTools,
 	});
-	const missionAckReply = resolveMissionAckReply(mission, input.taskText);
+	const missionAckReply = resolveMissionAckReply(mission, input.taskText, replyLanguageMode);
 	if (missionAckReply) {
 		await input.onAssistantReply?.(missionAckReply, "reflection");
 	}
@@ -492,7 +492,7 @@ export async function runDelegatedTaskLoop(input: {
 					maxActions: config.longSequence.maxActions,
 				})
 				: "";
-			const policyIssue = invalidatedStrategyIssue ?? longSequenceIssue ?? detectPlannerPolicyIssue({
+			const policyIssue = invalidatedStrategyIssue || longSequenceIssue || detectPlannerPolicyIssue({
 				goalReached: nextPlanner.goalReached,
 				expectedOutcome: nextPlanner.expectedOutcome,
 				actions: nextPlanner.actions,
@@ -522,6 +522,31 @@ export async function runDelegatedTaskLoop(input: {
 		}
 		const effectivePlannerActions = planner.actions;
 		noActionStreak = effectivePlannerActions.length ? 0 : noActionStreak + 1;
+		const tooShortLongSequenceIssue = longSequenceMode
+			? detectLongSequencePlannerIssue({
+				actions: effectivePlannerActions,
+				minActions: config.longSequence.minActions,
+				round,
+				maxActions: config.longSequence.maxActions,
+			})
+			: "";
+		if (tooShortLongSequenceIssue) {
+			log.error("long sequence planner rejected after retry", {
+				round,
+				actionCount: effectivePlannerActions.length,
+				minActions: config.longSequence.minActions,
+				issue: tooShortLongSequenceIssue,
+			});
+			return {
+				status: "failed",
+				rounds: round,
+				summary: pickReplyLanguageText(
+					`长序列规划失败：Planner 仍只给出 ${effectivePlannerActions.length}/${config.longSequence.minActions} 步，未达到完整解题序列要求。`,
+					`Long-sequence planning failed: Planner still produced only ${effectivePlannerActions.length}/${config.longSequence.minActions} actions, below the required complete-route threshold.`,
+				),
+				timeline: buildTimeline(),
+			};
+		}
 		const plannerNote = formatPlannerScratchpadNote({
 			round,
 			planner,
@@ -856,7 +881,7 @@ export async function runDelegatedTaskLoop(input: {
 			goalProgress: reflection.goalProgress,
 			phaseStatus: reflection.phaseStatus,
 		});
-		const reflectionReply = normalizeDelegatedCompanionReply(reflection.reply, "reflection");
+		const reflectionReply = normalizeDelegatedCompanionReply(reflection.reply, "reflection", replyLanguageMode);
 		if (reflectionReply) {
 			await input.onAssistantReply?.(reflectionReply, "reflection");
 		}
@@ -3945,17 +3970,19 @@ function resolveOperationsNarration(_planner: OperationsPlannerDecision, _canPla
 		return "";
 	}
 
-function resolveMissionAckReply(mission: MissionAnalysisDecision, taskText: string): string {
-	const fallback = `派蒙知道啦！你要我帮忙“${truncateTaskForAck(taskText)}”，派蒙这就去做。`;
+function resolveMissionAckReply(mission: MissionAnalysisDecision, taskText: string, languageMode: ReplyLanguageMode): string {
+	const fallback = languageMode === "en"
+		? `Received. I’ll start working on “${truncateTaskForAck(taskText, languageMode)}” now.`
+		: `派蒙知道啦！你要我帮忙“${truncateTaskForAck(taskText, languageMode)}”，派蒙这就去做。`;
 	const raw = mission.ackReply || fallback;
 	if (!raw) {
 		return "";
 	}
-	const normalized = normalizeDelegatedCompanionReply(raw, "planner");
+	const normalized = normalizeDelegatedCompanionReply(raw, "planner", languageMode);
 	return normalized || fallback;
 }
 
-function normalizeDelegatedCompanionReply(reply: string, _source: "planner" | "reflection"): string {
+function normalizeDelegatedCompanionReply(reply: string, source: "planner" | "reflection", languageMode: ReplyLanguageMode): string {
 		let text = reply.trim();
 		if (!text) {
 			return "";
@@ -3963,7 +3990,12 @@ function normalizeDelegatedCompanionReply(reply: string, _source: "planner" | "r
 		text = text
 			.replace(/（0x[0-9a-f]+）/gi, "")
 			.replace(/(0x[0-9a-f]+)/gi, "");
-		if (pickReplyLanguageText("zh", "en") === "zh") {
+		if (languageMode === "en" && hasCjkText(text)) {
+			return source === "planner"
+				? "I’ll execute the planned route now."
+				: "That sequence did not work; I need to rebuild the route.";
+		}
+		if (languageMode === "zh") {
 			text = text
 				.replace(/你已经/g, "派蒙已经")
 				.replace(/你可以/g, "派蒙可以")
@@ -3978,12 +4010,16 @@ function normalizeDelegatedCompanionReply(reply: string, _source: "planner" | "r
 		return text;
 	}
 
-function truncateTaskForAck(taskText: string): string {
+function truncateTaskForAck(taskText: string, languageMode?: ReplyLanguageMode): string {
 	const compact = taskText.trim().replace(/\s+/g, " ");
 	if (!compact) {
-		return pickReplyLanguageText("这个委托", "this task");
+		return languageMode === "en" ? "this task" : pickReplyLanguageText("这个委托", "this task");
 	}
 	return compact.length > 22 ? compact.slice(0, 22) : compact;
+}
+
+function hasCjkText(text: string): boolean {
+	return /[\u3400-\u9fff]/u.test(text);
 }
 
 function normalizeHostKey(rawKey: string): string {
