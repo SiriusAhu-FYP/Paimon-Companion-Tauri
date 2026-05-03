@@ -14,6 +14,8 @@ function translateCategoryLabel(category: string, t: (zh: string, en: string) =>
 			return t("性能", "Performance");
 		case "功能":
 			return t("功能", "Functional");
+		case "记忆":
+			return t("记忆", "Memory");
 		case "调试":
 			return t("调试", "Debug");
 		case "角色":
