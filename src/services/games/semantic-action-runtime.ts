@@ -52,10 +52,11 @@ export async function executeSemanticAction<ActionId extends string>(
 			continue;
 		}
 
+		const coordinate = await resolveMouseStepCoordinate(orchestrator, target, step);
 		const task = await orchestrator.runSendMouseTask(
 			{
-				x: step.x,
-				y: step.y,
+				x: coordinate.x,
+				y: coordinate.y,
 				button: step.button,
 				action: step.action,
 			},
@@ -85,6 +86,32 @@ export async function executeSemanticAction<ActionId extends string>(
 		beforeSnapshotAvailable,
 		afterSnapshotAvailable,
 	};
+}
+
+async function resolveMouseStepCoordinate(
+	orchestrator: OrchestratorService,
+	target: FunctionalTarget,
+	step: Extract<SemanticGameActionDefinition<string>["steps"][number], { kind: "send-mouse" }>,
+): Promise<{ x: number | undefined; y: number | undefined }> {
+	if (typeof step.x === "number" || typeof step.y === "number") {
+		return {
+			x: typeof step.x === "number" ? Math.round(step.x) : undefined,
+			y: typeof step.y === "number" ? Math.round(step.y) : undefined,
+		};
+	}
+	if (typeof step.xNorm !== "number" || typeof step.yNorm !== "number") {
+		return { x: undefined, y: undefined };
+	}
+	const snapshot = await captureLatestSnapshot(orchestrator, target);
+	return {
+		x: denormalizeCoordinate(step.xNorm, snapshot.width),
+		y: denormalizeCoordinate(step.yNorm, snapshot.height),
+	};
+}
+
+function denormalizeCoordinate(unitValue: number, size: number): number {
+	const max = Math.max(1, size) - 1;
+	return Math.max(0, Math.min(max, Math.round(unitValue * max)));
 }
 
 function resolveLoadGuardDecision(

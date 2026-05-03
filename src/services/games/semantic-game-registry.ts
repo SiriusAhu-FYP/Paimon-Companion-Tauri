@@ -320,6 +320,8 @@ function validateStep(
 			kind: "send-mouse",
 			x: typeof step.x === "number" ? step.x : undefined,
 			y: typeof step.y === "number" ? step.y : undefined,
+			xNorm: typeof step.xNorm === "number" ? step.xNorm : undefined,
+			yNorm: typeof step.yNorm === "number" ? step.yNorm : undefined,
 			button,
 			action,
 		};

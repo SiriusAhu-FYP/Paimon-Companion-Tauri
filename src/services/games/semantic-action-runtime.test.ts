@@ -163,4 +163,28 @@ describe("executeSemanticAction browser load guard", () => {
 		expect(orchestrator.runCaptureTask).not.toHaveBeenCalled();
 		expect(requestActiveVisionDecision).not.toHaveBeenCalled();
 	});
+
+	it("resolves normalized mouse coordinates from the current snapshot", async () => {
+		const orchestrator = createOrchestrator();
+
+		await executeSemanticAction(
+			orchestrator as never,
+			{ handle: "window-1", title: "Sokoban" },
+			{
+				id: "reset_level",
+				label: "Reset Level",
+				description: "restart",
+				steps: [{ kind: "send-mouse", action: "click", button: "left", xNorm: 0.5, yNorm: 0.25 }],
+			},
+			{
+				loadGuardPolicy: "force-disable",
+			},
+		);
+
+		expect(orchestrator.runCaptureTask).toHaveBeenCalledTimes(1);
+		expect(orchestrator.runSendMouseTask).toHaveBeenCalledWith(
+			{ action: "click", button: "left", x: 600, y: 175 },
+			{ handle: "window-1", title: "Sokoban" },
+		);
+	});
 });

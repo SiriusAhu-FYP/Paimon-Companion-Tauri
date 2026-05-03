@@ -15,7 +15,6 @@ const log = createLogger("delegated-task-runner");
 const LONG_SEQUENCE_UNCHANGED_THRESHOLD = 0.0025;
 const LONG_SEQUENCE_UNCHANGED_SAMPLE_SIZE = 72;
 const LONG_SEQUENCE_UNCHANGED_CROP_SCALE = 0.6;
-const LONG_SEQUENCE_RESET_ATTEMPTS = 5;
 
 interface DelegatedTaskAction {
 	tool: string;
@@ -375,8 +374,8 @@ export async function runDelegatedTaskLoop(input: {
 				latestHint = combineHints(
 					latestHint,
 					pickReplyLanguageText(
-						`系统已连续 ${LONG_SEQUENCE_RESET_ATTEMPTS} 次尝试重开但没有确认成功：${recovery.error || "重置后画面没有变化"}。这不是任务结束信号；下一轮必须先根据当前截图判断是否仍可解，若仍是死局，再继续定位右上角紫红色重置按钮。`,
-						`The runner tried to restart ${LONG_SEQUENCE_RESET_ATTEMPTS} times but could not confirm it: ${recovery.error || "no visible change after reset"}. This is not a task-ending signal; next planner turn must judge whether the current screenshot is still solvable, and if it is still deadlocked, keep locating the purple-pink restart button.`,
+						`系统执行 reset_level 但没有确认重开成功：${recovery.error || "重置后画面没有变化"}。这不是任务结束信号；下一轮必须先根据当前截图判断是否仍可解，若仍是死局，再执行 reset_level 重开本关。`,
+						`The runner executed reset_level but could not confirm a restart: ${recovery.error || "no visible change after reset"}. This is not a task-ending signal; next planner turn must judge whether the current screenshot is still solvable, and if it is still deadlocked, execute reset_level again.`,
 					),
 				);
 				await sleep(config.afterActionWaitMs);
@@ -1276,84 +1275,63 @@ async function executeLongSequenceRecoveryReset(input: {
 }): Promise<{ succeeded: boolean; error: string; changeScore: number | null }> {
 	let lastError = "";
 	let lastChangeScore: number | null = null;
-	for (let attempt = 1; attempt <= LONG_SEQUENCE_RESET_ATTEMPTS; attempt += 1) {
-		const beforeSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
-		const resetAction = buildLongSequenceResetAction(input.target, attempt);
-		const resolvedAction = await resolveActionWithLocator({
-			action: resetAction,
-			config: input.config,
-			target: input.target,
-			mission: input.mission,
-			beforeSnapshot,
+	const beforeSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
+	const resetAction = buildLongSequenceResetAction(input.target);
+	const executionPlan = buildExecutableActionPlan(resetAction, input.target);
+	try {
+		log.warn("long sequence recovery reset executing", {
 			round: input.round,
+			reason: input.reason,
+			action: executionPlan.actionForEvaluation,
 		});
-		const executionPlan = buildExecutableActionPlan(resolvedAction, input.target);
-		try {
-			log.warn("long sequence recovery reset executing", {
-				round: input.round,
-				attempt,
-				reason: input.reason,
-				action: executionPlan.actionForEvaluation,
-			});
-			await callLocalMcpTool(executionPlan.primary.tool, executionPlan.primary.args, {
+		await callLocalMcpTool(executionPlan.primary.tool, executionPlan.primary.args, {
+			timeoutMs: 45_000,
+			traceId: input.traceId,
+		});
+		for (const followUpAction of executionPlan.followUps) {
+			await callLocalMcpTool(followUpAction.tool, followUpAction.args, {
 				timeoutMs: 45_000,
 				traceId: input.traceId,
 			});
-			for (const followUpAction of executionPlan.followUps) {
-				await callLocalMcpTool(followUpAction.tool, followUpAction.args, {
-					timeoutMs: 45_000,
-					traceId: input.traceId,
-				});
-			}
-		} catch (error) {
-			lastError = error instanceof Error ? error.message : String(error);
-			log.warn("long sequence recovery reset action failed", {
-				round: input.round,
-				attempt,
-				error: lastError,
-			});
-			continue;
 		}
-		const afterSnapshot = await capturePostActionSnapshot({
-			orchestrator: input.orchestrator,
-			target: input.target,
-			beforeSnapshot,
-			baseWaitMs: Math.max(input.config.afterActionWaitMs, input.config.longSequence.stepWaitMs),
-		});
-		const change = await assessSnapshotChange(beforeSnapshot, afterSnapshot);
-		lastChangeScore = change.score;
-		log.info("long sequence recovery reset change", {
+	} catch (error) {
+		lastError = error instanceof Error ? error.message : String(error);
+		log.warn("long sequence recovery reset action failed", {
 			round: input.round,
-			attempt,
-			changeScore: change.score,
-			threshold: LONG_SEQUENCE_UNCHANGED_THRESHOLD,
-			unchanged: change.unchanged,
-			reason: change.reason,
+			error: lastError,
 		});
-		if (!change.unchanged) {
-			return { succeeded: true, error: "", changeScore: change.score };
-		}
-		lastError = "reset click produced no meaningful screenshot change";
-		await sleep(250);
+		return { succeeded: false, error: lastError, changeScore: lastChangeScore };
 	}
+	const afterSnapshot = await capturePostActionSnapshot({
+		orchestrator: input.orchestrator,
+		target: input.target,
+		beforeSnapshot,
+		baseWaitMs: Math.max(input.config.afterActionWaitMs, input.config.longSequence.stepWaitMs),
+	});
+	const change = await assessSnapshotChange(beforeSnapshot, afterSnapshot);
+	lastChangeScore = change.score;
+	log.info("long sequence recovery reset change", {
+		round: input.round,
+		changeScore: change.score,
+		threshold: LONG_SEQUENCE_UNCHANGED_THRESHOLD,
+		unchanged: change.unchanged,
+		reason: change.reason,
+	});
+	if (!change.unchanged) {
+		return { succeeded: true, error: "", changeScore: change.score };
+	}
+	lastError = "reset_level produced no meaningful screenshot change";
 	return { succeeded: false, error: lastError, changeScore: lastChangeScore };
 }
 
-function buildLongSequenceResetAction(target: FunctionalTarget, attempt = 1): DelegatedTaskAction {
-	const locatorHints = [
-		"purple-pink circular restart/reset button in the upper-right corner of the Sokoban game; do not click the green undo button",
-		"magenta or pink circular arrow restart button at the top-right of the game canvas, separate from the green undo/back button",
-		"rightmost pink/purple reset icon above the Sokoban board; restart current level, not browser refresh",
-		"small purple-red restart button near the upper-right game UI; avoid the green undo button",
-		"restart current Sokoban level button: pink circular arrow in the game's top-right control area",
-	];
+function buildLongSequenceResetAction(target: FunctionalTarget): DelegatedTaskAction {
 	return {
-		tool: "host.send_mouse",
+		tool: "game.perform_action",
 		args: {
-			button: "left",
+			gameId: "sokoban",
+			actionId: "reset_level",
 			targetHandle: target.handle,
 			targetTitle: target.title,
-			locatorHint: locatorHints[(attempt - 1) % locatorHints.length],
 		},
 	};
 }
@@ -2197,6 +2175,9 @@ function detectLongSequencePlannerIssue(input: {
 	round: number;
 }): string {
 	if (input.minActions <= 1 || input.actions.length >= input.minActions) {
+		return "";
+	}
+	if (input.actions.length === 1 && toText(input.actions[0]?.args.actionId) === "reset_level") {
 		return "";
 	}
 	const actionIds = input.actions

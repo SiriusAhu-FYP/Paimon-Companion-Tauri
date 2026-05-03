@@ -7,6 +7,8 @@ export type SemanticHostStep =
 		kind: "send-mouse";
 		x?: number;
 		y?: number;
+		xNorm?: number;
+		yNorm?: number;
 		button?: HostMouseButton;
 		action?: HostMouseAction;
 	};

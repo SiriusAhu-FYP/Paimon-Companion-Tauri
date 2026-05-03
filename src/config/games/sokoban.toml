@@ -119,8 +119,8 @@ operationsPlannerRules = [
 	"长序列模式下，actions 应从当前局面开始，覆盖完整解法或尽可能长的合理解法；若中途撞墙，系统会自动停止并把失败步交给 evaluator 反思。",
 	"长序列模式下，每一轮 Planner 都应被视为一次完整解题尝试；如果上一条长序列失败或死局，runner 会先重开本关，Planner 不要从失败残局继续打补丁。",
 	"长序列模式下，expectedOutcome 应描述整条序列的目标，并简要列出关键里程碑，例如先移动哪个箱子、再移动哪个箱子、最终哪些目标应被占据。",
-	"优先使用 game.perform_action；若不可用再考虑 host.send_key；只有确认需要重开时才考虑点击右上角洋红色 / 紫红色重置按钮。",
-	"当 evaluator / latestHint 明确指出 deadlock、死局、卡死、或要求 restart 时，下一轮应优先执行一次 host.send_mouse 点击右上角紫红色/偏粉红色重置按钮，并在 reasoning 中说明上一条错误路线是什么。",
+	"优先使用 game.perform_action；若不可用再考虑 host.send_key；只有确认需要重开时才使用 game.perform_action 的 reset_level。",
+	"当 evaluator / latestHint 明确指出 deadlock、死局、卡死、或要求 restart 时，下一轮应优先执行一次 game.perform_action reset_level，并在 reasoning 中说明上一条错误路线是什么。",
 	"禁止使用右上角绿色撤销 / 回退按钮。",
 	"普通逐步模式每轮最多 8 个动作；长序列模式下服从 longSequence.maxActions=100，可以输出完整或尽可能长的安全通关序列。",
 	"reasoning 与 stateSketch 必须基于当前观察到的棋盘局面，而不是基于希望发生的移动。",
@@ -201,6 +201,18 @@ description = "Move the player down once, pushing a box only if the path allows 
 [[actions.steps]]
 kind = "send-key"
 key = "Down"
+
+[[actions]]
+id = "reset_level"
+label = "Reset Level"
+description = "Restart the current Sokoban level by clicking the purple-pink reset button in the game header."
+
+[[actions.steps]]
+kind = "send-mouse"
+action = "click"
+button = "left"
+xNorm = 0.622
+yNorm = 0.133
 
 [delegationProfile.boardPerception]
 boardPerceptionPrompt = """Observe only the Sokoban board in the screenshot and convert it to ASCII.
