@@ -248,6 +248,9 @@ export async function runDelegatedTaskLoop(input: {
 		target: input.target.title,
 		candidateGameContext: candidateGameContext?.gameId ?? null,
 		gameContext: gameContext?.gameId ?? null,
+		longSequenceMode,
+		longSequenceMaxActions: config.longSequence.maxActions,
+		longSequenceStepWaitMs: config.longSequence.stepWaitMs,
 		allowedTools,
 	});
 	const missionAckReply = resolveMissionAckReply(mission, input.taskText);
