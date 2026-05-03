@@ -847,7 +847,7 @@ export async function runDelegatedTaskLoop(input: {
 		const lastExecutedAction = executedActions[executedActions.length - 1]?.plan.actionForEvaluation
 			?? effectivePlannerActions[0];
 
-		const evaluatorSystemPrompt = buildProgressEvaluatorSystemPrompt(config.progressEvaluatorRules, mission);
+		const evaluatorSystemPrompt = buildProgressEvaluatorSystemPrompt(config.progressEvaluatorRules, mission, replyLanguageMode);
 		const evaluatorUserPrompt = buildProgressEvaluatorUserPrompt({
 				taskText: input.taskText,
 				round,
@@ -1937,7 +1937,14 @@ function buildLongSequencePlannerUserPrompt(input: {
 	].join("\n");
 }
 
-function buildProgressEvaluatorSystemPrompt(rules: string[], mission: MissionAnalysisDecision): string {
+function buildProgressEvaluatorSystemPrompt(
+	rules: string[],
+	mission: MissionAnalysisDecision,
+	replyLanguageMode: ReplyLanguageMode,
+): string {
+	const replyRule = replyLanguageMode === "en"
+		? "reply is a short natural English spoken recap (<=18 words), in Paimon's first person, reporting the concrete result without repeating the same sentence."
+		: "reply 是一句自然口语化的简短复盘（≤40字），以派蒙第一人称说话，像跟朋友汇报进度一样，避免重复相同句式。";
 	const baseRules = [
 		"你是 Progress Evaluator。你会收到 before/after 两张图。",
 		"你不仅要判断是否有变化，还要判断动作是否做对、是否朝 mission 目标推进。",
@@ -1961,7 +1968,7 @@ function buildProgressEvaluatorSystemPrompt(rules: string[], mission: MissionAna
 		"若 executedAction 的 text 内含 {ENTER}/{RETURN} 这类字面宏，必须判定 wasActionCorrect=false、goalAlignment=deviated。",
 		"你必须评估当前环境是否仍然满足任务前提：页面是否正确、站点是否相关、是否发生页面漂移、前置条件是否被破坏。",
 		"若环境已经偏离任务前提，不要只评估局部动作是否成功；要在 nextHint 中明确说明当前错误状态与应恢复到的目标状态。",
-		"reply 是一句自然口语化的简短复盘（≤40字），以派蒙第一人称说话，像跟朋友汇报进度一样，避免重复相同句式。",
+		replyRule,
 		"nextHint 要明确“当前处于哪个状态、下一轮应推进到哪个状态”，不要笼统描述。",
 		"禁止输出代码块、禁止附加解释文本，只输出 JSON。",
 	];
@@ -4259,9 +4266,7 @@ function normalizeDelegatedCompanionReply(reply: string, source: "planner" | "re
 			.replace(/（0x[0-9a-f]+）/gi, "")
 			.replace(/(0x[0-9a-f]+)/gi, "");
 		if (languageMode === "en" && hasCjkText(text)) {
-			return source === "planner"
-				? "I’ll execute the planned route now."
-				: "That sequence did not work; I need to rebuild the route.";
+			return buildEnglishFallbackReply(source, text);
 		}
 		if (languageMode === "zh") {
 			text = text
@@ -4277,6 +4282,30 @@ function normalizeDelegatedCompanionReply(reply: string, source: "planner" | "re
 		text = text.replace(/\s+/g, " ").trim();
 		return text;
 	}
+
+function buildEnglishFallbackReply(source: "planner" | "reflection", rawText: string): string {
+	const plannerFallbacks = [
+		"I’ll try the next route now.",
+		"I’m rebuilding the route now.",
+		"I’ll continue with a fresh route.",
+	];
+	const reflectionFallbacks = [
+		"That attempt missed; I need a new route.",
+		"It didn’t work, so I need to rebuild the route.",
+		"I need to rethink the route from here.",
+	];
+	const bucket = source === "planner" ? plannerFallbacks : reflectionFallbacks;
+	const index = stableStringHash(rawText) % bucket.length;
+	return bucket[index] ?? bucket[0];
+}
+
+function stableStringHash(value: string): number {
+	let hash = 0;
+	for (let index = 0; index < value.length; index += 1) {
+		hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+	}
+	return Math.abs(hash);
+}
 
 function truncateTaskForAck(taskText: string, languageMode?: ReplyLanguageMode): string {
 	const compact = taskText.trim().replace(/\s+/g, " ");
