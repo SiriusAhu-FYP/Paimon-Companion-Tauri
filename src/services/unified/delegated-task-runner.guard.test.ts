@@ -158,12 +158,14 @@ describe("delegation long sequence planning helpers", () => {
 		expect(classifySnapshotChangeScore(0.01)).toBe(false);
 	});
 
-	it("schedules long-sequence recovery for interrupted or deadlocked attempts", () => {
+	it("does not force reset recovery for an ordinary interrupted long sequence", () => {
 		expect(detectLongSequenceRecoveryReason({
 			executionError: "Long sequence stopped at step 4/12: board screenshot did not meaningfully change",
 			reflection: makeReflection(),
-		})).toContain("Long sequence stopped");
+		})).toBe("");
+	});
 
+	it("schedules long-sequence recovery for hard deadlocked attempts", () => {
 		expect(detectLongSequenceRecoveryReason({
 			executionError: "",
 			reflection: makeReflection({

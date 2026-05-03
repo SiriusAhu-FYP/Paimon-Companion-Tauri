@@ -366,43 +366,42 @@ export async function runDelegatedTaskLoop(input: {
 			});
 			pendingLongSequenceRecoveryReason = "";
 			if (!recovery.succeeded) {
-				const summary = pickReplyLanguageText(
-					`长序列失败后需要重开，但自动点击重置失败：${recovery.error || "重置后画面没有变化"}`,
-					`Long-sequence recovery required a restart, but automatic reset failed: ${recovery.error || "no visible change after reset"}`,
-				);
 				log.warn("long sequence recovery reset failed", {
 					round,
 					error: recovery.error,
 					changeScore: recovery.changeScore,
 				});
-				return {
-					status: "failed",
-					rounds: round - 1,
-					summary,
-					timeline: buildTimeline(),
-				};
+				latestHint = combineHints(
+					latestHint,
+					pickReplyLanguageText(
+						`系统尝试重开但没有确认成功：${recovery.error || "重置后画面没有变化"}。下一轮必须先根据当前截图判断是否仍可解；若仍是死局，再重新定位右上角紫红色重置按钮，不要急停。`,
+						`The runner tried to restart but could not confirm it: ${recovery.error || "no visible change after reset"}. Next planner turn must first judge whether the current screenshot is still solvable; if it is still deadlocked, re-locate the purple-pink restart button instead of stopping the whole task.`,
+					),
+				);
+				await sleep(config.afterActionWaitMs);
+			} else {
+				latestHint = combineHints(
+					latestHint,
+					pickReplyLanguageText(
+						"系统已强制重开本关；保留上一条失败经验，但下一轮必须从初始局面重新生成完整长序列。",
+						"The runner has restarted the level; keep the previous failure lesson, but the next planner turn must generate a fresh full long sequence from the initial board.",
+					),
+				);
+				latestExpectedOutcome = "";
+				latestExpectedMet = null;
+				latestPhaseGoal = "";
+				latestPhaseReason = "";
+				latestPhaseAbortCondition = "";
+				latestPhaseStatus = "";
+				latestPhaseAssessment = "";
+				latestActiveStrategy = "";
+				latestStrategyRevision = "";
+				latestPlanViability = "";
+				latestPlanAssessment = "";
+				routeState = resetRouteStateAfterLongSequenceRecovery(routeState);
+				await persistRouteState(input.scratchpad, routeState);
+				await sleep(config.afterActionWaitMs);
 			}
-			latestHint = combineHints(
-				latestHint,
-				pickReplyLanguageText(
-					"系统已强制重开本关；保留上一条失败经验，但下一轮必须从初始局面重新生成完整长序列。",
-					"The runner has restarted the level; keep the previous failure lesson, but the next planner turn must generate a fresh full long sequence from the initial board.",
-				),
-			);
-			latestExpectedOutcome = "";
-			latestExpectedMet = null;
-			latestPhaseGoal = "";
-			latestPhaseReason = "";
-			latestPhaseAbortCondition = "";
-			latestPhaseStatus = "";
-			latestPhaseAssessment = "";
-			latestActiveStrategy = "";
-			latestStrategyRevision = "";
-			latestPlanViability = "";
-			latestPlanAssessment = "";
-			routeState = resetRouteStateAfterLongSequenceRecovery(routeState);
-			await persistRouteState(input.scratchpad, routeState);
-			await sleep(config.afterActionWaitMs);
 		}
 
 		const currentSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
@@ -807,7 +806,7 @@ export async function runDelegatedTaskLoop(input: {
 					`failedAction=${executionPlan.actionForEvaluation.tool}(${JSON.stringify(executionPlan.actionForEvaluation.args)})`,
 					`executedPrefix=${executedActions.map((item) => item.plan.actionForEvaluation.tool + "(" + JSON.stringify(item.plan.actionForEvaluation.args) + ")").join(" -> ")}`,
 					`remainingActions=${remainingActions}`,
-					"Runner will restart the level before the next planner turn; the next planner must generate a fresh full long-sequence route from the clean initial board.",
+					"Next planner turn must rebuild a full long-sequence route from the current screenshot unless the evaluator confirms a hard deadlock that requires restart.",
 				].join(" ");
 				batchExecutionError = longSequenceFailureDetail;
 				log.warn("long sequence stopped on unchanged snapshot", {
@@ -931,8 +930,8 @@ export async function runDelegatedTaskLoop(input: {
 						reflection.nextHint,
 						longSequenceMode
 							? pickReplyLanguageText(
-								`长序列执行中断：${batchExecutionError}。下一轮必须从当前截图重新生成完整长序列，不要只给单步纠偏。`,
-								`Long sequence interrupted: ${batchExecutionError}. Next round must rebuild a full long-sequence route from the current screenshot, not a single corrective move.`,
+								`长序列执行中断：${batchExecutionError}。若当前局面仍可解，下一轮必须从当前截图重新生成完整长序列；只有确认硬死局时才重开。`,
+								`Long sequence interrupted: ${batchExecutionError}. If the current board is still solvable, next round must rebuild a full long-sequence route from the current screenshot; restart only after confirming a hard deadlock.`,
 							)
 							: pickReplyLanguageText(
 								`动作执行报错：${batchExecutionError}。下一轮先修正动作参数或先做聚焦/定位校准。`,
@@ -1380,9 +1379,6 @@ function detectLongSequenceRecoveryReason(input: {
 	executionError: string;
 	reflection: ProgressEvaluatorDecision;
 }): string {
-	if (input.executionError) {
-		return input.executionError;
-	}
 	const joined = [
 		input.reflection.nextHint,
 		input.reflection.planAssessment,
@@ -1393,7 +1389,11 @@ function detectLongSequenceRecoveryReason(input: {
 	if (/deadlock|死局|restart|reset|重开|重新开始|unrecoverable|无法恢复|卡死/i.test(joined)) {
 		return joined.slice(0, 500);
 	}
-	if (input.reflection.planViability === "invalidated" && input.reflection.phaseStatus === "blocked") {
+	if (
+		input.reflection.planViability === "invalidated"
+		&& input.reflection.phaseStatus === "blocked"
+		&& /corner|wall-locked|blocked permanently|不可恢复|无法恢复|死路|角落/i.test(joined)
+	) {
 		return input.reflection.planAssessment || input.reflection.phaseAssessment || "long sequence route invalidated";
 	}
 	return "";
