@@ -176,6 +176,7 @@ function validateDelegationProfile(value: unknown): SemanticDelegationProfileCon
 	const visionPreprocess = isObjectRecord(value.visionPreprocess) ? value.visionPreprocess : {};
 	const visionPreprocessCrop = isObjectRecord(visionPreprocess.crop) ? visionPreprocess.crop : {};
 	const visionPreprocessMode = visionPreprocess.mode;
+	const longSequence = isObjectRecord(value.longSequence) ? value.longSequence : null;
 	const thinkingMode = missionAnalyst.missionAnalystThinkingMode;
 	const plannerThinkingMode = operationsPlanner.operationsPlannerThinkingMode;
 	const evaluatorThinkingMode = progressEvaluator.progressEvaluatorThinkingMode;
@@ -242,6 +243,14 @@ function validateDelegationProfile(value: unknown): SemanticDelegationProfileCon
 			format: visionPreprocess.format === "png" || visionPreprocess.format === "jpeg" ? visionPreprocess.format : undefined,
 			quality: toOptionalNumber(visionPreprocess.quality),
 		},
+		longSequence: longSequence
+			? {
+				enabled: toOptionalBoolean(longSequence.enabled),
+				maxActions: toOptionalNumber(longSequence.maxActions),
+				stepWaitMs: toOptionalNumber(longSequence.stepWaitMs),
+				stopOnUnchangedSnapshot: toOptionalBoolean(longSequence.stopOnUnchangedSnapshot),
+			}
+			: undefined,
 	};
 }
 

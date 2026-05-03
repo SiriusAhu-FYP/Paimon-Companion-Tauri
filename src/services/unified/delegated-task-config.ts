@@ -21,6 +21,13 @@ export interface DelegatedVisionPreprocessConfig {
 	quality: number;
 }
 
+export interface DelegatedLongSequenceConfig {
+	enabled: boolean;
+	maxActions: number;
+	stepWaitMs: number;
+	stopOnUnchangedSnapshot: boolean;
+}
+
 export interface DelegatedTaskProfileConfig {
 	taskId: string;
 	displayName: string;
@@ -44,6 +51,7 @@ export interface DelegatedTaskProfileConfig {
 	progressEvaluatorRules: string[];
 	boardPerceptionPrompt: string;
 	visionPreprocess: DelegatedVisionPreprocessConfig;
+	longSequence: DelegatedLongSequenceConfig;
 }
 
 export interface DelegatedTaskProfilesConfig {
@@ -82,6 +90,7 @@ type DelegatedTaskProfileRaw = {
 	boardPerception?: unknown;
 	boardPerceptionPrompt?: unknown;
 	visionPreprocess?: unknown;
+	longSequence?: unknown;
 	plannerTemperature?: unknown;
 	reflectionTemperature?: unknown;
 	plannerRules?: unknown;
@@ -128,6 +137,12 @@ const DEFAULT_PROFILE_CONFIG: DelegatedTaskProfileConfig = {
 		maxHeight: 960,
 		format: "png",
 		quality: 0.82,
+	},
+	longSequence: {
+		enabled: false,
+		maxActions: 100,
+		stepWaitMs: 500,
+		stopOnUnchangedSnapshot: true,
 	},
 };
 
@@ -255,6 +270,7 @@ function sanitizeProfile(rawValue: unknown, fallback: DelegatedTaskProfileConfig
 		: sanitizeStringArray(parsed.reflectionRules);
 	const allowedTools = sanitizeStringArray(parsed.allowedTools);
 	const visionPreprocess = sanitizeVisionPreprocess(parsed.visionPreprocess, fallback.visionPreprocess);
+	const longSequence = sanitizeLongSequence(parsed.longSequence, fallback.longSequence);
 	return {
 		taskId: typeof parsed.taskId === "string" && parsed.taskId.trim() ? parsed.taskId.trim() : fallback.taskId,
 		displayName: typeof parsed.displayName === "string" && parsed.displayName.trim()
@@ -280,6 +296,20 @@ function sanitizeProfile(rawValue: unknown, fallback: DelegatedTaskProfileConfig
 		progressEvaluatorRules: progressEvaluatorRules.length ? progressEvaluatorRules : [...fallback.progressEvaluatorRules],
 		boardPerceptionPrompt: typeof parsed.boardPerceptionPrompt === "string" && parsed.boardPerceptionPrompt.trim() ? parsed.boardPerceptionPrompt.trim() : fallback.boardPerceptionPrompt,
 		visionPreprocess,
+		longSequence,
+	};
+}
+
+function sanitizeLongSequence(
+	rawValue: unknown,
+	fallback: DelegatedLongSequenceConfig,
+): DelegatedLongSequenceConfig {
+	const parsed = isObjectRecord(rawValue) ? rawValue : {};
+	return {
+		enabled: sanitizeBoolean(parsed.enabled, fallback.enabled),
+		maxActions: Math.round(sanitizeNumber(parsed.maxActions, fallback.maxActions, 1, 100)),
+		stepWaitMs: Math.round(sanitizeNumber(parsed.stepWaitMs, fallback.stepWaitMs, 100, 5000)),
+		stopOnUnchangedSnapshot: sanitizeBoolean(parsed.stopOnUnchangedSnapshot, fallback.stopOnUnchangedSnapshot),
 	};
 }
 

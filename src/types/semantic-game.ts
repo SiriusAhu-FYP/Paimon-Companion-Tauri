@@ -60,6 +60,12 @@ export interface SemanticDelegationProfileConfig {
 		format?: "png" | "jpeg";
 		quality?: number;
 	};
+	longSequence?: {
+		enabled?: boolean;
+		maxActions?: number;
+		stepWaitMs?: number;
+		stopOnUnchangedSnapshot?: boolean;
+	};
 }
 
 export interface SemanticGameManifest<ActionId extends string> extends SemanticGamePluginDefinition<ActionId> {

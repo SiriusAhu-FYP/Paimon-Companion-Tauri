@@ -32,4 +32,13 @@ describe("delegated task config", () => {
 		});
 		expect(config.visionPreprocess.format).toBe("png");
 	});
+
+	it("keeps long sequence mode disabled by default", () => {
+		const config = getDelegatedBrowserTaskConfig();
+
+		expect(config.longSequence.enabled).toBe(false);
+		expect(config.longSequence.maxActions).toBe(100);
+		expect(config.longSequence.stepWaitMs).toBe(500);
+		expect(config.longSequence.stopOnUnchangedSnapshot).toBe(true);
+	});
 });

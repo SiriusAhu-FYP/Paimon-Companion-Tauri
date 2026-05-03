@@ -188,6 +188,7 @@ export async function runDelegatedTaskLoop(input: {
 	let noActionStreak = 0;
 	let hasExecutionEvidence = false;
 	const strategyLessons: string[] = [];
+	const longSequenceMode = config.longSequence.enabled && candidateGameContext?.gameId === "sokoban";
 	const runtimeToolNames = await resolveRuntimeToolNames(input.traceId);
 	const missionProbeTools = buildAllowedTools(config.allowedTools, candidateGameContext, runtimeToolNames);
 	const missionSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
@@ -212,7 +213,7 @@ export async function runDelegatedTaskLoop(input: {
 	const mission = normalizeMissionAnalysisDecision(missionRaw, input.taskText, input.target);
 	const gameContext = resolveOperationalGameContext(candidateGameContext, mission.taskMode, input.taskText);
 	const allowedTools = buildAllowedTools(config.allowedTools, gameContext, runtimeToolNames);
-	const initialCanonicalBoard = buildInitialCanonicalBoard(gameContext, mission, preMissionObservation);
+	const initialCanonicalBoard = longSequenceMode ? null : buildInitialCanonicalBoard(gameContext, mission, preMissionObservation);
 	routeState = gameContext
 		? {
 			currentBoard: initialCanonicalBoard?.currentBoard || preMissionObservation.boardGrid || mission.initialStateSketch,
@@ -376,10 +377,11 @@ export async function runDelegatedTaskLoop(input: {
 		});
 		const plannerSystemPrompt = buildOperationsPlannerSystemPrompt({
 			allowedTools,
-			maxActionsPerRound: config.maxActionsPerRound,
+			maxActionsPerRound: longSequenceMode ? config.longSequence.maxActions : config.maxActionsPerRound,
 			rules: config.operationsPlannerRules,
 			gameContext,
 			mission,
+			longSequenceMode,
 		});
 		let plannerPolicyReminder = "";
 		let plannerRetryCount = 0;
@@ -426,20 +428,24 @@ export async function runDelegatedTaskLoop(input: {
 					latestPlanAssessment,
 					invalidatedStrategies,
 					strategyLessons,
-				boardPositionsText: formatBoardObservationForPlanner(roundBoardObservation) || undefined,
+				boardPositionsText: longSequenceMode ? undefined : formatBoardObservationForPlanner(roundBoardObservation) || undefined,
 			});
+			const plannerSnapshot = longSequenceMode
+				? await preprocessSnapshotForRoleVision(currentSnapshot, config)
+				: currentSnapshot;
 			const plannerRaw = await requestPlannerDecision({
 				config,
 				systemPrompt: plannerSystemPrompt,
 				userPrompt: plannerUserPrompt,
-				snapshot: currentSnapshot,
+				snapshot: plannerSnapshot,
 				boardObservation: roundBoardObservation,
 				taskKind: gameContext?.gameId ?? mission.taskMode,
+				forceVision: longSequenceMode,
 			});
 			const nextPlanner = normalizeOperationsPlannerDecision(
 				plannerRaw,
 				allowedTools,
-				config.maxActionsPerRound,
+				longSequenceMode ? config.longSequence.maxActions : config.maxActionsPerRound,
 				input.target,
 				gameContext,
 			);
@@ -603,6 +609,7 @@ export async function runDelegatedTaskLoop(input: {
 		const executedActions: { plan: ExecutableActionPlan; error: string }[] = [];
 		let batchAfterSnapshot = batchBeforeSnapshot;
 		let batchExecutionError = "";
+		let longSequenceFailureDetail = "";
 
 		for (let actionIndex = 0; actionIndex < effectivePlannerActions.length; actionIndex += 1) {
 			const action = effectivePlannerActions[actionIndex];
@@ -649,16 +656,36 @@ export async function runDelegatedTaskLoop(input: {
 				orchestrator: input.orchestrator,
 				target: input.target,
 				beforeSnapshot,
-				baseWaitMs: config.afterActionWaitMs,
+				baseWaitMs: longSequenceMode ? config.longSequence.stepWaitMs : config.afterActionWaitMs,
+				skipUnchangedRetries: longSequenceMode,
 			});
 			executedActions.push({ plan: executionPlan, error: actionExecutionError });
 			if (actionExecutionError) {
 				batchExecutionError = actionExecutionError;
 				break;
 			}
+			if (longSequenceMode && config.longSequence.stopOnUnchangedSnapshot && isSnapshotLikelyUnchanged(beforeSnapshot, batchAfterSnapshot)) {
+				const failedStepIndex = actionIndex + 1;
+				const remainingActions = effectivePlannerActions.length - failedStepIndex;
+				longSequenceFailureDetail = [
+					`Long sequence stopped at step ${failedStepIndex}/${effectivePlannerActions.length}: screenshot unchanged after ${config.longSequence.stepWaitMs}ms.`,
+					`failedAction=${executionPlan.actionForEvaluation.tool}(${JSON.stringify(executionPlan.actionForEvaluation.args)})`,
+					`executedPrefix=${executedActions.map((item) => item.plan.actionForEvaluation.tool + "(" + JSON.stringify(item.plan.actionForEvaluation.args) + ")").join(" -> ")}`,
+					`remainingActions=${remainingActions}`,
+				].join(" ");
+				batchExecutionError = longSequenceFailureDetail;
+				log.warn("long sequence stopped on unchanged snapshot", {
+					round,
+					failedStepIndex,
+					totalActions: effectivePlannerActions.length,
+					remainingActions,
+					action: executionPlan.actionForEvaluation,
+				});
+				break;
+			}
 			// 0.5s gap before the next action in a multi-action batch
 			const hasNextAction = actionIndex < effectivePlannerActions.length - 1;
-			if (hasNextAction) {
+			if (hasNextAction && !longSequenceMode) {
 				await sleep(500);
 			}
 		}
@@ -689,7 +716,7 @@ export async function runDelegatedTaskLoop(input: {
 				mission,
 				history,
 				expectedOutcome: planner.expectedOutcome,
-				executionError: batchExecutionError,
+				executionError: longSequenceFailureDetail || batchExecutionError,
 				scratchpadContext: buildSharedScratchpadContext({
 					taskText: input.taskText,
 					mission,
@@ -718,17 +745,24 @@ export async function runDelegatedTaskLoop(input: {
 				phaseReason: planner.whyThisPhase,
 				phaseAbortCondition: planner.abortCondition,
 				activeStrategy: planner.activeStrategy,
-				boardPositionsText: formatBoardObservationForEvaluator(roundBoardObservation, afterBoardObservation) || undefined,
+				boardPositionsText: longSequenceMode ? undefined : formatBoardObservationForEvaluator(roundBoardObservation, afterBoardObservation) || undefined,
 		});
+		const evaluatorBeforeSnapshot = longSequenceMode
+			? await preprocessSnapshotForRoleVision(batchBeforeSnapshot, config)
+			: batchBeforeSnapshot;
+		const evaluatorAfterSnapshot = longSequenceMode
+			? await preprocessSnapshotForRoleVision(batchAfterSnapshot, config)
+			: batchAfterSnapshot;
 		const reflectionRaw = await requestEvaluatorDecision({
 			config,
 			systemPrompt: evaluatorSystemPrompt,
 			userPrompt: evaluatorUserPrompt,
-			beforeSnapshot: batchBeforeSnapshot,
-			afterSnapshot: batchAfterSnapshot,
+			beforeSnapshot: evaluatorBeforeSnapshot,
+			afterSnapshot: evaluatorAfterSnapshot,
 			beforeObservation: roundBoardObservation,
 			afterObservation: afterBoardObservation,
 			taskKind: gameContext?.gameId ?? mission.taskMode,
+			forceVision: longSequenceMode,
 		});
 		let reflection = normalizeProgressEvaluatorDecision(reflectionRaw);
 		reflection = applyBoardTaskConsistencyGuard(reflection, gameContext);
@@ -991,9 +1025,13 @@ async function capturePostActionSnapshot(input: {
 	target: FunctionalTarget;
 	beforeSnapshot: CapturedTargetSnapshot;
 	baseWaitMs: number;
+	skipUnchangedRetries?: boolean;
 }): Promise<CapturedTargetSnapshot> {
 	await sleep(input.baseWaitMs);
 	let afterSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
+	if (input.skipUnchangedRetries) {
+		return afterSnapshot;
+	}
 	for (let attempt = 0; attempt < 2; attempt += 1) {
 		if (!isSnapshotLikelyUnchanged(input.beforeSnapshot, afterSnapshot)) {
 			return afterSnapshot;
@@ -1104,8 +1142,9 @@ async function requestPlannerDecision(input: {
 	snapshot: CapturedTargetSnapshot;
 	boardObservation: BoardObservation;
 	taskKind: string;
+	forceVision?: boolean;
 }): Promise<string> {
-	if (isUsableBoardObservation(input.boardObservation)) {
+	if (!input.forceVision && isUsableBoardObservation(input.boardObservation)) {
 		try {
 			log.info("delegated role request mode", {
 				role: "operations-planner",
@@ -1135,7 +1174,7 @@ async function requestPlannerDecision(input: {
 	}
 	log.info("delegated role request mode", {
 		role: "operations-planner",
-		mode: "vision-fallback",
+		mode: input.forceVision ? "vision-forced" : "vision-fallback",
 		thinkingMode: "off",
 		boardConfidence: input.boardObservation.confidence,
 	});
@@ -1165,8 +1204,9 @@ async function requestEvaluatorDecision(input: {
 	beforeObservation: BoardObservation;
 	afterObservation: BoardObservation;
 	taskKind: string;
+	forceVision?: boolean;
 }): Promise<string> {
-	if (isUsableBoardObservation(input.beforeObservation) && isUsableBoardObservation(input.afterObservation)) {
+	if (!input.forceVision && isUsableBoardObservation(input.beforeObservation) && isUsableBoardObservation(input.afterObservation)) {
 		try {
 			log.info("delegated role request mode", {
 				role: "progress-evaluator",
@@ -1197,7 +1237,7 @@ async function requestEvaluatorDecision(input: {
 	}
 	log.info("delegated role request mode", {
 		role: "progress-evaluator",
-		mode: "vision-fallback",
+		mode: input.forceVision ? "vision-forced" : "vision-fallback",
 		thinkingMode: "off",
 		beforeConfidence: input.beforeObservation.confidence,
 		afterConfidence: input.afterObservation.confidence,
@@ -1286,6 +1326,7 @@ function buildOperationsPlannerSystemPrompt(input: {
 	rules: string[];
 	gameContext: DelegatedGameContext | null;
 	mission: MissionAnalysisDecision;
+	longSequenceMode?: boolean;
 }): string {
 	const baseRules = [
 		"你是 Operations Planner。你只负责下一步动作决策。",
@@ -1318,6 +1359,12 @@ function buildOperationsPlannerSystemPrompt(input: {
 		"若需要“输入并回车”，请拆成两步动作：先 host.paste_text 输入纯文本，再 host.send_key(\"Enter\")；不要把 {ENTER} 混进 text。",
 		"禁止输出代码块、禁止附加解释文本，只输出 JSON。",
 	];
+	if (input.longSequenceMode) {
+		baseRules.push("长序列模式覆盖常规短步策略：本轮不要求只推进一个最小状态变化，而是要求给出可连续验证的一整段解题动作。");
+		baseRules.push("长序列模式：当前轮次应尽量输出从当前棋盘到通关的一整条动作序列，而不是局部短序列。每个动作仍必须是一个单步 action。");
+		baseRules.push(`长序列模式动作上限为 ${input.maxActionsPerRound} 步；只输出你有理由相信从当前局面可连续执行的步骤，系统会在某步无截图变化时自动停止并交给 Evaluator 反思。`);
+		baseRules.push("长序列模式下，优先全部使用 game.perform_action；不要夹杂 reset、刷新、换标签页等恢复动作，除非当前局面已经明确死局。");
+	}
 	if (input.gameContext) {
 		baseRules.push(`若当前任务模式是游戏且窗口识别为 ${input.gameContext.displayName}，优先使用 game.perform_action。`);
 	}
@@ -3099,6 +3146,25 @@ async function preprocessSnapshotForVision(
 	};
 }
 
+async function preprocessSnapshotForRoleVision(
+	snapshot: CapturedTargetSnapshot,
+	config: DelegatedTaskProfileConfig,
+): Promise<CapturedTargetSnapshot> {
+	try {
+		const processed = await preprocessSnapshotForVision(snapshot, config);
+		return {
+			dataUrl: processed.dataUrl,
+			width: processed.width,
+			height: processed.height,
+		};
+	} catch (error) {
+		log.warn("role vision preprocessing failed; using original screenshot", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+		return snapshot;
+	}
+}
+
 function hasBrowserImagePreprocessingSupport(): boolean {
 	return typeof Image !== "undefined" && typeof document !== "undefined";
 }
@@ -3588,6 +3654,14 @@ function mergeDelegatedConfigForGame(
 		maxRounds: gameProfile.maxRounds ?? baseConfig.maxRounds,
 		maxActionsPerRound: gameProfile.maxActionsPerRound ?? baseConfig.maxActionsPerRound,
 		afterActionWaitMs: gameProfile.afterActionWaitMs ?? baseConfig.afterActionWaitMs,
+		longSequence: gameProfile.longSequence
+			? {
+				enabled: gameProfile.longSequence.enabled ?? baseConfig.longSequence.enabled,
+				maxActions: gameProfile.longSequence.maxActions ?? baseConfig.longSequence.maxActions,
+				stepWaitMs: gameProfile.longSequence.stepWaitMs ?? baseConfig.longSequence.stepWaitMs,
+				stopOnUnchangedSnapshot: gameProfile.longSequence.stopOnUnchangedSnapshot ?? baseConfig.longSequence.stopOnUnchangedSnapshot,
+			}
+			: baseConfig.longSequence,
 		locatorRulesEnabled: gameProfile.locatorRulesEnabled ?? baseConfig.locatorRulesEnabled,
 		locatorCloudEnabled: gameProfile.locatorCloudEnabled ?? baseConfig.locatorCloudEnabled,
 		locatorLocalFallbackEnabled: gameProfile.locatorLocalFallbackEnabled ?? baseConfig.locatorLocalFallbackEnabled,
