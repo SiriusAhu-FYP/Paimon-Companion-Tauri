@@ -15,6 +15,7 @@ const log = createLogger("delegated-task-runner");
 const LONG_SEQUENCE_UNCHANGED_THRESHOLD = 0.0025;
 const LONG_SEQUENCE_UNCHANGED_SAMPLE_SIZE = 72;
 const LONG_SEQUENCE_UNCHANGED_CROP_SCALE = 0.6;
+const LONG_SEQUENCE_RESET_ATTEMPTS = 5;
 
 interface DelegatedTaskAction {
 	tool: string;
@@ -374,8 +375,8 @@ export async function runDelegatedTaskLoop(input: {
 				latestHint = combineHints(
 					latestHint,
 					pickReplyLanguageText(
-						`系统尝试重开但没有确认成功：${recovery.error || "重置后画面没有变化"}。下一轮必须先根据当前截图判断是否仍可解；若仍是死局，再重新定位右上角紫红色重置按钮，不要急停。`,
-						`The runner tried to restart but could not confirm it: ${recovery.error || "no visible change after reset"}. Next planner turn must first judge whether the current screenshot is still solvable; if it is still deadlocked, re-locate the purple-pink restart button instead of stopping the whole task.`,
+						`系统已连续 ${LONG_SEQUENCE_RESET_ATTEMPTS} 次尝试重开但没有确认成功：${recovery.error || "重置后画面没有变化"}。这不是任务结束信号；下一轮必须先根据当前截图判断是否仍可解，若仍是死局，再继续定位右上角紫红色重置按钮。`,
+						`The runner tried to restart ${LONG_SEQUENCE_RESET_ATTEMPTS} times but could not confirm it: ${recovery.error || "no visible change after reset"}. This is not a task-ending signal; next planner turn must judge whether the current screenshot is still solvable, and if it is still deadlocked, keep locating the purple-pink restart button.`,
 					),
 				);
 				await sleep(config.afterActionWaitMs);
@@ -1275,9 +1276,9 @@ async function executeLongSequenceRecoveryReset(input: {
 }): Promise<{ succeeded: boolean; error: string; changeScore: number | null }> {
 	let lastError = "";
 	let lastChangeScore: number | null = null;
-	for (let attempt = 1; attempt <= 2; attempt += 1) {
+	for (let attempt = 1; attempt <= LONG_SEQUENCE_RESET_ATTEMPTS; attempt += 1) {
 		const beforeSnapshot = await captureTargetSnapshot(input.orchestrator, input.target);
-		const resetAction = buildLongSequenceResetAction(input.target);
+		const resetAction = buildLongSequenceResetAction(input.target, attempt);
 		const resolvedAction = await resolveActionWithLocator({
 			action: resetAction,
 			config: input.config,
@@ -1333,18 +1334,26 @@ async function executeLongSequenceRecoveryReset(input: {
 			return { succeeded: true, error: "", changeScore: change.score };
 		}
 		lastError = "reset click produced no meaningful screenshot change";
+		await sleep(250);
 	}
 	return { succeeded: false, error: lastError, changeScore: lastChangeScore };
 }
 
-function buildLongSequenceResetAction(target: FunctionalTarget): DelegatedTaskAction {
+function buildLongSequenceResetAction(target: FunctionalTarget, attempt = 1): DelegatedTaskAction {
+	const locatorHints = [
+		"purple-pink circular restart/reset button in the upper-right corner of the Sokoban game; do not click the green undo button",
+		"magenta or pink circular arrow restart button at the top-right of the game canvas, separate from the green undo/back button",
+		"rightmost pink/purple reset icon above the Sokoban board; restart current level, not browser refresh",
+		"small purple-red restart button near the upper-right game UI; avoid the green undo button",
+		"restart current Sokoban level button: pink circular arrow in the game's top-right control area",
+	];
 	return {
 		tool: "host.send_mouse",
 		args: {
 			button: "left",
 			targetHandle: target.handle,
 			targetTitle: target.title,
-			locatorHint: "purple-pink circular restart/reset button in the upper-right corner of the Sokoban game; do not click the green undo button",
+			locatorHint: locatorHints[(attempt - 1) % locatorHints.length],
 		},
 	};
 }
