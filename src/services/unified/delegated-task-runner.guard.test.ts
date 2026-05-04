@@ -23,6 +23,8 @@ const {
 	didBoardTaskMakeProgress,
 	buildStrategyLesson,
 	enrichEvaluatorDiagnosisFromExecutionError,
+	buildCompletedLongSequenceFailureDetail,
+	formatActionSequenceForDiagnosis,
 	resolveOperationsNarration,
 	resolveReflectionNarration,
 	buildInitialCanonicalBoard,
@@ -259,7 +261,19 @@ describe("delegation long sequence planning helpers", () => {
 			"en",
 		);
 
-		expect(narration).toContain("stopped early");
+		expect(narration).toContain("failed at step 1/12");
+		expect(narration).not.toContain("That attempt stopped early");
+	});
+
+	it("falls back to spoken evaluator narration for completed failed long routes", () => {
+		const narration = resolveReflectionNarration(
+			makeReflection({ reply: "", expectedMet: false, actionSucceeded: false }),
+			"Long sequence completed 12/12 actions but did not solve the level.",
+			"en",
+		);
+
+		expect(narration).toContain("full 12/12 route ran");
+		expect(narration).toContain("restart");
 	});
 
 	it("uses a long-sequence evaluator prompt that diagnoses failed prefixes without banning directions", () => {
@@ -295,12 +309,32 @@ describe("delegation long sequence planning helpers", () => {
 
 		expect(enriched.routeStateUpdate).toContain("failedStep=10/12");
 		expect(enriched.routeStateUpdate).toContain("failedPrefix=");
-		expect(enriched.routeStateUpdate).toContain("move_right");
+		expect(enriched.routeStateUpdate).toContain("right");
 		expect(enriched.routeStateUpdate).toContain("failureGeometry=");
-		expect(enriched.routeStateUpdate).toContain("move_up");
+		expect(enriched.routeStateUpdate).toContain("up");
 		expect(enriched.routeStateUpdate).toContain("preserveUsefulPrefixFrom=lower-box-first");
 		expect(enriched.routeStateUpdate).toContain("abandonUnchangedPrefix=");
+		expect(enriched.routeStateUpdate).not.toContain("game.perform_action({");
 		expect(enriched.latestDiagnosis).toContain("exact prefix");
+	});
+
+	it("builds recovery details for completed long-sequence attempts that miss the expected result", () => {
+		const detail = buildCompletedLongSequenceFailureDetail({
+			executedCount: 12,
+			totalCount: 12,
+			actionSummary: 'game.perform_action({"actionId":"move_right","gameId":"sokoban"}) -> game.perform_action({"actionId":"move_down","gameId":"sokoban"})',
+			reflection: makeReflection({ expectedMet: false, latestDiagnosis: "not solved" }),
+		});
+
+		expect(detail).toContain("Long sequence completed 12/12 actions");
+		expect(detail).toContain("right -> down");
+		expect(detail).toContain("Restart before the next planner turn");
+	});
+
+	it("formats tool-call action summaries as readable direction chains", () => {
+		expect(formatActionSequenceForDiagnosis(
+			'game.perform_action({"actionId":"move_right","gameId":"sokoban"}) -> game.perform_action({"actionId":"move_down","gameId":"sokoban"})',
+		)).toBe("right -> down");
 	});
 
 	it("resets after an interrupted long sequence attempt", () => {
@@ -308,6 +342,13 @@ describe("delegation long sequence planning helpers", () => {
 			executionError: "Long sequence stopped at step 4/12: board screenshot did not meaningfully change",
 			reflection: makeReflection(),
 		})).toContain("Long sequence stopped");
+	});
+
+	it("resets after a completed long sequence attempt that did not solve the level", () => {
+		expect(detectLongSequenceRecoveryReason({
+			executionError: "Long sequence completed 12/12 actions but did not solve the level.",
+			reflection: makeReflection({ expectedMet: false, actionSucceeded: false }),
+		})).toContain("Long sequence completed");
 	});
 
 	it("schedules long-sequence recovery for hard deadlocked attempts", () => {

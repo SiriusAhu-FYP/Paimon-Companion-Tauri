@@ -59,9 +59,28 @@ function ProgressChip({ progress }: { progress: string }) {
 	return <Chip size="small" label={progress} color={colorMap[progress] ?? "default"} variant="outlined" sx={{ mr: 0.5 }} />;
 }
 
+function compactTimelineText(text: string, limit = 260): string {
+	const normalized = text
+		.replace(/game\.perform_action\(\{"actionId":"([^"]+)","gameId":"sokoban"\}\)/g, (_all, actionId: string) => actionId.replace(/^move_/, ""))
+		.replace(/\s+/g, " ")
+		.trim();
+	return normalized.length > limit ? `${normalized.slice(0, Math.max(0, limit - 3)).trim()}...` : normalized;
+}
+
+function compactActionSummary(text: string): string {
+	const actionIds = [...text.matchAll(/"actionId"\s*:\s*"([^"]+)"/g)]
+		.map((match) => match[1]?.replace(/^move_/, "") ?? "")
+		.filter(Boolean);
+	return actionIds.length ? actionIds.join(" -> ") : compactTimelineText(text, 180);
+}
+
 function RoundCard({ entry, isLatest }: { entry: DelegationRoundEntry; isLatest: boolean }) {
 	const { t } = useI18n();
 	const time = new Date(entry.timestamp).toLocaleTimeString();
+	const plannerText = compactTimelineText(entry.plannerReasoning);
+	const expectedText = compactTimelineText(entry.plannerExpectedOutcome, 180);
+	const routeDiagnosis = compactTimelineText(entry.routeDiagnosis ?? "", 220);
+	const evaluatorHint = compactTimelineText(entry.evaluatorHint, 220);
 
 	return (
 		<Accordion
@@ -97,12 +116,12 @@ function RoundCard({ entry, isLatest }: { entry: DelegationRoundEntry; isLatest:
 			<AccordionDetails sx={{ pt: 0, px: 1.5, pb: 1 }}>
 				<Box sx={{ display: "flex", flexDirection: "column", gap: 0.8 }}>
 					<Section label="Planner">
-						<Typography variant="body2" sx={{ whiteSpace: "pre-wrap", fontSize: "0.8rem" }}>
-							{entry.plannerReasoning}
+						<Typography variant="body2" title={entry.plannerReasoning} sx={{ whiteSpace: "pre-wrap", fontSize: "0.8rem" }}>
+							{plannerText}
 						</Typography>
 						{entry.plannerExpectedOutcome && (
-							<Typography variant="body2" color="info.main" sx={{ mt: 0.3, fontSize: "0.8rem" }}>
-								→ {entry.plannerExpectedOutcome}
+							<Typography variant="body2" title={entry.plannerExpectedOutcome} color="info.main" sx={{ mt: 0.3, fontSize: "0.8rem" }}>
+								→ {expectedText}
 							</Typography>
 						)}
 					</Section>
@@ -119,8 +138,8 @@ function RoundCard({ entry, isLatest }: { entry: DelegationRoundEntry; isLatest:
 								</Typography>
 							)}
 							{entry.routeDiagnosis && (
-								<Typography variant="body2" color="warning.main" sx={{ fontSize: "0.78rem" }}>
-									{entry.routeDiagnosis}
+								<Typography variant="body2" title={entry.routeDiagnosis} color="warning.main" sx={{ fontSize: "0.78rem" }}>
+									{routeDiagnosis}
 								</Typography>
 							)}
 							{entry.boardGrid && (
@@ -131,8 +150,8 @@ function RoundCard({ entry, isLatest }: { entry: DelegationRoundEntry; isLatest:
 						</Section>
 					)}
 					<Section label="Action">
-						<Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.72rem", wordBreak: "break-all", color: "text.secondary" }}>
-							{entry.actionTool}({entry.actionSummary})
+						<Typography variant="body2" title={entry.actionSummary} sx={{ fontFamily: "monospace", fontSize: "0.72rem", wordBreak: "break-all", color: "text.secondary" }}>
+							{entry.actionTool}({compactActionSummary(entry.actionSummary)})
 						</Typography>
 					</Section>
 					<Section label="Evaluator">
@@ -160,8 +179,8 @@ function RoundCard({ entry, isLatest }: { entry: DelegationRoundEntry; isLatest:
 							</Typography>
 						)}
 						{entry.evaluatorHint && (
-							<Typography variant="body2" color="warning.main" sx={{ mt: 0.3, fontSize: "0.8rem" }}>
-								{entry.evaluatorHint}
+							<Typography variant="body2" title={entry.evaluatorHint} color="warning.main" sx={{ mt: 0.3, fontSize: "0.8rem" }}>
+								{evaluatorHint}
 							</Typography>
 						)}
 					</Section>

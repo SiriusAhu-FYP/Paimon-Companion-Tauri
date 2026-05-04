@@ -364,7 +364,6 @@ export async function runDelegatedTaskLoop(input: {
 				round,
 				traceId: input.traceId,
 			});
-			pendingLongSequenceRecoveryReason = "";
 			if (!recovery.succeeded) {
 				log.warn("long sequence recovery reset failed", {
 					round,
@@ -379,7 +378,9 @@ export async function runDelegatedTaskLoop(input: {
 					),
 				);
 				await sleep(config.afterActionWaitMs);
+				continue;
 			} else {
+				pendingLongSequenceRecoveryReason = "";
 				latestHint = pickReplyLanguageText(
 					"系统已重开本关。上一轮的局部进展不是当前进度，只能作为失败路线经验；下一轮必须从初始局面重新生成完整长序列。",
 					"The runner has restarted the level. The previous partial progress is not current progress; treat it only as a failed-route lesson and generate a fresh full sequence from the initial board.",
@@ -956,9 +957,17 @@ export async function runDelegatedTaskLoop(input: {
 			goalProgress: reflection.goalProgress,
 			phaseStatus: reflection.phaseStatus,
 		});
+		const longSequenceAttemptFailureDetail = longSequenceMode && !isBoardMissionCompleted(reflection, planner)
+			? (longSequenceFailureDetail || batchExecutionError || buildCompletedLongSequenceFailureDetail({
+				executedCount: executedActions.length,
+				totalCount: effectivePlannerActions.length,
+				actionSummary: batchActionSummary,
+				reflection,
+			}))
+			: "";
 		const reflectionReply = resolveReflectionNarration(
 			reflection,
-			longSequenceFailureDetail || batchExecutionError,
+			longSequenceAttemptFailureDetail,
 			replyLanguageMode,
 		);
 		if (reflectionReply) {
@@ -979,13 +988,13 @@ export async function runDelegatedTaskLoop(input: {
 			reflection,
 		});
 		pushStrategyLesson(strategyLessons, strategyLesson, 4);
-		if (longSequenceMode && longSequenceFailureDetail) {
+		if (longSequenceMode && longSequenceAttemptFailureDetail) {
 			pushStrategyLesson(
 				strategyLessons,
 				buildLongSequenceAttemptLesson({
 					planner,
 					reflection,
-					failureDetail: longSequenceFailureDetail,
+					failureDetail: longSequenceAttemptFailureDetail,
 					actionSummary: batchActionSummary,
 				}),
 				6,
@@ -1081,7 +1090,7 @@ export async function runDelegatedTaskLoop(input: {
 		}
 		const longSequenceRecoveryReason = longSequenceMode && !isBoardMissionCompleted(reflection, planner)
 			? detectLongSequenceRecoveryReason({
-				executionError: longSequenceFailureDetail || batchExecutionError,
+				executionError: longSequenceAttemptFailureDetail,
 				reflection,
 			})
 			: "";
@@ -1103,7 +1112,7 @@ export async function runDelegatedTaskLoop(input: {
 			log.warn("long sequence recovery scheduled", {
 				round,
 				reason: longSequenceRecoveryReason,
-				executionError: longSequenceFailureDetail || batchExecutionError,
+				executionError: longSequenceAttemptFailureDetail,
 				planViability: reflection.planViability,
 				phaseStatus: reflection.phaseStatus,
 			});
@@ -1456,6 +1465,29 @@ function detectLongSequenceRecoveryReason(input: {
 		return input.reflection.planAssessment || input.reflection.phaseAssessment || "long sequence route invalidated";
 	}
 	return "";
+}
+
+function buildCompletedLongSequenceFailureDetail(input: {
+	executedCount: number;
+	totalCount: number;
+	actionSummary: string;
+	reflection: ProgressEvaluatorDecision;
+}): string {
+	if (input.totalCount <= 1 || input.executedCount < input.totalCount || input.reflection.expectedMet) {
+		return "";
+	}
+	const sequence = formatActionSequenceForDiagnosis(input.actionSummary);
+	const reason = input.reflection.latestDiagnosis
+		|| input.reflection.routeStateUpdate
+		|| input.reflection.planAssessment
+		|| input.reflection.phaseAssessment
+		|| "the evaluator did not confirm the expected outcome";
+	return [
+		`Long sequence completed ${input.executedCount}/${input.totalCount} actions but did not solve the level.`,
+		sequence ? `sequence=${sequence}` : "",
+		`result=${compactDiagnosticText(reason, 180)}`,
+		"Restart before the next planner turn and generate a different full route from the initial board.",
+	].filter(Boolean).join(" ");
 }
 
 function buildPreMissionForObservation(taskText: string): MissionAnalysisDecision {
@@ -4335,6 +4367,12 @@ function resolveOperationsNarration(
 			? "I think the task is complete now."
 			: "派蒙认为这次任务已经完成了。";
 	}
+	const routeSummary = compactDiagnosticText(planner.currentRouteStep || planner.committedRoute || planner.expectedOutcome, 120);
+	if (planner.actions.length > 1 && routeSummary) {
+		return languageMode === "en"
+			? `I’ll try a full route now: ${routeSummary}`
+			: `派蒙这轮会尝试一条完整路线：${routeSummary}`;
+	}
 	const firstAction = planner.actions[0];
 	const actionId = toText(firstAction?.args.actionId || firstAction?.args.key);
 	if (actionId) {
@@ -4360,9 +4398,13 @@ function resolveReflectionNarration(
 		}
 	}
 	if (executionError) {
+		const summary = summarizeLongSequenceFailureForSpeech(executionError, languageMode);
+		if (summary) {
+			return summary;
+		}
 		return languageMode === "en"
-			? "That attempt stopped early, so I’ll revise the route."
-			: "这次尝试提前停住了，派蒙会重新修正路线。";
+			? "This route did not solve the level, so I’ll restart and try a different plan."
+			: "这条路线没有解开关卡，派蒙会重开并换一条路线。";
 	}
 	if (reflection.expectedMet || reflection.actionSucceeded || didBoardTaskMakeProgress(reflection)) {
 		return languageMode === "en"
@@ -4372,6 +4414,25 @@ function resolveReflectionNarration(
 	return languageMode === "en"
 		? "That step did not clearly work, so I’ll adjust."
 		: "这一步没有明显成功，派蒙调整一下。";
+}
+
+function summarizeLongSequenceFailureForSpeech(text: string, languageMode: ReplyLanguageMode): string {
+	const failedStep = extractLongSequenceFailureStep(text);
+	const failedAction = extractLongSequenceFailedAction(text);
+	const completedMatch = text.match(/Long sequence completed\s+(\d+\/\d+)\s+actions/i);
+	if (completedMatch) {
+		const count = completedMatch[1] ?? "";
+		return languageMode === "en"
+			? `The full ${count} route ran, but it did not solve the level. I’ll restart and change the route.`
+			: `这条 ${count} 步路线已经走完，但没有通关。派蒙会重开并换一条路线。`;
+	}
+	if (failedStep) {
+		const actionText = failedAction ? formatActionForNarration(failedAction) : "a move";
+		return languageMode === "en"
+			? `The route failed at step ${failedStep} on ${actionText}. I’ll restart and change the prefix.`
+			: `这条路线在第 ${failedStep} 步的 ${actionText} 卡住了。派蒙会重开并调整前缀。`;
+	}
+	return "";
 }
 
 function formatActionForNarration(actionId: string): string {
@@ -4648,11 +4709,12 @@ function enrichEvaluatorDiagnosisFromExecutionError(
 		return reflection;
 	}
 	const failedStep = extractLongSequenceFailureStep(executionError);
-	const failedPrefix = extractLongSequenceExecutedPrefix(executionError) || actionSummary;
+	const failedPrefix = formatActionSequenceForDiagnosis(extractLongSequenceExecutedPrefix(executionError) || actionSummary);
 	const failedAction = extractLongSequenceFailedAction(executionError);
+	const failedActionLabel = failedAction ? formatActionForNarration(failedAction) : "";
 	const failureGeometry = (
-		failedAction
-			? `The board did not change after ${failedAction}; the player was not in a valid stance for that move, or the route prefix reached a blocked cell.`
+		failedActionLabel
+			? `The board did not change after ${failedActionLabel}; the player was not in a valid stance for that move, or the route prefix reached a blocked cell.`
 			: "The board did not change after the failed step, so the route prefix reached an invalid stance or blocked cell."
 	);
 	const routeLesson = (
@@ -4661,8 +4723,8 @@ function enrichEvaluatorDiagnosisFromExecutionError(
 			: "The failed long sequence proves the current route geometry needs revision before retrying."
 	);
 	const nextAttemptConstraint = (
-		failedAction
-			? `Next attempt may reuse ${failedAction} only after changing the prefix or stance that led to this failure.`
+		failedActionLabel
+			? `Next attempt may reuse ${failedActionLabel} only after changing the prefix or stance that led to this failure.`
 			: "Next attempt must change the failed prefix or stance, not merely repeat the same sequence."
 	);
 	const routeLearning = [
@@ -4688,7 +4750,7 @@ function enrichEvaluatorDiagnosisFromExecutionError(
 }
 
 function extractLongSequenceFailureStep(text: string): string {
-	const match = text.match(/Long sequence stopped at step\s+([^:]+):/i);
+	const match = text.match(/Long sequence stopped at step\s+([^\s:]+)(?::|\s|$)/i);
 	return match?.[1]?.trim() ?? "";
 }
 
@@ -4699,7 +4761,40 @@ function extractLongSequenceExecutedPrefix(text: string): string {
 
 function extractLongSequenceFailedAction(text: string): string {
 	const match = text.match(/failedAction=(.+?)\s+executedPrefix=/i);
-	return match?.[1]?.trim() ?? "";
+	return extractActionIdsFromText(match?.[1]?.trim() ?? "")[0] ?? "";
+}
+
+function formatActionSequenceForDiagnosis(text: string): string {
+	return extractActionIdsFromText(text)
+		.map(formatActionForNarration)
+		.join(" -> ");
+}
+
+function extractActionIdsFromText(text: string): string[] {
+	const ids: string[] = [];
+	for (const match of text.matchAll(/"actionId"\s*:\s*"([^"]+)"/gi)) {
+		ids.push(match[1] ?? "");
+	}
+	for (const match of text.matchAll(/actionId=([A-Za-z0-9_-]+)/gi)) {
+		ids.push(match[1] ?? "");
+	}
+	if (!ids.length && /\bmove_(?:up|down|left|right)\b/i.test(text)) {
+		for (const match of text.matchAll(/\b(move_(?:up|down|left|right)|reset_level)\b/gi)) {
+			ids.push(match[1] ?? "");
+		}
+	}
+	return ids.map((id) => id.trim()).filter(Boolean);
+}
+
+function compactDiagnosticText(text: string, limit = 220): string {
+	const withoutToolJson = text
+		.replace(/game\.perform_action\(\{"actionId":"([^"]+)","gameId":"sokoban"\}\)/g, (_all, actionId: string) => formatActionForNarration(actionId))
+		.replace(/host\.send_key\(\{"key":"([^"]+)"[^)]*\}\)/g, (_all, key: string) => formatActionForNarration(key))
+		.replace(/\s+/g, " ")
+		.trim();
+	return withoutToolJson.length > limit
+		? `${withoutToolJson.slice(0, Math.max(0, limit - 3)).trim()}...`
+		: withoutToolJson;
 }
 
 function normalizeStrategyIdentity(value: string): string {
@@ -5269,6 +5364,8 @@ export const __test = {
 	normalizeStateSketchText,
 	buildStrategyLesson,
 	enrichEvaluatorDiagnosisFromExecutionError,
+	buildCompletedLongSequenceFailureDetail,
+	formatActionSequenceForDiagnosis,
 	resolveOperationsNarration,
 	resolveReflectionNarration,
 	buildInitialCanonicalBoard,
