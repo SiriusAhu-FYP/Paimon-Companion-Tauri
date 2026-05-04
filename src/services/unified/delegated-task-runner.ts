@@ -1830,9 +1830,9 @@ function buildOperationsPlannerSystemPrompt(input: {
 		"对复杂棋盘任务，必须维护 committedRoute / currentRouteStep / routeSelfCheck：先说明当前承诺路线，再自检这一轮动作是否服务于该路线，最后才给 actions。",
 		"如果 committedRoute 与当前棋盘或失败经验冲突，必须在 strategyRevision 中改路线；不要只跟随 latestHint 做局部动作。",
 		"对复杂推箱子任务，优先围绕“释放空间、调整箱子相对关系、验证候选路线”选择 activeStrategy，而不是贪心地先完成看起来最近的箱子。",
-		"对推箱子任务，任何推动箱子的动作都必须在 reasoning 或 expectedOutcome 中显式写清：目标箱子、箱子要移动的方向、P 必须站在箱子的哪一侧、P 当前是否已经在该侧、最终 actionId。若 P 不在正确侧，本轮只能先走位，不能假装已经能推。",
+		"对推箱子任务，任何推动箱子的动作都必须在 reasoning 或 expectedOutcome 中显式写清：目标箱子、箱子要移动的方向、P 必须站在箱子的哪一侧、P 当前是否已经在该侧、箱子后方目标格内容、最终 actionId。若 P 不在正确侧或后方目标格不是可进入地砖/目标点，本轮只能先走位，不能假装已经能推。",
 		"推箱几何硬规则：箱子向左，P 必须在箱子右侧并执行 move_left；箱子向右，P 必须在箱子左侧并执行 move_right；箱子向上，P 必须在箱子下侧并执行 move_up；箱子向下，P 必须在箱子上侧并执行 move_down。",
-		"推箱子输出前必须自己逐步模拟动作链：每一步都要判断 P 是普通移动、推箱、撞墙，还是推不动两个相邻箱子；若某一步会撞墙、把非目标箱推入角落、或把箱子推到顶墙/边墙死局，必须先改路线再输出 actions。",
+		"推箱子输出前必须自己逐步模拟动作链：每一步都要判断 P 是普通移动、推箱、撞墙，还是推不动两个相邻箱子；每个 effect=push 的步骤必须写出 boxBefore、pushDirection、playerRequiredCell、destinationCell、destinationContent、legal=true/false；若 legal=false、某一步会撞墙、把非目标箱推入角落、或把箱子推到顶墙/边墙死局，必须先改路线再输出 actions。",
 		"不要把“高层策略失败”和“站位/方向执行失败”混为一谈。若 lower-box-first 这类高层路线还可能成立，只修正具体站位或动作方向，不要把整类路线写进 invalidatedStrategies。",
 		"activeStrategy 应代表当前正在验证的高层路线；strategyRevision 用一句话说明本轮是否维持、修正或放弃原路线。",
 		"若 scratchpadContext 中已经列出 invalidatedStrategies，禁止继续复用这些已被否决的高层路线，必须改选候选路线或明确修正原路线。",
@@ -1846,7 +1846,7 @@ function buildOperationsPlannerSystemPrompt(input: {
 		baseRules.push(`长序列模式硬契约：当前轮次必须输出从当前棋盘到通关的一整条动作序列，而不是局部短序列；actions 少于 ${input.minActionsPerRound} 步会被拒绝且不会执行。每个动作仍必须是一个单步 action。`);
 		baseRules.push(`长序列模式动作范围为 ${input.minActionsPerRound}-${input.maxActionsPerRound} 步；只输出你有理由相信从当前局面可连续执行并最终通关的步骤，系统会在某步无截图变化时自动停止并交给 Evaluator 反思。`);
 		baseRules.push("长序列模式下，优先全部使用 game.perform_action 的上下左右移动；不要夹杂 reset、刷新、换标签页等恢复动作。reset_level 由 runner/recovery 层统一管理，不是 Planner actions。");
-		baseRules.push("长序列模式下，routeSelfCheck 必须包含逐步模拟摘要，例如 step/action/P-before/effect/P-after/boxes-after。不要只写高层路线自信；要证明每一步不会撞墙、不会意外推箱、不会制造死局。");
+		baseRules.push("长序列模式下，routeSelfCheck 必须包含逐步模拟摘要，例如 step/action/P-before/effect/P-after/boxes-after。每个 effect=push 还必须列出 boxBefore/pushDirection/playerRequiredCell/destinationCell/destinationContent/legal。不要只写高层路线自信；要证明每一步不会撞墙、不会意外推箱、不会制造死局。");
 	}
 	if (input.gameContext) {
 		baseRules.push(`若当前任务模式是游戏且窗口识别为 ${input.gameContext.displayName}，优先使用 game.perform_action。`);
@@ -2030,7 +2030,7 @@ function buildLongSequencePlannerUserPrompt(input: {
 		"- When prior evaluator feedback contains verifiedPrefix / failedSuffix / failureReason / uncertainty, explicitly answer it in strategyRevision: which prefix you keep, which suffix you replace, and where the new action sequence first differs from the failed one.",
 		"- For Sokoban, compare multiple route ideas before committing. Do not assume boxes are solved linearly or permanently once they touch a target.",
 		"- Temporary placements, moving a box off a target, and interleaving boxes are allowed when they preserve global solvability.",
-		"- Before any push in the sequence, internally verify push geometry: player side, push direction, destination cell, and later access.",
+		"- Before any push in the sequence, internally verify push geometry: player side, push direction, destination cell, destination content, legality, and later access.",
 		"- Before writing actions, simulate the whole sequence step by step on your own ASCII board. For each action, know whether it is a walk, a box push, a wall collision, or an impossible push against another box.",
 		"- If a simulated step would push a box against the top/side wall off target, push a non-target box into a corner, or push two adjacent boxes, revise the route before output. Do not rely on the runner to catch that mistake.",
 		"- A target tile is not automatically final: a box may need to pass through or leave a target if the global route requires it, but every such move must remain reversible or lead to completion.",
@@ -2056,7 +2056,7 @@ function buildLongSequencePlannerUserPrompt(input: {
 		'  "abortCondition": "when the runner/evaluator should stop and replan, especially the likely first bad step",',
 		'  "activeStrategy": "the chosen global route, including box/target ordering and temporary placements",',
 		'  "strategyRevision": "how previous failure facts changed this route: kept verifiedPrefix, replaced failedSuffix, first differing action, or no prior failure",',
-		'  "routeSelfCheck": "step simulation summary: step/action/P-before/effect/P-after/boxes-after; explicitly note no wall collision, no unintended push, and no off-target corner deadlock",',
+		'  "routeSelfCheck": "step simulation summary. For each push include boxBefore/pushDirection/playerRequiredCell/destinationCell/destinationContent/legal; explicitly note no wall collision, no unintended push, and no off-target corner deadlock",',
 		'  "committedRoute": "numbered route milestones for the full attempt",',
 		'  "currentRouteStep": "full-sequence attempt from current board",',
 		'  "routeRisks": ["risk strings"],',
@@ -2081,6 +2081,7 @@ function buildProgressEvaluatorSystemPrompt(
 		"actionSucceeded 只表示动作是否造成可见执行结果；wasActionCorrect 表示该执行是否符合本轮预期；goalProgress 表示整关目标是否推进。三者不得混用。",
 		"如果本轮预期是推动箱子，但 after 图显示只有 P 移动、箱子没有移动，则 expectedMet=false、wasActionCorrect=false、goalProgress=none；除非该纯走位正好是 currentPhaseGoal 明确要求的站位。",
 		"如果执行在某一步后截图无变化，不要把它描述成系统没有执行；要从 before/after 和执行前缀推断智能体路线为什么无效：撞墙、推不动相邻箱子、P 不在正确侧、或棋盘读错。",
+		"如果 Planner 的 stateSketch/routeSelfCheck 已经显示某次 push 的 destinationContent 是墙、箱子或棋盘外，但 expectedOutcome/actions 仍然假设这个 push 会成功，必须在 latestDiagnosis 或 routeStateUpdate 中标记 selfCheckContradiction，并判定 expectedMet=false、wasActionCorrect=false。",
 		"若 preExpectedOutcome 未达成，nextHint 必须明确给出修正动作链，不能只给抽象建议。",
 		"你还必须判断当前阶段目标是否推进，输出 phaseStatus（advanced|stalled|blocked|completed）和 phaseAssessment（一句话）。",
 		"phaseStatus=completed 只表示当前阶段完成，不等于整个 mission 完成；mission 是否完成仍必须严格服从 completionSignals。",

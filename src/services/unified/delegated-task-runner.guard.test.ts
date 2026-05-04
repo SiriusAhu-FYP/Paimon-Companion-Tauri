@@ -107,6 +107,8 @@ describe("delegation long sequence planning helpers", () => {
 		expect(prompt).toContain("must not stop at a setup position");
 		expect(prompt).toContain("simulate the whole sequence step by step");
 		expect(prompt).toContain("wall collision");
+		expect(prompt).toContain("destinationContent");
+		expect(prompt).toContain("legal");
 		expect(prompt).toContain("up to 100 actions");
 		expect(prompt).toContain("fewer than 12 actions");
 		expect(prompt).toContain("not a recommended length");
@@ -302,6 +304,8 @@ describe("delegation long sequence planning helpers", () => {
 		expect(prompt).toContain("failureReason=");
 		expect(prompt).toContain("uncertainty=");
 		expect(prompt).toContain("不要把它描述成系统没有执行");
+		expect(prompt).toContain("selfCheckContradiction");
+		expect(prompt).toContain("destinationContent");
 		expect(prompt).toContain("应复现的有效前缀");
 		expect(prompt).toContain("不要要求 Planner 从失败后的残局继续行动");
 		expect(prompt).toContain("不要把“某方向在某个站位失败”泛化成永远禁止该方向");
