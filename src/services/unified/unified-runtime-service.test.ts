@@ -243,6 +243,17 @@ describe("UnifiedRuntimeService delegation path", () => {
 		expect(service.getState().lastCompanionText).toContain("任务完成");
 	});
 
+	it("uses a single-clause warmup cue for delegated TTS", async () => {
+		const { pipeline, service } = createService({
+			selectedTargetTitle: "Mozilla Firefox",
+		});
+
+		await service.submitDelegationTaskInstruction("请在当前页面完成浏览器任务");
+
+		expect(pipeline.speakTextNonBlocking).toHaveBeenCalledWith("派蒙收到新委托了，马上瞧瞧。");
+		expect(pipeline.speakTextNonBlocking).not.toHaveBeenCalledWith("有新委托来了？让派蒙瞧瞧。");
+	});
+
 	it("emits a final result reply even when planner or evaluator already spoke", async () => {
 		vi.mocked(runDelegatedTaskLoop).mockImplementationOnce(async ({ onAssistantReply }) => {
 			await onAssistantReply?.("I got the page open, but I bundled too many actions.", "reflection");

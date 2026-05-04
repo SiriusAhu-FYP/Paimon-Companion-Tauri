@@ -52,8 +52,8 @@ const PREFLIGHT_CUE_TEXT = {
 	},
 } as const;
 const DELEGATION_WARMUP_CUE = {
-	zh: "有新委托来了？让派蒙瞧瞧。",
-	en: "A new commission? Let Paimon take a look.",
+	zh: "派蒙收到新委托了，马上瞧瞧。",
+	en: "Paimon has the new commission and will take a look.",
 } as const;
 type PreflightCueKey = keyof typeof PREFLIGHT_CUE_TEXT;
 
