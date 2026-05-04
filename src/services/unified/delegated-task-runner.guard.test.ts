@@ -40,6 +40,7 @@ const {
 	countRawPlannerActions,
 	extractRawPlannerActionIds,
 	detectLongSequencePlannerIssue,
+	detectRepeatedLongSequenceIssue,
 	detectPlannerPolicyIssue,
 	buildRepeatedFailureHint,
 	classifySnapshotChangeScore,
@@ -108,6 +109,9 @@ describe("delegation long sequence planning helpers", () => {
 		expect(prompt).toContain("wall collision");
 		expect(prompt).toContain("up to 100 actions");
 		expect(prompt).toContain("fewer than 12 actions");
+		expect(prompt).toContain("not a recommended length");
+		expect(prompt).toContain("30-50 moves");
+		expect(prompt).toContain("kept verifiedPrefix");
 	});
 
 	it("puts long-sequence min/max action counts in the planner system prompt", () => {
@@ -293,6 +297,10 @@ describe("delegation long sequence planning helpers", () => {
 		expect(prompt).toContain("动作前缀");
 		expect(prompt).toContain("routeStateUpdate/latestDiagnosis");
 		expect(prompt).toContain("失败几何原因");
+		expect(prompt).toContain("verifiedPrefix=");
+		expect(prompt).toContain("failedSuffix=");
+		expect(prompt).toContain("failureReason=");
+		expect(prompt).toContain("uncertainty=");
 		expect(prompt).toContain("不要把它描述成系统没有执行");
 		expect(prompt).toContain("应复现的有效前缀");
 		expect(prompt).toContain("不要要求 Planner 从失败后的残局继续行动");
@@ -432,6 +440,21 @@ describe("delegation long sequence planning helpers", () => {
 
 		expect(issue).toContain("Do not output reset_level");
 		expect(issue).toContain("step(s): 1");
+	});
+
+	it("feeds back repeated failed long sequences without banning useful prefixes", () => {
+		const actions = [
+			{ tool: "game.perform_action", args: { actionId: "move_right", gameId: "sokoban" } },
+			{ tool: "game.perform_action", args: { actionId: "move_right", gameId: "sokoban" } },
+			{ tool: "game.perform_action", args: { actionId: "move_down", gameId: "sokoban" } },
+			{ tool: "game.perform_action", args: { actionId: "move_up", gameId: "sokoban" } },
+		];
+
+		const issue = detectRepeatedLongSequenceIssue(actions, ["move_right -> move_right -> move_down -> move_up"]);
+
+		expect(issue).toContain("重复输出");
+		expect(issue).toContain("保留可复现的有效前缀");
+		expect(issue).toContain("重写失败后缀");
 	});
 
 	it("schedules long-sequence recovery for hard deadlocked attempts", () => {

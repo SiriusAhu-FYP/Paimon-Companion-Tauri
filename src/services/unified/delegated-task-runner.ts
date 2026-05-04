@@ -207,6 +207,7 @@ export async function runDelegatedTaskLoop(input: {
 	let noActionStreak = 0;
 	let hasExecutionEvidence = false;
 	const strategyLessons: string[] = [];
+	const recentLongSequenceFailedSequences: string[] = [];
 	const longSequenceMode = config.longSequence.enabled && candidateGameContext?.gameId === "sokoban";
 	let pendingLongSequenceRecoveryReason = "";
 	const runtimeToolNames = await resolveRuntimeToolNames(input.traceId);
@@ -554,7 +555,10 @@ export async function runDelegatedTaskLoop(input: {
 					maxActions: config.longSequence.maxActions,
 				})
 				: "";
-			const policyIssue = invalidatedStrategyIssue || longSequenceIssue || detectPlannerPolicyIssue({
+			const repeatedLongSequenceIssue = longSequenceMode
+				? detectRepeatedLongSequenceIssue(nextPlanner.actions, recentLongSequenceFailedSequences)
+				: "";
+			const policyIssue = invalidatedStrategyIssue || longSequenceIssue || repeatedLongSequenceIssue || detectPlannerPolicyIssue({
 				goalReached: nextPlanner.goalReached,
 				expectedOutcome: nextPlanner.expectedOutcome,
 				actions: nextPlanner.actions,
@@ -1003,6 +1007,7 @@ export async function runDelegatedTaskLoop(input: {
 		});
 		pushStrategyLesson(strategyLessons, strategyLesson, 4);
 		if (longSequenceMode && longSequenceAttemptFailureDetail) {
+			pushLongSequenceFailedSequence(recentLongSequenceFailedSequences, effectivePlannerActions);
 			pushStrategyLesson(
 				strategyLessons,
 				buildLongSequenceAttemptLesson({
@@ -2017,10 +2022,12 @@ function buildLongSequencePlannerUserPrompt(input: {
 		"- If the level is visible and solvable, output the full solution sequence from this board to completion. Do not output a local prefix as a substitute for a solve.",
 		`- You may output up to ${input.maxActions} actions. A short sequence is acceptable only when it genuinely completes the level or the board is unreadable; explain that in abortCondition.`,
 		`- Planner contract: for this game profile, fewer than ${input.minActions} actions is treated as an incomplete plan. reset_level is not an exception because restart is runner-managed.`,
-		`- If you can only think of fewer than ${input.minActions} actions, keep solving before writing JSON; the runner will not execute a short partial sequence.`,
+		`- ${input.minActions} is only the minimum allowed count, not a recommended length. Complex Sokoban levels often need 30-50 moves; do not truncate a real route to ${input.minActions} moves just because it satisfies the minimum.`,
+		`- If you can only think of fewer than ${input.minActions} actions, keep solving before writing JSON; if the route needs 20, 30, or 50 moves, output that full sequence.`,
 		"- Prefer game.perform_action movement actions only: move_up, move_down, move_left, move_right. Do not output reset_level, evaluator checkpoints, refreshes, or tab/window recovery actions.",
 		"- If a prior attempt failed or deadlocked, the runner restarts the level before asking you again when recovery is possible. Use the current screenshot as source of truth, but treat prior partial progress as experience to reproduce after reset, not as persistent progress.",
 		"- Treat each planner turn as a fresh complete solve attempt from the visible board. Do not output a short local repair sequence after a failed long sequence.",
+		"- When prior evaluator feedback contains verifiedPrefix / failedSuffix / failureReason / uncertainty, explicitly answer it in strategyRevision: which prefix you keep, which suffix you replace, and where the new action sequence first differs from the failed one.",
 		"- For Sokoban, compare multiple route ideas before committing. Do not assume boxes are solved linearly or permanently once they touch a target.",
 		"- Temporary placements, moving a box off a target, and interleaving boxes are allowed when they preserve global solvability.",
 		"- Before any push in the sequence, internally verify push geometry: player side, push direction, destination cell, and later access.",
@@ -2048,7 +2055,7 @@ function buildLongSequencePlannerUserPrompt(input: {
 		'  "whyThisPhase": "why this full route is globally viable",',
 		'  "abortCondition": "when the runner/evaluator should stop and replan, especially the likely first bad step",',
 		'  "activeStrategy": "the chosen global route, including box/target ordering and temporary placements",',
-		'  "strategyRevision": "how previous failure facts changed this route, or no prior failure",',
+		'  "strategyRevision": "how previous failure facts changed this route: kept verifiedPrefix, replaced failedSuffix, first differing action, or no prior failure",',
 		'  "routeSelfCheck": "step simulation summary: step/action/P-before/effect/P-after/boxes-after; explicitly note no wall collision, no unintended push, and no off-target corner deadlock",',
 		'  "committedRoute": "numbered route milestones for the full attempt",',
 		'  "currentRouteStep": "full-sequence attempt from current board",',
@@ -2086,6 +2093,9 @@ function buildProgressEvaluatorSystemPrompt(
 			: "若 history 显示同签名动作已连续失败 >=2 轮，你必须判定 wasActionCorrect=false 且 goalAlignment=deviated，并在 nextHint 强制要求“换策略/换动作链，不得重复同动作”。",
 		options.longSequenceMode
 			? "长序列失败时，你的核心职责是提取可复用的失败前缀经验，并写入已有字段 routeStateUpdate/latestDiagnosis：说明失败前缀、失败步、失败几何原因、这次失败证明了什么、下一轮路线必须如何不同。"
+			: "",
+		options.longSequenceMode
+			? "routeStateUpdate 必须使用证据分层格式：verifiedPrefix=已被画面证明有效的动作前缀；failedSuffix=从哪里开始失败或无效的后缀；failureReason=站位/墙/箱子/通道层面的原因；uncertainty=还没有被证明的路线假设。不要把经验写成命令。"
 			: "",
 		options.longSequenceMode
 			? "不要只输出 failed/blocked/none；要回答“这次失败让下一轮更接近成功的知识是什么”。如果某路线走得更远但最后失败，应在 routeStateUpdate 中明确保留有效前缀、放弃错误后缀。"
@@ -2344,6 +2354,26 @@ function detectLongSequencePlannerIssue(input: {
 		actionIds ? `Previous too-short sequence was: ${actionIds}.` : "",
 		`This is round ${input.round}; treat this as planner-contract feedback before execution, not as evaluator feedback.`,
 	].filter(Boolean).join(" ");
+}
+
+function detectRepeatedLongSequenceIssue(
+	actions: DelegatedTaskAction[],
+	recentFailedSequences: readonly string[],
+): string {
+	const sequence = formatPlannerActionSequence(actions);
+	if (!sequence || !recentFailedSequences.length) {
+		return "";
+	}
+	const lastFailed = recentFailedSequences[recentFailedSequences.length - 1] ?? "";
+	if (sequence !== lastFailed) {
+		return "";
+	}
+	return [
+		"你重复输出了上一轮已经失败的完整长序列。",
+		`上一轮失败序列：${lastFailed}`,
+		"请保留可复现的有效前缀，但必须重写失败后缀，或者明确改变箱子处理顺序/站位几何。",
+		"如果你无法说明这次与上一轮为什么不同，就不要复读同一条序列。",
+	].join(" ");
 }
 
 function normalizeAction(
@@ -5253,6 +5283,27 @@ function buildActionSignature(action: DelegatedTaskAction): string {
 		.join("|");
 }
 
+function formatPlannerActionSequence(actions: readonly DelegatedTaskAction[]): string {
+	return actions
+		.map((action) => toText(action.args.actionId))
+		.filter(Boolean)
+		.join(" -> ");
+}
+
+function pushLongSequenceFailedSequence(bucket: string[], actions: readonly DelegatedTaskAction[]): void {
+	const sequence = formatPlannerActionSequence(actions);
+	if (!sequence) {
+		return;
+	}
+	if (bucket[bucket.length - 1] === sequence) {
+		return;
+	}
+	bucket.push(sequence);
+	if (bucket.length > 4) {
+		bucket.splice(0, bucket.length - 4);
+	}
+}
+
 function normalizeActionSignatureValue(value: unknown): string {
 	return typeof value === "string"
 		? value.trim().toLowerCase()
@@ -5431,6 +5482,7 @@ export const __test = {
 	countRawPlannerActions,
 	extractRawPlannerActionIds,
 	detectLongSequencePlannerIssue,
+	detectRepeatedLongSequenceIssue,
 	detectPlannerPolicyIssue,
 	buildRepeatedFailureHint,
 	classifySnapshotChangeScore,

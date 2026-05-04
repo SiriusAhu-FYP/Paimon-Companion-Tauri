@@ -118,6 +118,7 @@ operationsPlannerThinkingMode = "off"
 operationsPlannerRules = [
 	"长序列模式已开启：如果当前局面清晰，直接生成一整条尝试通关的动作序列，而不是只走局部 1-8 步；优先输出 game.perform_action，每个动作一个 action。上限 100 步。",
 	"长序列模式下，actions 应从当前局面开始，覆盖完整解法或尽可能长的合理解法；若中途撞墙，系统会自动停止并把失败步交给 evaluator 反思。",
+	"longSequence.minActions=12 只是最低门槛，不是推荐长度；复杂推箱子关卡经常需要 30-50 步。不要因为达到 12 步就提前停止，必须输出你认为能通关的完整路线。",
 	"长序列模式下，每一轮 Planner 都应被视为一次从当前可见棋盘到通关的完整解题尝试；上一轮失败后的局部进展只作为经验，不作为持久进度。",
 	"长序列模式下，expectedOutcome 应描述整条序列的目标，并简要列出关键里程碑，例如先移动哪个箱子、再移动哪个箱子、最终哪些目标应被占据。",
 	"长序列模式下 Planner 的 actions 只能包含 move_up / move_down / move_left / move_right 这类棋盘移动；reset_level 由 runner/recovery 层管理，Planner 不得把 reset_level 写进 actions。",
@@ -133,6 +134,7 @@ operationsPlannerRules = [
 	"推箱方向规则：箱子向左=P 在箱子右侧并 move_left；箱子向右=P 在箱子左侧并 move_right；箱子向上=P 在箱子下方并 move_up；箱子向下=P 在箱子上方并 move_down。",
 	"推动箱子前必须检查箱子后方一格是否可走；若后方是墙、箱子或棋盘外区域，则不要选择该推动。",
 	"输出 actions 前必须在 routeSelfCheck 中逐步模拟整条序列：每一步写 P-before、action、effect=walk/push/blocked、P-after、boxes-after；发现撞墙、推不动箱子链、意外推箱或死局时，先改路线再输出。",
+	"如果 evaluator 记录了 verifiedPrefix / failedSuffix / failureReason / uncertainty，本轮 strategyRevision 必须逐项回应：保留哪个有效前缀、替换哪个失败后缀、新动作序列从第几步开始不同、为什么新后缀几何上更可行。",
 	"如果最近连续两轮都没有确认 stateDelta，就先重建 stateSketch，并明确换一个局面目标；不要沿用同一套方向套路。",
 	"如果普通箱子 B 被推到贴墙且相邻方向又被墙/已完成箱子封住，导致剩余目标无法继续推进，应停止继续乱走，直接规划重置本关。",
 	"每轮都要明确 currentPhaseGoal：说明本轮要怎样保持或改善整体可达性，例如打开通道、保留绕位空间、拆开箱子链、或建立某个安全推位；不要只盯着“把某箱立即推到目标点”。",
@@ -169,6 +171,7 @@ progressEvaluatorRules = [
 	"只有死局、重置、关键通道被不可恢复地堵死时，才把高层路线判为 invalidated。单次站位错误、推向错误、或 actionId 与目标方向不匹配，应判为 weakened/blocked，并要求修正具体推法。",
 	"评估路线时必须考虑所有未完成箱子之后是否仍可达、玩家是否仍能绕到关键推位、关键通道是否被打开或堵死；不要只因为一个箱子更接近目标就给正面评价。",
 	"长序列失败后，routeStateUpdate/latestDiagnosis 应记录重开后要复现的有效前缀、要避免的失败后缀和失败几何；不要要求 Planner 从失败后的残局继续行动。",
+	"routeStateUpdate 必须使用证据分层：verifiedPrefix=已被画面证明有效的动作前缀；failedSuffix=已失败或无效的动作后缀；failureReason=具体几何原因；uncertainty=仍未被证明的路线假设。Evaluator 只记录证据，不把这些字段写成强制命令。",
 ]
 
 [[actions]]
