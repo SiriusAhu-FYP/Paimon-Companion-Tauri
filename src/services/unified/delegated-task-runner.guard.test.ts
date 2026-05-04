@@ -45,6 +45,7 @@ const {
 	classifySnapshotChangeScore,
 	buildLongSequenceSnapshotChangeOptions,
 	detectLongSequenceRecoveryReason,
+	shouldContinueLongSequenceFromCurrentState,
 	resetRouteStateAfterLongSequenceRecovery,
 	PROGRESS_EVALUATOR_TEXT_MAX_TOKENS,
 	PROGRESS_EVALUATOR_VISION_MAX_TOKENS,
@@ -294,7 +295,7 @@ describe("delegation long sequence planning helpers", () => {
 		expect(prompt).toContain("routeStateUpdate/latestDiagnosis");
 		expect(prompt).toContain("失败几何原因");
 		expect(prompt).toContain("不要把它描述成系统没有执行");
-		expect(prompt).toContain("不要指挥下一轮从失败后的残局继续单步行动");
+		expect(prompt).toContain("若 after 图仍可续解且更接近目标");
 		expect(prompt).toContain("不要把“某方向在某个站位失败”泛化成永远禁止该方向");
 		expect(prompt).not.toContain("不得重复同动作");
 	});
@@ -336,12 +337,38 @@ describe("delegation long sequence planning helpers", () => {
 			executedCount: 12,
 			totalCount: 12,
 			actionSummary: 'game.perform_action({"actionId":"move_right","gameId":"sokoban"}) -> game.perform_action({"actionId":"move_down","gameId":"sokoban"})',
-			reflection: makeReflection({ expectedMet: false, latestDiagnosis: "not solved" }),
+			reflection: makeReflection({
+				expectedMet: false,
+				actionSucceeded: false,
+				goalAlignment: "unchanged",
+				goalProgress: "none",
+				phaseStatus: "stalled",
+				latestDiagnosis: "not solved",
+			}),
 		});
 
 		expect(detail).toContain("Long sequence completed 12/12 actions");
 		expect(detail).toContain("right -> down");
 		expect(detail).toContain("Restart before the next planner turn");
+	});
+
+	it("keeps completed long-sequence details recoverable when evaluator reports partial progress", () => {
+		const detail = buildCompletedLongSequenceFailureDetail({
+			executedCount: 12,
+			totalCount: 12,
+			actionSummary: 'game.perform_action({"actionId":"move_right","gameId":"sokoban"})',
+			reflection: makeReflection({
+				expectedMet: false,
+				actionSucceeded: true,
+				goalAlignment: "closer",
+				goalProgress: "partial",
+				phaseStatus: "advanced",
+				latestDiagnosis: "one box is on target and the remaining board is recoverable",
+			}),
+		});
+
+		expect(detail).toContain("Current board appears recoverable");
+		expect(detail).not.toContain("Restart before the next planner turn");
 	});
 
 	it("formats tool-call action summaries as readable direction chains", () => {
@@ -353,15 +380,59 @@ describe("delegation long sequence planning helpers", () => {
 	it("resets after an interrupted long sequence attempt", () => {
 		expect(detectLongSequenceRecoveryReason({
 			executionError: "Long sequence stopped at step 4/12: board screenshot did not meaningfully change",
-			reflection: makeReflection(),
+			reflection: makeReflection({
+				expectedMet: false,
+				actionSucceeded: false,
+				goalAlignment: "unchanged",
+				goalProgress: "none",
+				phaseStatus: "blocked",
+			}),
 		})).toContain("Long sequence stopped");
 	});
 
 	it("resets after a completed long sequence attempt that did not solve the level", () => {
 		expect(detectLongSequenceRecoveryReason({
 			executionError: "Long sequence completed 12/12 actions but did not solve the level.",
-			reflection: makeReflection({ expectedMet: false, actionSucceeded: false }),
+			reflection: makeReflection({
+				expectedMet: false,
+				actionSucceeded: false,
+				goalAlignment: "unchanged",
+				goalProgress: "none",
+				phaseStatus: "stalled",
+			}),
 		})).toContain("Long sequence completed");
+	});
+
+	it("does not schedule recovery reset when long sequence made recoverable partial progress", () => {
+		const reflection = makeReflection({
+			expectedMet: false,
+			actionSucceeded: true,
+			goalAlignment: "closer",
+			goalProgress: "partial",
+			phaseStatus: "advanced",
+			latestDiagnosis: "one box is on target and the board is recoverable",
+		});
+
+		expect(shouldContinueLongSequenceFromCurrentState(reflection)).toBe(true);
+		expect(detectLongSequenceRecoveryReason({
+			executionError: "Long sequence completed 12/12 actions but did not solve the level.",
+			reflection,
+		})).toBe("");
+	});
+
+	it("rejects reset_level inside long-sequence planner actions", () => {
+		const issue = detectLongSequencePlannerIssue({
+			actions: [
+				{ tool: "game.perform_action", args: { actionId: "reset_level", gameId: "sokoban" } },
+				{ tool: "game.perform_action", args: { actionId: "move_right", gameId: "sokoban" } },
+			],
+			minActions: 12,
+			maxActions: 100,
+			round: 7,
+		});
+
+		expect(issue).toContain("Do not output reset_level");
+		expect(issue).toContain("step(s): 1");
 	});
 
 	it("schedules long-sequence recovery for hard deadlocked attempts", () => {

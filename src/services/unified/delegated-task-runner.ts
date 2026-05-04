@@ -372,15 +372,17 @@ export async function runDelegatedTaskLoop(input: {
 					error: recovery.error,
 					changeScore: recovery.changeScore,
 				});
+				pendingLongSequenceRecoveryReason = "";
 				latestHint = combineHints(
 					latestHint,
 					pickReplyLanguageText(
-						`系统执行 reset_level 但没有确认重开成功：${recovery.error || "重置后画面没有变化"}。这不是任务结束信号；下一轮必须先根据当前截图判断是否仍可解，若仍是死局，再执行 reset_level 重开本关。`,
-						`The runner executed reset_level but could not confirm a restart: ${recovery.error || "no visible change after reset"}. This is not a task-ending signal; next planner turn must judge whether the current screenshot is still solvable, and if it is still deadlocked, execute reset_level again.`,
+						`系统执行 reset_level 但没有确认重开成功：${recovery.error || "重置后画面没有变化"}。这不是任务结束信号；本轮会把当前截图交回 Planner 重新判断。Planner 不得把 reset_level 写进 actions。`,
+						`The runner executed reset_level but could not confirm a restart: ${recovery.error || "no visible change after reset"}. This is not a task-ending signal; this round will return the current screenshot to Planner. Planner must not put reset_level in actions.`,
 					),
 				);
+				latestPlanViability = "weakened";
+				latestPlanAssessment = combineHints(latestPlanAssessment, recovery.error || "reset_level did not visibly change the board");
 				await sleep(config.afterActionWaitMs);
-				continue;
 			} else {
 				pendingLongSequenceRecoveryReason = "";
 				latestHint = pickReplyLanguageText(
@@ -814,7 +816,7 @@ export async function runDelegatedTaskLoop(input: {
 					`failedAction=${executionPlan.actionForEvaluation.tool}(${JSON.stringify(executionPlan.actionForEvaluation.args)})`,
 					`executedPrefix=${executedActions.map((item) => item.plan.actionForEvaluation.tool + "(" + JSON.stringify(item.plan.actionForEvaluation.args) + ")").join(" -> ")}`,
 					`remainingActions=${remainingActions}`,
-					"Evaluator must diagnose why this exact prefix/position failed and record a failed-route lesson. This attempt will be reset before the next planner turn; do not treat any partial progress as current progress.",
+					"Evaluator must diagnose why this exact prefix/position failed and record a failed-route lesson. If the after-state is still useful/recoverable, say so explicitly so the next Planner can continue from the visible board; otherwise mark it as deadlocked/unrecoverable so the runner can reset before the next planner turn.",
 				].filter(Boolean).join(" ");
 				batchExecutionError = longSequenceFailureDetail;
 				log.warn("long sequence stopped on unchanged snapshot", {
@@ -1453,6 +1455,9 @@ function detectLongSequenceRecoveryReason(input: {
 	executionError: string;
 	reflection: ProgressEvaluatorDecision;
 }): string {
+	if (shouldContinueLongSequenceFromCurrentState(input.reflection)) {
+		return "";
+	}
 	if (input.executionError) {
 		return input.executionError;
 	}
@@ -1476,6 +1481,27 @@ function detectLongSequenceRecoveryReason(input: {
 	return "";
 }
 
+function shouldContinueLongSequenceFromCurrentState(reflection: ProgressEvaluatorDecision): boolean {
+	if (reflection.goalProgress === "done" || reflection.goalAlignment === "achieved") {
+		return false;
+	}
+	const joined = [
+		reflection.nextHint,
+		reflection.planAssessment,
+		reflection.phaseAssessment,
+		reflection.latestDiagnosis,
+		reflection.routeStateUpdate,
+	].join(" ");
+	if (/deadlock|死局|restart|reset|重开|重新开始|unrecoverable|无法恢复|卡死|corner-locked|wall-locked/i.test(joined)) {
+		return false;
+	}
+	return reflection.goalProgress === "partial"
+		|| reflection.goalAlignment === "closer"
+		|| reflection.phaseStatus === "advanced"
+		|| reflection.phaseStatus === "completed"
+		|| reflection.planViability === "strengthened";
+}
+
 function buildCompletedLongSequenceFailureDetail(input: {
 	executedCount: number;
 	totalCount: number;
@@ -1495,7 +1521,9 @@ function buildCompletedLongSequenceFailureDetail(input: {
 		`Long sequence completed ${input.executedCount}/${input.totalCount} actions but did not solve the level.`,
 		sequence ? `sequence=${sequence}` : "",
 		`result=${compactDiagnosticText(reason, 180)}`,
-		"Restart before the next planner turn; keep this as failed-prefix evidence for the next full route from the initial board.",
+		shouldContinueLongSequenceFromCurrentState(input.reflection)
+			? "Current board appears recoverable; continue from the visible after-state and keep the useful prefix."
+			: "Restart before the next planner turn; keep this as failed-prefix evidence for the next full route from the initial board.",
 	].filter(Boolean).join(" ");
 }
 
@@ -1835,7 +1863,7 @@ function buildOperationsPlannerSystemPrompt(input: {
 		baseRules.push("长序列模式覆盖常规短步策略：本轮不要求只推进一个最小状态变化，而是要求给出可连续验证的一整段解题动作。");
 		baseRules.push(`长序列模式硬契约：当前轮次必须输出从当前棋盘到通关的一整条动作序列，而不是局部短序列；actions 少于 ${input.minActionsPerRound} 步会被拒绝且不会执行。每个动作仍必须是一个单步 action。`);
 		baseRules.push(`长序列模式动作范围为 ${input.minActionsPerRound}-${input.maxActionsPerRound} 步；只输出你有理由相信从当前局面可连续执行并最终通关的步骤，系统会在某步无截图变化时自动停止并交给 Evaluator 反思。`);
-		baseRules.push("长序列模式下，优先全部使用 game.perform_action；不要夹杂 reset、刷新、换标签页等恢复动作，除非当前局面已经明确死局。");
+		baseRules.push("长序列模式下，优先全部使用 game.perform_action 的上下左右移动；不要夹杂 reset、刷新、换标签页等恢复动作。reset_level 由 runner/recovery 层统一管理，不是 Planner actions。");
 		baseRules.push("长序列模式下，routeSelfCheck 必须包含逐步模拟摘要，例如 step/action/P-before/effect/P-after/boxes-after。不要只写高层路线自信；要证明每一步不会撞墙、不会意外推箱、不会制造死局。");
 	}
 	if (input.gameContext) {
@@ -2010,11 +2038,11 @@ function buildLongSequencePlannerUserPrompt(input: {
 		"- First solve the puzzle mentally from the current board, then expand that route into consecutive single-step game.perform_action actions.",
 		"- The actions array is the execution plan. It must not stop at a setup position, a stance correction, or a partial milestone.",
 		"- If the level is visible and solvable, output the full solution sequence from this board to completion. Do not output a local prefix as a substitute for a solve.",
-		`- You may output up to ${input.maxActions} actions. A short sequence is acceptable only when it genuinely completes the level, performs a required reset, or the board is unreadable; explain that in abortCondition.`,
-		`- Planner contract: for this game profile, fewer than ${input.minActions} actions is treated as an incomplete plan unless it is reset_level. Do not stop after setup, stance correction, or the first box push.`,
+		`- You may output up to ${input.maxActions} actions. A short sequence is acceptable only when it genuinely completes the level or the board is unreadable; explain that in abortCondition.`,
+		`- Planner contract: for this game profile, fewer than ${input.minActions} actions is treated as an incomplete plan. reset_level is not an exception because restart is runner-managed.`,
 		`- If you can only think of fewer than ${input.minActions} actions, keep solving before writing JSON; the runner will not execute a short partial sequence.`,
-		"- Prefer game.perform_action only. Do not insert evaluator checkpoints; the runner will execute each step and stop automatically on no-change.",
-		"- If a prior attempt failed or deadlocked, the runner restarts the level before asking you again. Do not continue patching the corrupted board unless the current screenshot clearly shows a non-initial board.",
+		"- Prefer game.perform_action movement actions only: move_up, move_down, move_left, move_right. Do not output reset_level, evaluator checkpoints, refreshes, or tab/window recovery actions.",
+		"- If a prior attempt failed or deadlocked, the runner may have restarted the level before asking you again. Trust the current screenshot: continue from the visible board if it is recoverable, otherwise explain the deadlock in fields but still do not output reset_level.",
 		"- Treat each planner turn as a fresh complete solve attempt from the visible board. Do not output a short local repair sequence after a failed long sequence.",
 		"- For Sokoban, compare multiple route ideas before committing. Do not assume boxes are solved linearly or permanently once they touch a target.",
 		"- Temporary placements, moving a box off a target, and interleaving boxes are allowed when they preserve global solvability.",
@@ -2086,10 +2114,10 @@ function buildProgressEvaluatorSystemPrompt(
 			? "不要只输出 failed/blocked/none；要回答“这次失败让下一轮更接近成功的知识是什么”。如果某路线走得更远但最后失败，应在 routeStateUpdate 中明确保留有效前缀、放弃错误后缀。"
 			: "",
 		options.longSequenceMode
-			? "长序列模式的每轮失败后会先重开本关再进入下一轮 Planner。你的诊断必须写成“从下一次初始局面重新规划时应保留/避免的经验”，不要指挥下一轮从失败后的残局继续单步行动。"
+			? "长序列模式下，若 after 图是死局、不可恢复或没有有效推进，诊断必须写成“重开后从初始局面应保留/避免的经验”；若 after 图仍可续解且更接近目标，必须明确写出 recoverable/可续解，让下一轮 Planner 从当前可见局面继续规划完整剩余路线。"
 			: "",
 		options.longSequenceMode
-			? "如果 after 图出现局部进展但整条长序列未通关，要记录这是哪条路线前缀带来的知识；不要把 after 图当成下一轮当前状态，除非用户/系统明确没有重开。"
+			? "如果 after 图出现局部进展但整条长序列未通关，要记录这是哪条路线前缀带来的知识；只有在你判断当前局面不可恢复时才建议重开。"
 			: "",
 		`missionGoal: ${mission.missionGoal}`,
 		`initialState: ${mission.initialStateSummary || "(none)"}`,
@@ -2313,10 +2341,18 @@ function detectLongSequencePlannerIssue(input: {
 	maxActions: number;
 	round: number;
 }): string {
-	if (input.minActions <= 1 || input.actions.length >= input.minActions) {
-		return "";
+	const resetIndexes = input.actions
+		.map((action, index) => toText(action.args.actionId) === "reset_level" ? index + 1 : 0)
+		.filter(Boolean);
+	if (resetIndexes.length) {
+		return [
+			"Long sequence mode actions must contain only board movement actions such as move_up/move_down/move_left/move_right.",
+			"Do not output reset_level inside Planner actions; level restart is managed by the runner/recovery layer.",
+			`Remove reset_level at step(s): ${resetIndexes.join(", ")} and regenerate a route from the current screenshot.`,
+			`This is round ${input.round}; treat this as planner-contract feedback before execution, not as evaluator feedback.`,
+		].join(" ");
 	}
-	if (input.actions.length === 1 && toText(input.actions[0]?.args.actionId) === "reset_level") {
+	if (input.minActions <= 1 || input.actions.length >= input.minActions) {
 		return "";
 	}
 	const actionIds = input.actions
@@ -2327,7 +2363,7 @@ function detectLongSequencePlannerIssue(input: {
 		`Long sequence mode requires a complete or near-complete solve attempt, but only ${input.actions.length}/${input.minActions} actions were produced.`,
 		`Regenerate the plan with a full contiguous action sequence up to ${input.maxActions} actions.`,
 		"Do not stop at setup, stance correction, or a partial milestone.",
-		"A reset_level action is the only short-plan exception; otherwise continue solving before writing JSON.",
+		"reset_level is not a short-plan exception in long sequence mode; reset is runner-managed, not a Planner action.",
 		actionIds ? `Previous too-short sequence was: ${actionIds}.` : "",
 		`This is round ${input.round}; treat this as planner-contract feedback before execution, not as evaluator feedback.`,
 	].filter(Boolean).join(" ");
@@ -4445,12 +4481,22 @@ function summarizeLongSequenceFailureForSpeech(text: string, languageMode: Reply
 	const completedMatch = text.match(/Long sequence completed\s+(\d+\/\d+)\s+actions/i);
 	if (completedMatch) {
 		const count = completedMatch[1] ?? "";
+		if (/recoverable|可续解|continue from the visible after-state|continue from the current/i.test(text)) {
+			return languageMode === "en"
+				? `The full ${count} route did not finish, but it reached a useful state. I’ll continue from here.`
+				: `这条 ${count} 步路线还没通关，但局面更好了。派蒙从这里继续。`;
+		}
 		return languageMode === "en"
 			? `The full ${count} route ran, but it did not solve the level. I’ll restart and change the route.`
 			: `这条 ${count} 步路线已经走完，但没有通关。派蒙会重开并换一条路线。`;
 	}
 	if (failedStep) {
 		const actionText = failedAction ? formatActionForNarration(failedAction) : "a move";
+		if (/recoverable|可续解|continue from the visible after-state|continue from the current/i.test(text)) {
+			return languageMode === "en"
+				? `The route caught a bad ${actionText} at step ${failedStep}, but the board is still useful. I’ll continue from here.`
+				: `路线在第 ${failedStep} 步的 ${actionText} 卡住了，但局面还能继续。派蒙从这里续解。`;
+		}
 		return languageMode === "en"
 			? `The route failed at step ${failedStep} on ${actionText}. I’ll restart and change the prefix.`
 			: `这条路线在第 ${failedStep} 步的 ${actionText} 卡住了。派蒙会重开并调整前缀。`;
@@ -4717,7 +4763,9 @@ function buildLongSequenceAttemptLesson(input: {
 		input.reflection.latestDiagnosis ? `诊断=${input.reflection.latestDiagnosis}` : "",
 		input.reflection.planAssessment ? `路线评估=${input.reflection.planAssessment}` : "",
 		input.reflection.nextHint ? `前缀修正=${input.reflection.nextHint}` : "",
-		"下一轮从重开后的初始局面重新规划；不要把本轮局部进展当成当前进度；不要仅因某个方向在本前缀失败就禁用该方向。",
+		shouldContinueLongSequenceFromCurrentState(input.reflection)
+			? "当前局面被评估为可续解；下一轮应从可见 after 局面规划完整剩余路线，并保留有效前缀经验。"
+			: "下一轮从重开后的初始局面重新规划；不要把本轮局部进展当成当前进度；不要仅因某个方向在本前缀失败就禁用该方向。",
 	].filter(Boolean);
 	return parts.join(" | ").slice(0, 900);
 }
@@ -5409,6 +5457,7 @@ export const __test = {
 	classifySnapshotChangeScore,
 	buildLongSequenceSnapshotChangeOptions,
 	detectLongSequenceRecoveryReason,
+	shouldContinueLongSequenceFromCurrentState,
 	resetRouteStateAfterLongSequenceRecovery,
 	PROGRESS_EVALUATOR_TEXT_MAX_TOKENS,
 	PROGRESS_EVALUATOR_VISION_MAX_TOKENS,
