@@ -46,6 +46,8 @@ const {
 	buildLongSequenceSnapshotChangeOptions,
 	detectLongSequenceRecoveryReason,
 	resetRouteStateAfterLongSequenceRecovery,
+	PROGRESS_EVALUATOR_TEXT_MAX_TOKENS,
+	PROGRESS_EVALUATOR_VISION_MAX_TOKENS,
 } = __test;
 
 const GAME_CONTEXT = { gameId: "sokoban" as const, displayName: "Sokoban", actionIds: ["move_up"] };
@@ -131,7 +133,12 @@ describe("delegation long sequence planning helpers", () => {
 		});
 
 		expect(prompt).toContain("12 到 100");
-		expect(prompt).toContain("actions 不应少于 12");
+		expect(prompt).toContain("短于 12 步会被工程层拒绝");
+	});
+
+	it("gives progress evaluator enough room for long-sequence reflection", () => {
+		expect(PROGRESS_EVALUATOR_TEXT_MAX_TOKENS).toBeGreaterThanOrEqual(1200);
+		expect(PROGRESS_EVALUATOR_VISION_MAX_TOKENS).toBeGreaterThanOrEqual(1600);
 	});
 
 	it("counts raw planner actions before normalization", () => {
@@ -158,6 +165,7 @@ describe("delegation long sequence planning helpers", () => {
 		});
 		expect(issue).toContain("only 2/12 actions");
 		expect(issue).toContain("move_left -> move_right");
+		expect(issue).toContain("engineering rejection before execution");
 	});
 
 	it("classifies tiny screenshot diffs as unchanged for long-sequence step verification", () => {

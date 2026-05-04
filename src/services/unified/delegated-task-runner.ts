@@ -15,6 +15,8 @@ const log = createLogger("delegated-task-runner");
 const LONG_SEQUENCE_UNCHANGED_THRESHOLD = 0.00075;
 const LONG_SEQUENCE_UNCHANGED_SAMPLE_SIZE = 72;
 const LONG_SEQUENCE_UNCHANGED_CROP_SCALE = 0.6;
+const PROGRESS_EVALUATOR_TEXT_MAX_TOKENS = 1600;
+const PROGRESS_EVALUATOR_VISION_MAX_TOKENS = 1800;
 
 interface DelegatedTaskAction {
 	tool: string;
@@ -576,20 +578,21 @@ export async function runDelegatedTaskLoop(input: {
 				reasoning: nextPlanner.reasoning.slice(0, 180),
 			});
 		}
-		const effectivePlannerActions = planner.actions;
-		noActionStreak = effectivePlannerActions.length ? 0 : noActionStreak + 1;
 		const tooShortLongSequenceIssue = longSequenceMode
 			? detectLongSequencePlannerIssue({
-				actions: effectivePlannerActions,
+				actions: planner.actions,
 				minActions: config.longSequence.minActions,
 				round,
 				maxActions: config.longSequence.maxActions,
 			})
 			: "";
+		const rejectedTooShortLongSequence = Boolean(tooShortLongSequenceIssue);
+		const effectivePlannerActions = rejectedTooShortLongSequence ? [] : planner.actions;
+		noActionStreak = effectivePlannerActions.length ? 0 : noActionStreak + 1;
 		if (tooShortLongSequenceIssue) {
-			log.warn("long sequence planner remained too short after retries; executing available prefix", {
+			log.warn("long sequence planner remained too short after retries; rejecting before execution", {
 				round,
-				actionCount: effectivePlannerActions.length,
+				actionCount: planner.actions.length,
 				minActions: config.longSequence.minActions,
 				issue: tooShortLongSequenceIssue,
 			});
@@ -606,12 +609,14 @@ export async function runDelegatedTaskLoop(input: {
 			previousExpectedMet: latestExpectedMet,
 		});
 		pushScratchpadNote(plannerNotes, plannerNote, 6);
-		latestPhaseGoal = planner.currentPhaseGoal || latestPhaseGoal;
-		latestPhaseReason = planner.whyThisPhase || latestPhaseReason;
-		latestPhaseAbortCondition = planner.abortCondition || latestPhaseAbortCondition;
-		latestActiveStrategy = planner.activeStrategy || latestActiveStrategy;
-		latestStrategyRevision = planner.strategyRevision || latestStrategyRevision;
-		routeState = updateRouteStateFromPlanner(routeState, planner, roundBoardObservation);
+		if (!rejectedTooShortLongSequence) {
+			latestPhaseGoal = planner.currentPhaseGoal || latestPhaseGoal;
+			latestPhaseReason = planner.whyThisPhase || latestPhaseReason;
+			latestPhaseAbortCondition = planner.abortCondition || latestPhaseAbortCondition;
+			latestActiveStrategy = planner.activeStrategy || latestActiveStrategy;
+			latestStrategyRevision = planner.strategyRevision || latestStrategyRevision;
+			routeState = updateRouteStateFromPlanner(routeState, planner, roundBoardObservation);
+		}
 		await persistScratchpadText(input.scratchpad, "roles/planner.md", `${plannerNote}\n`);
 		await persistRouteState(input.scratchpad, routeState);
 		await persistScratchpadText(
@@ -668,7 +673,7 @@ export async function runDelegatedTaskLoop(input: {
 			actions: effectivePlannerActions,
 		};
 		const plannerReply = resolveOperationsNarration(plannerView, canPlannerFinish, replyLanguageMode);
-		if (plannerReply) {
+		if (plannerReply && !rejectedTooShortLongSequence) {
 			await input.onAssistantReply?.(plannerReply, "planner");
 		}
 		if (canPlannerFinish) {
@@ -680,11 +685,15 @@ export async function runDelegatedTaskLoop(input: {
 			};
 		}
 		if (!effectivePlannerActions.length) {
-			history.push(`round ${round}: no action generated`);
+			history.push(rejectedTooShortLongSequence
+				? `round ${round}: long-sequence planner output rejected before execution: ${tooShortLongSequenceIssue}`
+				: `round ${round}: no action generated`);
 			if (history.length > 6) {
 				history.splice(0, history.length - 6);
 			}
-			latestHint = plannerPolicyReminder || pickReplyLanguageText("上一轮没有产出可执行动作。下一轮必须给出一个单步工具动作。", "No executable action was produced last round. Next round must provide a single-step tool action.");
+			latestHint = rejectedTooShortLongSequence
+				? plannerPolicyReminder
+				: plannerPolicyReminder || pickReplyLanguageText("上一轮没有产出可执行动作。下一轮必须给出一个单步工具动作。", "No executable action was produced last round. Next round must provide a single-step tool action.");
 			await persistScratchpadText(
 				input.scratchpad,
 				"shared/context.md",
@@ -1669,7 +1678,7 @@ async function requestEvaluatorDecision(input: {
 				userPrompt: input.userPrompt,
 				temperature: input.config.progressEvaluatorTemperature,
 				thinkingMode: input.config.progressEvaluatorThinkingMode,
-				maxTokens: 700,
+				maxTokens: PROGRESS_EVALUATOR_TEXT_MAX_TOKENS,
 				jsonResponse: true,
 				timeoutMs: 35_000,
 				replyLanguageMode: input.replyLanguageMode,
@@ -1698,7 +1707,7 @@ async function requestEvaluatorDecision(input: {
 		imageDataUrls: [input.beforeSnapshot.dataUrl, input.afterSnapshot.dataUrl],
 		temperature: input.config.progressEvaluatorTemperature,
 		thinkingMode: input.config.progressEvaluatorThinkingMode,
-		maxTokens: 500,
+		maxTokens: PROGRESS_EVALUATOR_VISION_MAX_TOKENS,
 		jsonResponse: true,
 		timeoutMs: 30_000,
 		replyLanguageMode: input.replyLanguageMode,
@@ -1782,14 +1791,14 @@ function buildOperationsPlannerSystemPrompt(input: {
 }): string {
 	const baseRules = [
 		input.longSequenceMode
-			? "你是 Operations Planner。长序列模式下，你负责从当前截图一次性规划完整或尽可能完整的连续动作路线。"
+			? "你是 Operations Planner。长序列模式下，你负责从当前截图一次性规划从当前局面到通关的完整连续动作路线。"
 			: "你是 Operations Planner。你只负责下一步动作决策。",
 		`missionGoal: ${input.mission.missionGoal}`,
 		`hardConstraints: ${input.mission.hardConstraints.join(" | ") || "(none)"}`,
 		`completionSignals: ${input.mission.completionSignals.join(" | ") || "(none)"}`,
 		`allowedTools: ${input.allowedTools.join(", ")}`,
 		input.longSequenceMode
-			? `长序列模式动作数量契约：actions 必须尽量输出 ${input.minActionsPerRound} 到 ${input.maxActionsPerRound} 个单步动作；目标是一次给出完整或尽可能长的连续通关序列。`
+			? `长序列模式动作数量契约：actions 必须输出 ${input.minActionsPerRound} 到 ${input.maxActionsPerRound} 个单步动作；目标是一次给出完整连续通关序列。短于 ${input.minActionsPerRound} 步会被工程层拒绝且不会执行。`
 			: `每轮最多输出 ${input.maxActionsPerRound} 个动作，动作粒度越小越好。`,
 		"每轮都要先复盘上一轮“预期结果”与“实际达成”，再决定本轮动作；若上一轮未达成，优先给出纠偏动作链。",
 		"当 goalReached=false 时，reply 只能描述“下一步要做什么”，禁止直接回答任务问题本身。",
@@ -1823,8 +1832,8 @@ function buildOperationsPlannerSystemPrompt(input: {
 	];
 	if (input.longSequenceMode) {
 		baseRules.push("长序列模式覆盖常规短步策略：本轮不要求只推进一个最小状态变化，而是要求给出可连续验证的一整段解题动作。");
-		baseRules.push(`长序列模式：当前轮次应尽量输出从当前棋盘到通关的一整条动作序列，而不是局部短序列。除非这些动作会直接通关，否则 actions 不应少于 ${input.minActionsPerRound} 步。每个动作仍必须是一个单步 action。`);
-		baseRules.push(`长序列模式动作范围为 ${input.minActionsPerRound}-${input.maxActionsPerRound} 步；只输出你有理由相信从当前局面可连续执行的步骤，系统会在某步无截图变化时自动停止并交给 Evaluator 反思。`);
+		baseRules.push(`长序列模式硬契约：当前轮次必须输出从当前棋盘到通关的一整条动作序列，而不是局部短序列；actions 少于 ${input.minActionsPerRound} 步会被拒绝且不会执行。每个动作仍必须是一个单步 action。`);
+		baseRules.push(`长序列模式动作范围为 ${input.minActionsPerRound}-${input.maxActionsPerRound} 步；只输出你有理由相信从当前局面可连续执行并最终通关的步骤，系统会在某步无截图变化时自动停止并交给 Evaluator 反思。`);
 		baseRules.push("长序列模式下，优先全部使用 game.perform_action；不要夹杂 reset、刷新、换标签页等恢复动作，除非当前局面已经明确死局。");
 	}
 	if (input.gameContext) {
@@ -1998,9 +2007,10 @@ function buildLongSequencePlannerUserPrompt(input: {
 		"- Use the current screenshot as the source of truth for the current board.",
 		"- First solve the puzzle mentally from the current board, then expand that route into consecutive single-step game.perform_action actions.",
 		"- The actions array is the execution plan. It must not stop at a setup position, a stance correction, or a partial milestone.",
-		"- If the level is visible and solvable, output the full solution sequence or the longest contiguous prefix you genuinely believe will solve it.",
+		"- If the level is visible and solvable, output the full solution sequence from this board to completion. Do not output a local prefix as a substitute for a solve.",
 		`- You may output up to ${input.maxActions} actions. A short sequence is acceptable only when it genuinely completes the level, performs a required reset, or the board is unreadable; explain that in abortCondition.`,
-		`- Engineering acceptance: for this game profile, fewer than ${input.minActions} actions is treated as suspiciously short unless the level is visibly solved by that exact sequence. Do not stop after a setup move.`,
+		`- Engineering acceptance: for this game profile, fewer than ${input.minActions} actions is rejected before execution unless it is reset_level. Do not stop after setup, stance correction, or the first box push.`,
+		`- If you can only think of fewer than ${input.minActions} actions, keep solving before writing JSON; the runner will not execute a short partial sequence.`,
 		"- Prefer game.perform_action only. Do not insert evaluator checkpoints; the runner will execute each step and stop automatically on no-change.",
 		"- If a prior attempt failed or deadlocked, the runner restarts the level before asking you again. Do not continue patching the corrupted board unless the current screenshot clearly shows a non-initial board.",
 		"- Treat each planner turn as a fresh complete solve attempt from the visible board. Do not output a short local repair sequence after a failed long sequence.",
@@ -2033,7 +2043,7 @@ function buildLongSequencePlannerUserPrompt(input: {
 		'  "committedRoute": "numbered route milestones for the full attempt",',
 		'  "currentRouteStep": "full-sequence attempt from current board",',
 		'  "routeRisks": ["risk strings"],',
-		`  "actionCountRequirement": "actions array should contain ${input.minActions}..${input.maxActions} items unless the shorter list truly completes the level",`,
+		`  "actionCountRequirement": "actions array must contain ${input.minActions}..${input.maxActions} items; shorter partial plans are rejected before execution",`,
 		'  "actions": [',
 		'    { "tool": "game.perform_action", "args": { "actionId": "move_left" } }',
 		"  ]",
@@ -2304,7 +2314,7 @@ function detectLongSequencePlannerIssue(input: {
 		`Long sequence mode requires a complete or near-complete solve attempt, but only ${input.actions.length}/${input.minActions} actions were produced.`,
 		`Regenerate the plan with a full contiguous action sequence up to ${input.maxActions} actions.`,
 		"Do not stop at setup, stance correction, or a partial milestone.",
-		"Only output fewer actions if those exact actions visibly complete the level; otherwise continue the route.",
+		"A reset_level action is the only short-plan exception; otherwise continue solving before writing JSON.",
 		actionIds ? `Previous too-short sequence was: ${actionIds}.` : "",
 		`This is round ${input.round}; treat this as an engineering rejection before execution, not as evaluator feedback.`,
 	].filter(Boolean).join(" ");
@@ -5387,4 +5397,6 @@ export const __test = {
 	buildLongSequenceSnapshotChangeOptions,
 	detectLongSequenceRecoveryReason,
 	resetRouteStateAfterLongSequenceRecovery,
+	PROGRESS_EVALUATOR_TEXT_MAX_TOKENS,
+	PROGRESS_EVALUATOR_VISION_MAX_TOKENS,
 } as const;
