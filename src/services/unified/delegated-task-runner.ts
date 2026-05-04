@@ -1434,8 +1434,8 @@ function resetRouteStateAfterLongSequenceRecovery(routeState: DelegationRouteSta
 		currentRouteStep: "",
 		routeRisks: routeState.routeRisks,
 		latestDiagnosis: pickReplyLanguageText(
-			"长序列失败后已重开；保留失败经验，但清除死局中的临时棋盘和路线。",
-			"Restarted after long-sequence failure; preserved failure lessons but cleared the deadlocked temporary route.",
+			"长序列失败后已重开；下一轮从初始棋盘重新规划，只保留上一条路线的失败前缀经验。",
+			"Restarted after long-sequence failure; next planning starts from the initial board and only keeps failed-prefix lessons from the previous route.",
 		),
 	};
 }
@@ -1495,7 +1495,7 @@ function buildCompletedLongSequenceFailureDetail(input: {
 		`Long sequence completed ${input.executedCount}/${input.totalCount} actions but did not solve the level.`,
 		sequence ? `sequence=${sequence}` : "",
 		`result=${compactDiagnosticText(reason, 180)}`,
-		"Restart before the next planner turn and generate a different full route from the initial board.",
+		"Restart before the next planner turn; keep this as failed-prefix evidence for the next full route from the initial board.",
 	].filter(Boolean).join(" ");
 }
 
@@ -1822,6 +1822,7 @@ function buildOperationsPlannerSystemPrompt(input: {
 		"对复杂推箱子任务，优先围绕“释放空间、调整箱子相对关系、验证候选路线”选择 activeStrategy，而不是贪心地先完成看起来最近的箱子。",
 		"对推箱子任务，任何推动箱子的动作都必须在 reasoning 或 expectedOutcome 中显式写清：目标箱子、箱子要移动的方向、P 必须站在箱子的哪一侧、P 当前是否已经在该侧、最终 actionId。若 P 不在正确侧，本轮只能先走位，不能假装已经能推。",
 		"推箱几何硬规则：箱子向左，P 必须在箱子右侧并执行 move_left；箱子向右，P 必须在箱子左侧并执行 move_right；箱子向上，P 必须在箱子下侧并执行 move_up；箱子向下，P 必须在箱子上侧并执行 move_down。",
+		"推箱子输出前必须自己逐步模拟动作链：每一步都要判断 P 是普通移动、推箱、撞墙，还是推不动两个相邻箱子；若某一步会撞墙、把非目标箱推入角落、或把箱子推到顶墙/边墙死局，必须先改路线再输出 actions。",
 		"不要把“高层策略失败”和“站位/方向执行失败”混为一谈。若 lower-box-first 这类高层路线还可能成立，只修正具体站位或动作方向，不要把整类路线写进 invalidatedStrategies。",
 		"activeStrategy 应代表当前正在验证的高层路线；strategyRevision 用一句话说明本轮是否维持、修正或放弃原路线。",
 		"若 scratchpadContext 中已经列出 invalidatedStrategies，禁止继续复用这些已被否决的高层路线，必须改选候选路线或明确修正原路线。",
@@ -1835,6 +1836,7 @@ function buildOperationsPlannerSystemPrompt(input: {
 		baseRules.push(`长序列模式硬契约：当前轮次必须输出从当前棋盘到通关的一整条动作序列，而不是局部短序列；actions 少于 ${input.minActionsPerRound} 步会被拒绝且不会执行。每个动作仍必须是一个单步 action。`);
 		baseRules.push(`长序列模式动作范围为 ${input.minActionsPerRound}-${input.maxActionsPerRound} 步；只输出你有理由相信从当前局面可连续执行并最终通关的步骤，系统会在某步无截图变化时自动停止并交给 Evaluator 反思。`);
 		baseRules.push("长序列模式下，优先全部使用 game.perform_action；不要夹杂 reset、刷新、换标签页等恢复动作，除非当前局面已经明确死局。");
+		baseRules.push("长序列模式下，routeSelfCheck 必须包含逐步模拟摘要，例如 step/action/P-before/effect/P-after/boxes-after。不要只写高层路线自信；要证明每一步不会撞墙、不会意外推箱、不会制造死局。");
 	}
 	if (input.gameContext) {
 		baseRules.push(`若当前任务模式是游戏且窗口识别为 ${input.gameContext.displayName}，优先使用 game.perform_action。`);
@@ -2009,7 +2011,7 @@ function buildLongSequencePlannerUserPrompt(input: {
 		"- The actions array is the execution plan. It must not stop at a setup position, a stance correction, or a partial milestone.",
 		"- If the level is visible and solvable, output the full solution sequence from this board to completion. Do not output a local prefix as a substitute for a solve.",
 		`- You may output up to ${input.maxActions} actions. A short sequence is acceptable only when it genuinely completes the level, performs a required reset, or the board is unreadable; explain that in abortCondition.`,
-		`- Engineering acceptance: for this game profile, fewer than ${input.minActions} actions is rejected before execution unless it is reset_level. Do not stop after setup, stance correction, or the first box push.`,
+		`- Planner contract: for this game profile, fewer than ${input.minActions} actions is treated as an incomplete plan unless it is reset_level. Do not stop after setup, stance correction, or the first box push.`,
 		`- If you can only think of fewer than ${input.minActions} actions, keep solving before writing JSON; the runner will not execute a short partial sequence.`,
 		"- Prefer game.perform_action only. Do not insert evaluator checkpoints; the runner will execute each step and stop automatically on no-change.",
 		"- If a prior attempt failed or deadlocked, the runner restarts the level before asking you again. Do not continue patching the corrupted board unless the current screenshot clearly shows a non-initial board.",
@@ -2017,6 +2019,9 @@ function buildLongSequencePlannerUserPrompt(input: {
 		"- For Sokoban, compare multiple route ideas before committing. Do not assume boxes are solved linearly or permanently once they touch a target.",
 		"- Temporary placements, moving a box off a target, and interleaving boxes are allowed when they preserve global solvability.",
 		"- Before any push in the sequence, internally verify push geometry: player side, push direction, destination cell, and later access.",
+		"- Before writing actions, simulate the whole sequence step by step on your own ASCII board. For each action, know whether it is a walk, a box push, a wall collision, or an impossible push against another box.",
+		"- If a simulated step would push a box against the top/side wall off target, push a non-target box into a corner, or push two adjacent boxes, revise the route before output. Do not rely on the runner to catch that mistake.",
+		"- A target tile is not automatically final: a box may need to pass through or leave a target if the global route requires it, but every such move must remain reversible or lead to completion.",
 		"",
 		"Failure facts from previous attempts, if any. Treat them as evidence, not as commands:",
 		failureContext,
@@ -2039,7 +2044,7 @@ function buildLongSequencePlannerUserPrompt(input: {
 		'  "abortCondition": "when the runner/evaluator should stop and replan, especially the likely first bad step",',
 		'  "activeStrategy": "the chosen global route, including box/target ordering and temporary placements",',
 		'  "strategyRevision": "how previous failure facts changed this route, or no prior failure",',
-		'  "routeSelfCheck": "explicitly state that the action list continues past setup moves toward completion",',
+		'  "routeSelfCheck": "step simulation summary: step/action/P-before/effect/P-after/boxes-after; explicitly note no wall collision, no unintended push, and no off-target corner deadlock",',
 		'  "committedRoute": "numbered route milestones for the full attempt",',
 		'  "currentRouteStep": "full-sequence attempt from current board",',
 		'  "routeRisks": ["risk strings"],',
@@ -2063,6 +2068,7 @@ function buildProgressEvaluatorSystemPrompt(
 		"层级判定规则：expectedMet 是本轮动作正确性的主判定。若 expectedMet=false，wasActionCorrect 默认必须为 false；除非 after 图显示了一个明确、非预期但有价值的替代中间态，也只能在 planViability/phaseAssessment 里说明，不能把原动作判为正确。",
 		"actionSucceeded 只表示动作是否造成可见执行结果；wasActionCorrect 表示该执行是否符合本轮预期；goalProgress 表示整关目标是否推进。三者不得混用。",
 		"如果本轮预期是推动箱子，但 after 图显示只有 P 移动、箱子没有移动，则 expectedMet=false、wasActionCorrect=false、goalProgress=none；除非该纯走位正好是 currentPhaseGoal 明确要求的站位。",
+		"如果执行在某一步后截图无变化，不要把它描述成系统没有执行；要从 before/after 和执行前缀推断智能体路线为什么无效：撞墙、推不动相邻箱子、P 不在正确侧、或棋盘读错。",
 		"若 preExpectedOutcome 未达成，nextHint 必须明确给出修正动作链，不能只给抽象建议。",
 		"你还必须判断当前阶段目标是否推进，输出 phaseStatus（advanced|stalled|blocked|completed）和 phaseAssessment（一句话）。",
 		"phaseStatus=completed 只表示当前阶段完成，不等于整个 mission 完成；mission 是否完成仍必须严格服从 completionSignals。",
@@ -2078,6 +2084,12 @@ function buildProgressEvaluatorSystemPrompt(
 			: "",
 		options.longSequenceMode
 			? "不要只输出 failed/blocked/none；要回答“这次失败让下一轮更接近成功的知识是什么”。如果某路线走得更远但最后失败，应在 routeStateUpdate 中明确保留有效前缀、放弃错误后缀。"
+			: "",
+		options.longSequenceMode
+			? "长序列模式的每轮失败后会先重开本关再进入下一轮 Planner。你的诊断必须写成“从下一次初始局面重新规划时应保留/避免的经验”，不要指挥下一轮从失败后的残局继续单步行动。"
+			: "",
+		options.longSequenceMode
+			? "如果 after 图出现局部进展但整条长序列未通关，要记录这是哪条路线前缀带来的知识；不要把 after 图当成下一轮当前状态，除非用户/系统明确没有重开。"
 			: "",
 		`missionGoal: ${mission.missionGoal}`,
 		`initialState: ${mission.initialStateSummary || "(none)"}`,
@@ -2127,6 +2139,7 @@ function buildProgressEvaluatorUserPrompt(input: {
 	if (input.batchActionSummary) {
 		lines.push(`executedActionBatch: ${input.batchActionSummary}`);
 		lines.push("注意：本轮执行了多步动作序列。before 图为本轮首步执行前，after 图为末步执行后。请基于整体结果做出判断。");
+		lines.push("如果 executionError 表示某一步后截图无变化，请把它当作智能体路线的几何反馈：定位失败步和执行前缀，解释为什么这一步在该棋盘下不会生效。");
 	} else {
 		lines.push(`executedAction: ${input.action.tool}`);
 		lines.push(`actionArgs: ${JSON.stringify(input.action.args)}`);
@@ -2316,7 +2329,7 @@ function detectLongSequencePlannerIssue(input: {
 		"Do not stop at setup, stance correction, or a partial milestone.",
 		"A reset_level action is the only short-plan exception; otherwise continue solving before writing JSON.",
 		actionIds ? `Previous too-short sequence was: ${actionIds}.` : "",
-		`This is round ${input.round}; treat this as an engineering rejection before execution, not as evaluator feedback.`,
+		`This is round ${input.round}; treat this as planner-contract feedback before execution, not as evaluator feedback.`,
 	].filter(Boolean).join(" ");
 }
 
@@ -4724,12 +4737,12 @@ function enrichEvaluatorDiagnosisFromExecutionError(
 	const failedActionLabel = failedAction ? formatActionForNarration(failedAction) : "";
 	const failureGeometry = (
 		failedActionLabel
-			? `The board did not change after ${failedActionLabel}; the player was not in a valid stance for that move, or the route prefix reached a blocked cell.`
-			: "The board did not change after the failed step, so the route prefix reached an invalid stance or blocked cell."
+			? `The board did not change after ${failedActionLabel}; treat this as route-geometry feedback, not an execution-system failure. The prefix likely put P at a wall, a wrong push side, or against an immovable box pair.`
+			: "The board did not change after the failed step; treat this as route-geometry feedback, not an execution-system failure."
 	);
 	const routeLesson = (
 		failedPrefix
-			? `This exact prefix is not a proven route from the reset board; keep useful earlier geometry only if the next attempt changes the failed stance.`
+			? `This exact prefix is not a valid full-route prefix from the reset board unless the next plan explains a different stance before the failed step.`
 			: "The failed long sequence proves the current route geometry needs revision before retrying."
 	);
 	const nextAttemptConstraint = (

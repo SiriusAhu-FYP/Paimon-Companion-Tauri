@@ -104,6 +104,8 @@ describe("delegation long sequence planning helpers", () => {
 
 		expect(prompt).toContain("LONG SEQUENCE MODE");
 		expect(prompt).toContain("must not stop at a setup position");
+		expect(prompt).toContain("simulate the whole sequence step by step");
+		expect(prompt).toContain("wall collision");
 		expect(prompt).toContain("up to 100 actions");
 		expect(prompt).toContain("fewer than 12 actions");
 	});
@@ -134,6 +136,7 @@ describe("delegation long sequence planning helpers", () => {
 
 		expect(prompt).toContain("12 到 100");
 		expect(prompt).toContain("短于 12 步会被工程层拒绝");
+		expect(prompt).toContain("逐步模拟摘要");
 	});
 
 	it("gives progress evaluator enough room for long-sequence reflection", () => {
@@ -165,7 +168,7 @@ describe("delegation long sequence planning helpers", () => {
 		});
 		expect(issue).toContain("only 2/12 actions");
 		expect(issue).toContain("move_left -> move_right");
-		expect(issue).toContain("engineering rejection before execution");
+		expect(issue).toContain("planner-contract feedback before execution");
 	});
 
 	it("classifies tiny screenshot diffs as unchanged for long-sequence step verification", () => {
@@ -290,6 +293,8 @@ describe("delegation long sequence planning helpers", () => {
 		expect(prompt).toContain("动作前缀");
 		expect(prompt).toContain("routeStateUpdate/latestDiagnosis");
 		expect(prompt).toContain("失败几何原因");
+		expect(prompt).toContain("不要把它描述成系统没有执行");
+		expect(prompt).toContain("不要指挥下一轮从失败后的残局继续单步行动");
 		expect(prompt).toContain("不要把“某方向在某个站位失败”泛化成永远禁止该方向");
 		expect(prompt).not.toContain("不得重复同动作");
 	});
