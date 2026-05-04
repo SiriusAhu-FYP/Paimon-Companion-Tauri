@@ -45,7 +45,6 @@ const {
 	classifySnapshotChangeScore,
 	buildLongSequenceSnapshotChangeOptions,
 	detectLongSequenceRecoveryReason,
-	shouldContinueLongSequenceFromCurrentState,
 	resetRouteStateAfterLongSequenceRecovery,
 	PROGRESS_EVALUATOR_TEXT_MAX_TOKENS,
 	PROGRESS_EVALUATOR_VISION_MAX_TOKENS,
@@ -295,7 +294,8 @@ describe("delegation long sequence planning helpers", () => {
 		expect(prompt).toContain("routeStateUpdate/latestDiagnosis");
 		expect(prompt).toContain("失败几何原因");
 		expect(prompt).toContain("不要把它描述成系统没有执行");
-		expect(prompt).toContain("若 after 图仍可续解且更接近目标");
+		expect(prompt).toContain("应复现的有效前缀");
+		expect(prompt).toContain("不要要求 Planner 从失败后的残局继续行动");
 		expect(prompt).toContain("不要把“某方向在某个站位失败”泛化成永远禁止该方向");
 		expect(prompt).not.toContain("不得重复同动作");
 	});
@@ -352,7 +352,7 @@ describe("delegation long sequence planning helpers", () => {
 		expect(detail).toContain("Restart before the next planner turn");
 	});
 
-	it("keeps completed long-sequence details recoverable when evaluator reports partial progress", () => {
+	it("still schedules reset after completed long-sequence partial progress while preserving the useful prefix", () => {
 		const detail = buildCompletedLongSequenceFailureDetail({
 			executedCount: 12,
 			totalCount: 12,
@@ -367,8 +367,8 @@ describe("delegation long sequence planning helpers", () => {
 			}),
 		});
 
-		expect(detail).toContain("Current board appears recoverable");
-		expect(detail).not.toContain("Restart before the next planner turn");
+		expect(detail).toContain("Restart before the next planner turn");
+		expect(detail).toContain("keep this as failed-prefix evidence");
 	});
 
 	it("formats tool-call action summaries as readable direction chains", () => {
@@ -403,7 +403,7 @@ describe("delegation long sequence planning helpers", () => {
 		})).toContain("Long sequence completed");
 	});
 
-	it("does not schedule recovery reset when long sequence made recoverable partial progress", () => {
+	it("schedules recovery reset even when long sequence made partial progress", () => {
 		const reflection = makeReflection({
 			expectedMet: false,
 			actionSucceeded: true,
@@ -413,11 +413,10 @@ describe("delegation long sequence planning helpers", () => {
 			latestDiagnosis: "one box is on target and the board is recoverable",
 		});
 
-		expect(shouldContinueLongSequenceFromCurrentState(reflection)).toBe(true);
 		expect(detectLongSequenceRecoveryReason({
 			executionError: "Long sequence completed 12/12 actions but did not solve the level.",
 			reflection,
-		})).toBe("");
+		})).toContain("Long sequence completed");
 	});
 
 	it("rejects reset_level inside long-sequence planner actions", () => {

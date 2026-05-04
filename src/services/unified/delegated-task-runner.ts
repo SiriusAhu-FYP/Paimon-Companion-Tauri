@@ -453,12 +453,15 @@ export async function runDelegatedTaskLoop(input: {
 			plannerNotes,
 			evaluatorNotes,
 		});
+		const plannerGameContext = longSequenceMode
+			? hideRunnerManagedActionsFromPlanner(gameContext)
+			: gameContext;
 		const plannerSystemPrompt = buildOperationsPlannerSystemPrompt({
 			allowedTools,
 			maxActionsPerRound: longSequenceMode ? config.longSequence.maxActions : config.maxActionsPerRound,
 			minActionsPerRound: longSequenceMode ? config.longSequence.minActions : 1,
 			rules: config.operationsPlannerRules,
-			gameContext,
+			gameContext: plannerGameContext,
 			mission,
 			longSequenceMode,
 		});
@@ -491,7 +494,6 @@ export async function runDelegatedTaskLoop(input: {
 					history,
 					latestHint,
 					mission,
-					gameContext,
 					allowedTools,
 					scratchpadContext: sharedScratchpadContext,
 					plannerPolicyReminder,
@@ -509,6 +511,7 @@ export async function runDelegatedTaskLoop(input: {
 					invalidatedStrategies,
 					strategyLessons,
 				boardPositionsText: longSequenceMode ? undefined : formatBoardObservationForPlanner(roundBoardObservation) || undefined,
+				gameContext: plannerGameContext,
 				longSequenceMode,
 				longSequenceMaxActions: config.longSequence.maxActions,
 				longSequenceMinActions: config.longSequence.minActions,
@@ -540,7 +543,7 @@ export async function runDelegatedTaskLoop(input: {
 				allowedTools,
 				longSequenceMode ? config.longSequence.maxActions : config.maxActionsPerRound,
 				input.target,
-				gameContext,
+				plannerGameContext,
 			);
 			const invalidatedStrategyIssue = detectInvalidatedStrategyReuse(nextPlanner.activeStrategy, invalidatedStrategies);
 			const longSequenceIssue = longSequenceMode
@@ -816,7 +819,7 @@ export async function runDelegatedTaskLoop(input: {
 					`failedAction=${executionPlan.actionForEvaluation.tool}(${JSON.stringify(executionPlan.actionForEvaluation.args)})`,
 					`executedPrefix=${executedActions.map((item) => item.plan.actionForEvaluation.tool + "(" + JSON.stringify(item.plan.actionForEvaluation.args) + ")").join(" -> ")}`,
 					`remainingActions=${remainingActions}`,
-					"Evaluator must diagnose why this exact prefix/position failed and record a failed-route lesson. If the after-state is still useful/recoverable, say so explicitly so the next Planner can continue from the visible board; otherwise mark it as deadlocked/unrecoverable so the runner can reset before the next planner turn.",
+					"Evaluator must diagnose why this exact prefix/position failed and record a failed-route lesson. If the after-state contains useful progress, preserve the useful prefix as experience for the next fresh attempt after reset; do not ask Planner to continue from the failed after-state.",
 				].filter(Boolean).join(" ");
 				batchExecutionError = longSequenceFailureDetail;
 				log.warn("long sequence stopped on unchanged snapshot", {
@@ -1455,9 +1458,6 @@ function detectLongSequenceRecoveryReason(input: {
 	executionError: string;
 	reflection: ProgressEvaluatorDecision;
 }): string {
-	if (shouldContinueLongSequenceFromCurrentState(input.reflection)) {
-		return "";
-	}
 	if (input.executionError) {
 		return input.executionError;
 	}
@@ -1481,27 +1481,6 @@ function detectLongSequenceRecoveryReason(input: {
 	return "";
 }
 
-function shouldContinueLongSequenceFromCurrentState(reflection: ProgressEvaluatorDecision): boolean {
-	if (reflection.goalProgress === "done" || reflection.goalAlignment === "achieved") {
-		return false;
-	}
-	const joined = [
-		reflection.nextHint,
-		reflection.planAssessment,
-		reflection.phaseAssessment,
-		reflection.latestDiagnosis,
-		reflection.routeStateUpdate,
-	].join(" ");
-	if (/deadlock|死局|restart|reset|重开|重新开始|unrecoverable|无法恢复|卡死|corner-locked|wall-locked/i.test(joined)) {
-		return false;
-	}
-	return reflection.goalProgress === "partial"
-		|| reflection.goalAlignment === "closer"
-		|| reflection.phaseStatus === "advanced"
-		|| reflection.phaseStatus === "completed"
-		|| reflection.planViability === "strengthened";
-}
-
 function buildCompletedLongSequenceFailureDetail(input: {
 	executedCount: number;
 	totalCount: number;
@@ -1521,9 +1500,7 @@ function buildCompletedLongSequenceFailureDetail(input: {
 		`Long sequence completed ${input.executedCount}/${input.totalCount} actions but did not solve the level.`,
 		sequence ? `sequence=${sequence}` : "",
 		`result=${compactDiagnosticText(reason, 180)}`,
-		shouldContinueLongSequenceFromCurrentState(input.reflection)
-			? "Current board appears recoverable; continue from the visible after-state and keep the useful prefix."
-			: "Restart before the next planner turn; keep this as failed-prefix evidence for the next full route from the initial board.",
+		"Restart before the next planner turn; keep this as failed-prefix evidence for the next full route from the initial board.",
 	].filter(Boolean).join(" ");
 }
 
@@ -2042,7 +2019,7 @@ function buildLongSequencePlannerUserPrompt(input: {
 		`- Planner contract: for this game profile, fewer than ${input.minActions} actions is treated as an incomplete plan. reset_level is not an exception because restart is runner-managed.`,
 		`- If you can only think of fewer than ${input.minActions} actions, keep solving before writing JSON; the runner will not execute a short partial sequence.`,
 		"- Prefer game.perform_action movement actions only: move_up, move_down, move_left, move_right. Do not output reset_level, evaluator checkpoints, refreshes, or tab/window recovery actions.",
-		"- If a prior attempt failed or deadlocked, the runner may have restarted the level before asking you again. Trust the current screenshot: continue from the visible board if it is recoverable, otherwise explain the deadlock in fields but still do not output reset_level.",
+		"- If a prior attempt failed or deadlocked, the runner restarts the level before asking you again when recovery is possible. Use the current screenshot as source of truth, but treat prior partial progress as experience to reproduce after reset, not as persistent progress.",
 		"- Treat each planner turn as a fresh complete solve attempt from the visible board. Do not output a short local repair sequence after a failed long sequence.",
 		"- For Sokoban, compare multiple route ideas before committing. Do not assume boxes are solved linearly or permanently once they touch a target.",
 		"- Temporary placements, moving a box off a target, and interleaving boxes are allowed when they preserve global solvability.",
@@ -2114,10 +2091,10 @@ function buildProgressEvaluatorSystemPrompt(
 			? "不要只输出 failed/blocked/none；要回答“这次失败让下一轮更接近成功的知识是什么”。如果某路线走得更远但最后失败，应在 routeStateUpdate 中明确保留有效前缀、放弃错误后缀。"
 			: "",
 		options.longSequenceMode
-			? "长序列模式下，若 after 图是死局、不可恢复或没有有效推进，诊断必须写成“重开后从初始局面应保留/避免的经验”；若 after 图仍可续解且更接近目标，必须明确写出 recoverable/可续解，让下一轮 Planner 从当前可见局面继续规划完整剩余路线。"
+			? "长序列模式下，只要整条路线没有通关，下一轮默认由 runner 重开后从初始局面再尝试。你的诊断必须写成“重开后从初始局面应复现的有效前缀/应避免的失败后缀”，不要要求 Planner 从失败后的残局继续行动。"
 			: "",
 		options.longSequenceMode
-			? "如果 after 图出现局部进展但整条长序列未通关，要记录这是哪条路线前缀带来的知识；只有在你判断当前局面不可恢复时才建议重开。"
+			? "如果 after 图出现局部进展但整条长序列未通关，要记录这是哪条路线前缀带来的知识；这不是保留残局继续玩，而是下一次重开后复现并改进的经验。"
 			: "",
 		`missionGoal: ${mission.missionGoal}`,
 		`initialState: ${mission.initialStateSummary || "(none)"}`,
@@ -4392,6 +4369,20 @@ function mergeDelegatedConfigForGame(
 	};
 }
 
+function hideRunnerManagedActionsFromPlanner(gameContext: DelegatedGameContext | null): DelegatedGameContext | null {
+	if (!gameContext) {
+		return null;
+	}
+	const actionIds = gameContext.actionIds.filter((actionId) => actionId !== "reset_level");
+	if (actionIds.length === gameContext.actionIds.length) {
+		return gameContext;
+	}
+	return {
+		...gameContext,
+		actionIds,
+	};
+}
+
 function resolveOperationalGameContext(
 	candidateGameContext: DelegatedGameContext | null,
 	taskMode: MissionTaskMode,
@@ -4481,22 +4472,12 @@ function summarizeLongSequenceFailureForSpeech(text: string, languageMode: Reply
 	const completedMatch = text.match(/Long sequence completed\s+(\d+\/\d+)\s+actions/i);
 	if (completedMatch) {
 		const count = completedMatch[1] ?? "";
-		if (/recoverable|可续解|continue from the visible after-state|continue from the current/i.test(text)) {
-			return languageMode === "en"
-				? `The full ${count} route did not finish, but it reached a useful state. I’ll continue from here.`
-				: `这条 ${count} 步路线还没通关，但局面更好了。派蒙从这里继续。`;
-		}
 		return languageMode === "en"
 			? `The full ${count} route ran, but it did not solve the level. I’ll restart and change the route.`
 			: `这条 ${count} 步路线已经走完，但没有通关。派蒙会重开并换一条路线。`;
 	}
 	if (failedStep) {
 		const actionText = failedAction ? formatActionForNarration(failedAction) : "a move";
-		if (/recoverable|可续解|continue from the visible after-state|continue from the current/i.test(text)) {
-			return languageMode === "en"
-				? `The route caught a bad ${actionText} at step ${failedStep}, but the board is still useful. I’ll continue from here.`
-				: `路线在第 ${failedStep} 步的 ${actionText} 卡住了，但局面还能继续。派蒙从这里续解。`;
-		}
 		return languageMode === "en"
 			? `The route failed at step ${failedStep} on ${actionText}. I’ll restart and change the prefix.`
 			: `这条路线在第 ${failedStep} 步的 ${actionText} 卡住了。派蒙会重开并调整前缀。`;
@@ -4763,9 +4744,7 @@ function buildLongSequenceAttemptLesson(input: {
 		input.reflection.latestDiagnosis ? `诊断=${input.reflection.latestDiagnosis}` : "",
 		input.reflection.planAssessment ? `路线评估=${input.reflection.planAssessment}` : "",
 		input.reflection.nextHint ? `前缀修正=${input.reflection.nextHint}` : "",
-		shouldContinueLongSequenceFromCurrentState(input.reflection)
-			? "当前局面被评估为可续解；下一轮应从可见 after 局面规划完整剩余路线，并保留有效前缀经验。"
-			: "下一轮从重开后的初始局面重新规划；不要把本轮局部进展当成当前进度；不要仅因某个方向在本前缀失败就禁用该方向。",
+		"下一轮从重开后的初始局面重新规划；不要把本轮局部进展当成当前进度；但要保留可复现的有效前缀经验，也不要仅因某个方向在本前缀失败就禁用该方向。",
 	].filter(Boolean);
 	return parts.join(" | ").slice(0, 900);
 }
@@ -5457,7 +5436,6 @@ export const __test = {
 	classifySnapshotChangeScore,
 	buildLongSequenceSnapshotChangeOptions,
 	detectLongSequenceRecoveryReason,
-	shouldContinueLongSequenceFromCurrentState,
 	resetRouteStateAfterLongSequenceRecovery,
 	PROGRESS_EVALUATOR_TEXT_MAX_TOKENS,
 	PROGRESS_EVALUATOR_VISION_MAX_TOKENS,

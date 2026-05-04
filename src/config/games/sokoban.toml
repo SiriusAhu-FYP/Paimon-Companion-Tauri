@@ -118,7 +118,7 @@ operationsPlannerThinkingMode = "off"
 operationsPlannerRules = [
 	"长序列模式已开启：如果当前局面清晰，直接生成一整条尝试通关的动作序列，而不是只走局部 1-8 步；优先输出 game.perform_action，每个动作一个 action。上限 100 步。",
 	"长序列模式下，actions 应从当前局面开始，覆盖完整解法或尽可能长的合理解法；若中途撞墙，系统会自动停止并把失败步交给 evaluator 反思。",
-	"长序列模式下，每一轮 Planner 都应被视为从当前可见棋盘出发的一次完整解题尝试；如果当前局面仍可续解，应从当前局面规划剩余完整路线；只有 runner/recovery 确认重开后才从初始局面重新规划。",
+	"长序列模式下，每一轮 Planner 都应被视为一次从当前可见棋盘到通关的完整解题尝试；上一轮失败后的局部进展只作为经验，不作为持久进度。",
 	"长序列模式下，expectedOutcome 应描述整条序列的目标，并简要列出关键里程碑，例如先移动哪个箱子、再移动哪个箱子、最终哪些目标应被占据。",
 	"长序列模式下 Planner 的 actions 只能包含 move_up / move_down / move_left / move_right 这类棋盘移动；reset_level 由 runner/recovery 层管理，Planner 不得把 reset_level 写进 actions。",
 	"当 evaluator / latestHint 明确指出 deadlock、死局、卡死、或要求 restart 时，Planner 应在 reasoning/abortCondition 说明为何当前局面不可恢复，并等待 runner/recovery 处理重开；不要自行输出 reset_level。",
@@ -168,7 +168,7 @@ progressEvaluatorRules = [
 	"planViability 必须评估当前整体路线是否更可信：strengthened=整体可达性更好，weakened=虽然有变化但通道/绕位/其他箱子可达性变差，invalidated=这条路线应放弃，unchanged=还不足以下结论。",
 	"只有死局、重置、关键通道被不可恢复地堵死时，才把高层路线判为 invalidated。单次站位错误、推向错误、或 actionId 与目标方向不匹配，应判为 weakened/blocked，并要求修正具体推法。",
 	"评估路线时必须考虑所有未完成箱子之后是否仍可达、玩家是否仍能绕到关键推位、关键通道是否被打开或堵死；不要只因为一个箱子更接近目标就给正面评价。",
-	"长序列失败后，如果 after 图是死局或没有有效推进，routeStateUpdate/latestDiagnosis 应记录重开后要保留/避免的失败前缀经验；如果 after 图仍可续解且更接近目标，必须明确写出可续解局面和下一轮应从当前局面规划剩余完整路线。",
+	"长序列失败后，routeStateUpdate/latestDiagnosis 应记录重开后要复现的有效前缀、要避免的失败后缀和失败几何；不要要求 Planner 从失败后的残局继续行动。",
 ]
 
 [[actions]]
