@@ -242,7 +242,7 @@ P5 close-out:
   - cloud LLM latency (~20s per call via relay)
   - preflight voice cue audio files not yet recorded
 
-- [ ] P6: Memory, Stability, And Final Runtime Convergence
+- [x] P6: Memory, Stability, And Final Runtime Convergence
   Goal: finish the last round of core product work so the system has a defensible final runtime shape rather than only a collection of working subsystems.
   This phase is a core implementation phase, focused on memory, stability hardening, and the final local-small / cloud-big split.
   - [x] finalize the local-small / cloud-big split for the current product scope
@@ -259,6 +259,10 @@ P5 close-out:
   - [x] add unified log lifecycle management (TTL, size caps, session export baseline)
   - [x] finish Delegation Mode continuity quality close-out (grounded follow-up, cross-round reasoning continuity, and stable position/state narration)
   - [x] tighten bounded GCC scope, mode-aware orchestration, and layered memory into the final explicit product definition
+  - [x] strengthen delegation route-state tracking with committed-route continuity, failure diagnosis, and reusable route lessons across retries
+  - [x] add long-sequence Sokoban planning/execution mode with reset-based recovery and failed-prefix route learning
+  - [x] turn debug capture into an exportable evidence pipeline with image refs, session export, scratchpad mirroring, and lifecycle cleanup
+  - [x] add workbench-grade delegation inspection for live timeline, route diagnosis, and scratchpad-backed execution review
   - [-] keep complex dynamic game delegation (for example PVZ-like scenarios) in Future Work rather than the `P6` acceptance bar
 
 - [ ] P7: Product Close-Out And FYP Packaging
