@@ -457,7 +457,7 @@ export function StageWindow() {
 			)}
 
 			{loadStatus === "error" ? (
-				<div style={{ color: "#F87171", textAlign: "center", marginTop: 40, padding: "0 16px" }}>
+				<div style={{ color: "var(--paimon-error)", textAlign: "center", marginTop: 40, padding: "0 16px" }}>
 					<p style={{ marginBottom: 8 }}>{t("Live2D 加载失败", "Live2D failed to load")}</p>
 					<p style={{ fontSize: 12, opacity: 0.85 }}>{loadErrorMessage ?? t("未知错误", "Unknown error")}</p>
 				</div>

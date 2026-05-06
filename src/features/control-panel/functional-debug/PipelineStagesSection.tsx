@@ -1,5 +1,6 @@
 import { Alert, Chip, Stack, Typography } from "@mui/material";
 import type { FunctionalRuntimeState, Game2048State, SokobanState } from "@/types";
+import { useI18n } from "@/contexts/I18nProvider";
 import { buildLatestGameRun, formatDuration, formatPercent, formatTime, SnapshotCard, StageCard } from "./shared";
 
 interface PipelineStagesSectionProps {
@@ -9,6 +10,7 @@ interface PipelineStagesSectionProps {
 }
 
 export function PipelineStagesSection(props: PipelineStagesSectionProps) {
+	const { t } = useI18n();
 	const latestTask = props.functionalState.latestTask;
 	const latestSnapshot = props.functionalState.latestSnapshot;
 	const latestRun = buildLatestGameRun(props.game2048State, props.sokobanState);
@@ -39,13 +41,13 @@ export function PipelineStagesSection(props: PipelineStagesSectionProps) {
 					`method: ${latestSnapshot.captureMethod}`,
 					`quality: ${latestSnapshot.qualityScore.toFixed(3)}${latestSnapshot.lowConfidence ? " (low-confidence)" : ""}`,
 					`captured: ${formatTime(latestSnapshot.capturedAt)}`,
-				] : ["还没有可视快照"]}
+				] : [t("还没有可视快照", "No visual snapshot yet")]}
 			>
 				{latestSnapshot ? (
 					<>
 						{latestSnapshot.lowConfidence && (
 							<Alert severity="warning" sx={{ mb: 0.75, py: 0 }}>
-								当前截图可信度偏低，后续验证结果可能不可靠。
+								{t("当前截图可信度偏低，后续验证结果可能不可靠。", "The current snapshot has low confidence, so follow-up verification can be unreliable.")}
 							</Alert>
 						)}
 						<SnapshotCard
@@ -66,15 +68,15 @@ export function PipelineStagesSection(props: PipelineStagesSectionProps) {
 					`source: ${latestRun.analysisSource}`,
 					`at: ${formatTime(latestRun.startedAt)}`,
 					`strategy: ${latestRun.strategy}`,
-				] : ["还没有游戏分析结果"]}
+				] : [t("还没有游戏分析结果", "No game analysis yet")]}
 			>
 				{latestRun ? (
 					<>
 						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5, fontSize: 10 }}>
-							反思: {latestRun.reflection}
+							{t("反思", "Reflection")}: {latestRun.reflection}
 						</Typography>
 						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5, fontSize: 10 }}>
-							推理: {latestRun.reasoning}
+							{t("推理", "Reasoning")}: {latestRun.reasoning}
 						</Typography>
 						<Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
 							{latestRun.preferred.map((entry) => (
@@ -93,12 +95,12 @@ export function PipelineStagesSection(props: PipelineStagesSectionProps) {
 					`status: ${latestTask.status}`,
 					`duration: ${formatDuration(latestTask.startedAt, latestTask.endedAt)}`,
 					`target: ${latestTask.targetTitle}`,
-				] : ["还没有功能动作任务"]}
+				] : [t("还没有功能动作任务", "No functional task yet")]}
 			>
 				{latestTask ? (
 					<>
 						<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5, fontSize: 10 }}>
-							摘要: {latestTask.summary || "—"}
+							{t("摘要", "Summary")}: {latestTask.summary || "—"}
 						</Typography>
 						<Stack spacing={0.35}>
 							{latestTask.logs.slice(-5).map((entry) => (
@@ -118,23 +120,23 @@ export function PipelineStagesSection(props: PipelineStagesSectionProps) {
 					`status: ${latestRun.status}`,
 					`summary: ${latestRun.summary}`,
 					`attempts: ${latestRun.attempts.length}`,
-				] : ["还没有验证结果"]}
+				] : [t("还没有验证结果", "No verification yet")]}
 			>
 				{latestRun ? (
 					<>
 						<Stack spacing={0.35} sx={{ mb: 0.5 }}>
 							{latestRun.attempts.length > 0 ? latestRun.attempts.map((attempt) => (
 								<Typography key={`${latestRun.game}-${attempt.label}`} variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
-									{attempt.label}: {attempt.changed ? "changed" : "no change"} ({formatPercent(attempt.changeRatio)})
+									{attempt.label}: {attempt.changed ? t("已变化", "changed") : t("无变化", "no change")} ({formatPercent(attempt.changeRatio)})
 								</Typography>
 							)) : (
 								<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
-									还没有动作尝试记录
+									{t("还没有动作尝试记录", "No action attempts yet")}
 								</Typography>
 							)}
 						</Stack>
 						<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
-							反馈: {latestRun.companionText}
+							{t("反馈", "Feedback")}: {latestRun.companionText}
 						</Typography>
 					</>
 				) : null}

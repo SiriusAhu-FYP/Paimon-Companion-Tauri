@@ -1,6 +1,7 @@
 import { useCharacter, useEventBus } from "@/hooks";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { createLogger } from "@/services/logger";
+import { useI18n } from "@/contexts/I18nProvider";
 
 const log = createLogger("live2d-preview");
 
@@ -79,6 +80,7 @@ function applyEmotionParams(model: AnyModel, emotion: string) {
  * 订阅 character:expression 事件，将情绪映射为 Cubism 参数覆盖。
  */
 export function Live2DPreview() {
+	const { t } = useI18n();
 	const { characterId, emotion, isSpeaking } = useCharacter();
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const modelRef = useRef<AnyModel>(null);
@@ -173,12 +175,12 @@ export function Live2DPreview() {
 
 	return (
 		<section className="live2d-preview">
-			<h2>角色预览</h2>
+			<h2>{t("角色预览", "Character Preview")}</h2>
 			{loadStatus === "error" ? (
 				<div className="live2d-placeholder">
-					<p className="placeholder-icon"><svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5"/><path d="M3 21c0-4.97 4.03-9 9-9s9 4.03 9 9"/></svg></p>
-					<p>Live2D 加载失败</p>
-					<p className="placeholder-info" style={{ color: "#e94560", fontSize: 11 }}>
+					<p className="placeholder-icon"><svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ color: "var(--paimon-fg-faint)" }} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5"/><path d="M3 21c0-4.97 4.03-9 9-9s9 4.03 9 9"/></svg></p>
+					<p>{t("Live2D 加载失败", "Live2D failed to load")}</p>
+					<p className="placeholder-info" style={{ color: "var(--paimon-error)", fontSize: 11 }}>
 						{errorMsg}
 					</p>
 				</div>
@@ -186,13 +188,13 @@ export function Live2DPreview() {
 				<>
 					<canvas ref={canvasRef} style={{ width: "100%", maxHeight: "calc(100% - 60px)" }} />
 					{loadStatus === "loading" && (
-						<p className="placeholder-info">加载模型中...</p>
+						<p className="placeholder-info">{t("加载模型中...", "Loading model...")}</p>
 					)}
 				</>
 			)}
 			<p className="placeholder-info">
-				{characterId || "未加载"} · {emotion}
-				{isSpeaking ? " · 说话中" : ""}
+				{characterId || t("未加载", "Not loaded")} · {emotion}
+				{isSpeaking ? ` · ${t("说话中", "Speaking")}` : ""}
 			</p>
 		</section>
 	);

@@ -119,9 +119,11 @@ export function EventLog() {
 	const [selectedKey, setSelectedKey] = useState<string | null>(null);
 	const [copyMessage, setCopyMessage] = useState<string | null>(null);
 	const listRef = useRef<HTMLDivElement | null>(null);
+	const detailRef = useRef<HTMLDivElement | null>(null);
 	const stickToBottomRef = useRef(true);
 	const [scrollTop, setScrollTop] = useState(0);
 	const [viewportHeight, setViewportHeight] = useState(0);
+	const [detailHeight, setDetailHeight] = useState(0);
 
 	const filteredEntries = useMemo(() => {
 		const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
@@ -182,6 +184,20 @@ export function EventLog() {
 		return () => window.removeEventListener("resize", measure);
 	}, []);
 
+	useLayoutEffect(() => {
+		const detail = detailRef.current;
+		if (!detail) return;
+
+		const observer = new ResizeObserver((entries) => {
+			const entry = entries[0];
+			if (!entry) return;
+			setDetailHeight(entry.contentRect.height);
+		});
+		observer.observe(detail);
+		setDetailHeight(detail.clientHeight);
+		return () => observer.disconnect();
+	}, []);
+
 	useEffect(() => {
 		if (!stickToBottomRef.current) return;
 		const list = listRef.current;
@@ -195,6 +211,7 @@ export function EventLog() {
 		() => (selectedEntry ? serializePayload(selectedEntry.rawPayload, true) : ""),
 		[selectedEntry],
 	);
+	const canShowFullPayload = detailHeight >= 220;
 
 	const totalHeight = filteredEntries.length * ENTRY_ROW_HEIGHT;
 	const maxVisibleRows = Math.max(1, Math.ceil(viewportHeight / ENTRY_ROW_HEIGHT));
@@ -246,6 +263,14 @@ export function EventLog() {
 						<button
 							key={severity}
 							className={`event-log-filter-chip${activeSeverities.includes(severity) ? " active" : ""}`}
+							style={{
+								"--chip-color":
+									severity === "info"
+										? "#64748B"
+										: severity === "warn"
+											? "#D97706"
+											: "#DC2626",
+							} as CSSProperties}
 							onClick={() => {
 								setActiveSeverities((current) =>
 									current.includes(severity)
@@ -337,7 +362,7 @@ export function EventLog() {
 					)}
 				</div>
 
-				<div className="event-log-detail">
+				<div ref={detailRef} className="event-log-detail">
 					{selectedEntry ? (
 						<>
 							<div className="event-log-detail-header">
@@ -376,7 +401,13 @@ export function EventLog() {
 								</div>
 							)}
 							<div className="event-log-detail-summary">{selectedEntry.summary}</div>
-							<pre className="event-log-detail-payload">{selectedPayloadText}</pre>
+							{canShowFullPayload ? (
+								<pre className="event-log-detail-payload">{selectedPayloadText}</pre>
+							) : (
+								<div className="event-log-detail-payload-collapsed">
+									{t("面板高度不足，展开后显示完整 payload。", "Panel is too short; expand to view full payload.")}
+								</div>
+							)}
 						</>
 					) : (
 						<div className="event-log-empty">{t("选择一条事件以查看完整详情", "Select an event to inspect full details")}</div>
