@@ -265,12 +265,12 @@ P5 close-out:
   - [x] add workbench-grade delegation inspection for live timeline, route diagnosis, and scratchpad-backed execution review
   - [-] keep complex dynamic game delegation (for example PVZ-like scenarios) in Future Work rather than the `P6` acceptance bar
 
-- [ ] P7: Product Close-Out And FYP Packaging
-  Goal: package the now-converged system into a clean, defensible, and directly usable FYP deliverable.
-  This phase should avoid opening new core implementation frontiers and instead focus on cleanup, validation packaging, and presentation quality.
-  - [ ] remove stale UI buttons, debug controls, and other low-value surface actions before final acceptance
-  - [ ] fix build artifacts and release packaging so generated outputs are directly usable without local dev-only adjustments
-  - [ ] complete the final write-up, user study, and release packaging polish
+- [ ] P7: Repository And Documentation Close-Out
+  Goal: close out the repository into a clean, defensible, and review-friendly FYP codebase.
+  This phase should avoid opening new core implementation frontiers and instead focus on repository cleanup, documentation polish, and making the final project scope understandable from the codebase itself.
+  - [ ] remove stale UI buttons, debug controls, and other low-value surface residue from the review-facing repository state
+  - [ ] polish README and core docs so supervisors/examiners can understand the final scope, architecture, and accepted capabilities from the repository alone
+  - [ ] clarify repository boundaries by separating stable project surfaces from branch-only, debug-only, or experimental residue where needed
 
 ## Appendix: P2 Historical Notes
 
