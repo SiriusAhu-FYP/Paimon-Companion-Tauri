@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { getConfig, updateConfig } from "@/services/config";
 
 export type AppLocale = "zh" | "en";
@@ -39,6 +39,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 		setLocale,
 		t,
 	}), [localeState, setLocale, t]);
+
+	useEffect(() => {
+		document.documentElement.lang = localeState === "en" ? "en-US" : "zh-CN";
+	}, [localeState]);
 
 	return (
 		<I18nContext.Provider value={value}>

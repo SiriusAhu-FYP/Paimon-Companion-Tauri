@@ -2,6 +2,7 @@
 
 :root,
 [data-theme="dark"] {
+	--paimon-bg-default: #0f1117;
 	--paimon-scrollbar-thumb: rgba(104, 160, 255, 0.72);
 	--paimon-scrollbar-track: rgba(255, 255, 255, 0.05);
 	--paimon-scrollbar-thumb-hover: rgba(132, 182, 255, 0.88);
@@ -21,28 +22,81 @@
 	--paimon-code-bg: rgba(0, 0, 0, 0.22);
 	--paimon-resize-line: rgba(255, 255, 255, 0.12);
 	--paimon-resize-line-hover: rgba(255, 255, 255, 0.24);
+	--paimon-warning: #ffb74d;
+	--paimon-warning-soft: rgba(255, 183, 77, 0.08);
+	--paimon-warning-strong: rgba(255, 183, 77, 0.9);
+	--paimon-error: #f87171;
+	--paimon-error-soft: rgba(244, 67, 54, 0.06);
+	--paimon-error-strong: rgba(244, 67, 54, 0.95);
+	--paimon-on-accent: #121212;
+	--paimon-stage-glow-interactive: radial-gradient(circle at top, rgba(89, 159, 255, 0.08), transparent 52%);
+	--paimon-stage-glow-static: radial-gradient(circle at top, rgba(255, 255, 255, 0.03), transparent 50%);
+	--paimon-stage-toolbar-bg: rgba(10, 15, 24, 0.72);
+	--paimon-stage-toolbar-border: rgba(255, 255, 255, 0.14);
+	--paimon-stage-toolbar-interactive-bg: rgba(18, 34, 58, 0.82);
+	--paimon-stage-toolbar-interactive-border: rgba(89, 159, 255, 0.34);
+	--paimon-stage-toolbar-static-bg: rgba(22, 24, 31, 0.78);
+	--paimon-stage-toolbar-static-border: rgba(255, 255, 255, 0.12);
+	--paimon-stage-toolbar-label: rgba(255, 255, 255, 0.78);
+	--paimon-stage-btn-bg: rgba(255, 255, 255, 0.12);
+	--paimon-stage-btn-border: rgba(255, 255, 255, 0.22);
+	--paimon-stage-btn-fg: rgba(255, 255, 255, 0.84);
+	--paimon-stage-btn-hover-bg: rgba(255, 255, 255, 0.22);
+	--paimon-stage-btn-hover-fg: #ffffff;
+	--paimon-stage-btn-active-bg: rgba(255, 183, 77, 0.22);
+	--paimon-stage-btn-active-border: rgba(255, 183, 77, 0.45);
+	--paimon-stage-btn-active-fg: #ffd180;
+	--paimon-stage-btn-close-bg: rgba(233, 69, 96, 0.7);
+	--paimon-stage-btn-close-border: rgba(233, 69, 96, 0.7);
 }
 
 [data-theme="light"] {
-	--paimon-scrollbar-thumb: rgba(43, 122, 233, 0.5);
-	--paimon-scrollbar-track: rgba(0, 0, 0, 0.04);
-	--paimon-scrollbar-thumb-hover: rgba(43, 122, 233, 0.7);
-	--paimon-fg: rgba(0, 0, 0, 0.87);
-	--paimon-fg-muted: rgba(0, 0, 0, 0.6);
-	--paimon-fg-faint: rgba(0, 0, 0, 0.38);
-	--paimon-fg-faintest: rgba(0, 0, 0, 0.12);
-	--paimon-bg-subtle: rgba(0, 0, 0, 0.02);
-	--paimon-bg-hover: rgba(0, 0, 0, 0.04);
-	--paimon-bg-active: rgba(0, 0, 0, 0.08);
-	--paimon-border: rgba(0, 0, 0, 0.1);
-	--paimon-border-strong: rgba(0, 0, 0, 0.18);
-	--paimon-accent-bg: rgba(43, 122, 233, 0.14);
-	--paimon-accent-hover: rgba(43, 122, 233, 0.1);
-	--paimon-accent-drag: rgba(43, 122, 233, 0.3);
-	--paimon-splitter: rgba(0, 0, 0, 0.04);
-	--paimon-code-bg: rgba(0, 0, 0, 0.05);
-	--paimon-resize-line: rgba(0, 0, 0, 0.1);
-	--paimon-resize-line-hover: rgba(0, 0, 0, 0.2);
+	--paimon-bg-default: #f3f5f8;
+	--paimon-scrollbar-thumb: rgba(37, 99, 235, 0.42);
+	--paimon-scrollbar-track: rgba(100, 116, 139, 0.12);
+	--paimon-scrollbar-thumb-hover: rgba(37, 99, 235, 0.6);
+	--paimon-fg: #1f2937;
+	--paimon-fg-muted: #475569;
+	--paimon-fg-faint: #64748b;
+	--paimon-fg-faintest: rgba(100, 116, 139, 0.22);
+	--paimon-bg-subtle: #f8fafc;
+	--paimon-bg-hover: #eef2f7;
+	--paimon-bg-active: #e2e8f0;
+	--paimon-border: rgba(100, 116, 139, 0.26);
+	--paimon-border-strong: rgba(71, 85, 105, 0.34);
+	--paimon-accent-bg: rgba(37, 99, 235, 0.16);
+	--paimon-accent-hover: rgba(37, 99, 235, 0.2);
+	--paimon-accent-drag: rgba(37, 99, 235, 0.34);
+	--paimon-splitter: rgba(71, 85, 105, 0.18);
+	--paimon-code-bg: rgba(148, 163, 184, 0.16);
+	--paimon-resize-line: rgba(71, 85, 105, 0.26);
+	--paimon-resize-line-hover: rgba(37, 99, 235, 0.34);
+	--paimon-warning: #a16207;
+	--paimon-warning-soft: rgba(161, 98, 7, 0.16);
+	--paimon-warning-strong: rgba(161, 98, 7, 0.82);
+	--paimon-error: #be123c;
+	--paimon-error-soft: rgba(190, 18, 60, 0.12);
+	--paimon-error-strong: rgba(190, 18, 60, 0.82);
+	--paimon-on-accent: #0f172a;
+	--paimon-stage-glow-interactive: radial-gradient(circle at top, rgba(43, 122, 233, 0.16), transparent 52%);
+	--paimon-stage-glow-static: radial-gradient(circle at top, rgba(0, 0, 0, 0.06), transparent 50%);
+	--paimon-stage-toolbar-bg: rgba(244, 246, 251, 0.8);
+	--paimon-stage-toolbar-border: rgba(0, 0, 0, 0.16);
+	--paimon-stage-toolbar-interactive-bg: rgba(226, 236, 252, 0.9);
+	--paimon-stage-toolbar-interactive-border: rgba(43, 122, 233, 0.36);
+	--paimon-stage-toolbar-static-bg: rgba(238, 241, 247, 0.88);
+	--paimon-stage-toolbar-static-border: rgba(0, 0, 0, 0.14);
+	--paimon-stage-toolbar-label: rgba(0, 0, 0, 0.72);
+	--paimon-stage-btn-bg: rgba(0, 0, 0, 0.06);
+	--paimon-stage-btn-border: rgba(0, 0, 0, 0.16);
+	--paimon-stage-btn-fg: rgba(0, 0, 0, 0.78);
+	--paimon-stage-btn-hover-bg: rgba(0, 0, 0, 0.12);
+	--paimon-stage-btn-hover-fg: rgba(0, 0, 0, 0.9);
+	--paimon-stage-btn-active-bg: rgba(178, 106, 0, 0.16);
+	--paimon-stage-btn-active-border: rgba(178, 106, 0, 0.38);
+	--paimon-stage-btn-active-fg: rgba(110, 64, 0, 0.92);
+	--paimon-stage-btn-close-bg: rgba(201, 39, 78, 0.22);
+	--paimon-stage-btn-close-border: rgba(201, 39, 78, 0.35);
 }
 
 /* ── 全局 reset（MUI CssBaseline 覆盖大部分，仅保留补充） ── */
@@ -137,13 +191,13 @@
 .paimon-workspace {
 	position: relative;
 	min-height: 0;
-	background: var(--mui-palette-background-default, #0f1117);
+	background: var(--mui-palette-background-default, var(--paimon-bg-default));
 }
 
 .paimon-workspace .flexlayout__layout {
 	--color-text: var(--paimon-fg);
-	--color-background: var(--mui-palette-background-default, #0f1117);
-	--color-base: var(--mui-palette-background-default, #0f1117);
+	--color-background: var(--mui-palette-background-default, var(--paimon-bg-default));
+	--color-base: var(--mui-palette-background-default, var(--paimon-bg-default));
 	--color-1: var(--paimon-bg-subtle);
 	--color-2: var(--paimon-bg-hover);
 	--color-3: var(--paimon-bg-active);
@@ -153,7 +207,7 @@
 	--color-tabset-background: transparent;
 	--color-tabset-header-background: var(--paimon-bg-hover);
 	--color-tabset-background-selected: var(--paimon-bg-hover);
-	--color-tab-content: var(--mui-palette-background-default, #0f1117);
+	--color-tab-content: var(--mui-palette-background-default, var(--paimon-bg-default));
 	--color-tab-selected: var(--paimon-fg);
 	--color-tab-selected-background: var(--paimon-accent-bg);
 	--color-tab-unselected: var(--paimon-fg-muted);
@@ -173,7 +227,7 @@
 }
 
 .paimon-workspace .flexlayout__layout_main {
-	background: var(--mui-palette-background-default, #0f1117);
+	background: var(--mui-palette-background-default, var(--paimon-bg-default));
 }
 
 .paimon-workspace .flexlayout__tabset {
@@ -202,6 +256,18 @@
 .paimon-workspace .flexlayout__tab_toolbar_button,
 .paimon-workspace .flexlayout__tab_button_trailing {
 	border-radius: 6px;
+}
+
+.paimon-workspace .flexlayout__tabset_header,
+.paimon-workspace .flexlayout__tab_top,
+.paimon-workspace .flexlayout__tab_bottom,
+.paimon-workspace .flexlayout__border_button {
+	box-shadow: none;
+}
+
+.paimon-workspace .flexlayout__tabset-selected,
+.paimon-workspace .flexlayout__tabset-maximized {
+	background-image: none;
 }
 
 .paimon-tabset-action {
@@ -331,9 +397,9 @@
 }
 
 .event-log-debug-toggle.active {
-	border-color: rgba(255, 183, 77, 0.55);
-	color: #ffb74d;
-	background: rgba(255, 183, 77, 0.08);
+	border-color: color-mix(in srgb, var(--paimon-warning) 60%, transparent);
+	color: var(--paimon-warning);
+	background: var(--paimon-warning-soft);
 }
 
 .event-log-search::placeholder {
@@ -350,10 +416,10 @@
 
 .event-log-filter-chip {
 	padding: 1px 6px;
-	border: 1px solid color-mix(in srgb, var(--chip-color, #90a4ae) 50%, transparent);
+	border: 1px solid color-mix(in srgb, var(--chip-color, #90a4ae) 58%, transparent);
 	border-radius: 8px;
-	background: transparent;
-	color: var(--chip-color, #90a4ae);
+	background: color-mix(in srgb, var(--chip-color, #90a4ae) 8%, transparent);
+	color: color-mix(in srgb, var(--chip-color, #90a4ae) 72%, var(--paimon-fg-muted));
 	font-size: 10px;
 	cursor: pointer;
 	transition: all 0.15s;
@@ -361,13 +427,29 @@
 }
 
 .event-log-filter-chip:hover {
-	background: color-mix(in srgb, var(--chip-color, #90a4ae) 15%, transparent);
+	background: color-mix(in srgb, var(--chip-color, #90a4ae) 16%, transparent);
 }
 
 .event-log-filter-chip.active {
-	background: var(--chip-color, #90a4ae);
-	color: #121212;
+	background: color-mix(in srgb, var(--chip-color, #90a4ae) 24%, var(--paimon-bg-subtle));
+	border-color: color-mix(in srgb, var(--chip-color, #90a4ae) 82%, var(--paimon-border-strong));
+	color: color-mix(in srgb, var(--chip-color, #90a4ae) 84%, var(--paimon-fg));
 	font-weight: 600;
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip-color, #90a4ae) 35%, transparent);
+}
+
+[data-theme="light"] .event-log-filter-chip {
+	background: color-mix(in srgb, var(--chip-color, #90a4ae) 12%, var(--paimon-bg-subtle));
+	border-color: color-mix(in srgb, var(--chip-color, #90a4ae) 66%, var(--paimon-border-strong));
+	color: color-mix(in srgb, var(--chip-color, #90a4ae) 78%, var(--paimon-fg));
+}
+
+[data-theme="light"] .event-log-filter-chip:hover {
+	background: color-mix(in srgb, var(--chip-color, #90a4ae) 20%, var(--paimon-bg-subtle));
+}
+
+[data-theme="light"] .event-log-filter-chip.active {
+	background: color-mix(in srgb, var(--chip-color, #90a4ae) 30%, var(--paimon-bg-subtle));
 }
 
 .event-log-clear-btn {
@@ -405,9 +487,11 @@
 .event-log-body-layout {
 	display: grid;
 	grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+	align-items: stretch;
 	gap: 8px;
 	min-height: 0;
 	flex: 1;
+	overflow: hidden;
 }
 
 .event-log-entries {
@@ -455,12 +539,12 @@
 }
 
 .event-log-entry.warn {
-	border-left: 2px solid rgba(255, 183, 77, 0.9);
+	border-left: 2px solid var(--paimon-warning-strong);
 }
 
 .event-log-entry.error {
-	border-left: 2px solid rgba(244, 67, 54, 0.95);
-	background: rgba(244, 67, 54, 0.06);
+	border-left: 2px solid var(--paimon-error-strong);
+	background: var(--paimon-error-soft);
 }
 
 .event-log-time {
@@ -502,11 +586,11 @@
 }
 
 .event-log-severity.warn {
-	color: #ffb74d;
+	color: var(--paimon-warning);
 }
 
 .event-log-severity.error {
-	color: #ef5350;
+	color: var(--paimon-error);
 }
 
 .event-log-name {
@@ -539,6 +623,7 @@
 	background: var(--paimon-bg-subtle);
 	padding: 8px 10px;
 	gap: 8px;
+	overflow: hidden;
 }
 
 .event-log-detail-header {
@@ -569,6 +654,7 @@
 	font-size: 12px;
 	line-height: 1.45;
 	color: var(--paimon-fg);
+	flex-shrink: 0;
 }
 
 .event-log-detail-severity {
@@ -579,11 +665,11 @@
 }
 
 .event-log-detail-severity.warn {
-	color: #ffb74d;
+	color: var(--paimon-warning);
 }
 
 .event-log-detail-severity.error {
-	color: #ef5350;
+	color: var(--paimon-error);
 }
 
 .event-log-detail-payload {
@@ -600,6 +686,39 @@
 	line-height: 1.45;
 	white-space: pre-wrap;
 	word-break: break-word;
+}
+
+.event-log-detail-payload-collapsed {
+	font-size: 11px;
+	color: var(--paimon-fg-muted);
+	background: var(--paimon-code-bg);
+	border: 1px solid var(--paimon-border);
+	border-radius: 8px;
+	padding: 8px 10px;
+}
+
+[data-theme="light"] .event-log-header h3 {
+	opacity: 0.72;
+}
+
+[data-theme="light"] .event-log-meta {
+	opacity: 0.72;
+}
+
+[data-theme="light"] .event-log-latest {
+	opacity: 0.78;
+}
+
+[data-theme="light"] .event-log-time {
+	opacity: 0.68;
+}
+
+[data-theme="light"] .event-log-payload {
+	opacity: 0.78;
+}
+
+[data-theme="light"] .event-log-detail-meta {
+	opacity: 0.74;
 }
 
 @media (max-width: 1100px) {
@@ -633,12 +752,12 @@
 }
 
 .stage-window-interactive::before {
-	background: radial-gradient(circle at top, rgba(89, 159, 255, 0.08), transparent 52%);
+	background: var(--paimon-stage-glow-interactive);
 	box-shadow: none;
 }
 
 .stage-window-static::before {
-	background: radial-gradient(circle at top, rgba(255, 255, 255, 0.03), transparent 50%);
+	background: var(--paimon-stage-glow-static);
 	box-shadow: none;
 }
 
@@ -652,9 +771,9 @@
 	align-items: center;
 	justify-content: space-between;
 	padding: 6px 10px;
-	background: rgba(10, 15, 24, 0.72);
+	background: var(--paimon-stage-toolbar-bg);
 	backdrop-filter: blur(10px);
-	border: 1px solid rgba(255, 255, 255, 0.14);
+	border: 1px solid var(--paimon-stage-toolbar-border);
 	border-radius: 12px;
 	opacity: 0;
 	transition: opacity 0.2s;
@@ -664,13 +783,13 @@
 }
 
 .stage-toolbar-interactive {
-	background: rgba(18, 34, 58, 0.82);
-	border-color: rgba(89, 159, 255, 0.34);
+	background: var(--paimon-stage-toolbar-interactive-bg);
+	border-color: var(--paimon-stage-toolbar-interactive-border);
 }
 
 .stage-toolbar-static {
-	background: rgba(22, 24, 31, 0.78);
-	border-color: rgba(255, 255, 255, 0.12);
+	background: var(--paimon-stage-toolbar-static-bg);
+	border-color: var(--paimon-stage-toolbar-static-border);
 }
 
 .stage-toolbar-visible {
@@ -680,7 +799,7 @@
 
 .stage-toolbar-label {
 	font-size: 11px;
-	color: rgba(255, 255, 255, 0.78);
+	color: var(--paimon-stage-toolbar-label);
 	letter-spacing: 0.4px;
 	font-weight: 600;
 }
@@ -698,26 +817,26 @@
 	min-height: 28px;
 	padding: 3px 10px;
 	font-size: 11px;
-	background: rgba(255, 255, 255, 0.12);
-	border: 1px solid rgba(255, 255, 255, 0.22);
+	background: var(--paimon-stage-btn-bg);
+	border: 1px solid var(--paimon-stage-btn-border);
 	border-radius: 8px;
-	color: rgba(255, 255, 255, 0.84);
+	color: var(--paimon-stage-btn-fg);
 	cursor: pointer;
 	line-height: 1.4;
 }
 
 .stage-tb-btn:hover {
-	background: rgba(255, 255, 255, 0.22);
-	color: #fff;
+	background: var(--paimon-stage-btn-hover-bg);
+	color: var(--paimon-stage-btn-hover-fg);
 }
 
 .stage-tb-btn-active {
-	background: rgba(255, 183, 77, 0.22);
-	border-color: rgba(255, 183, 77, 0.45);
-	color: #ffd180;
+	background: var(--paimon-stage-btn-active-bg);
+	border-color: var(--paimon-stage-btn-active-border);
+	color: var(--paimon-stage-btn-active-fg);
 }
 
 .stage-tb-close:hover {
-	background: rgba(233, 69, 96, 0.7);
-	border-color: rgba(233, 69, 96, 0.7);
+	background: var(--paimon-stage-btn-close-bg);
+	border-color: var(--paimon-stage-btn-close-border);
 }

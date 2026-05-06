@@ -14,8 +14,18 @@ import App from "./App";
 import "flexlayout-react/style/dark.css";
 import "./App.css";
 
+const COLOR_SCHEME_STORAGE_KEY = "paimon-companion-tauri:color-scheme";
+
+function applyInitialDocumentTheme() {
+	const savedMode = localStorage.getItem(COLOR_SCHEME_STORAGE_KEY);
+	const initialMode = (savedMode === "light" || savedMode === "dark") ? savedMode : "dark";
+	document.documentElement.setAttribute("data-theme", initialMode);
+}
+
 async function bootstrap() {
 	await loadConfig();
+	const locale = getConfig().locale;
+	document.documentElement.lang = locale === "en" ? "en-US" : "zh-CN";
 
 	const services = initServices();
 	setLocalMcpEventBus(services.bus);
@@ -81,4 +91,5 @@ async function bootstrap() {
 	);
 }
 
+applyInitialDocumentTheme();
 bootstrap();
