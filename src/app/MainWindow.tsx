@@ -286,9 +286,9 @@ export function MainWindow() {
 		{ id: "delegation-timeline", label: t("托管时间轴", "Delegation Timeline") },
 		{ id: "chat", label: t("对话", "Chat") },
 		{ id: "knowledge", label: t("知识库", "Knowledge") },
-		{ id: "workbench", label: t("高级诊断", "Advanced Diagnostics") },
+		{ id: "workbench", label: t("开发工作台", "Workbench") },
 		{ id: "settings", label: t("设置", "Settings") },
-		{ id: "event-log", label: t("诊断日志", "Diagnostic Log") },
+		{ id: "event-log", label: t("日志", "Event Log") },
 	] as const;
 
 	useEffect(() => {

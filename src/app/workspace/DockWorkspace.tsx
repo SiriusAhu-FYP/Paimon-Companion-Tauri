@@ -66,12 +66,12 @@ const PANEL_LABELS: Record<DockPanelId, { zh: string; en: string }> = {
 	"stage-controls": { zh: "舞台", en: "Stage" },
 	"stage-slot": { zh: "贴靠舞台", en: "Attach Stage" },
 	chat: { zh: "对话", en: "Chat" },
-	"delegation-timeline": { zh: "托管时间轴", en: "Delegation Timeline" },
+	"delegation-timeline": { zh: "时间轴", en: "Timeline" },
 	"control-panel": { zh: "控制面板", en: "Control Panel" },
 	knowledge: { zh: "知识库", en: "Knowledge" },
-	workbench: { zh: "高级诊断", en: "Advanced Diagnostics" },
+	workbench: { zh: "开发工作台", en: "Workbench" },
 	settings: { zh: "设置", en: "Settings" },
-	"event-log": { zh: "诊断日志", en: "Diagnostic Log" },
+	"event-log": { zh: "事件日志", en: "Event Log" },
 };
 
 interface DockWorkspaceProps {
@@ -160,7 +160,7 @@ export function DockWorkspace(props: DockWorkspaceProps) {
 							stageMode={props.stageMode}
 							alwaysOnTop={props.alwaysOnTop}
 							displayMode={props.displayMode}
-							variant="product"
+							variant="developer"
 							onShowStage={props.onShowStage}
 							onVisibilityChange={props.onVisibilityChange}
 							onAlwaysOnTopChange={props.onAlwaysOnTopChange}

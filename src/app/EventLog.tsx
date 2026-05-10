@@ -223,7 +223,7 @@ export function EventLog() {
 		<section className="event-log">
 			<div className="event-log-header">
 				<div className="event-log-title-group">
-					<h3>{t("诊断日志", "Diagnostic Log")}</h3>
+					<h3>{t("事件控制台", "Event Console")}</h3>
 					<span className="event-log-meta">{filteredEntries.length} / {totalTrackedEntries} {t("条", "items")}</span>
 					{latestEntry && (
 						<span className="event-log-latest" title={latestEntry.payloadPreviewText}>
@@ -250,7 +250,7 @@ export function EventLog() {
 					className="event-log-search"
 					value={searchQuery}
 					onChange={(event) => setSearchQuery(event.target.value)}
-					placeholder={t("搜索事件名 / 摘要", "Search event / summary")}
+					placeholder={t("搜索事件名 / 摘要 / payload", "Search event / summary / payload")}
 				/>
 				<button
 					className={`event-log-debug-toggle${showDebug ? " active" : ""}`}
