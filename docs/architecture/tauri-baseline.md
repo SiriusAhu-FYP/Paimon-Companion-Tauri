@@ -1,5 +1,17 @@
 # Tauri Baseline
 
+## Document Status
+
+This document started as a `P2`-era baseline note.
+
+For current phase status and acceptance decisions, use:
+
+- `README.md`
+- `ROADMAP.md`
+- `docs/architecture/post-fusion-baseline.md`
+
+Treat phase wording in this file as architecture context unless newer source-of-truth docs override it.
+
 ## Purpose
 
 This document records the current architectural baseline of `paimon-companion-tauri`.
@@ -77,7 +89,7 @@ Current scope:
 
 - `功能实验 -> Unified Run` supports direct unified single-step execution
 - speech output is real and uses the normal `PipelineService` TTS path
-- voice input is currently a manual/mock ASR path for interaction validation, not a full microphone capture stack
+- `Unified Run` may still use testing-oriented text entry paths, while the regular chat path already has accepted real microphone capture + ASR flow
 
 Separate from `Unified Run`, the normal chat path now has a real microphone entry again:
 
@@ -147,7 +159,8 @@ The cloud model is responsible for:
 
 Reference:
 
-- `docs/architecture/companion-runtime.md`
+- `docs/architecture/source-fusion-audit.md`
+- `docs/architecture/post-fusion-baseline.md`
 
 ## ASR Direction
 

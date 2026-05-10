@@ -31,15 +31,18 @@ Purpose:
 
 Suggested output:
 
+The contract itself is game-agnostic. A concrete runtime will expose the action set of the currently active game.
+
+Example (`2048` shown only as one concrete implementation):
+
 ```json
 {
-  "gameId": "minecraft",
+  "gameId": "2048",
   "actions": [
-    "open_inventory",
-    "close_inventory",
-    "craft_plank",
-    "move_forward",
-    "turn_left"
+    "move_up",
+    "move_down",
+    "move_left",
+    "move_right"
   ]
 }
 ```
@@ -52,20 +55,24 @@ Purpose:
 
 Suggested input:
 
+Example (`2048` action shown as one concrete implementation):
+
 ```json
 {
-  "action": "open_inventory"
+  "action": "move_up"
 }
 ```
 
 Suggested output:
 
+Example:
+
 ```json
 {
   "accepted": true,
-  "action": "open_inventory",
+  "action": "move_up",
   "status": "completed",
-  "summary": "inventory opened"
+  "summary": "board shifted upward"
 }
 ```
 
@@ -76,6 +83,8 @@ Purpose:
 - expose the current game-facing runtime state in semantic terms
 
 Suggested output:
+
+Example (`2048` shown as one concrete implementation):
 
 ```json
 {
@@ -154,4 +163,9 @@ At this stage:
 - `game.list_actions` and `game.perform_action` are exposed by the local MCP server
 - `2048` and `Sokoban` runtime loops now execute their semantic actions through that MCP-facing boundary rather than calling the action runtime only through internal shortcuts
 
-What is still missing is the full end-to-end acceptance pass where this same MCP-facing game path is validated together with companion observation, follow-up generation, speech, and expression response.
+Focused fusion validation has already accepted this MCP-facing game path as part of the `P2` close-out baseline (see `post-fusion-baseline.md`).
+
+Remaining work is scope extension and hardening, not baseline acceptance:
+
+- keep semantic action contracts stable when adding future games
+- improve diagnostics/retry behavior without breaking the MCP-facing boundary

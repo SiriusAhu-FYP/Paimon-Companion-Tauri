@@ -121,4 +121,9 @@ Current accepted behavior already exists in-app:
 
 A first localhost MCP server slice now exists in the Tauri host, with companion tool requests bridged into the current runtime.
 
-What is still missing is the accepted end-to-end validation that the real LLM path consistently uses that MCP-facing tool boundary instead of falling back to mock-only or internal-only shortcuts.
+Focused fusion validation has already accepted this MCP-facing companion path as part of the `P2` close-out bar (see `post-fusion-baseline.md`).
+
+Remaining work is follow-up hardening, not baseline acceptance:
+
+- keep MCP tool usage stable under longer mixed workloads
+- evolve tool surface carefully without leaking model-specific runtime internals

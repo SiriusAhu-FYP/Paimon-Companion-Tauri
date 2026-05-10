@@ -3,48 +3,75 @@
 Tauri-first desktop host for PAIMON:
 Player-Aware Intelligent Monitoring and Operations Navigator.
 
-## Status
+## Current Repository Status
 
-This repository is the active Tauri implementation trunk.
+This repository is the active FYP implementation trunk.
 
-`P1 Functional Core Validation` is complete and merged into `main`.
+- `P1` to `P6` are accepted as complete in `ROADMAP.md`.
+- `P7` is currently the repository/documentation close-out phase.
+- Current phase goal is review clarity, not new core features, packaging, or release engineering.
 
-Current `P2` mainline is not new game expansion.
+## What This Repository Is
 
-It is focused on fully integrating the functional heritage of these source repositories:
+This codebase assembles capabilities inherited from:
 
 - `LLMPlay-MVP`
 - `VoiceL2D-MVP`
 - `Video-Understanding-MVP`
 
-`paimon-live` is treated as the desktop host/framework origin only.
+`paimon-live` is treated as host/framework heritage only.
 
-Current accepted baseline:
+The accepted runtime direction is companion-first, with explicit Delegation Mode boundaries and MCP-facing semantic control.
 
-- Windows host primitives for window discovery, capture, focus, and input
-- `2048` functional loop with capture -> decide -> execute -> verify
-- evaluation harness and functional debug tooling
-- companion UI, Live2D stage foundation, runtime/config/service scaffolding
+## Accepted Scope For Final Review
 
-What the baseline does not yet prove:
+The accepted repository-facing scope is:
 
-- full migration of `LLMPlay-MVP` source scope
-- full migration of `Video-Understanding-MVP` pipeline/evaluation capabilities
-- full post-fusion validation across all three source lines
+- Windows host primitives (window discovery, capture, focus, keyboard/mouse input)
+- companion runtime with Live2D, speech playback, and expression linkage
+- validated semantic task loops for `2048` and retained `Sokoban`
+- local-small / cloud-big runtime split from `P6`
+- memory/stability convergence and evidence-oriented debug capture/export baseline
 
-Current fusion direction:
+## Repository Layout
 
-- accepted `P2.2` baseline: local voice input -> companion pipeline -> `GPT-SoVITS` -> Live2D response
-- accepted `P2.3` sub-baseline: companion replies can already drive model-aware Live2D expression changes
-- current next focus: `P2.4` and `P2.5`
-- long-term control boundary: MCP for both companion actions and gameplay actions
+For repository review, the top-level structure can be read as:
 
-## UI
+- `src/`
+  React UI plus TypeScript-side runtime/services
+- `src-tauri/`
+  Rust/Tauri host backend and native commands
+- `docs/`
+  tracked review-facing architecture/evaluation/project docs
+- `prompts/`
+  shared prompt/template artifacts retained as part of the project scope
+- `.workbench/`
+  harness, experiments, simulations, and other non-primary project surfaces
 
-The desktop UI is currently split into:
+## Reviewer Read Path
 
-- `控制面板`: runtime, character, behavior, and context controls
-- `功能实验`: host-window tools, functional loops, evaluation harness, and debug drill-down
+For supervisors/examiners opening the repository cold, read in this order:
+
+1. `ROADMAP.md` (phase status, accepted scope, historical boundaries)
+2. `docs/README.md` (document trust levels and navigation)
+3. `docs/architecture/post-fusion-baseline.md` (accepted fusion bar)
+4. `docs/evaluation/2048-baseline.md` and `docs/evaluation/p6-memory-validation-protocol.md` (evaluation evidence shape)
+
+## Evaluation Boundaries
+
+From this repository alone, reviewers should primarily evaluate:
+
+- architecture and scope clarity
+- accepted capability boundaries
+- representative runtime/control/evaluation paths
+
+This repository does not target:
+
+- one-click full reproducibility across all machines
+- packaging/installer completeness as a phase gate
+- full recreation of every local vision/vLLM runtime condition
+
+Some local assets or sidecar environments are intentionally machine-dependent.
 
 ## Development
 
@@ -69,22 +96,12 @@ pnpm setup:local-asr
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
-## Notes
+## Runtime Notes
 
-- The app stays Tauri-first. Optional local sidecars remain acceptable for heavy workloads where the source projects already depend on them.
-- External AI services may still run outside the app over HTTP/SSE.
+- The app stays Tauri-first. Optional local sidecars remain acceptable where source projects already relied on them.
+- External AI services may run outside the app over HTTP/SSE.
 - Local TTS stays on the GPT-SoVITS path inherited from `VoiceL2D-MVP`.
-- A real chat-panel microphone path now exists, with browser-side capture/VAD plus pluggable cloud or local-runtime ASR upload.
-- Accepted ASR families are currently `local-sherpa`, `volcengine`, and `aliyun`.
-- The default local ASR route is the bundled `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16` model.
-- `pnpm setup:local-asr` prepares both the local ASR model assets and the sherpa native archive needed by `cargo check`.
-- The current local bilingual ASR baseline is practical for both Chinese and English, but mixed-language recognition is still effectively resolved one utterance at a time rather than as robust intra-sentence code-switching.
-- The currently accepted `P2.2` live voice baseline is local-only: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D reaction.
-- Cloud ASR providers remain supported configuration options, but they are not yet part of the accepted live-validation baseline.
-- The next fusion step is to formalize an MCP-facing runtime where local perception, cloud reasoning, companion expression control, and semantic gameplay actions can coexist without a rigid visible reply format.
-- Production tuning should start from an `8-10s` local description window and preserve at least the latest `1min` of summarized context.
-- The functional path intentionally excludes knowledge retrieval / embedding / rerank due to latency sensitivity.
-- The current host input model is foreground-oriented and does not guarantee coexistence with user typing or IME composition.
-- New game transfer work is gated behind source-repository fusion and validation.
-- Public progress is tracked in `ROADMAP.md`.
-- Architecture references live under `docs/`.
+- ASR families currently supported: `local-sherpa`, `volcengine`, `aliyun`.
+- Default local ASR baseline: bundled `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16`.
+- `pnpm setup:local-asr` prepares local ASR model assets and sherpa native archive needed by Rust checks.
+- Host input is foreground-oriented and does not guarantee coexistence with user typing/IME composition.

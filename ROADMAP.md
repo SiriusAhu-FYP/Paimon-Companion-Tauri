@@ -2,6 +2,13 @@
 
 Public progress tracker for `paimon-companion-tauri`.
 
+## Current Snapshot For Reviewers
+
+- `P1` to `P6` are accepted as complete milestones.
+- Current active phase is `P7: Repository And Documentation Close-Out`.
+- `P7` scope is repository clarity and documentation coherence, not packaging/release engineering or new core feature frontiers.
+- Recommended first-read order: `README.md` -> `ROADMAP.md` -> `docs/README.md`.
+
 ## Status Legend
 
 - `[x]` done

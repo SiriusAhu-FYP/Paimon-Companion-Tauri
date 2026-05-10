@@ -1,7 +1,8 @@
-# This Folder Is Outdated, Do Not Reference
+# Architecture Folder Status
 
-`docs/architecture/` currently contains historical or partially stale design notes.
+`docs/architecture/` contains a mix of:
 
-Do not treat this folder as the source of truth for current `P6` / `P7` implementation work.
+- current contract/baseline docs still used for review (`post-fusion-baseline`, MCP contracts, selected baseline notes)
+- historical or planning notes that should be treated as context only
 
-Public docs will be reorganized later when the project is closer to final packaging.
+For current `P7` close-out work, use `docs/README.md` trust levels to decide which files are source-of-truth vs historical.

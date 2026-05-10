@@ -20,16 +20,16 @@ It records what has already landed in `paimon-companion-tauri`, what is still mi
 These source capabilities are considered intentionally replaced rather than literally copied:
 
 - `LLMPlay-MVP` `FastMCP` action transport
-  - replaced by Tauri Rust host commands plus TypeScript orchestration/services
+  - replaced by an in-host localhost MCP bridge plus Tauri Rust commands and TypeScript orchestration/services
 - `VoiceL2D-MVP` frontend/backend WebSocket split
   - replaced by in-process React + service-container + event-bus wiring
 - `VoiceL2D-MVP` MCP-based expression bridging
-  - replaced by direct character-expression events and Stage window control
+  - transport shape changed from the original split, while the current accepted control boundary is MCP-facing companion tools bridged into runtime/state events
 
 These are not yet accepted replacements:
 
 - single-frame screenshot reasoning in place of the broader video-understanding pipeline/toolkit
-- `2048`-only functional validation in place of the full intended `LLMPlay-MVP` source scope
+- retained `2048` + `Sokoban` validation scope in place of the full intended `LLMPlay-MVP` gameplay breadth
 
 ## Audit Matrix
 
@@ -39,8 +39,8 @@ These are not yet accepted replacements:
 |---|---|---|---|---|
 | Window capture + focus + key input for game control | `src-tauri/src/commands/window.rs`, `src/services/system/system-service.ts`, `src/services/orchestrator/orchestrator-service.ts` | `merged` | Tauri-native host primitives cover the same control surface as the MVP’s OS helpers. | Keep as the accepted host baseline. |
 | `2048` screenshot -> decide -> act loop | `src/services/games/game-2048-service.ts` | `merged` | The core `2048` command-to-action loop is implemented and already validated in `P1`. | Treat as accepted carry-over. |
-| Tool-call based action interface (`FastMCP`) | `src/services/orchestrator/orchestrator-service.ts`, `src/services/unified/unified-runtime-service.ts` | `replaced` | Runtime actions no longer travel through an external MCP server; they are in-process Tauri service calls now. | Document this as a permanent architecture decision. |
-| Game-specific MCP tool packs (`2048`, `sokoban`) | `src/services/games/game-2048-service.ts`, `src/services/games/sokoban-service.ts` | `partial` | `2048` is validated and `sokoban` now has a restored minimal validation skeleton on the same semantic-action foundation. The future external MCP boundary is still not the final shape yet. | Keep `sokoban` in retained scope while MCP-facing tool packaging stays a later convergence step. |
+| Tool-call based action interface (`FastMCP`) | `src/services/orchestrator/orchestrator-service.ts`, `src/services/unified/unified-runtime-service.ts`, `src/services/mcp/tool-bridge-service.ts` | `replaced` | The original external Python `FastMCP` process shape is replaced by a local in-host MCP bridge plus Tauri-native runtime services. MCP remains the accepted semantic control boundary. | Keep MCP-facing semantics stable without restoring the old external process shape. |
+| Game-specific MCP tool packs (`2048`, `sokoban`) | `src/services/games/game-2048-service.ts`, `src/services/games/sokoban-service.ts` | `partial` | `2048` is validated and `sokoban` retains a validated path on the same semantic-action foundation. Baseline MCP-facing game tools are accepted; broader plugin packaging/generalization remains future work. | Keep `sokoban` in retained scope and extend plugin packaging only when a concrete new game requires it. |
 | Decision-history/reflection loop around repeated moves | `src/services/games/game-2048-service.ts`, `src/services/games/sokoban-service.ts`, `src/features/control-panel/FunctionalDebugPanel.tsx`, `src/services/evaluation/evaluation-service.ts` | `partial` | The runtime now records plan signatures, attempted moves, successful moves, and repeated-failure counts for both `2048` and `sokoban`, which is much closer to the MVP’s reflection shape. Longer-horizon planning memory is still lighter than the original research prototype. | Accept the current stronger decision-history baseline and only extend it further if later games expose a real gap. |
 | Prompt-pack/game-prompt structure | `src/services/games/game-2048-service.ts`, `src/services/games/sokoban-service.ts`, `prompts/example.md` | `replaced` | The MVP’s per-game prompt text is no longer the accepted source shape. The Tauri baseline now uses one shared game prompt template plus lightweight per-game filling. | Keep the shared template direction as the accepted replacement. |
 
@@ -53,7 +53,7 @@ These are not yet accepted replacements:
 | Character/persona management | `src/services/character/character-service.ts`, `src/features/control-panel/ControlPanel.tsx` | `merged` | Character cards, persona loading, switching, and expression mapping exist. | Keep as accepted baseline. |
 | TTS generation + sequential playback + lip sync | `src/services/tts/gptsovits-tts-service.ts`, `src/services/pipeline/pipeline-service.ts`, `src/services/audio/audio-player.ts` | `merged` | GPT-SoVITS playback, sequential output, and Live2D mouth/response linkage are now validated in the Tauri host. | Keep as accepted baseline. |
 | Frontend/backend transport via WebSocket | `src/services/index.ts`, `src/services/event-bus/event-bus.ts` | `replaced` | The Tauri app is single-runtime and no longer needs the MVP’s WebSocket boundary. | Keep this replacement. |
-| MCP-driven expression commands from LLM | `src/services/character/character-service.ts`, `src/services/character/expression-protocol.ts`, `src/features/stage/StageWindow.tsx`, `src/main.tsx` | `partial` | Companion replies can now drive model-aware Live2D expression changes through a first-pass reusable emotion protocol. The accepted behavior exists, but the public/control contract is still internal and should later be formalized as MCP. | Keep current behavior as accepted baseline, then MCP-formalize the control surface and align it with future gameplay tools. |
+| MCP-driven expression commands from LLM | `src/services/character/character-service.ts`, `src/services/character/expression-protocol.ts`, `src/features/stage/StageWindow.tsx`, `src/main.tsx`, `src/services/mcp/tool-bridge-service.ts` | `merged` | Companion replies can drive model-aware Live2D expression changes on the accepted MCP-facing control boundary in the current fusion baseline. | Treat MCP-driven companion expression as accepted baseline and focus future work on reliability hardening. |
 | Microphone capture | `src/services/voice-input/voice-input-service.ts`, `src/features/chat/ChatPanel.tsx` | `merged` | The Tauri app has a real chat-panel microphone path again, using browser/WebView capture instead of the MVP’s Python `sounddevice` loop, and it is now live-validated. | Keep as accepted baseline. |
 | VAD-based speech segmentation | `src/services/voice-input/voice-input-service.ts` | `merged` | The lighter browser-side VAD gate is now accepted through live validation as the current replacement for the MVP’s older `webrtcvad` path. | Keep current implementation unless quality issues force a revisit. |
 | Real ASR pipeline (bundled `sherpa-onnx` / cloud ASR) | `src/services/asr/local-sherpa-asr-service.ts`, `src/services/asr/http-asr-service.ts`, `src/services/provider-resolvers.ts`, `src/features/settings/AsrProfilesSection.tsx` | `partial` | The bundled local `sherpa-onnx` path is now live-validated and accepted. Cloud ASR providers (`volcengine`, `aliyun`) remain supported but are not part of the accepted live-validation baseline yet. | Treat local sherpa as accepted baseline; validate a cloud path later only if it remains product-relevant. |
@@ -78,7 +78,7 @@ Current high-level audit result:
 
 - `LLMPlay-MVP`: `partial`
   - accepted core: Tauri-native host control + validated `2048` loop + retained `Sokoban` validation skeleton + stronger decision-history loop
-  - unresolved: MCP-facing gameplay exposure and later plugin generalization, not whether the Python MVP structure itself must be copied
+  - unresolved: broader plugin generalization and additional game scope, not whether MCP-facing gameplay exposure exists in the accepted baseline
 - `VoiceL2D-MVP`: `partial`
   - accepted core: Live2D + chat + character + microphone + VAD + bundled local sherpa ASR + GPT-SoVITS TTS/lip-sync
   - unresolved: cloud ASR validation and any future quality upgrades such as better mixed-language utterance handling

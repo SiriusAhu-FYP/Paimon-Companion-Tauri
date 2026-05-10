@@ -54,7 +54,7 @@ Migration checklist:
 Current examples:
 
 - `src/services/games/game-2048-service.ts`
-- future `Sokoban` runtime
+- `src/services/games/sokoban-service.ts`
 
 Why they belong in the backend:
 
