@@ -193,12 +193,15 @@ export function MainWindow() {
 
 		let unlistenMainMove: (() => void) | null = null;
 		let unlistenMainResize: (() => void) | null = null;
+		let unlistenStageMove: (() => void) | null = null;
+		let unlistenStageResize: (() => void) | null = null;
 		let disposed = false;
 
 		(async () => {
 			try {
 				const mainWin = await Window.getByLabel("main");
-				if (!mainWin) {
+				const stageWin = await Window.getByLabel("stage");
+				if (!mainWin || !stageWin) {
 					return;
 				}
 
@@ -206,6 +209,20 @@ export function MainWindow() {
 					debouncedSyncDockedStageBounds();
 				});
 				unlistenMainResize = await mainWin.onResized(() => {
+					debouncedSyncDockedStageBounds();
+				});
+				unlistenStageMove = await stageWin.onMoved(() => {
+					if (stageModeRef.current !== "docked" || !stageVisibleRef.current) {
+						return;
+					}
+					lastDockedBoundsRef.current = null;
+					debouncedSyncDockedStageBounds();
+				});
+				unlistenStageResize = await stageWin.onResized(() => {
+					if (stageModeRef.current !== "docked" || !stageVisibleRef.current) {
+						return;
+					}
+					lastDockedBoundsRef.current = null;
 					debouncedSyncDockedStageBounds();
 				});
 			} catch (err) {
@@ -219,6 +236,8 @@ export function MainWindow() {
 			disposed = true;
 			unlistenMainMove?.();
 			unlistenMainResize?.();
+			unlistenStageMove?.();
+			unlistenStageResize?.();
 		};
 	}, [stageSlotOpen, debouncedSyncDockedStageBounds]);
 
