@@ -36,19 +36,18 @@ const TABSET_WEIGHTS = {
 	stageSlot: 28,
 	chat: 28,
 	right: 24,
-	bottom: 22,
 } as const;
 
 const PANEL_TITLES: Record<DockPanelId, string> = {
 	"stage-controls": "Stage",
 	"stage-slot": "Attach Stage",
 	chat: "Chat",
-	"delegation-timeline": "Timeline",
+	"delegation-timeline": "Delegation Timeline",
 	"control-panel": "Control Panel",
 	knowledge: "Knowledge",
-	workbench: "Workbench",
+	workbench: "Advanced Diagnostics",
 	settings: "Settings",
-	"event-log": "Event Log",
+	"event-log": "Diagnostic Log",
 };
 
 function createDockTabJson(panelId: DockPanelId): IJsonTabNode {
@@ -102,7 +101,7 @@ const DEFAULT_LAYOUT: DefaultWorkspaceLayout = {
 				weight: 78,
 				children: [
 					{
-						...createDockTabsetJson(TABSET_IDS.stage, ["stage-controls", "delegation-timeline"], TABSET_WEIGHTS.stage),
+						...createDockTabsetJson(TABSET_IDS.stage, ["stage-controls"], TABSET_WEIGHTS.stage),
 					},
 					{
 						...createDockTabsetJson(TABSET_IDS.chat, ["stage-slot"], TABSET_WEIGHTS.stageSlot),
@@ -111,12 +110,9 @@ const DEFAULT_LAYOUT: DefaultWorkspaceLayout = {
 						...createDockTabsetJson(TABSET_IDS.chatMain, ["chat"], TABSET_WEIGHTS.chat),
 					},
 					{
-						...createDockTabsetJson(TABSET_IDS.right, ["control-panel", "knowledge", "workbench", "settings"], TABSET_WEIGHTS.right),
+						...createDockTabsetJson(TABSET_IDS.right, ["control-panel", "knowledge", "settings"], TABSET_WEIGHTS.right),
 					},
 				],
-			},
-			{
-				...createDockTabsetJson(TABSET_IDS.bottom, ["event-log"], TABSET_WEIGHTS.bottom),
 			},
 		],
 	},

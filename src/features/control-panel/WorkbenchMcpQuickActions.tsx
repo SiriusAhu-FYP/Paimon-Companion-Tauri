@@ -194,7 +194,10 @@ export function WorkbenchMcpQuickActions() {
 	return (
 		<PanelCard compact>
 			<Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: "block", mb: 0.5 }}>
-				{t("临时 MCP 快捷操作", "Temporary MCP Quick Actions")}
+				{t("MCP 集成测试快捷操作", "MCP Integration Quick Actions")}
+			</Typography>
+			<Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5, fontSize: 10 }}>
+				{t("调试用途：用于快速验证 host.* MCP 工具链。", "Diagnostics only: quick checks for the host.* MCP toolchain.")}
 			</Typography>
 			<Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", mb: 0.5 }}>
 				<Button size="small" variant="outlined" onClick={handleFocusFirefox} disabled={busy}>
