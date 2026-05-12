@@ -42,20 +42,40 @@ For repository review, the top-level structure can be read as:
 - `src-tauri/`
   Rust/Tauri host backend and native commands
 - `docs/`
-  tracked review-facing architecture/evaluation/project docs
+  compact current architecture note
 - `prompts/`
   shared prompt/template artifacts retained as part of the project scope
 - `.workbench/`
   harness, experiments, simulations, and other non-primary project surfaces
 
-## Reviewer Read Path
+## Further Reading
 
-For supervisors/examiners opening the repository cold, read in this order:
+For the phase record and current architecture snapshot, continue with:
 
-1. `ROADMAP.md` (phase status, accepted scope, historical boundaries)
-2. `docs/README.md` (document trust levels and navigation)
-3. `docs/architecture/post-fusion-baseline.md` (accepted fusion bar)
-4. `docs/evaluation/2048-baseline.md` and `docs/evaluation/p6-memory-validation-protocol.md` (evaluation evidence shape)
+1. `ROADMAP.md`
+2. `docs/architecture.md`
+
+## Research And Verification Surfaces
+
+This repository intentionally keeps inspection-oriented UI surfaces visible:
+
+- `Workbench` for runtime/delegation inspection workflows
+- `Timeline` for round-by-round delegation trace review
+- `Event Log` for runtime/memory/tool evidence observation
+
+These are part of the FYP validation story (interpretability, delegation process checks, and evidence capture), not accidental leftover UI residue.
+
+`Control Panel` remains the formal interaction entry; the inspection surfaces above support review, diagnosis, and thesis-facing system explainability.
+
+## Mainline vs Experimental Surfaces
+
+Mainline accepted scope is defined by:
+
+- this `README.md`
+- `ROADMAP.md`
+- `docs/architecture.md`
+
+The repository may also contain branch-local or machine-local experimental/harness surfaces (for example `.workbench/` artifacts and local evaluation assets). Those are contextual support materials, not separate productization gates.
 
 ## Evaluation Boundaries
 

@@ -7,7 +7,8 @@ Public progress tracker for `paimon-companion-tauri`.
 - `P1` to `P6` are accepted as complete milestones.
 - Current active phase is `P7: Repository And Documentation Close-Out`.
 - `P7` scope is repository clarity and documentation coherence, not packaging/release engineering or new core feature frontiers.
-- Recommended first-read order: `README.md` -> `ROADMAP.md` -> `docs/README.md`.
+- `P7` is active while the close-out checklist below is still being completed.
+- Recommended first-read order: `README.md` -> `ROADMAP.md` -> `docs/architecture.md`.
 
 ## Status Legend
 
@@ -275,9 +276,10 @@ P5 close-out:
 - [ ] P7: Repository And Documentation Close-Out
   Goal: close out the repository into a clean, defensible, and review-friendly FYP codebase.
   This phase should avoid opening new core implementation frontiers and instead focus on repository cleanup, documentation polish, and making the final project scope understandable from the codebase itself.
-  - [ ] remove stale UI buttons, debug controls, and other low-value surface residue from the review-facing repository state
-  - [ ] polish README and core docs so supervisors/examiners can understand the final scope, architecture, and accepted capabilities from the repository alone
-  - [ ] clarify repository boundaries by separating stable project surfaces from branch-only, debug-only, or experimental residue where needed
+  - [ ] rebuild the docs layer around a small current architecture note instead of keeping stale/conflicting historical docs
+  - [ ] polish README and roadmap wording so the final scope is understandable from the repository alone
+  - [ ] clarify stable mainline scope versus branch-only or machine-local experimental/harness surfaces without changing runtime behavior
+  - [ ] keep Workbench/Timeline/Event Log framed as intentional research/verification surfaces
 
 ## Appendix: P2 Historical Notes
 
