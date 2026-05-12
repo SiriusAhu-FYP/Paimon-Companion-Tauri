@@ -27,7 +27,7 @@ Later scope tightening is tracked in later phases without reopening earlier mile
   - [x] Remove inherited docs and experiment baggage from the initial fork
   - [x] Remove livestream-only external event injection layer
   - [x] Keep the knowledge module as a support capability
-  - [x] move planning/report material out of tracked repo content
+  - [x] Move planning/report material out of tracked repo content
   - [x] Copy owner-local `.cursor` workspace rules into the repo as ignored local files
 
 - [x] P1: Functional Core Validation
@@ -73,7 +73,7 @@ Later scope tightening is tracked in later phases without reopening earlier mile
     - [x] map `VoiceL2D-MVP` features to the current Tauri codebase
     - [x] map `Video-Understanding-MVP` features to the current Tauri codebase
     - [x] classify each capability as merged / partial / missing / replaced
-    - [x] document the accepted replacement decisions where implementation shape has changed
+    - [x] document replacement decisions where implementation shape has changed
   - [x] P2.2 `VoiceL2D-MVP` Completion
     - [x] define the ASR migration strategy around pluggable providers
     - [x] add ASR provider/profile configuration surface in settings
@@ -92,7 +92,7 @@ Later scope tightening is tracked in later phases without reopening earlier mile
     - [x] validate visible Live2D expression changes through the real LLM and MCP tool path
     - [x] migrate the accepted expression-control path toward a formal MCP-facing contract
     - [-] keep motion as an optional enhancement outside the current acceptance gate
-      deferred: expression linkage is accepted for `P2`; motion remains an optional follow-up enhancement
+      deferred: expression linkage is in place for `P2`; motion remains an optional follow-up enhancement
   - [x] P2.4 `LLMPlay-MVP` Completion
     - [x] keep `Sokoban` in scope as the second reasoning-oriented validation game
     - [x] define a shared game prompt template (`example.md`) before rewriting per-game prompts
@@ -116,21 +116,21 @@ Later scope tightening is tracked in later phases without reopening earlier mile
       - [x] factor repeated OpenAI-compatible image reasoning calls into a shared vision client
       - [x] replace interval overlap with self-paced runtime scheduling and bounded queue pruning so long-running observation sessions stay stable
       - [-] integrate the missing reusable perception pieces that are still required
-        deferred: the accepted `P2` runtime slice is in place; broader toolkit carry-over stays in future work
+        deferred: the `P2` runtime slice is in place; broader toolkit carry-over stays in future work
       - [x] carry over the relevant evaluation/benchmark logic where it still serves the product goal
       - [-] add no-progress escalation and selected-frame cloud rescue
-        deferred: keep this as a future optimization path outside the current implementation gate
+        deferred: keep this as a future optimization path
   - [x] P2.6 Post-Fusion Validation
     - [x] route `Unified Run` through the selected semantic game target and produce grounded companion follow-up text
     - [x] add a first fusion evaluation case that samples runtime-context usage, LLM follow-up generation, and speech in one pass
     - [x] refresh the active companion observation context after unified game rounds so follow-up replies can speak from fresher runtime state
     - [x] land the first real MCP server boundary for companion control and semantic game control
     - [x] verify that all three source lines coexist in one Tauri runtime with companion behavior, expression, speech, and functional execution on the same MCP-facing path
-    - [x] define the accepted post-fusion baseline after MCP-backed fusion is working
+    - [x] define the post-fusion baseline after MCP-backed fusion is working
 
 - [x] P3: Emotion Runtime Foundation
   Goal: build the first bounded, inspectable emotion state that actually persists across turns and runtime events.
-  This phase is about establishing the first shared relational core that later companion behavior and functional follow-up can reliably consume.
+  This phase establishes the first shared relational core that later companion behavior and functional follow-up can reliably consume.
   - [x] define a bounded relational core model with explicit emotion labels, intensity, hold, and decay rules
   - [x] separate immediate reaction, short carry-over mood, and output-style hints into distinct layers
   - [x] unify emotion inputs from voice turns, runtime observations, task outcomes, and recent interaction context
@@ -141,7 +141,7 @@ Later scope tightening is tracked in later phases without reopening earlier mile
 
 - [x] P4: Full Emotion Companion Validation
   Goal: raise the emotion runtime from "state exists" to "companion feels coherently emotional" across chat, observation, and Delegation Mode execution.
-  The acceptance bar here is a basic but believable full-emotion module with coherent text, voice, and expression behavior.
+  The target here is a basic but believable full-emotion module with coherent text, voice, and expression behavior.
   This phase should prefer controllable video/scenario-based validation for companion behavior and move forward without waiting for full functional hardening.
   - [x] keep emotion continuity across multi-turn chat, passive companion runtime, and Delegation Mode follow-up
   - [x] let runtime observations and summaries support companion appraisal and proactive response, with relational-core changes tied to companion reply/appraisal
@@ -151,11 +151,11 @@ Later scope tightening is tracked in later phases without reopening earlier mile
   - [x] validate consistency across text reply, speech output, Live2D expression, and runtime follow-up behavior
   - [x] add targeted evaluation cases for stale emotion, overreaction, failed recovery to neutral, and contradictory multimodal output
   - [x] define and meet the minimum accepted bar for a "basic full emotion module"
-  - [-] proactive reply quality still needs tuning even though the accepted `P4` baseline is in place
+  - [-] proactive reply quality still needs tuning on top of the accepted `P4` baseline
 
 - [x] P5: Functional Module Hardening
-  Goal: after the companion-side emotional baseline is usable, harden the actual task/delegation stack into a reliable system.
-  The accepted Delegation Mode architecture is a three-role chain: `Mission Analyst -> Operations Planner -> Progress Evaluator`, with a shared scratchpad for inter-role context passing.
+  Goal: after the companion-side emotional baseline is usable, turn the task/delegation stack into a reliable system.
+  The Delegation Mode architecture for this phase is a three-role chain: `Mission Analyst -> Operations Planner -> Progress Evaluator`, with a shared scratchpad for inter-role context passing.
   Browser and game Delegation Mode tasks share the same unified loop; scenario differences are profile-driven through TOML plug-and-play config.
   Click localization uses local Qwen3-VL-2B-Instruct as the primary path, with multi-sample consensus correction (`resolve_locator_consensus`).
   Focus supports a Delegation Mode viewport policy (`16:9` reduced-tier physical resize).
@@ -167,7 +167,7 @@ Later scope tightening is tracked in later phases without reopening earlier mile
   - [x] make companion-first and Delegation Mode boundaries explicit in runtime/orchestration behavior
   - [x] structure Delegation Mode follow-up around explicit verification (Evaluator expectedMet/reflection loop) plus scratchpad memory update
   - [x] complete the generic Delegation Mode browser loop through `host.*` MCP tools and TOML task configs
-  - [x] keep control panel as the only formal interaction entry; workbench is debug-only
+  - [x] keep control panel as the formal interaction entry and workbench as a research/inspection surface
   - [x] add Delegation Mode preflight health check (target window selected + local vision reachable)
   - [x] stabilize TTS pipeline: speechChain reset, failure queuing, opening reply deduplication
   - [x] add task completion/failure summary with TTS broadcast
@@ -179,7 +179,7 @@ Later scope tightening is tracked in later phases without reopening earlier mile
 
 - [x] P6: Memory, Stability, And Final Runtime Convergence
   Goal: finish the last round of core product work so the system has a defensible final runtime shape.
-  This phase is a core implementation phase, focused on memory, stability hardening, and the final local-small / cloud-big split.
+  This phase focuses on memory, stability hardening, and the final local-small / cloud-big split.
   - [x] finalize the local-small / cloud-big split for the current product scope
     - Companion Mode: local observation first, cloud temporal summary/reply second
     - Delegation Mode: screenshot-driven cloud mission/planner/evaluator as the primary path; local vision stays as locator fallback
@@ -187,7 +187,7 @@ Later scope tightening is tracked in later phases without reopening earlier mile
   - [x] deliver a file-backed pseudo-long-term memory prototype: session-end compression with timestamped structured entries (scene/task, key entities, event result, summary)
   - [x] keep Delegation Mode memory scope bounded in P6: one async memory retrieval after mission confirmation + event-level writeback (what/when/result/optional attempts), without per-round auto-recall
   - [x] support explicit long-term recall in P6 (user asks for past events, optional light session-start pre-read), while deferring fully automatic trigger-based recall to future work
-  - [-] keep local fast-reaction language layer in Future Work for now; leave it outside the P6 acceptance path
+  - [-] keep local fast-reaction language layer in Future Work for now
   - [x] complete events.jsonl image reference-only storage (event payload data URLs are persisted as file refs, base64 removed from JSONL)
   - [-] keep site-specific cookie/popup bypass logic out of P6; stay within the GCC boundary and rely on generic host.* flow
   - [x] add browser cookie-handling policy into generic delegation profile (prefer reject, else essential/necessary, never accept-all unless explicitly requested)
@@ -198,11 +198,11 @@ Later scope tightening is tracked in later phases without reopening earlier mile
   - [x] add long-sequence Sokoban planning/execution mode with reset-based recovery and failed-prefix route learning
   - [x] turn debug capture into an exportable evidence pipeline with image refs, session export, scratchpad mirroring, and lifecycle cleanup
   - [x] add workbench-grade delegation inspection for live timeline, route diagnosis, and scratchpad-backed execution review
-  - [-] keep complex dynamic game delegation (for example PVZ-like scenarios) in Future Work, outside the `P6` acceptance bar
+  - [-] keep complex dynamic game delegation (for example PVZ-like scenarios) in Future Work
 
 - [ ] P7: Repository And Documentation
   Goal: leave the repository in a clean, defensible, and review-friendly FYP state.
-  This phase focuses on documentation polish, structure cleanup, and making the final project scope understandable from the codebase itself.
+  This phase focuses on documentation polish, structure cleanup, and making the final project scope readable from the codebase itself.
   - [x] replace stale historical docs with a minimal current `docs/architecture.md`
   - [ ] rewrite `README.md` as a clear project introduction
   - [ ] tighten `ROADMAP.md` wording and checklist style so the phase record reads consistently end to end
