@@ -204,6 +204,7 @@ Later scope tightening is tracked in later phases without reopening earlier mile
   Goal: leave the repository in a clean, defensible, and review-friendly FYP state.
   This phase focuses on documentation polish, structure cleanup, and making the final project scope readable from the codebase itself.
   - [x] replace stale historical docs with a minimal current `docs/architecture.md`
+  - [x] rewrite `docs/architecture.md` into a current architecture note that matches the tracked codebase
   - [ ] rewrite `README.md` as a clear project introduction
   - [ ] tighten `ROADMAP.md` wording and checklist style so the phase record reads consistently end to end
   - [ ] clarify the boundary between stable mainline scope and branch-only or machine-local experimental/harness surfaces
