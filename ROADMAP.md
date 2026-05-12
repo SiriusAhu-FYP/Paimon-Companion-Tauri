@@ -5,9 +5,8 @@ Public progress tracker for `paimon-companion-tauri`.
 ## Current Snapshot For Reviewers
 
 - `P1` to `P6` are accepted as complete milestones.
-- Current active phase is `P7: Repository And Documentation Close-Out`.
-- `P7` scope is repository clarity and documentation coherence, not packaging/release engineering or new core feature frontiers.
-- `P7` is active while the close-out checklist below is still being completed.
+- Current active phase is `P7: Repository And Documentation`.
+- `P7` scope stays on repository clarity, documentation polish, and final-scope readability.
 - Recommended first-read order: `README.md` -> `ROADMAP.md` -> `docs/architecture.md`.
 
 ## Status Legend
@@ -16,51 +15,11 @@ Public progress tracker for `paimon-companion-tauri`.
 - `[ ]` not started
 - `[-]` intentionally deferred
 
-## Branch Snapshot And Working Model
+## Historical Note
 
-This roadmap tracks product phases, but the repository has also accumulated a small set of long-lived historical branches that are worth recording explicitly.
+The checked items below remain checked because they satisfied the acceptance bar active at the time.
 
-Current surviving branch snapshot:
-
-- `main`
-  accepted stable baseline branch; `P1` is already merged here, and the accepted `P2` fusion baseline plus immediate post-`P2` performance follow-up currently also live here
-- `chore/tauri-bootstrap-cleanup`
-  repository/bootstrap cleanup line tied to the early host-base cleanup work
-- `feat/p1-host-primitives`
-  early `P1` functional-validation line centered on host primitives and the first runnable task loop
-- `refactor/p2-preflight-shrink`
-  pre-`P2` cleanup line used to reduce maintenance surface before the larger fusion pass
-- `feat/p2-relational-core`
-  main `P2` source-fusion branch where the three-source runtime merge was driven to the accepted baseline
-- `perf/post-p2-runtime-profiling`
-  first immediate post-`P2` branch for profiling and measurement after fusion close-out
-- `perf/post-p2-latency-followup`
-  second immediate post-`P2` branch for latency/stall reduction and runtime stabilization
-
-Working branch model from this point onward:
-
-- `main` should remain the feature-complete accepted baseline branch
-- each new roadmap phase should start from `main` as its own phase branch
-- smaller feature/fix branches should branch from the active phase branch and merge back there first
-- only when a phase has passed its own acceptance/testing bar should that phase branch merge back into `main`
-
-## Historical Acceptance Note
-
-The checked items below remain checked because they satisfied the acceptance bar that was active when each milestone was closed.
-
-Current final-version discussion has tightened the intended product definition:
-
-- companion-first by default
-- explicit delegation before gameplay takeover
-- bounded GCC task scope instead of broad autonomous gameplay
-- local lightweight VLM as the main perception direction
-- stronger functional correctness bar for validated tasks, especially where real solving is expected
-
-This means some already-checked roadmap items may still need follow-up work to meet the newer final-version bar.
-
-They are not being re-opened as unfinished historical milestones.
-
-Instead, the remaining gap is tracked as post-`P2` convergence phases on top of the accepted baseline.
+Later scope tightening is tracked in later phases without reopening earlier milestones.
 
 - [x] P0: Repository And Host Baseline
   - [x] Create `paimon-companion-tauri` from the reusable Tauri host base
@@ -107,11 +66,6 @@ Instead, the remaining gap is tracked as post-`P2` convergence phases on top of 
     event log and status bar now surface live runtime / functional events; control panel also exposes capture -> decision -> action -> verification drill-down, but richer artifact export is still pending
   - [x] add reusable task templates for new games
 
-P1 close-out:
-
-- accepted baseline: validated `2048` path on `2026-04-03`
-- `P2` should start from a fresh branch
-
 - [x] P2: Core Repository Fusion
   - [x] groundwork: a thin unified runtime layer already exists for `2048` validation
   - [x] P2.1 Source Audit And Gap Mapping
@@ -121,9 +75,9 @@ P1 close-out:
     - [x] classify each capability as merged / partial / missing / replaced
     - [x] document the accepted replacement decisions where implementation shape has changed
   - [x] P2.2 `VoiceL2D-MVP` Completion
-    - [x] define ASR migration strategy around pluggable providers instead of bundled desktop weights
+    - [x] define the ASR migration strategy around pluggable providers
     - [x] add ASR provider/profile configuration surface in settings
-    - [x] restore a real voice-input path instead of manual/mock-only ASR
+    - [x] restore a real voice-input path
     - [x] support at least one cloud ASR provider and one local-runtime provider
     - [x] keep GPT-SoVITS as the accepted local TTS baseline from `VoiceL2D-MVP`
     - [x] align accepted ASR providers with the current product plan: `local-sherpa`, `volcengine`, `aliyun`
@@ -135,9 +89,9 @@ P1 close-out:
   - [x] P2.3 Companion Expression Protocol
     - [x] define a first-pass emotion taxonomy and randomized per-model expression candidate mapping
     - [x] extend the same protocol to first-pass motion selection where models expose reusable motions
-    - [x] validate the real LLM path can consistently drive visible Live2D expression changes through MCP tools instead of mock-only/internal-only wiring
+    - [x] validate visible Live2D expression changes through the real LLM and MCP tool path
     - [x] migrate the accepted expression-control path toward a formal MCP-facing contract
-    - [-] keep motion as an optional enhancement rather than the current acceptance gate
+    - [-] keep motion as an optional enhancement outside the current acceptance gate
       deferred: expression linkage is accepted for `P2`; motion remains an optional follow-up enhancement
   - [x] P2.4 `LLMPlay-MVP` Completion
     - [x] keep `Sokoban` in scope as the second reasoning-oriented validation game
@@ -154,69 +108,53 @@ P1 close-out:
   - [x] P2.5 `Video-Understanding-MVP` Completion
     - [x] define the first local-fast / cloud-summarize companion runtime slice around `Qwen3-VL-2B-Instruct` style local frame descriptions plus cloud temporal reasoning
     - [x] start from `8-10s` rolling local-description windows and preserve at least the latest `1min` of summary context
-    - [x] feed the latest rolling temporal summary into the companion prompt path instead of leaving it as a lab-only side panel
+    - [x] feed the latest rolling temporal summary into the companion prompt path
       - [x] split perception prompting into general observation plus lightweight game-specific focus overlays
-      - [x] add lightweight change-based frame filtering so the runtime can coalesce visually unchanged captures instead of re-describing every tick
+      - [x] add lightweight change-based frame filtering so the runtime can coalesce visually unchanged captures and avoid re-describing every tick
       - [x] expose lightweight session metrics for runtime throughput, unchanged-frame ratio, and summary latency
       - [x] add a fixed-duration companion runtime benchmark so throughput and summary cadence can be sampled without ad hoc manual timing
-      - [x] factor repeated OpenAI-compatible image reasoning calls into a shared vision client instead of duplicating per-game/per-runtime request code
+      - [x] factor repeated OpenAI-compatible image reasoning calls into a shared vision client
       - [x] replace interval overlap with self-paced runtime scheduling and bounded queue pruning so long-running observation sessions stay stable
       - [-] integrate the missing reusable perception pieces that are still required
-        deferred: the accepted `P2` runtime slice is in place; broader toolkit carry-over is future work, not a close-out gate
+        deferred: the accepted `P2` runtime slice is in place; broader toolkit carry-over stays in future work
       - [x] carry over the relevant evaluation/benchmark logic where it still serves the product goal
       - [-] add no-progress escalation and selected-frame cloud rescue
-        deferred: keep this as a future optimization path, not a current implementation gate
+        deferred: keep this as a future optimization path outside the current implementation gate
   - [x] P2.6 Post-Fusion Validation
-    - [x] route the current `Unified Run` entry through the selected semantic game target instead of keeping it 2048-only
-    - [x] let unified game results ask the active LLM for grounded companion follow-up text instead of relying only on hardcoded per-game copy
+    - [x] route `Unified Run` through the selected semantic game target and produce grounded companion follow-up text
     - [x] add a first fusion evaluation case that samples runtime-context usage, LLM follow-up generation, and speech in one pass
     - [x] refresh the active companion observation context after unified game rounds so follow-up replies can speak from fresher runtime state
     - [x] land the first real MCP server boundary for companion control and semantic game control
-    - [x] verify that all three source lines coexist in one Tauri runtime through that MCP-facing runtime path
-    - [x] verify companion behavior, expression, speech, and functional execution together
+    - [x] verify that all three source lines coexist in one Tauri runtime with companion behavior, expression, speech, and functional execution on the same MCP-facing path
     - [x] define the accepted post-fusion baseline after MCP-backed fusion is working
 
-Cross-cutting rule during `P2` and later:
-
-- when work touches runtime-owned frontend modules that are already better suited to the backend, migrate that slice during the same implementation pass where practical
-- current definite migration targets are recorded in `docs/architecture/runtime-backend-migration.md`
-- each migration must be followed by a focused manual regression check before it is treated as accepted
-
 - [x] P3: Emotion Runtime Foundation
-  Goal: build the first bounded, inspectable emotion state that actually persists across turns and runtime events instead of being treated as one-off reply flavoring.
+  Goal: build the first bounded, inspectable emotion state that actually persists across turns and runtime events.
   This phase is about establishing the first shared relational core that later companion behavior and functional follow-up can reliably consume.
   - [x] define a bounded relational core model with explicit emotion labels, intensity, hold, and decay rules
-  - [x] separate immediate reaction, short carry-over mood, and output-style hints instead of treating emotion as one-shot reply decoration
+  - [x] separate immediate reaction, short carry-over mood, and output-style hints into distinct layers
   - [x] unify emotion inputs from voice turns, runtime observations, task outcomes, and recent interaction context
-  - [x] keep runtime summaries as neutral observation context for later companion reasoning instead of treating summary text itself as a direct relational-core trigger
+  - [x] keep runtime summaries as neutral observation context for later companion reasoning
   - [x] make Live2D expression selection, reply wording, and speech delivery hints consume the same emotion state
   - [x] expose emotion state and transition reasons in runtime/debug surfaces so the loop is inspectable
   - [-] keep new game/plugin expansion out of scope unless it is strictly required to validate the emotion loop
 
 - [x] P4: Full Emotion Companion Validation
   Goal: raise the emotion runtime from "state exists" to "companion feels coherently emotional" across chat, observation, and Delegation Mode execution.
-  The acceptance bar here is a basic but believable full-emotion module rather than a loose collection of separate text/voice/expression tricks.
-  This phase should prefer controllable video/scenario-based validation for companion behavior and should not wait for full functional hardening.
+  The acceptance bar here is a basic but believable full-emotion module with coherent text, voice, and expression behavior.
+  This phase should prefer controllable video/scenario-based validation for companion behavior and move forward without waiting for full functional hardening.
   - [x] keep emotion continuity across multi-turn chat, passive companion runtime, and Delegation Mode follow-up
-  - [x] let runtime observations and summaries support companion appraisal and proactive response, while keeping the actual relational-core change tied to companion reply/appraisal rather than raw summary text
-  - [x] define and validate a proactive response policy around event relevance plus a minimum silence threshold so the companion can speak up without becoming noisy
+  - [x] let runtime observations and summaries support companion appraisal and proactive response, with relational-core changes tied to companion reply/appraisal
+  - [x] define and validate a proactive response policy with event relevance gating and a minimum silence threshold
   - [x] build a small set of repeatable video/scenario validation cases for observation -> appraisal -> reply/expression consistency before relying on stronger game-solving quality
-  - [x] let functional results and companion appraisal feed back into the persistent emotion state instead of resetting every turn
+  - [x] let functional results and companion appraisal feed back into the persistent emotion state across turns
   - [x] validate consistency across text reply, speech output, Live2D expression, and runtime follow-up behavior
   - [x] add targeted evaluation cases for stale emotion, overreaction, failed recovery to neutral, and contradictory multimodal output
   - [x] define and meet the minimum accepted bar for a "basic full emotion module"
-
-P3/P4 close-out:
-
-- accepted `P3` status: the relational core is now persistent, inspectable, and shared across expression, speech, prompt context, and debug surfaces
-- accepted `P4` status: proactive companion behavior is now functioning end-to-end with session entry, silence-window gating, forced post-silence check-in, restart-safe session reset, and foreground-safe behavior
-- accepted validation method: debug-capture-backed manual checks plus targeted service tests, using repeatable observation/runtime scenarios rather than waiting for full gameplay hardening
-- accepted known remaining gap before later polish phases:
-  - proactive reply quality is now present and stable, but still not consistently strong enough to feel like an especially natural watch-along / observation-side companion
-  - this is treated as a tuning/polish problem on top of an accepted `P4` baseline, not as a blocker for phase close-out
+  - [-] proactive reply quality still needs tuning even though the accepted `P4` baseline is in place
 
 - [x] P5: Functional Module Hardening
-  Goal: after the companion-side emotional baseline is usable, harden the actual task/delegation stack so the system is not expressive but unreliable.
+  Goal: after the companion-side emotional baseline is usable, harden the actual task/delegation stack into a reliable system.
   The accepted Delegation Mode architecture is a three-role chain: `Mission Analyst -> Operations Planner -> Progress Evaluator`, with a shared scratchpad for inter-role context passing.
   Browser and game Delegation Mode tasks share the same unified loop; scenario differences are profile-driven through TOML plug-and-play config.
   Click localization uses local Qwen3-VL-2B-Instruct as the primary path, with multi-sample consensus correction (`resolve_locator_consensus`).
@@ -237,21 +175,10 @@ P3/P4 close-out:
   - [x] add delegation timeline visualization panel (dock-level tab with per-round decision cards)
   - [-] raise `2048` / `Sokoban` to higher solving baselines — deferred to P6 if needed
   - [-] keep broader new-game transfer outside the acceptance bar until the existing functional pair is stable
-
-P5 close-out:
-
-- accepted on 2026-04-22
-- all 5 Neo acceptance gates passed (screenshot-driven decisions, click localization, game verification, first-person narration, window focus stability)
-- browser delegation validated: Google search (2x pass), Bing story search (2x pass, cookie popup as external obstacle)
-- game delegation validated: 2048 scoring (pass), Sokoban movement (pass, historical)
-- known issues deferred to P6:
-  - events.jsonl bloat (mitigated by string truncation + throttling, full fix needs reference-only image storage)
-  - cookie/popup auto-bypass mechanism
-  - cloud LLM latency (~20s per call via relay)
-  - preflight voice cue audio files not yet recorded
+  - [-] known issues deferred to P6: events.jsonl bloat, cookie/popup auto-bypass, cloud LLM latency, and preflight voice cue recordings
 
 - [x] P6: Memory, Stability, And Final Runtime Convergence
-  Goal: finish the last round of core product work so the system has a defensible final runtime shape rather than only a collection of working subsystems.
+  Goal: finish the last round of core product work so the system has a defensible final runtime shape.
   This phase is a core implementation phase, focused on memory, stability hardening, and the final local-small / cloud-big split.
   - [x] finalize the local-small / cloud-big split for the current product scope
     - Companion Mode: local observation first, cloud temporal summary/reply second
@@ -260,45 +187,24 @@ P5 close-out:
   - [x] deliver a file-backed pseudo-long-term memory prototype: session-end compression with timestamped structured entries (scene/task, key entities, event result, summary)
   - [x] keep Delegation Mode memory scope bounded in P6: one async memory retrieval after mission confirmation + event-level writeback (what/when/result/optional attempts), without per-round auto-recall
   - [x] support explicit long-term recall in P6 (user asks for past events, optional light session-start pre-read), while deferring fully automatic trigger-based recall to future work
-  - [-] keep local fast-reaction language layer in Future Work for now; do not block P6 acceptance on this optional path
+  - [-] keep local fast-reaction language layer in Future Work for now; leave it outside the P6 acceptance path
   - [x] complete events.jsonl image reference-only storage (event payload data URLs are persisted as file refs, base64 removed from JSONL)
-  - [-] do not add site-specific cookie/popup bypass logic in P6; keep GCC boundary and rely on generic host.* flow
+  - [-] keep site-specific cookie/popup bypass logic out of P6; stay within the GCC boundary and rely on generic host.* flow
   - [x] add browser cookie-handling policy into generic delegation profile (prefer reject, else essential/necessary, never accept-all unless explicitly requested)
   - [x] add unified log lifecycle management (TTL, size caps, session export baseline)
-  - [x] finish Delegation Mode continuity quality close-out (grounded follow-up, cross-round reasoning continuity, and stable position/state narration)
+  - [x] finish Delegation Mode continuity quality work (grounded follow-up, cross-round reasoning continuity, and stable position/state narration)
   - [x] tighten bounded GCC scope, mode-aware orchestration, and layered memory into the final explicit product definition
   - [x] strengthen delegation route-state tracking with committed-route continuity, failure diagnosis, and reusable route lessons across retries
   - [x] add long-sequence Sokoban planning/execution mode with reset-based recovery and failed-prefix route learning
   - [x] turn debug capture into an exportable evidence pipeline with image refs, session export, scratchpad mirroring, and lifecycle cleanup
   - [x] add workbench-grade delegation inspection for live timeline, route diagnosis, and scratchpad-backed execution review
-  - [-] keep complex dynamic game delegation (for example PVZ-like scenarios) in Future Work rather than the `P6` acceptance bar
+  - [-] keep complex dynamic game delegation (for example PVZ-like scenarios) in Future Work, outside the `P6` acceptance bar
 
-- [ ] P7: Repository And Documentation Close-Out
-  Goal: close out the repository into a clean, defensible, and review-friendly FYP codebase.
-  This phase should avoid opening new core implementation frontiers and instead focus on repository cleanup, documentation polish, and making the final project scope understandable from the codebase itself.
-  - [ ] rebuild the docs layer around a small current architecture note instead of keeping stale/conflicting historical docs
-  - [ ] polish README and roadmap wording so the final scope is understandable from the repository alone
-  - [ ] clarify stable mainline scope versus branch-only or machine-local experimental/harness surfaces without changing runtime behavior
-  - [ ] keep Workbench/Timeline/Event Log framed as intentional research/verification surfaces
-
-## Appendix: P2 Historical Notes
-
-- `paimon-live` is framework heritage only
-- the functional source-of-truth repos for this stage are `LLMPlay-MVP`, `VoiceL2D-MVP`, and `Video-Understanding-MVP`
-- the current `Unified Run` path is useful groundwork, but it is not by itself proof that source-repo fusion is complete
-- the first-pass fusion matrix is recorded in `docs/architecture/source-fusion-audit.md`
-- retained / replaced / retired `LLMPlay-MVP` decisions are recorded in `docs/architecture/llmplay-retained-scope.md`
-- the ASR restoration strategy is recorded in `docs/architecture/asr-migration-strategy.md`
-- the accepted `P2` close-out bar is recorded in `docs/architecture/post-fusion-baseline.md`
-- accepted `P2.2` baseline: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D response
-- cloud ASR providers remain configured options, but they are not part of the accepted `P2.2` live-validation baseline
-- `P2.3` is intentionally about companion expression / motion protocol first, not about full game-plugin protocol yet
-- the first pass of `P2.3` should stay semantically small and distinct: `neutral`, `happy`, `angry`, `sad`, `delighted`, `alarmed`, `dazed`
-- the current internal expression path and mock-path are useful groundwork, but they do not satisfy the intended `P2` fusion bar on their own
-- the first localhost MCP server slice has landed, but it is not treated as accepted until the real LLM path and semantic game path are both validated through it
-- MCP externalization is a prerequisite for `P2` close-out, not later optional polish
-- accepted close-out status on `2026-04-09`: the MCP-backed fusion baseline is working end to end, including voice input, rolling runtime context, grounded follow-up text, speech, Live2D expression changes, and semantic game actions through the same local MCP boundary
-- accepted known issues at close-out:
-  - fusion evaluation now exposes stage timing (`action/runtime refresh/llm/speech`) plus `totalBlocking` and `totalNonBlocking`, but these are still workload wall-clock numbers rather than isolated model-only delay
-  - UI stall telemetry (`averageUiStallCount`, `maxUiStallMs`) is now present, and event-log rendering pressure has been reduced, but heavy local vision + speech runs can still cause occasional responsiveness drops depending on host load
-  - immediate post-`P2` work remains focused on reducing slow-round outliers and keeping MCP fusion behavior stable while performance tuning continues
+- [ ] P7: Repository And Documentation
+  Goal: leave the repository in a clean, defensible, and review-friendly FYP state.
+  This phase focuses on documentation polish, structure cleanup, and making the final project scope understandable from the codebase itself.
+  - [x] replace stale historical docs with a minimal current `docs/architecture.md`
+  - [ ] rewrite `README.md` as a clear project introduction
+  - [ ] tighten `ROADMAP.md` wording and checklist style so the phase record reads consistently end to end
+  - [ ] clarify the boundary between stable mainline scope and branch-only or machine-local experimental/harness surfaces
+  - [x] preserve `Workbench`, `Timeline`, and `Event Log` as intentional research/verification surfaces
