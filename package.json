@@ -9,8 +9,6 @@
     "build": "pnpm setup:local-asr && tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "eval:p6:memory": "node ./scripts/p6-memory-eval.mjs",
-    "logs:filter": "node ./scripts/filter-debug-capture.mjs",
     "tauri": "tauri",
     "kill-port": "powershell -Command \"$ports = 31420,31421; $connections = Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in $ports }; if ($connections) { $connections | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }; exit 0\""
   },
