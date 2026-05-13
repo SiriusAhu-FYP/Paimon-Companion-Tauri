@@ -22,16 +22,14 @@
 
 `paimon-companion-tauri` is the main FYP implementation of PAIMON. It presents one desktop system with two separately activated interaction paths built on the same technical foundation:
 
+<p align="center">
+  <img src="./media/app-screenshot-light.png" alt="PAIMON desktop application main interface" width="100%" />
+</p>
+
 - `Companion Mode`, which focuses on screen-aware presence, speech interaction, rolling memory, and affect-linked Live2D expression
 - `Delegation Mode`, which handles explicit browser and game tasks through a bounded multi-role loop
 
 The project is companion-first in overall direction. Delegated operation is intentionally constrained, verified, and task-bounded rather than framed as unrestricted autonomy.
-
-## Screenshot
-
-<p align="center">
-  <img src="./media/app-screenshot-light.png" alt="PAIMON desktop application main interface" width="100%" />
-</p>
 
 ## What It Includes
 
@@ -66,8 +64,8 @@ Machine-local or branch-specific working material may also exist around the repo
 
 Prerequisites:
 
-- Node.js 18+
-- `pnpm`
+- Node.js `20.19+` or `22.12+` (`22.x` recommended)
+- `pnpm 10+`
 - Rust
 - Windows Tauri prerequisites
 

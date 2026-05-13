@@ -205,7 +205,8 @@ Later scope tightening is tracked in later phases without reopening earlier mile
   This phase focuses on documentation polish, structure cleanup, and making the final project scope readable from the codebase itself.
   - [x] replace stale historical docs with a minimal current `docs/architecture.md`
   - [x] rewrite `docs/architecture.md` into a current architecture note that matches the tracked codebase
-  - [ ] rewrite `README.md` as a clear project introduction
-  - [ ] tighten `ROADMAP.md` wording and checklist style so the phase record reads consistently end to end
-  - [ ] clarify the boundary between stable mainline scope and branch-only or machine-local experimental/harness surfaces
+  - [x] rewrite `README.md` as a clear project introduction
+  - [x] add an aligned `README_zh.md` so the repository front page remains consistent across both languages
+  - [x] tighten `ROADMAP.md` wording and checklist style so the phase record reads consistently end to end
+  - [x] clarify the boundary between stable mainline scope and branch-only or machine-local experimental/harness surfaces
   - [x] preserve `Workbench`, `Timeline`, and `Event Log` as intentional research/verification surfaces
