@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="./media/readme-banner.png" alt="PAIMON banner" width="100%" />
+  <img src="./docs/imgs/readme-banner.png" alt="PAIMON banner" width="100%" />
 </p>
 
 ## 项目概览
@@ -23,7 +23,7 @@
 `paimon-companion-tauri` 是 PAIMON 项目（FYP）的主实现仓库。它呈现的是一个建立在同一套技术基础之上、但分别激活的双路径桌面系统：
 
 <p align="center">
-  <img src="./media/app-screenshot-light.png" alt="PAIMON desktop application main interface" width="100%" />
+  <img src="./docs/imgs/app-screenshot-light.png" alt="PAIMON desktop application main interface" width="100%" />
 </p>
 
 - `Companion Mode`：强调屏幕感知存在感、语音交互、滚动记忆，以及与 Live2D 表达联动的 affect runtime
@@ -58,13 +58,14 @@ PAIMON 在一个运行时中结合了几条关键思路：
 - `docs/`：面向实现理解的项目文档
 - `ROADMAP.md`：阶段历史与里程碑记录
 
-你也会看到一些机器本地或分支相关的工作材料，例如 `.workbench/` 或 `.private/`。这些是围绕项目存在的支持性工作界面，但不属于被跟踪主线实现的核心部分。
+你也会看到一些机器本地或分支相关的工作材料。这些是围绕项目存在的支持性工作界面，但不属于被跟踪主线实现的核心部分。
 
 ## 开发
 
 前置环境：
 
 - Node.js `20.19+` 或 `22.12+`（推荐 `22.x`）
+  - 对应 Vite 7 的兼容性要求
 - `pnpm 10+`
 - Rust
 - Windows 下的 Tauri 依赖环境
@@ -73,7 +74,7 @@ PAIMON 在一个运行时中结合了几条关键思路：
 
 ```bash
 pnpm install
-pnpm tauri dev
+pnpm dev
 ```
 
 Rust 侧检查：
@@ -83,14 +84,7 @@ pnpm setup:local-asr
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
-## 运行时说明
-
-- 该项目以桌面环境为中心，并采用 Tauri-first 的宿主结构。
-- 外部 AI 服务可以通过 HTTP 或 SSE 运行在应用外部。
-- 本地 TTS 仍沿用自早期工作线保留下来的 GPT-SoVITS 路线。
-- 当前支持的 ASR 家族包括 `local-sherpa`、`volcengine` 与 `aliyun`。
-- 默认打包的本地 ASR 基线为 `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16`。
-- 宿主输入是前台导向的，不保证与用户手动输入或输入法编辑过程安全共存。
+`pnpm dev` 会先执行仓库中保留的本地 ASR 准备步骤。关于本地运行时依赖边界、可选的 WSL 本地视觉服务脚本，以及保留的 GPT-SoVITS 路线，可参见 `docs/runtime-setup.md`。
 
 ## 边界说明
 
@@ -101,5 +95,6 @@ cargo check --manifest-path src-tauri/Cargo.toml
 ## 延伸阅读
 
 - `docs/architecture.md`：系统结构说明
+- `docs/runtime-setup.md`：本地运行时依赖与可选 sidecar 服务说明
 - `ROADMAP.md`：开发阶段与已接受里程碑记录
 - `README.md`：英文版仓库首页

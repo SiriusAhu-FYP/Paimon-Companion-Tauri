@@ -1,10 +1,10 @@
-# Shared Game Prompt Template
+# Shared Game Prompt
 
-Use this template when defining a game-specific prompt.
+Use this prompt when defining a game-specific prompt.
 
 Keep the game-specific file short.
 
-It should fill in the variables of this template rather than invent a new prompt structure every time.
+It should fill in the variables of this shared prompt rather than invent a new prompt structure every time.
 
 ## Role
 

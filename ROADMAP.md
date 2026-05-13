@@ -28,7 +28,7 @@ Later scope tightening is tracked in later phases without reopening earlier mile
   - [x] Remove livestream-only external event injection layer
   - [x] Keep the knowledge module as a support capability
   - [x] Move planning/report material out of tracked repo content
-  - [x] Copy owner-local `.cursor` workspace rules into the repo as ignored local files
+  - [x] Copy owner-local workspace rules into the repo as ignored local files
 
 - [x] P1: Functional Core Validation
   - [x] P1.1 Host OS Primitives
@@ -63,7 +63,7 @@ Later scope tightening is tracked in later phases without reopening earlier mile
   - [-] connect knowledge retrieval to functional tasks where useful
     deferred: current functional loop is latency-bound, so embedding / retrieval / rerank stay out of the real-time path
   - [-] add better debug panels for capture / action / verification
-    event log and status bar now surface live runtime / functional events; control panel also exposes capture -> decision -> action -> verification drill-down, but richer artifact export is still pending
+    event log, status bar, and control-panel drill-down now cover the live runtime path; richer artifact export remained future work at this stage
   - [x] add reusable task templates for new games
 
 - [x] P2: Core Repository Fusion
@@ -95,7 +95,7 @@ Later scope tightening is tracked in later phases without reopening earlier mile
       deferred: expression linkage is in place for `P2`; motion remains an optional follow-up enhancement
   - [x] P2.4 `LLMPlay-MVP` Completion
     - [x] keep `Sokoban` in scope as the second reasoning-oriented validation game
-    - [x] define a shared game prompt template (`example.md`) before rewriting per-game prompts
+    - [x] define a shared game prompt asset before rewriting per-game prompts
     - [x] lock the first companion MCP contract and game semantic action contract before broad plugin work
     - [x] define the minimum retained `Sokoban` validation scope before implementation
     - [x] replace the current weak reflection/history loop with a stronger decision-history design derived from `LLMPlay-MVP`
@@ -207,6 +207,10 @@ Later scope tightening is tracked in later phases without reopening earlier mile
   - [x] rewrite `docs/architecture.md` into a current architecture note that matches the tracked codebase
   - [x] rewrite `README.md` as a clear project introduction
   - [x] add an aligned `README_zh.md` so the repository front page remains consistent across both languages
+  - [x] add `docs/runtime-setup.md` so local ASR, optional local vision, and retained GPT-SoVITS setup boundaries are documented in one place
+  - [x] align the README development entry with the tracked local ASR setup path and runtime-setup guidance
+  - [x] remove placeholder-style tracked names such as `prompts/example.md` from the public repository surface
   - [x] tighten `ROADMAP.md` wording and checklist style so the phase record reads consistently end to end
   - [x] clarify the boundary between stable mainline scope and branch-only or machine-local experimental/harness surfaces
   - [x] preserve `Workbench`, `Timeline`, and `Event Log` as intentional research/verification surfaces
+  - [ ] do one final public-surface audit across tracked files, branch/tag keep-set, and release-facing repository structure

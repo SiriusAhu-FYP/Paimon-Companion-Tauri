@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="./media/readme-banner.png" alt="PAIMON banner" width="100%" />
+  <img src="./docs/imgs/readme-banner.png" alt="PAIMON banner" width="100%" />
 </p>
 
 ## Overview
@@ -23,7 +23,7 @@
 `paimon-companion-tauri` is the main FYP implementation of PAIMON. It presents one desktop system with two separately activated interaction paths built on the same technical foundation:
 
 <p align="center">
-  <img src="./media/app-screenshot-light.png" alt="PAIMON desktop application main interface" width="100%" />
+  <img src="./docs/imgs/app-screenshot-light.png" alt="PAIMON desktop application main interface" width="100%" />
 </p>
 
 - `Companion Mode`, which focuses on screen-aware presence, speech interaction, rolling memory, and affect-linked Live2D expression
@@ -58,13 +58,14 @@ This repository is therefore not a minimal demo of one isolated feature. It is t
 - `docs/` - implementation-facing project documentation
 - `ROADMAP.md` - phase history and milestone record
 
-Machine-local or branch-specific working material may also exist around the repo, such as `.workbench/` or `.private/`, but those are support surfaces rather than the center of the tracked mainline implementation.
+Machine-local or branch-specific working material may also exist around the repo, but those are support surfaces rather than the center of the tracked mainline implementation.
 
 ## Development
 
 Prerequisites:
 
 - Node.js `20.19+` or `22.12+` (`22.x` recommended)
+  - per Vite 7 compatibility requirements
 - `pnpm 10+`
 - Rust
 - Windows Tauri prerequisites
@@ -73,7 +74,7 @@ Install and run:
 
 ```bash
 pnpm install
-pnpm tauri dev
+pnpm dev
 ```
 
 Rust-side check:
@@ -83,14 +84,7 @@ pnpm setup:local-asr
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
-## Runtime Notes
-
-- The host is desktop-oriented and Tauri-first.
-- External AI services may run outside the app over HTTP or SSE.
-- Local TTS remains on the GPT-SoVITS path retained from earlier work.
-- Supported ASR families currently include `local-sherpa`, `volcengine`, and `aliyun`.
-- The default bundled local ASR baseline is `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16`.
-- Host input is foreground-oriented and does not guarantee coexistence with user typing or IME composition.
+`pnpm dev` runs the tracked local ASR setup first. See `docs/runtime-setup.md` for the local runtime boundary, including the optional WSL-based local vision helper and the retained GPT-SoVITS path.
 
 ## Scope Boundary
 
@@ -101,5 +95,6 @@ The main review surface is the tracked codebase and the architecture/runtime it 
 ## Further Reading
 
 - `docs/architecture.md` for the system structure
+- `docs/runtime-setup.md` for local runtime dependencies and optional sidecar services
 - `ROADMAP.md` for the development phases and accepted milestones
 - `README_zh.md` for the Chinese version of the repository introduction

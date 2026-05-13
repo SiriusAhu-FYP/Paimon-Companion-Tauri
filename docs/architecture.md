@@ -72,7 +72,7 @@ This is what makes the project a desktop operator rather than only a frontend th
 The repository also contains tracked and local support material around the runtime:
 
 - `prompts/` for shared prompt templates and retained wording artifacts
-- `.workbench/` and `.private/` for local harnesses, experiments, logs, and machine-specific support material
+- local support material for experiments, logs, and machine-specific setup
 
 These surfaces matter for development and experimentation, but they are not the center of the main runtime architecture.
 
@@ -173,9 +173,7 @@ Architecturally, this layer does two jobs:
 
 This is why memory and evidence belong in the system description. They are part of how the runtime is meant to operate, not only part of how it is debugged.
 
-## 7. Mainline And Local Surfaces
-
-Not every surface around this repository carries the same architectural weight.
+## 7. Reading The Repository
 
 The main runtime architecture lives in:
 
@@ -183,12 +181,10 @@ The main runtime architecture lives in:
 - `src-tauri/`
 - `prompts/`
 
-Around that mainline, there may also be branch-local or machine-local material such as:
+The most useful tracked guides around that runtime are:
 
-- `.workbench/`
-- `.private/`
-- local logs
-- local evaluation assets
-- local sidecar setup scripts
+- `README.md` for repository-level orientation
+- `ROADMAP.md` for the phase history and milestone shape
+- `docs/runtime-setup.md` for local runtime dependencies and optional sidecar services
 
-These are real working surfaces around the project, but they should be read as support material unless a tracked document explicitly brings them into scope.
+Other local or branch-specific material may exist around the repository during development, but it should be treated as support context unless a tracked document explicitly brings it into scope.
