@@ -1,0 +1,65 @@
+# Generic browser profile for Delegation Mode.
+# This file is intentionally natural-language-first: rules guide behavior, numeric knobs stay minimal.
+
+defaultProfileId = "delegation"
+
+[profile]
+taskId = "delegation-generic"
+displayName = "Generic Delegation"
+maxRounds = 20
+maxActionsPerRound = 4
+afterActionWaitMs = 1000
+allowedTools = [
+	"host.list_windows",
+	"host.focus_window",
+	"host.capture_window",
+	"host.resolve_locator_consensus",
+	"host.send_key",
+	"host.send_mouse",
+	"host.paste_text",
+]
+
+[profile.locator]
+locatorRulesEnabled = true
+locatorCloudEnabled = false
+locatorLocalFallbackEnabled = true
+locatorMinConfidence = 0.55
+
+[profile.roles.missionAnalyst]
+missionAnalystTemperature = 0.1
+missionAnalystThinkingMode = "off"
+missionAnalystRules = [
+	"先提取明确任务完成目标，不要混入常识问答。",
+	"识别用户显式约束（如指定网站 Google、指定窗口、指定禁忌动作）并固化为 hardConstraints。",
+	"当前页面/站点/窗口标题只属于初始环境观察；除非用户明确要求，否则不要把它们写成约束。",
+	"必须输出对初始状态的判断：当前处于什么页面/站点，以及这会如何影响第一步计划。",
+	"如果遇到 cookie 同意弹窗，默认策略是优先拒绝；若没有拒绝选项，只选 essential/necessary；不要选择 accept all，除非用户明确要求。",
+	"给出可执行的子任务链，每步都应能被截图/动作结果验证。",
+	"如果任务语义偏浏览器操作，明确标注 taskMode 为 browser。",
+]
+
+[profile.roles.operationsPlanner]
+operationsPlannerTemperature = 0.1
+operationsPlannerThinkingMode = "off"
+operationsPlannerRules = [
+	"你只能规划 allowedTools 内的动作，不要编造新工具。",
+	"一次规划最多 maxActionsPerRound 个动作，动作要最小且可验证。",
+	"对 Ctrl+T -> Ctrl+L -> 粘贴 URL/搜索词 -> 回车 这种连续且安全的链条，可以在同一轮内一起给出；涉及页面加载后再找控件、依赖新截图确认的动作，不要硬拼成长链。",
+	"如果任务明确要求在新标签页、其他页面或其他站点展开，就不要优先处理当前标签页里的局部元素（如 cookie 弹窗、站内搜索框、广告遮罩）；除非这些元素实际阻碍了切到正确环境这一步。",
+	"处理 cookie 弹窗时遵循默认策略：reject > essential/necessary > accept all（仅用户明确要求时可选）。",
+	"如果任务已完成，goalReached 设为 true 并给出简短结论。",
+]
+
+[profile.roles.progressEvaluator]
+progressEvaluatorTemperature = 0.1
+progressEvaluatorThinkingMode = "off"
+progressEvaluatorRules = [
+	"严格比较 before/after 两张图，只描述可见变化。",
+	"除了变化本身，还要判断动作是否正确、是否朝 mission 目标靠近。",
+	"必须把“当前环境是否仍然正确”纳入反思：页面是否相关、站点是否正确、是否发生页面漂移、前置条件是否失效。",
+	"如果任务本应在新标签页、其他页面或其他站点继续展开，而当前动作仍在处理旧标签页的局部元素（如 cookie 弹窗），通常应判为恢复方向错误，而不是必要进展。",
+	"如果当前环境错误，不要只说动作局部成功与否；要在 nextHint 明确说明当前错误状态，并给出恢复到正确状态的下一步。",
+	"恢复策略优先考虑不打断用户当前内容的方式，例如新建标签页、切到已有相关标签页、或重新确认页面状态。",
+	"如果无法确认变化，goalProgress 设为 none，并给出下一步建议。",
+	"reply 使用第一人称、简洁、避免模板化重复。",
+]

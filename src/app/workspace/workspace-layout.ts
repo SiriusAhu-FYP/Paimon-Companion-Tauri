@@ -1,4 +1,4 @@
-import { Actions, DockLocation, Model, type IJsonModel, type IJsonTabNode } from "flexlayout-react";
+import { Actions, DockLocation, Model, type IJsonModel, type IJsonTabNode, type IJsonTabSetNode } from "flexlayout-react";
 
 export const WORKSPACE_LAYOUT_STORAGE_KEY = "paimon-companion-tauri:workspace-layout:v1";
 
@@ -6,6 +6,7 @@ export const DOCK_PANEL_IDS = [
 	"stage-controls",
 	"stage-slot",
 	"chat",
+	"delegation-timeline",
 	"control-panel",
 	"knowledge",
 	"workbench",
@@ -19,7 +20,8 @@ export type DefaultWorkspaceLayout = IJsonModel;
 
 const TABSET_IDS = {
 	stage: "stage-tabset",
-	chat: "chat-tabset",
+	chat: "stage-slot-tabset",
+	chatMain: "chat-main-tabset",
 	right: "right-tabset",
 	bottom: "bottom-tabset",
 } as const;
@@ -29,10 +31,19 @@ const WORKSPACE_NODE_IDS = {
 	main: "workspace-main",
 } as const;
 
+const TABSET_WEIGHTS = {
+	stage: 24,
+	stageSlot: 28,
+	chat: 28,
+	right: 24,
+	bottom: 22,
+} as const;
+
 const PANEL_TITLES: Record<DockPanelId, string> = {
 	"stage-controls": "Stage",
 	"stage-slot": "Attach Stage",
 	chat: "Chat",
+	"delegation-timeline": "Timeline",
 	"control-panel": "Control Panel",
 	knowledge: "Knowledge",
 	workbench: "Workbench",
@@ -49,6 +60,18 @@ function createDockTabJson(panelId: DockPanelId): IJsonTabNode {
 		enableClose: panelId !== "control-panel",
 		enableDrag: true,
 		enableRename: false,
+	};
+}
+
+function createDockTabsetJson(tabsetId: string, panelIds: DockPanelId[], weight: number): IJsonTabSetNode {
+	return {
+		type: "tabset",
+		id: tabsetId,
+		weight,
+		enableDrag: true,
+		enableDrop: true,
+		selected: 0,
+		children: panelIds.map((panelId) => createDockTabJson(panelId)),
 	};
 }
 
@@ -79,53 +102,21 @@ const DEFAULT_LAYOUT: DefaultWorkspaceLayout = {
 				weight: 78,
 				children: [
 					{
-						type: "tabset",
-						id: TABSET_IDS.stage,
-						weight: 24,
-						enableDrag: true,
-						enableDrop: true,
-						selected: 0,
-						children: [
-							createDockTabJson("stage-controls"),
-						],
+						...createDockTabsetJson(TABSET_IDS.stage, ["stage-controls", "delegation-timeline"], TABSET_WEIGHTS.stage),
 					},
 					{
-						type: "tabset",
-						id: TABSET_IDS.chat,
-						weight: 52,
-						enableDrag: true,
-						enableDrop: true,
-						selected: 0,
-						children: [
-							createDockTabJson("chat"),
-						],
+						...createDockTabsetJson(TABSET_IDS.chat, ["stage-slot"], TABSET_WEIGHTS.stageSlot),
 					},
 					{
-						type: "tabset",
-						id: TABSET_IDS.right,
-						weight: 24,
-						enableDrag: true,
-						enableDrop: true,
-						selected: 0,
-						children: [
-							createDockTabJson("control-panel"),
-							createDockTabJson("knowledge"),
-							createDockTabJson("workbench"),
-							createDockTabJson("settings"),
-						],
+						...createDockTabsetJson(TABSET_IDS.chatMain, ["chat"], TABSET_WEIGHTS.chat),
+					},
+					{
+						...createDockTabsetJson(TABSET_IDS.right, ["control-panel", "knowledge", "workbench", "settings"], TABSET_WEIGHTS.right),
 					},
 				],
 			},
 			{
-				type: "tabset",
-				id: TABSET_IDS.bottom,
-				weight: 22,
-				enableDrag: true,
-				enableDrop: true,
-				selected: 0,
-				children: [
-					createDockTabJson("event-log"),
-				],
+				...createDockTabsetJson(TABSET_IDS.bottom, ["event-log"], TABSET_WEIGHTS.bottom),
 			},
 		],
 	},
@@ -178,14 +169,14 @@ export function getOpenDockPanels(model: Model): Set<DockPanelId> {
 }
 
 export function focusOrRestoreDockPanel(model: Model, panelId: DockPanelId) {
-	const existing = model.getNodeById(panelId);
-	if (existing?.getType() === "tab") {
-		model.doAction(Actions.selectTab(panelId));
+	if (panelId === "event-log") {
+		moveOrRestoreBottomEventLog(model);
 		return;
 	}
 
-	if (panelId === "event-log") {
-		restoreBottomEventLog(model);
+	const existing = model.getNodeById(panelId);
+	if (existing?.getType() === "tab") {
+		model.doAction(Actions.selectTab(panelId));
 		return;
 	}
 
@@ -194,16 +185,23 @@ export function focusOrRestoreDockPanel(model: Model, panelId: DockPanelId) {
 	model.doAction(Actions.addNode(tabJson, restoreTarget.toNodeId, restoreTarget.location, -1, true));
 }
 
+function moveOrRestoreBottomEventLog(model: Model) {
+	const existing = model.getNodeById("event-log");
+	if (existing?.getType() === "tab") {
+		const parentId = existing.getParent()?.getId();
+		if (parentId === TABSET_IDS.bottom) {
+			model.doAction(Actions.selectTab("event-log"));
+			return;
+		}
+		model.doAction(Actions.deleteTab("event-log"));
+	}
+	restoreBottomEventLog(model);
+}
+
 function restoreBottomEventLog(model: Model) {
 	const existingBottom = model.getNodeById(TABSET_IDS.bottom);
 	if (existingBottom?.getType() === "tabset") {
 		model.doAction(Actions.addNode(createDockTabJson("event-log"), TABSET_IDS.bottom, DockLocation.CENTER, -1, true));
-		return;
-	}
-
-	const workspaceMain = model.getNodeById(WORKSPACE_NODE_IDS.main);
-	if (workspaceMain) {
-		model.doAction(Actions.addNode(createDockTabJson("event-log"), WORKSPACE_NODE_IDS.main, DockLocation.BOTTOM, -1, true));
 		return;
 	}
 
@@ -218,24 +216,49 @@ function restoreBottomEventLog(model: Model) {
 }
 
 function getRestoreTarget(model: Model, panelId: DockPanelId): { toNodeId: string; location: DockLocation } {
-	if (panelId === "stage-slot") {
-		const chatTabset = model.getNodeById(TABSET_IDS.chat);
-		if (chatTabset?.getType() === "tabset") {
-			return { toNodeId: TABSET_IDS.chat, location: DockLocation.LEFT };
-		}
-	}
-
 	const directTargetId = getPreferredTabsetId(panelId);
 	const directTarget = model.getNodeById(directTargetId);
 	if (directTarget?.getType() === "tabset") {
 		return { toNodeId: directTargetId, location: DockLocation.CENTER };
 	}
 
-	if (panelId === "event-log") {
+	if (panelId === "stage-controls") {
 		const workspaceMain = model.getNodeById(WORKSPACE_NODE_IDS.main);
 		if (workspaceMain) {
-			return { toNodeId: WORKSPACE_NODE_IDS.main, location: DockLocation.BOTTOM };
+			model.doAction(Actions.addNode(createDockTabJson("stage-controls"), WORKSPACE_NODE_IDS.main, DockLocation.LEFT, -1, true));
+			return { toNodeId: TABSET_IDS.stage, location: DockLocation.CENTER };
 		}
+	}
+
+	if (panelId === "delegation-timeline") {
+		if (model.getNodeById(TABSET_IDS.chat)?.getType() === "tabset") {
+			model.doAction(Actions.addNode(createDockTabJson("delegation-timeline"), TABSET_IDS.chat, DockLocation.LEFT, -1, true));
+			return { toNodeId: TABSET_IDS.stage, location: DockLocation.CENTER };
+		}
+	}
+
+	if (panelId === "stage-slot") {
+		if (model.getNodeById(TABSET_IDS.chatMain)?.getType() === "tabset") {
+			model.doAction(Actions.addNode(createDockTabJson("stage-slot"), TABSET_IDS.chatMain, DockLocation.LEFT, -1, true));
+			return { toNodeId: TABSET_IDS.chat, location: DockLocation.CENTER };
+		}
+	}
+
+	if (panelId === "chat") {
+		const stageSlotTabset = model.getNodeById(TABSET_IDS.chat);
+		if (stageSlotTabset?.getType() === "tabset") {
+			model.doAction(Actions.addNode(createDockTabJson("chat"), TABSET_IDS.chat, DockLocation.RIGHT, -1, true));
+			return { toNodeId: TABSET_IDS.chatMain, location: DockLocation.CENTER };
+		}
+
+		const workspaceMain = model.getNodeById(WORKSPACE_NODE_IDS.main);
+		if (workspaceMain) {
+			model.doAction(Actions.addNode(createDockTabJson("chat"), WORKSPACE_NODE_IDS.main, DockLocation.LEFT, -1, true));
+			return { toNodeId: TABSET_IDS.chatMain, location: DockLocation.CENTER };
+		}
+	}
+
+	if (panelId === "event-log") {
 		const workspaceRoot = model.getNodeById(WORKSPACE_NODE_IDS.root);
 		if (workspaceRoot) {
 			return { toNodeId: WORKSPACE_NODE_IDS.root, location: DockLocation.BOTTOM };
@@ -244,17 +267,11 @@ function getRestoreTarget(model: Model, panelId: DockPanelId): { toNodeId: strin
 
 	const rightTabset = model.getNodeById(TABSET_IDS.right);
 	if (rightTabset?.getType() === "tabset") {
-		if (panelId === "stage-slot") {
-			return { toNodeId: TABSET_IDS.right, location: DockLocation.LEFT };
-		}
-		if (panelId === "stage-controls") {
-			return { toNodeId: TABSET_IDS.right, location: DockLocation.LEFT };
-		}
-		if (panelId === "chat") {
-			return { toNodeId: TABSET_IDS.right, location: DockLocation.LEFT };
-		}
 		if (panelId === "event-log") {
 			return { toNodeId: TABSET_IDS.right, location: DockLocation.BOTTOM };
+		}
+		if (panelId === "stage-controls" || panelId === "stage-slot" || panelId === "chat") {
+			return { toNodeId: TABSET_IDS.right, location: DockLocation.LEFT };
 		}
 	}
 
@@ -285,11 +302,12 @@ function getRestoreTarget(model: Model, panelId: DockPanelId): { toNodeId: strin
 function getPreferredTabsetId(panelId: DockPanelId): string {
 	switch (panelId) {
 		case "stage-controls":
+		case "delegation-timeline":
 			return TABSET_IDS.stage;
 		case "stage-slot":
 			return TABSET_IDS.chat;
 		case "chat":
-			return TABSET_IDS.chat;
+			return TABSET_IDS.chatMain;
 		case "event-log":
 			return TABSET_IDS.bottom;
 		default:
@@ -303,6 +321,8 @@ function getFallbackAnchorPanel(panelId: DockPanelId): DockPanelId {
 			return "chat";
 		case "stage-slot":
 			return "chat";
+		case "delegation-timeline":
+			return "stage-controls";
 		case "chat":
 			return "control-panel";
 		case "event-log":

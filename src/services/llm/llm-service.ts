@@ -5,13 +5,18 @@ import type { CharacterService } from "@/services/character";
 import type { KnowledgeService } from "@/services/knowledge";
 import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { DebugCaptureService } from "@/services/debug-capture";
+import type { CompanionModeService } from "@/services/companion-mode";
+import type { DelegationMemoryService } from "@/services/delegation-memory";
+import type { L2RollingContextService } from "@/services/memory/l2-rolling-context-service";
+import type { LongTermMemoryService } from "@/services/memory/long-term-memory-service";
+import type { MemoryCandidate } from "@/types/memory";
 import { getConfig } from "@/services/config";
 import type { ILLMService, ChatMessage } from "./types";
 import { buildSystemMessage, summarizePromptContext } from "./prompt-builder";
 import { formatRetrievalForPrompt, summarizeRetrieval } from "@/services/knowledge/knowledge-formatter";
 import { createLogger } from "@/services/logger";
-import { listLlmTools, resolveMcpToolName } from "@/services/mcp/tool-defs";
-import { callLocalMcpTool } from "@/services/mcp/local-mcp-client";
+import { listLlmTools, listLlmToolsFromRuntime, resolveMcpToolName } from "@/services/mcp/tool-defs";
+import { callLocalMcpTool, listLocalMcpTools } from "@/services/mcp/local-mcp-client";
 
 const log = createLogger("llm");
 
@@ -27,7 +32,11 @@ export class LLMService {
 	private character: CharacterService;
 	private knowledge: KnowledgeService;
 	private companionRuntime: CompanionRuntimeService;
+	private companionMode: CompanionModeService;
+	private delegationMemory: DelegationMemoryService;
 	private debugCapture?: DebugCaptureService;
+	private l2Service?: L2RollingContextService;
+	private ltmService?: LongTermMemoryService;
 	private history: ChatMessage[] = [];
 	private processing = false;
 
@@ -39,6 +48,8 @@ export class LLMService {
 		character: CharacterService,
 		knowledge: KnowledgeService,
 		companionRuntime: CompanionRuntimeService,
+		companionMode: CompanionModeService,
+		delegationMemory: DelegationMemoryService,
 		debugCapture?: DebugCaptureService,
 	) {
 		this.bus = bus;
@@ -48,7 +59,14 @@ export class LLMService {
 		this.character = character;
 		this.knowledge = knowledge;
 		this.companionRuntime = companionRuntime;
+		this.companionMode = companionMode;
+		this.delegationMemory = delegationMemory;
 		this.debugCapture = debugCapture;
+	}
+
+	setMemoryServices(l2Service: L2RollingContextService, ltmService: LongTermMemoryService): void {
+		this.l2Service = l2Service;
+		this.ltmService = ltmService;
 	}
 
 	isProcessing(): boolean {
@@ -217,11 +235,32 @@ export class LLMService {
 		};
 	}
 
+	private async resolveCompanionTools(traceId?: string): Promise<ReturnType<typeof listLlmTools>> {
+		const fallbackTools = listLlmTools("companion");
+		try {
+			const runtimeTools = await listLocalMcpTools({
+				timeoutMs: 10_000,
+			});
+			return listLlmToolsFromRuntime(
+				"companion",
+				runtimeTools.map((tool) => tool.name),
+			);
+		} catch (error) {
+			log.warn("failed to list MCP tools, using static fallback", {
+				traceId: traceId ?? null,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return fallbackTools;
+		}
+	}
+
 	async generateCompanionReply(
 		userText: string,
 		options?: {
 			companionRuntimeContext?: string;
+			delegationMemoryContext?: string;
 			knowledgeContext?: string;
+			memoryCandidates?: MemoryCandidate[];
 			traceId?: string;
 			source?: "companion-reply" | "proactive-reply";
 		},
@@ -235,8 +274,12 @@ export class LLMService {
 		const promptCtx = {
 			characterProfile: this.character.getProfile(),
 			affectState: this.affect.getState(),
+			companionModeState: this.companionMode.getState(),
 			knowledgeContext: options?.knowledgeContext ?? "",
 			companionRuntimeContext: options?.companionRuntimeContext ?? this.companionRuntime.getPromptContext(),
+			delegationMemoryContext: options?.delegationMemoryContext ?? this.delegationMemory.buildPromptContext(),
+			rollingContext: this.l2Service?.getRollingContext() ?? "",
+			memoryCandidates: options?.memoryCandidates ?? [],
 			recentInteractionContext: summarizeRecentInteraction(this.history),
 			inputSource: "system" as const,
 			customPersona: appCharacter.customPersona,
@@ -246,13 +289,14 @@ export class LLMService {
 		const messages: ChatMessage[] = systemMsg
 			? [systemMsg, { role: "user", content: userText }]
 			: [{ role: "user", content: userText }];
-		const tools = listLlmTools("companion");
+		const tools = await this.resolveCompanionTools(options?.traceId);
 		this.debugCapture?.recordLlmExchange("request", {
 			source: options?.source ?? "companion-reply",
 			traceId: options?.traceId ?? null,
 			userText,
 			messages,
 			companionRuntimeContextLength: promptCtx.companionRuntimeContext.length,
+			delegationMemoryContextLength: promptCtx.delegationMemoryContext.length,
 			knowledgeContextLength: promptCtx.knowledgeContext.length,
 		});
 		this.bus.emit("llm:request-start", {
@@ -261,6 +305,7 @@ export class LLMService {
 			traceId: options?.traceId,
 			companionRuntimeContextUsed: promptCtx.companionRuntimeContext.length > 0,
 			companionRuntimeContextLength: promptCtx.companionRuntimeContext.length,
+			delegationMemoryContextLength: promptCtx.delegationMemoryContext.length,
 			knowledgeContextLength: promptCtx.knowledgeContext.length,
 		});
 
@@ -306,6 +351,7 @@ export class LLMService {
 		const companionRuntimeTarget = this.companionRuntime.getState().target?.title ?? null;
 
 		const appCharacter = getConfig().character;
+		const delegationMemoryContext = this.delegationMemory.buildPromptContext();
 
 		// Phase 3.5：语义检索 + liveContext 格式化（带超时保护，不阻塞主 LLM 流程）
 		let knowledgeContext = "";
@@ -334,14 +380,44 @@ export class LLMService {
 			companionRuntimeContextUsed: companionRuntimeContext.length > 0,
 			companionRuntimeTarget,
 			companionRuntimeContextLength: companionRuntimeContext.length,
+			delegationMemoryContextLength: delegationMemoryContext.length,
 			knowledgeContextLength: knowledgeContext.length,
 		});
+
+		// Lightweight automatic recall — every chat round, conservative threshold
+		const AUTO_RECALL_THRESHOLD = 2.0;
+		const AUTO_RECALL_TOP_K = 3;
+		let memoryCandidates: MemoryCandidate[] = [];
+		if (this.ltmService) {
+			try {
+				const allCandidates = await this.ltmService.recall(userText, AUTO_RECALL_TOP_K);
+				memoryCandidates = allCandidates.filter((c) => c.relevanceScore >= AUTO_RECALL_THRESHOLD);
+				log.debug("auto-recall results", {
+					query: userText.slice(0, 60),
+					raw: allCandidates.length,
+					filtered: memoryCandidates.length,
+					scores: allCandidates.map((c) => c.relevanceScore.toFixed(2)),
+				});
+				if (memoryCandidates.length > 0) {
+					log.info("auto-recall injected", {
+						count: memoryCandidates.length,
+						topScene: memoryCandidates[0]?.entry.scene_or_task,
+					});
+				}
+			} catch (err) {
+				log.warn("auto-recall failed", err);
+			}
+		}
 
 		const promptCtx = {
 			characterProfile: this.character.getProfile(),
 			affectState: this.affect.getState(),
+			companionModeState: this.companionMode.getState(),
 			knowledgeContext,
 			companionRuntimeContext,
+			delegationMemoryContext,
+			rollingContext: this.l2Service?.getRollingContext() ?? "",
+			memoryCandidates,
 			recentInteractionContext: summarizeRecentInteraction(this.history),
 			inputSource,
 			customPersona: appCharacter.customPersona,
@@ -351,13 +427,14 @@ export class LLMService {
 		const messages: ChatMessage[] = systemMsg
 			? [systemMsg, ...this.history]
 			: [...this.history];
-		const tools = listLlmTools("companion");
+		const tools = await this.resolveCompanionTools();
 		this.debugCapture?.recordLlmExchange("request", {
 			source: "chat",
 			traceId: null,
 			userText,
 			messages,
 			companionRuntimeContextLength: companionRuntimeContext.length,
+			delegationMemoryContextLength: delegationMemoryContext.length,
 			knowledgeContextLength: knowledgeContext.length,
 		});
 

@@ -4,34 +4,38 @@ import {
 	Box,
 	Button,
 	CircularProgress,
+	Collapse,
+	FormControl,
+	MenuItem,
+	Select,
 	Stack,
 	TextField,
 	Typography,
 } from "@mui/material";
-import MicIcon from "@mui/icons-material/Mic";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import CancelIcon from "@mui/icons-material/Cancel";
 import { HelpTooltip } from "@/components";
 import { useI18n } from "@/contexts/I18nProvider";
 import { listWindows } from "@/services/system";
 import { createLogger } from "@/services/logger";
 import type {
 	FunctionalRuntimeState,
+	HostFocusOptions,
 	FunctionalTarget,
 	HostMouseAction,
 	HostMouseButton,
 	HostWindowInfo,
 } from "@/types";
+import { chooseWindowByKeywords } from "@/services/games/game-utils";
 import { InfoLine, PanelCard, SectionHeader } from "./panel-shell";
 
 const log = createLogger("host-tools-section");
 const WINDOW_LIST_PREVIEW_LIMIT = 40;
+type PresetAppId = "firefox";
 
 export function HostToolsSection(props: {
 	functionalState: FunctionalRuntimeState;
 	setTarget: (target: FunctionalTarget | null) => void;
 	runCapture: (target?: FunctionalTarget) => Promise<unknown>;
-	runFocus: (target?: FunctionalTarget) => Promise<unknown>;
+	runFocus: (target?: FunctionalTarget, options?: HostFocusOptions) => Promise<unknown>;
 	runKey: (key: string, target?: FunctionalTarget) => Promise<unknown>;
 	runMouse: (
 		options: { action?: HostMouseAction; button?: HostMouseButton; x?: number; y?: number },
@@ -39,11 +43,12 @@ export function HostToolsSection(props: {
 	) => Promise<unknown>;
 }) {
 	const { t } = useI18n();
-	const [micStatus, setMicStatus] = useState<"idle" | "ok" | "denied" | "error">("idle");
 	const [windowsLoading, setWindowsLoading] = useState(false);
 	const [windowList, setWindowList] = useState<HostWindowInfo[]>([]);
 	const [windowListError, setWindowListError] = useState<string | null>(null);
+	const [windowListExpanded, setWindowListExpanded] = useState(false);
 	const [windowQuery, setWindowQuery] = useState("");
+	const [presetAppId, setPresetAppId] = useState<PresetAppId>("firefox");
 	const [manualKey, setManualKey] = useState("Enter");
 
 	const functionalError =
@@ -74,30 +79,6 @@ export function HostToolsSection(props: {
 		[filteredWindowList],
 	);
 
-	const handleMicTest = useCallback(async () => {
-		try {
-			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-			const ctx = new AudioContext();
-			const source = ctx.createMediaStreamSource(stream);
-			const analyser = ctx.createAnalyser();
-			analyser.fftSize = 256;
-			source.connect(analyser);
-
-			const dataArray = new Uint8Array(analyser.frequencyBinCount);
-			analyser.getByteFrequencyData(dataArray);
-			const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-			log.info(`mic test OK — avg volume: ${avg.toFixed(1)}`);
-
-			stream.getTracks().forEach((track) => track.stop());
-			ctx.close();
-			setMicStatus("ok");
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			log.error("mic test failed", message);
-			setMicStatus(message.includes("denied") || message.includes("NotAllowed") ? "denied" : "error");
-		}
-	}, []);
-
 	const handleListWindows = useCallback(async () => {
 		setWindowsLoading(true);
 		setWindowListError(null);
@@ -121,6 +102,42 @@ export function HostToolsSection(props: {
 		}
 	}, []);
 
+	const handleFocusPresetApp = useCallback(async () => {
+		setWindowsLoading(true);
+		setWindowListError(null);
+		try {
+			const windows = await listWindows();
+			setWindowList(windows);
+			setWindowListExpanded(true);
+			let candidate: HostWindowInfo | null = null;
+			if (presetAppId === "firefox") {
+				candidate = chooseWindowByKeywords(windows, {
+					keywords: ["firefox", "mozilla firefox"],
+					processKeywords: ["firefox"],
+					visibleBonus: 2,
+					normalBonus: 2,
+				});
+			}
+			if (!candidate) {
+				throw new Error("Preset app window not detected. Please ensure the target app is open and visible.");
+			}
+			const target = { handle: candidate.handle, title: candidate.title };
+			props.setTarget(target);
+			await props.runFocus(target, { applyDelegatedViewport: true });
+			log.info("focused preset app target", {
+				presetAppId,
+				title: candidate.title,
+				handle: candidate.handle,
+			});
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			setWindowListError(message);
+			log.error("failed to focus preset app target", err);
+		} finally {
+			setWindowsLoading(false);
+		}
+	}, [presetAppId, props]);
+
 	const selectWindowTarget = useCallback((windowInfo: HostWindowInfo) => {
 		props.setTarget({ handle: windowInfo.handle, title: windowInfo.title });
 		log.info("selected functional target", {
@@ -134,7 +151,7 @@ export function HostToolsSection(props: {
 		props.setTarget(target);
 
 		try {
-			await props.runFocus(target);
+			await props.runFocus(target, { applyDelegatedViewport: true });
 		} catch (err) {
 			log.error("failed to focus window", err);
 		}
@@ -175,37 +192,56 @@ export function HostToolsSection(props: {
 		<PanelCard compact>
 			<SectionHeader
 				title={t("宿主工具", "Host Tools")}
-				right={<HelpTooltip title={t("测试麦克风、窗口发现和基础输入能力。", "Test microphone, window discovery, and basic input capabilities.")} />}
+				right={<HelpTooltip title={t("测试窗口发现和基础输入能力。", "Test window discovery and basic input capabilities.")} />}
 			/>
 
-			<Stack direction="row" spacing={0.5} alignItems="center">
-				<Button variant="outlined" size="small" onClick={handleMicTest} startIcon={<MicIcon />}>
-					{t("麦克风", "Microphone")}
+			<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 0.5 }}>
+				<FormControl size="small" sx={{ minWidth: 170 }}>
+					<Select
+						value={presetAppId}
+						onChange={(event) => setPresetAppId(event.target.value as PresetAppId)}
+					>
+						<MenuItem value="firefox">{t("Firefox 浏览器", "Firefox Browser")}</MenuItem>
+					</Select>
+				</FormControl>
+				<Button variant="contained" size="small" onClick={() => { void handleFocusPresetApp(); }} disabled={windowsLoading || props.functionalState.activeTaskId !== null}>
+					{t("聚焦预设应用", "Focus Preset App")}
 				</Button>
-				{micStatus === "ok" && <CheckCircleIcon color="success" sx={{ fontSize: 14 }} />}
-				{micStatus !== "idle" && micStatus !== "ok" && <CancelIcon color="error" sx={{ fontSize: 14 }} />}
+			</Stack>
+
+			<Stack direction="row" spacing={0.5} alignItems="center">
 				<Button variant="outlined" size="small" onClick={handleListWindows} disabled={windowsLoading}>
 					{windowsLoading ? t("枚举中...", "Listing...") : t("枚举窗口", "List Windows")}
+				</Button>
+				<Button
+					variant="text"
+					size="small"
+					onClick={() => setWindowListExpanded((prev) => !prev)}
+					disabled={windowList.length === 0}
+				>
+					{windowListExpanded ? t("收起窗口列表", "Collapse Window List") : t("展开窗口列表", "Expand Window List")}
 				</Button>
 				<InfoLine>
 					{windowList.length > 0 ? `${filteredWindowList.length} / ${windowList.length}` : t("未获取", "Not loaded")}
 				</InfoLine>
 			</Stack>
 
-			{windowList.length > 0 && (
-				<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.75 }}>
-					<TextField
-						size="small"
-						fullWidth
-						value={windowQuery}
-						onChange={(event) => setWindowQuery(event.target.value)}
-						placeholder={t("搜索标题 / 进程 / 类名 / PID", "Search title / process / class / PID")}
-					/>
-					<Button size="small" variant="text" onClick={() => setWindowQuery("")} disabled={!windowQuery.trim()}>
-						{t("清空", "Clear")}
-					</Button>
-				</Stack>
-			)}
+			<Collapse in={windowListExpanded} unmountOnExit>
+				{windowList.length > 0 && (
+					<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.75 }}>
+						<TextField
+							size="small"
+							fullWidth
+							value={windowQuery}
+							onChange={(event) => setWindowQuery(event.target.value)}
+							placeholder={t("搜索标题 / 进程 / 类名 / PID", "Search title / process / class / PID")}
+						/>
+						<Button size="small" variant="text" onClick={() => setWindowQuery("")} disabled={!windowQuery.trim()}>
+							{t("清空", "Clear")}
+						</Button>
+					</Stack>
+				)}
+			</Collapse>
 
 			{windowListError && (
 				<Alert severity="error" sx={{ mt: 0.75, py: 0 }}>
@@ -219,63 +255,65 @@ export function HostToolsSection(props: {
 				</Alert>
 			)}
 
-			{windowList.length > 0 && (
-				<Box sx={{ mt: 0.75, maxHeight: 220, overflowY: "auto", pr: 0.5 }}>
-					<Stack spacing={0.5}>
-						{visibleWindowList.map((windowInfo) => (
-							<PanelCard key={windowInfo.handle} compact>
-								<Typography variant="caption" sx={{ display: "block", color: "text.primary" }}>
-									{windowInfo.title}
-								</Typography>
-								<InfoLine>
-									PID {windowInfo.processId} · {windowInfo.processName || "unknown"} · {windowInfo.className}
-								</InfoLine>
-								<InfoLine mb={0.5}>
-									{windowInfo.visible ? t("可见", "visible") : t("隐藏", "hidden")} · {windowInfo.minimized ? t("最小化", "minimized") : t("正常", "normal")}
-								</InfoLine>
-								<Stack direction="row" justifyContent="flex-end" spacing={0.25} sx={{ flexWrap: "wrap" }}>
-									<Button
-										size="small"
-										variant={props.functionalState.selectedTarget?.handle === windowInfo.handle ? "contained" : "text"}
-										onClick={() => selectWindowTarget(windowInfo)}
-										sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
-									>
-										{t("目标", "Target")}
-									</Button>
-									<Button
-										size="small"
-										variant="text"
-										onClick={() => handleFocusWindow(windowInfo)}
-										disabled={props.functionalState.activeTaskId !== null}
-										sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
-									>
-										{t("聚焦", "Focus")}
-									</Button>
-									<Button
-										size="small"
-										variant="text"
-										onClick={() => handleCaptureWindow(windowInfo)}
-										disabled={props.functionalState.activeTaskId !== null}
-										sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
-									>
-										{t("截图", "Capture")}
-									</Button>
-								</Stack>
-							</PanelCard>
-						))}
-					</Stack>
-					{filteredWindowList.length > WINDOW_LIST_PREVIEW_LIMIT && (
-						<InfoLine>
-							{t("仅展示前", "Showing only the first")} {WINDOW_LIST_PREVIEW_LIMIT} {t("条，请继续搜索。", "results. Refine the search.")}
-						</InfoLine>
-					)}
-					{filteredWindowList.length === 0 && (
-						<InfoLine>
-							{t("没有匹配结果。", "No matching results.")}
-						</InfoLine>
-					)}
-				</Box>
-			)}
+			<Collapse in={windowListExpanded} unmountOnExit>
+				{windowList.length > 0 && (
+					<Box sx={{ mt: 0.75, maxHeight: 220, overflowY: "auto", pr: 0.5 }}>
+						<Stack spacing={0.5}>
+							{visibleWindowList.map((windowInfo) => (
+								<PanelCard key={windowInfo.handle} compact>
+									<Typography variant="caption" sx={{ display: "block", color: "text.primary" }}>
+										{windowInfo.title}
+									</Typography>
+									<InfoLine>
+										PID {windowInfo.processId} · {windowInfo.processName || "unknown"} · {windowInfo.className}
+									</InfoLine>
+									<InfoLine mb={0.5}>
+										{windowInfo.visible ? t("可见", "visible") : t("隐藏", "hidden")} · {windowInfo.minimized ? t("最小化", "minimized") : t("正常", "normal")}
+									</InfoLine>
+									<Stack direction="row" justifyContent="flex-end" spacing={0.25} sx={{ flexWrap: "wrap" }}>
+										<Button
+											size="small"
+											variant={props.functionalState.selectedTarget?.handle === windowInfo.handle ? "contained" : "text"}
+											onClick={() => selectWindowTarget(windowInfo)}
+											sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
+										>
+											{t("目标", "Target")}
+										</Button>
+										<Button
+											size="small"
+											variant="text"
+											onClick={() => handleFocusWindow(windowInfo)}
+											disabled={props.functionalState.activeTaskId !== null}
+											sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
+										>
+											{t("聚焦", "Focus")}
+										</Button>
+										<Button
+											size="small"
+											variant="text"
+											onClick={() => handleCaptureWindow(windowInfo)}
+											disabled={props.functionalState.activeTaskId !== null}
+											sx={{ minWidth: 0, fontSize: 11, px: 0.5 }}
+										>
+											{t("截图", "Capture")}
+										</Button>
+									</Stack>
+								</PanelCard>
+							))}
+						</Stack>
+						{filteredWindowList.length > WINDOW_LIST_PREVIEW_LIMIT && (
+							<InfoLine>
+								{t("仅展示前", "Showing only the first")} {WINDOW_LIST_PREVIEW_LIMIT} {t("条，请继续搜索。", "results. Refine the search.")}
+							</InfoLine>
+						)}
+						{filteredWindowList.length === 0 && (
+							<InfoLine>
+								{t("没有匹配结果。", "No matching results.")}
+							</InfoLine>
+						)}
+					</Box>
+				)}
+			</Collapse>
 
 			{props.functionalState.activeTaskId && (
 				<Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.75 }}>
@@ -292,7 +330,7 @@ export function HostToolsSection(props: {
 						{t("当前目标", "Current Target")}：{props.functionalState.selectedTarget.title || props.functionalState.selectedTarget.handle}
 					</InfoLine>
 					<Stack direction="row" spacing={0.5} sx={{ mb: 0.5, flexWrap: "wrap" }}>
-						<Button size="small" variant="outlined" onClick={() => props.runFocus(props.functionalState.selectedTarget ?? undefined)} disabled={props.functionalState.activeTaskId !== null}>
+						<Button size="small" variant="outlined" onClick={() => props.runFocus(props.functionalState.selectedTarget ?? undefined, { applyDelegatedViewport: true })} disabled={props.functionalState.activeTaskId !== null}>
 							{t("聚焦", "Focus")}
 						</Button>
 						<Button size="small" variant="outlined" onClick={() => props.runCapture(props.functionalState.selectedTarget ?? undefined)} disabled={props.functionalState.activeTaskId !== null}>

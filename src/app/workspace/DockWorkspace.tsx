@@ -17,6 +17,7 @@ import ScienceIcon from "@mui/icons-material/Science";
 import SettingsIcon from "@mui/icons-material/Settings";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ChatIcon from "@mui/icons-material/Chat";
+import TimelineIcon from "@mui/icons-material/Timeline";
 import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
 import CropSquareIcon from "@mui/icons-material/CropSquare";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
@@ -25,7 +26,7 @@ import { ChatPanel } from "@/features/chat";
 import { ControlPanel } from "@/features/control-panel/ControlPanel";
 import { EventLog } from "@/app/EventLog";
 import { useI18n } from "@/contexts/I18nProvider";
-import { WorkspaceContext, subscribeWorkspaceClosePanel, subscribeWorkspaceOpenPanel, subscribeWorkspaceResetLayout } from "./WorkspaceContext";
+import { WorkspaceContext, notifyWorkspaceLayoutChanged, subscribeWorkspaceClosePanel, subscribeWorkspaceOpenPanel, subscribeWorkspaceResetLayout } from "./WorkspaceContext";
 import {
 	createWorkspaceModelFromStorage,
 	focusOrRestoreDockPanel,
@@ -38,6 +39,7 @@ import {
 const KnowledgePanel = lazy(async () => import("@/features/knowledge/KnowledgePanel").then((module) => ({ default: module.KnowledgePanel })));
 const SettingsPanel = lazy(async () => import("@/features/settings/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
 const WorkbenchPanel = lazy(async () => import("@/features/control-panel/WorkbenchPanel").then((module) => ({ default: module.WorkbenchPanel })));
+const DelegationTimelinePanel = lazy(async () => import("@/features/control-panel/DelegationTimelinePanel").then((module) => ({ default: module.DelegationTimelinePanel })));
 
 function PanelLoadingState() {
 	const { t } = useI18n();
@@ -52,6 +54,7 @@ const PANEL_ICONS: Record<DockPanelId, React.ReactNode> = {
 	"stage-controls": <ViewSidebarIcon sx={{ fontSize: 14 }} />,
 	"stage-slot": <CropSquareIcon sx={{ fontSize: 14 }} />,
 	chat: <ChatIcon sx={{ fontSize: 14 }} />,
+	"delegation-timeline": <TimelineIcon sx={{ fontSize: 14 }} />,
 	"control-panel": <TuneIcon sx={{ fontSize: 14 }} />,
 	knowledge: <AutoStoriesIcon sx={{ fontSize: 14 }} />,
 	workbench: <ScienceIcon sx={{ fontSize: 14 }} />,
@@ -63,6 +66,7 @@ const PANEL_LABELS: Record<DockPanelId, { zh: string; en: string }> = {
 	"stage-controls": { zh: "舞台", en: "Stage" },
 	"stage-slot": { zh: "贴靠舞台", en: "Attach Stage" },
 	chat: { zh: "对话", en: "Chat" },
+	"delegation-timeline": { zh: "时间轴", en: "Timeline" },
 	"control-panel": { zh: "控制面板", en: "Control Panel" },
 	knowledge: { zh: "知识库", en: "Knowledge" },
 	workbench: { zh: "开发工作台", en: "Workbench" },
@@ -79,6 +83,7 @@ interface DockWorkspaceProps {
 	onVisibilityChange: (visible: boolean) => void;
 	onAlwaysOnTopChange: (value: boolean) => void;
 	onDisplayModeChange: (mode: "interactive" | "static") => void;
+	onResetDockedStage: () => void;
 	onStageSlotOpenChange: (open: boolean) => void;
 	onStageSlotRectChange: (rect: DOMRect | null) => void;
 }
@@ -101,6 +106,7 @@ export function DockWorkspace(props: DockWorkspaceProps) {
 	const handleModelChange = useCallback((nextModel: Model) => {
 		saveWorkspaceModel(nextModel);
 		setRevision((current) => current + 1);
+		notifyWorkspaceLayoutChanged();
 	}, []);
 
 	const handleAction = useCallback((action: Action) => {
@@ -114,11 +120,13 @@ export function DockWorkspace(props: DockWorkspaceProps) {
 		focusOrRestoreDockPanel(model, panelId);
 		saveWorkspaceModel(model);
 		setRevision((current) => current + 1);
+		notifyWorkspaceLayoutChanged();
 	}, [model]);
 
 	const handleResetLayout = useCallback(() => {
 		setModel(resetWorkspaceModel());
 		setRevision((current) => current + 1);
+		notifyWorkspaceLayoutChanged();
 	}, []);
 
 	const handleCollapseEventLog = useCallback(() => {
@@ -127,6 +135,7 @@ export function DockWorkspace(props: DockWorkspaceProps) {
 			model.doAction(Actions.deleteTab("event-log"));
 			saveWorkspaceModel(model);
 			setRevision((current) => current + 1);
+			notifyWorkspaceLayoutChanged();
 		}
 	}, [model]);
 
@@ -136,6 +145,7 @@ export function DockWorkspace(props: DockWorkspaceProps) {
 			model.doAction(Actions.deleteTab(panelId));
 			saveWorkspaceModel(model);
 			setRevision((current) => current + 1);
+			notifyWorkspaceLayoutChanged();
 		}
 	}, [model]);
 
@@ -155,6 +165,7 @@ export function DockWorkspace(props: DockWorkspaceProps) {
 							onVisibilityChange={props.onVisibilityChange}
 							onAlwaysOnTopChange={props.onAlwaysOnTopChange}
 							onDisplayModeChange={props.onDisplayModeChange}
+							onResetDockedStage={props.onResetDockedStage}
 						/>
 					</Box>
 				);
@@ -163,6 +174,14 @@ export function DockWorkspace(props: DockWorkspaceProps) {
 					<Box sx={{ height: "100%", overflow: "hidden" }}>
 						<ChatPanel />
 					</Box>
+				);
+			case "delegation-timeline":
+				return (
+					<Suspense fallback={<PanelLoadingState />}>
+						<Box sx={{ height: "100%", overflowY: "auto" }}>
+							<DelegationTimelinePanel />
+						</Box>
+					</Suspense>
 				);
 			case "stage-slot":
 				return (

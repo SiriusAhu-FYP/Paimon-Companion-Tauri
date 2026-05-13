@@ -11,6 +11,7 @@ import type { UnifiedRunTimings } from "./unified";
 import type {
 	CompanionRuntimeBenchmarkResult,
 	CompanionRuntimeBenchmarkState,
+	CompanionRuntimeDiagnosticCode,
 	CompanionFrameDescriptionRecord,
 	CompanionRuntimeState,
 	CompanionSummaryRecord,
@@ -24,8 +25,17 @@ import type { Game2048Move, Game2048State } from "./game-2048";
 import type { SokobanActionId, SokobanState } from "./sokoban";
 import type { VoiceInputState } from "./voice";
 import type { AffectState, AffectEventSource } from "./affect";
-import type { CompanionInteractionMode, ProactiveState, ProactiveTriggerSource } from "./proactive";
+import type { ProactiveState, ProactiveTriggerSource } from "./proactive";
+import type { CompanionInteractionMode, CompanionModeSource, CompanionModeState } from "./companion-mode";
+import type { DelegatedExecutionRecord, DelegationMemoryState } from "./delegation-memory";
 import type { DebugCaptureState } from "./debug-capture";
+import type {
+	MemoryL2UpdatedPayload,
+	MemorySalientEventPayload,
+	MemoryCommittedPayload,
+	MemoryRecallCompletePayload,
+	MemoryLogAppendedPayload,
+} from "./memory";
 
 export interface RuntimeModeChangePayload {
 	mode: RuntimeMode;
@@ -57,6 +67,7 @@ export interface LlmRequestStartPayload {
 	companionRuntimeContextUsed?: boolean;
 	companionRuntimeTarget?: string | null;
 	companionRuntimeContextLength?: number;
+	delegationMemoryContextLength?: number;
 	knowledgeContextLength?: number;
 }
 
@@ -303,6 +314,10 @@ export interface CompanionRuntimeStateChangePayload {
 	lastSummaryId: string | null;
 	captureTicks: number;
 	summariesGenerated: number;
+	observationReady: boolean;
+	lastObservationAt: number | null;
+	diagnosticCode: CompanionRuntimeDiagnosticCode | null;
+	diagnosticMessage: string | null;
 	lastError: string | null;
 }
 
@@ -315,9 +330,12 @@ export interface CompanionRuntimeSummaryPayload {
 }
 
 export interface CompanionModeChangePayload {
+	state: CompanionModeState;
 	mode: CompanionInteractionMode;
 	previous: CompanionInteractionMode;
 	reason: string;
+	source: CompanionModeSource;
+	preferredMode: CompanionInteractionMode;
 }
 
 export interface CompanionProactiveStateChangePayload {
@@ -325,6 +343,14 @@ export interface CompanionProactiveStateChangePayload {
 	action: ProactiveState["lastDecision"];
 	source: ProactiveTriggerSource | null;
 	reason: string | null;
+}
+
+export interface DelegationMemoryStateChangePayload {
+	state: DelegationMemoryState;
+}
+
+export interface DelegationMemoryRecordAddedPayload {
+	record: DelegatedExecutionRecord;
 }
 
 export interface CompanionRuntimeBenchmarkStateChangePayload {
@@ -408,7 +434,14 @@ export interface EventMap {
 	"companion-runtime:benchmark-complete": CompanionRuntimeBenchmarkCompletePayload;
 	"companion:mode-change": CompanionModeChangePayload;
 	"companion:proactive-state-change": CompanionProactiveStateChangePayload;
+	"delegation-memory:state-change": DelegationMemoryStateChangePayload;
+	"delegation-memory:record-added": DelegationMemoryRecordAddedPayload;
 	"debug-capture:state-change": DebugCaptureStateChangePayload;
+	"memory:l2-updated": MemoryL2UpdatedPayload;
+	"memory:salient-event": MemorySalientEventPayload;
+	"memory:committed": MemoryCommittedPayload;
+	"memory:recall-complete": MemoryRecallCompletePayload;
+	"memory:log-appended": MemoryLogAppendedPayload;
 }
 
 export type EventName = keyof EventMap;

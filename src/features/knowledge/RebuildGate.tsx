@@ -5,6 +5,7 @@ import {
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { getServices } from "@/services";
 import { createLogger } from "@/services/logger";
+import { useI18n } from "@/contexts/I18nProvider";
 
 const log = createLogger("rebuild-gate");
 
@@ -18,6 +19,7 @@ interface RebuildGateProps {
  * 只允许二选一：重建索引 / 取消。不可通过 ESC、遮罩点击等方式关闭。
  */
 export function RebuildGate({ onRebuilt, onCancel }: RebuildGateProps) {
+	const { t } = useI18n();
 	const [rebuilding, setRebuilding] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -31,14 +33,14 @@ export function RebuildGate({ onRebuilt, onCancel }: RebuildGateProps) {
 				log.info("rebuild via gate succeeded");
 				onRebuilt();
 			} else {
-				setError(result.error ?? "重建失败");
+				setError(result.error ?? t("重建失败", "Rebuild failed"));
 			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		} finally {
 			setRebuilding(false);
 		}
-	}, [onRebuilt]);
+	}, [onRebuilt, t]);
 
 	return (
 		<Box sx={{
@@ -54,12 +56,12 @@ export function RebuildGate({ onRebuilt, onCancel }: RebuildGateProps) {
 			<Stack direction="row" spacing={1} alignItems="center">
 				<WarningAmberIcon color="warning" />
 				<Typography variant="subtitle2" fontWeight={700}>
-					索引需要重建
+					{t("索引需要重建", "Index rebuild required")}
 				</Typography>
 			</Stack>
 
 			<Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>
-				文档已变更，当前索引与文档内容不一致。必须重建索引后才能执行检索操作。
+				{t("文档已变更，当前索引与文档内容不一致。必须重建索引后才能执行检索操作。", "Documents changed and the index is out of sync. Rebuild the index before running retrieval.")}
 			</Typography>
 
 			{error && (
@@ -77,7 +79,7 @@ export function RebuildGate({ onRebuilt, onCancel }: RebuildGateProps) {
 					onClick={onCancel}
 					disabled={rebuilding}
 				>
-					取消
+					{t("取消", "Cancel")}
 				</Button>
 				<Button
 					size="small"
@@ -86,7 +88,7 @@ export function RebuildGate({ onRebuilt, onCancel }: RebuildGateProps) {
 					onClick={handleRebuild}
 					disabled={rebuilding}
 				>
-					{rebuilding ? "重建中..." : "重建索引"}
+					{rebuilding ? t("重建中...", "Rebuilding...") : t("重建索引", "Rebuild Index")}
 				</Button>
 			</Stack>
 		</Box>

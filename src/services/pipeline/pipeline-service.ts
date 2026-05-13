@@ -25,7 +25,10 @@ export class PipelineService {
 	private character: CharacterService;
 	private llm: LLMService;
 	private speechQueue: SpeechQueue;
-	private pendingSpeechText = "";
+	private currentSpeechText = "";
+	private speechChain: Promise<void> = Promise.resolve();
+	private speechGeneration = 0;
+	private lastQueuedSpeech: { text: string; atMs: number } | null = null;
 
 	constructor(deps: {
 		bus: EventBus;
@@ -54,9 +57,9 @@ export class PipelineService {
 			(speaking) => {
 				this.character.setSpeaking(speaking);
 				if (speaking) {
-					this.bus.emit("audio:tts-start", { text: this.pendingSpeechText });
+					this.bus.emit("audio:tts-start", { text: this.currentSpeechText });
 				} else {
-					this.pendingSpeechText = "";
+					this.currentSpeechText = "";
 					this.bus.emit("audio:tts-end");
 				}
 			},
@@ -65,7 +68,7 @@ export class PipelineService {
 		// 监听 runtime 模式变化：急停时立即停止语音播放
 		this.bus.on("runtime:mode-change", ({ mode }) => {
 			if (mode === "stopped") {
-				this.speechQueue.stop();
+				this.stopSpeechQueue();
 			}
 		});
 	}
@@ -75,8 +78,16 @@ export class PipelineService {
 		return this.speechQueue;
 	}
 
+	stopSpeechQueue(): void {
+		this.speechGeneration += 1;
+		this.currentSpeechText = "";
+		this.speechQueue.stop();
+		this.lastQueuedSpeech = null;
+		this.speechChain = Promise.resolve();
+	}
+
 	/** 执行完整主链路：文本 → LLM → 分段合成+播放 */
-	async run(userText: string, options?: { inputSource?: UserInputSource }): Promise<void> {
+	async run(userText: string, options?: { inputSource?: UserInputSource; waitForSpeech?: boolean }): Promise<void> {
 		if (!this.runtime.isAllowed()) {
 			log.warn("pipeline blocked — runtime stopped");
 			return;
@@ -107,7 +118,11 @@ export class PipelineService {
 			log.debug(`[text] spoken:  "${spokenText.slice(0, 80)}..."`);
 		}
 
-		await this.speakDisplayText(displayText, spokenText);
+		if (options?.waitForSpeech) {
+			await this.speakDisplayText(displayText, spokenText);
+		} else {
+			this.queueSpeech(displayText, spokenText, "pipeline.run");
+		}
 		log.info("pipeline complete");
 	}
 
@@ -122,23 +137,75 @@ export class PipelineService {
 		await this.speakDisplayText(displayText, spokenText);
 	}
 
+	speakTextNonBlocking(text: string): boolean {
+		if (!this.runtime.isAllowed()) {
+			log.warn("direct speech blocked — runtime stopped");
+			return false;
+		}
+		const displayText = text.trim();
+		if (!displayText) {
+			return false;
+		}
+		const spokenText = normalizeForSpeech(displayText);
+		this.queueSpeech(displayText, spokenText, "pipeline.speakTextNonBlocking");
+		return true;
+	}
+
 	private async speakDisplayText(displayText: string, spokenText: string): Promise<void> {
-		const segments = splitText(spokenText);
-		if (!segments.length) {
-			log.warn("text splitting produced no segments");
+		const generation = this.speechGeneration;
+		const run = async () => {
+			if (generation !== this.speechGeneration) {
+				return;
+			}
+			const segments = splitText(spokenText);
+			if (!segments.length) {
+				log.warn("text splitting produced no segments");
+				return;
+			}
+
+			if (generation !== this.speechGeneration) {
+				return;
+			}
+			this.currentSpeechText = displayText;
+			this.bus.emit("audio:tts-pending", { text: displayText });
+			const voiceConfig = resolveSpeechVoiceConfig(this.affect.getState());
+			log.info(`[split] ${segments.length} segments: ${segments.map((s) => `[${s.lang}]"${s.text.slice(0, 20)}"`).join(", ")}`);
+
+			try {
+				await this.speechQueue.speakAll(segments, voiceConfig);
+			} catch (err) {
+				log.error("speech queue failed", err);
+				throw err;
+			}
+		};
+
+		const next = this.speechChain.then(run, run);
+		this.speechChain = next.catch(() => {});
+		return next;
+	}
+
+	private queueSpeech(displayText: string, spokenText: string, source: string): void {
+		const now = Date.now();
+		const normalized = displayText.trim();
+		if (
+			normalized &&
+			this.lastQueuedSpeech &&
+			this.lastQueuedSpeech.text === normalized &&
+			now - this.lastQueuedSpeech.atMs < 1500
+		) {
+			log.info("[queue] skip duplicated speech request", { source, text: normalized.slice(0, 80) });
 			return;
 		}
-
-		this.pendingSpeechText = displayText;
-		this.bus.emit("audio:tts-pending", { text: displayText });
-		const voiceConfig = resolveSpeechVoiceConfig(this.affect.getState());
-		log.info(`[split] ${segments.length} segments: ${segments.map((s) => `[${s.lang}]"${s.text.slice(0, 20)}"`).join(", ")}`);
-
-		try {
-			await this.speechQueue.speakAll(segments, voiceConfig);
-		} catch (err) {
-			log.error("speech queue failed", err);
-			throw err;
-		}
+		this.lastQueuedSpeech = {
+			text: normalized,
+			atMs: now,
+		};
+		const task = this.speakDisplayText(displayText, spokenText);
+		void task.catch((err) => {
+			log.warn("non-blocking speech task failed", {
+				source,
+				error: err instanceof Error ? err.message : String(err),
+			});
+		});
 	}
 }

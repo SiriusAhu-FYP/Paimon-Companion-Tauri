@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from "react";
+import React, { createContext, useContext, useState, useCallback, useMemo, useLayoutEffect } from "react";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import { createAppTheme } from "@/theme";
 import type { PaletteMode } from "@mui/material";
@@ -22,7 +22,9 @@ export function useThemeMode() {
 export function ThemeModeProvider({ children }: { children: React.ReactNode }) {
 	const [mode, setModeState] = useState<PaletteMode>(() => {
 		const saved = localStorage.getItem(STORAGE_KEY);
-		return (saved === "light" || saved === "dark") ? saved : "dark";
+		const initialMode = (saved === "light" || saved === "dark") ? saved : "dark";
+		document.documentElement.setAttribute("data-theme", initialMode);
+		return initialMode;
 	});
 
 	const setMode = useCallback((newMode: PaletteMode) => {
@@ -31,6 +33,10 @@ export function ThemeModeProvider({ children }: { children: React.ReactNode }) {
 	}, []);
 
 	const theme = useMemo(() => createAppTheme(mode), [mode]);
+
+	useLayoutEffect(() => {
+		document.documentElement.setAttribute("data-theme", mode);
+	}, [mode]);
 
 	const contextValue = useMemo(() => ({ mode, setMode }), [mode, setMode]);
 

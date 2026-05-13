@@ -17,5 +17,9 @@ export interface HostWindowCapture {
 	qualityScore: number;
 }
 
+export interface HostFocusOptions {
+	applyDelegatedViewport?: boolean;
+}
+
 export type HostMouseButton = "left" | "right" | "middle";
 export type HostMouseAction = "move" | "down" | "up" | "click";

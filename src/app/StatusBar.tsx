@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { Box, Typography, Chip, Stack, IconButton, Tooltip } from "@mui/material";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import type { StageDisplayMode } from "@/utils/window-sync";
-import { useRuntime, useCharacter, useFunctional, useEventLog } from "@/hooks";
+import { useRuntime, useCharacter, useFunctional, useEventLog, useCompanionMode } from "@/hooks";
 import { useI18n } from "@/contexts/I18nProvider";
 import { getStoredOpenDockPanels } from "@/app/workspace/workspace-layout";
 import {
 	requestCloseWorkspacePanel,
 	requestOpenWorkspacePanel,
 	subscribeWorkspaceClosePanel,
+	subscribeWorkspaceLayoutChanged,
 	subscribeWorkspaceOpenPanel,
 	subscribeWorkspaceResetLayout,
 } from "@/app/workspace/WorkspaceContext";
@@ -26,6 +27,7 @@ export function StatusBar({
 }: StatusBarProps) {
 	const { mode } = useRuntime();
 	const { emotion, isSpeaking } = useCharacter();
+	const companionMode = useCompanionMode();
 	const { state: functionalState } = useFunctional();
 	const { latestEntry } = useEventLog(1, {
 		showDebug: false,
@@ -51,11 +53,13 @@ export function StatusBar({
 			}
 		});
 		const unsubReset = subscribeWorkspaceResetLayout(syncFromStorage);
+		const unsubChanged = subscribeWorkspaceLayoutChanged(syncFromStorage);
 
 		return () => {
 			unsubOpen();
 			unsubClose();
 			unsubReset();
+			unsubChanged();
 		};
 	}, []);
 
@@ -80,6 +84,12 @@ export function StatusBar({
 				<Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
 					{mode}
 				</Typography>
+				<Chip
+					label={companionMode.mode}
+					size="small"
+					variant="outlined"
+					sx={{ height: 18, fontSize: 10, "& .MuiChip-label": { px: 0.75 } }}
+				/>
 			</Stack>
 
 			<Stack direction="row" spacing={0.5} alignItems="center">
@@ -170,8 +180,8 @@ export function StatusBar({
 				{latestEntry
 					? `${t("最近事件", "Latest")}: ${latestEntry.summary}`
 					: (functionalState.activeTaskId
-						? t("托管执行中", "Delegated execution in progress")
-						: t("陪伴待机中", "Companion standing by"))}
+						? t("托管执行中", "Delegation Mode execution in progress")
+						: t("陪伴待机中", "Companion Mode standing by"))}
 			</Typography>
 		</Box>
 	);

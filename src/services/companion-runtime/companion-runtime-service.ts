@@ -9,6 +9,7 @@ import type {
 	CompanionFrameDescriptionRecord,
 	CompanionRuntimeMetrics,
 	CompanionRuntimeState,
+	CompanionRuntimeDiagnosticCode,
 	CompanionSummaryRecord,
 	FunctionalTarget,
 	PerceptionSnapshot,
@@ -17,11 +18,15 @@ import type { CompanionRuntimeStateChangePayload } from "@/types/events";
 import { normalizeCompatibleOpenAIBaseUrl } from "@/services/games/game-utils";
 
 const log = createLogger("companion-runtime");
-const MIN_MEANINGFUL_CHANGE_RATIO = 0.02;
+const MIN_MEANINGFUL_CHANGE_RATIO = 0.0045;
+const LOW_DIFF_SKIP_FRAME_QUEUE_LIMIT = 6;
 const UNCHANGED_FRAME_DESCRIPTION = "画面变化很小，当前画面与上一帧基本一致，没有明显新变化。";
 const LOCAL_VISION_READY_TIMEOUT_MS = 120_000;
 const LOCAL_VISION_READY_POLL_MS = 3_000;
 const STATE_CHANGE_MIN_INTERVAL_MS = 250;
+const OBSERVATION_READY_WAIT_TIMEOUT_MS = 60_000;
+const OBSERVATION_READY_POLL_MS = 300;
+const POST_ACTION_OBSERVATION_TIMEOUT_MS = 5_000;
 
 interface OpenAIChatCompletionResponse {
 	choices?: Array<{
@@ -29,6 +34,14 @@ interface OpenAIChatCompletionResponse {
 			content?: string | Array<{ type?: string; text?: string }>;
 		};
 	}>;
+}
+
+interface PromptContextProfile {
+	recentFrameCount: number;
+	recentSummaryCount: number;
+	lineCharLimit: number;
+	summaryHistoryCount: number;
+	auditLogEnabled: boolean;
 }
 
 function makeInitialMetrics(): CompanionRuntimeMetrics {
@@ -62,6 +75,10 @@ function makeInitialState(): CompanionRuntimeState {
 		frameQueue: [],
 		summaryHistory: [],
 		metrics: makeInitialMetrics(),
+		observationReady: false,
+		lastObservationAt: null,
+		diagnosticCode: null,
+		diagnosticMessage: null,
 		lastError: null,
 	};
 }
@@ -91,6 +108,31 @@ function extractMessageText(response: OpenAIChatCompletionResponse): string {
 function truncateLine(text: string, limit = 160): string {
 	if (text.length <= limit) return text;
 	return `${text.slice(0, limit - 1)}…`;
+}
+
+function clampInt(value: number, fallback: number, min: number, max: number): number {
+	if (!Number.isFinite(value)) {
+		return fallback;
+	}
+	return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function resolvePromptContextProfile(): PromptContextProfile {
+	const runtimeConfig = getConfig().companionRuntime;
+	return {
+		recentFrameCount: clampInt(runtimeConfig.promptRecentFrameCount, 3, 1, 12),
+		recentSummaryCount: clampInt(runtimeConfig.promptRecentSummaryCount, 3, 1, 12),
+		lineCharLimit: clampInt(runtimeConfig.promptLineCharLimit, 120, 60, 500),
+		summaryHistoryCount: clampInt(runtimeConfig.promptSummaryHistoryCount, 6, 1, 20),
+		auditLogEnabled: runtimeConfig.promptAuditLogEnabled === true,
+	};
+}
+
+function countDirectionalCues(text: string): number {
+	const patterns = ["左", "右", "上", "下", "前方", "后方", "通道", "墙", "箱子", "目标点"];
+	return patterns.reduce((count, pattern) => (
+		text.includes(pattern) ? count + 1 : count
+	), 0);
 }
 
 function buildFallbackSummary(frames: readonly CompanionFrameDescriptionRecord[]): string {
@@ -179,10 +221,24 @@ export class CompanionRuntimeService {
 			frameQueue: this.state.frameQueue.map(cloneFrameRecord),
 			summaryHistory: this.state.summaryHistory.map(cloneSummaryRecord),
 			metrics: { ...this.state.metrics },
+			observationReady: this.state.observationReady,
+			lastObservationAt: this.state.lastObservationAt,
+			diagnosticCode: this.state.diagnosticCode,
+			diagnosticMessage: this.state.diagnosticMessage,
 		};
 	}
 
+	private setDiagnostic(code: CompanionRuntimeDiagnosticCode | null, message: string | null) {
+		this.state.diagnosticCode = code;
+		this.state.diagnosticMessage = message;
+	}
+
+	private clearDiagnostic() {
+		this.setDiagnostic(null, null);
+	}
+
 	getPromptContext(): string {
+		const promptProfile = resolvePromptContextProfile();
 		const latestTimestamp = this.state.lastSummary?.createdAt ?? this.state.lastFrame?.capturedAt ?? 0;
 		if (!latestTimestamp) {
 			return "";
@@ -208,27 +264,217 @@ export class CompanionRuntimeService {
 			);
 		}
 
-		const recentFrames = this.state.frameQueue.slice(-3);
+		const recentFrames = this.state.frameQueue.slice(-promptProfile.recentFrameCount);
 		if (recentFrames.length) {
 			parts.push(
 				[
 					"最近帧描述：",
-					...recentFrames.map((frame) => `- [${formatTime(frame.capturedAt)}] ${truncateLine(frame.description, 120)}`),
+					...recentFrames.map((frame) => `- [${formatTime(frame.capturedAt)}] ${truncateLine(frame.description, promptProfile.lineCharLimit)}`),
 				].join("\n"),
 			);
 		}
 
-		const recentSummaries = this.state.summaryHistory.slice(-3);
+		const recentSummaries = this.state.summaryHistory.slice(-promptProfile.recentSummaryCount);
 		if (recentSummaries.length > 1) {
 			parts.push(
 				[
 					"最近总结历史：",
-					...recentSummaries.map((summary) => `- [${formatTime(summary.createdAt)}] ${truncateLine(summary.summary, 120)}`),
+					...recentSummaries.map((summary) => `- [${formatTime(summary.createdAt)}] ${truncateLine(summary.summary, promptProfile.lineCharLimit)}`),
 				].join("\n"),
 			);
 		}
 
-		return parts.join("\n\n").trim();
+		const context = parts.join("\n\n").trim();
+		if (promptProfile.auditLogEnabled && context) {
+			log.info("companion prompt context audit", {
+				targetTitle: targetTitle ?? null,
+				contextChars: context.length,
+				recentFrameCount: recentFrames.length,
+				recentSummaryCount: recentSummaries.length,
+				lineCharLimit: promptProfile.lineCharLimit,
+				directionalCueHits: countDirectionalCues(context),
+			});
+		}
+		return context;
+	}
+
+	requireObservationContext(
+		target: FunctionalTarget,
+		options?: { maxAgeMs?: number },
+	): { promptContext: string; latestTimestamp: number } {
+		if (!this.state.running) {
+			this.setDiagnostic("runtime-not-running", "Companion runtime is not running.");
+			throw new Error("companion runtime is not running; start local observation before delegated actions");
+		}
+		if (!this.state.target) {
+			this.setDiagnostic("runtime-not-running", "Companion runtime has no active target.");
+			throw new Error("companion runtime has no active target");
+		}
+		if (this.state.target.handle !== target.handle) {
+			this.setDiagnostic("target-mismatch", "Companion runtime target does not match the selected functional target.");
+			throw new Error("companion runtime target does not match the selected functional target");
+		}
+
+		const latestTimestamp = this.state.lastSummary?.createdAt ?? this.state.lastFrame?.capturedAt ?? 0;
+		if (!latestTimestamp) {
+			this.setDiagnostic("observation-not-ready", "Companion runtime has not produced any local observation yet.");
+			throw new Error("companion runtime has no recent local observation yet");
+		}
+
+		const maxAgeMs = options?.maxAgeMs ?? Math.max(this.state.summaryWindowMs * 2, this.state.captureIntervalMs * 4, 15_000);
+		if (Date.now() - latestTimestamp > maxAgeMs) {
+			this.setDiagnostic("observation-not-ready", "Companion runtime observation is stale.");
+			throw new Error("companion runtime observation is stale; refresh local observation before delegated actions");
+		}
+
+		const promptContext = this.getPromptContext();
+		if (!promptContext) {
+			this.setDiagnostic("observation-not-ready", "Companion runtime did not produce usable observation context.");
+			throw new Error("companion runtime did not produce usable observation context");
+		}
+
+		this.state.observationReady = true;
+		this.state.lastObservationAt = latestTimestamp;
+		this.clearDiagnostic();
+
+		return {
+			promptContext,
+			latestTimestamp,
+		};
+	}
+
+	async ensureObservationContext(
+		target: FunctionalTarget,
+		options?: { autoStart?: boolean; timeoutMs?: number; maxAgeMs?: number },
+	): Promise<{ promptContext: string; latestTimestamp: number }> {
+		const timeoutMs = options?.timeoutMs ?? OBSERVATION_READY_WAIT_TIMEOUT_MS;
+		const deadline = Date.now() + timeoutMs;
+		let lastError: Error | null = null;
+
+		if (!this.state.running || this.state.target?.handle !== target.handle) {
+			if (!options?.autoStart) {
+				return this.requireObservationContext(target, { maxAgeMs: options?.maxAgeMs });
+			}
+			this.setDiagnostic("runtime-auto-starting", `Starting local observation for ${target.title}.`);
+			log.info("companion runtime auto-start requested", {
+				target: target.title,
+				timeoutMs,
+			});
+			await this.start(target);
+		}
+
+		while (Date.now() <= deadline) {
+			try {
+				this.setDiagnostic("warmup-waiting", "Waiting for the first fresh local observation.");
+				await this.refreshNow({ summarize: true });
+				const context = this.requireObservationContext(target, { maxAgeMs: options?.maxAgeMs });
+				log.info("companion runtime warmup ready", {
+					target: target.title,
+					latestTimestamp: context.latestTimestamp,
+				});
+				return context;
+			} catch (err) {
+				lastError = err instanceof Error ? err : new Error(String(err));
+				this.state.observationReady = false;
+				if (lastError.message.includes("target does not match")) {
+					this.setDiagnostic("target-mismatch", "Companion runtime target does not match the selected functional target.");
+				} else if (lastError.message.includes("local vision")) {
+					this.setDiagnostic("local-vision-unavailable", lastError.message);
+				} else {
+					this.setDiagnostic("warmup-waiting", "Waiting for the first usable local observation.");
+				}
+				const remainingMs = deadline - Date.now();
+				if (remainingMs <= 0) {
+					break;
+				}
+				await delay(Math.min(OBSERVATION_READY_POLL_MS, remainingMs));
+			}
+		}
+
+		try {
+			this.setDiagnostic("warmup-waiting", "Waiting for the first fresh local observation.");
+			await this.refreshNow({ summarize: true });
+			const context = this.requireObservationContext(target, { maxAgeMs: options?.maxAgeMs });
+			this.clearDiagnostic();
+			log.info("companion runtime warmup ready on final boundary check", {
+				target: target.title,
+				latestTimestamp: context.latestTimestamp,
+			});
+			return context;
+		} catch (err) {
+			lastError = err instanceof Error ? err : new Error(String(err));
+		}
+
+		const timeoutMessage = lastError?.message ?? "companion runtime observation is not ready";
+		this.setDiagnostic("warmup-timeout", `Timed out while waiting for local observation readiness: ${timeoutMessage}`);
+		log.warn("companion runtime warmup timed out", {
+			target: target.title,
+			timeoutMs,
+			lastError: timeoutMessage,
+		});
+		throw new Error(`companion runtime warmup timed out after ${Math.round(timeoutMs / 1000)}s: ${timeoutMessage}`);
+	}
+
+	async waitForPostActionObservation(
+		target: FunctionalTarget,
+		options: {
+			afterTimestamp: number;
+			timeoutMs?: number;
+			requireChanged?: boolean;
+		},
+	): Promise<{ promptContext: string; latestTimestamp: number; changedObservation: boolean; timedOut: boolean }> {
+		const timeoutMs = options.timeoutMs ?? POST_ACTION_OBSERVATION_TIMEOUT_MS;
+		const deadline = Date.now() + timeoutMs;
+		let lastKnownContext = this.getPromptContext();
+		let lastKnownTimestamp = this.state.lastSummary?.createdAt ?? this.state.lastFrame?.capturedAt ?? 0;
+		let sawBelowThresholdChange = false;
+
+		while (Date.now() <= deadline) {
+			try {
+				await this.refreshNow({ summarize: true });
+				const context = this.requireObservationContext(target);
+				lastKnownContext = context.promptContext;
+				lastKnownTimestamp = context.latestTimestamp;
+				const latestFrame = this.state.lastFrame;
+				const latestSummary = this.state.lastSummary;
+				const hasFreshFrame = Boolean(latestFrame && latestFrame.capturedAt > options.afterTimestamp);
+				const hasFreshSummary = Boolean(latestSummary && latestSummary.createdAt > options.afterTimestamp);
+				const changedObservation = Boolean(hasFreshFrame && latestFrame?.source === "vision");
+
+				if (latestFrame && hasFreshFrame && latestFrame.changeRatio !== null && latestFrame.changeRatio > 0 && !changedObservation) {
+					sawBelowThresholdChange = true;
+				}
+
+				if ((hasFreshSummary || hasFreshFrame) && (!options.requireChanged || changedObservation)) {
+					this.clearDiagnostic();
+					return {
+						promptContext: context.promptContext,
+						latestTimestamp: context.latestTimestamp,
+						changedObservation,
+						timedOut: false,
+					};
+				}
+
+				if (sawBelowThresholdChange) {
+					this.setDiagnostic("below-threshold-change", "A new frame arrived, but the visible change is still below the current threshold.");
+				} else {
+					this.setDiagnostic("post-action-waiting", "Waiting for a fresh post-action local observation.");
+				}
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				this.setDiagnostic("post-action-waiting", message);
+			}
+
+			await delay(OBSERVATION_READY_POLL_MS);
+		}
+
+		this.setDiagnostic("post-action-timeout", "Timed out while waiting for a changed post-action observation.");
+		return {
+			promptContext: lastKnownContext,
+			latestTimestamp: lastKnownTimestamp,
+			changedObservation: false,
+			timedOut: true,
+		};
 	}
 
 	async start(target: FunctionalTarget): Promise<void> {
@@ -249,21 +495,38 @@ export class CompanionRuntimeService {
 			...makeInitialMetrics(),
 			sessionStartedAt: Date.now(),
 		};
+		this.state.observationReady = false;
+		this.state.lastObservationAt = null;
 		this.state.lastError = null;
+		this.clearDiagnostic();
 		this.state.phase = "connecting";
 		this.emitState();
 
-		await this.waitForLocalVisionReady();
-		await this.runCaptureTick();
-		this.scheduleCaptureTick();
-		this.scheduleSummaryTick();
+		try {
+			await this.waitForLocalVisionReady();
+			await this.runCaptureTick();
+			if (!this.state.lastFrame && this.state.lastError) {
+				throw new Error(this.state.lastError ?? "companion runtime failed to capture the first local observation");
+			}
+			this.scheduleCaptureTick();
+			this.scheduleSummaryTick();
 
-		log.info("companion runtime started", {
-			target: target.title,
-			captureIntervalMs: this.state.captureIntervalMs,
-			summaryWindowMs: this.state.summaryWindowMs,
-			historyRetentionMs: this.state.historyRetentionMs,
-		});
+			log.info("companion runtime started", {
+				target: target.title,
+				captureIntervalMs: this.state.captureIntervalMs,
+				summaryWindowMs: this.state.summaryWindowMs,
+				historyRetentionMs: this.state.historyRetentionMs,
+			});
+		} catch (err) {
+			this.stopTimers();
+			this.captureInFlight = false;
+			this.summaryInFlight = false;
+			this.lastSnapshotForDiff = null;
+			this.state.running = false;
+			this.state.observationReady = false;
+			this.emitState(true);
+			throw err;
+		}
 	}
 
 	stop(): void {
@@ -273,6 +536,9 @@ export class CompanionRuntimeService {
 		this.lastSnapshotForDiff = null;
 		this.state.running = false;
 		this.state.phase = "idle";
+		this.state.observationReady = false;
+		this.state.lastObservationAt = null;
+		this.clearDiagnostic();
 		this.emitState();
 		log.info("companion runtime stopped");
 	}
@@ -283,6 +549,9 @@ export class CompanionRuntimeService {
 		this.state.frameQueue = [];
 		this.state.summaryHistory = [];
 		this.state.metrics = makeInitialMetrics();
+		this.state.observationReady = false;
+		this.state.lastObservationAt = null;
+		this.clearDiagnostic();
 		this.state.lastError = null;
 		this.lastSnapshotForDiff = null;
 		this.emitState();
@@ -303,6 +572,18 @@ export class CompanionRuntimeService {
 				summaryWindowMs: this.state.summaryWindowMs,
 				historyRetentionMs: this.state.historyRetentionMs,
 				proactiveRuntimeSummarySilenceSeconds: getConfig().companionRuntime.proactiveRuntimeSummarySilenceSeconds,
+				promptRecentFrameCount: getConfig().companionRuntime.promptRecentFrameCount,
+				promptRecentSummaryCount: getConfig().companionRuntime.promptRecentSummaryCount,
+				promptLineCharLimit: getConfig().companionRuntime.promptLineCharLimit,
+				promptSummaryHistoryCount: getConfig().companionRuntime.promptSummaryHistoryCount,
+				promptAuditLogEnabled: getConfig().companionRuntime.promptAuditLogEnabled,
+				browserLoadGuardEnabled: getConfig().companionRuntime.browserLoadGuardEnabled,
+				browserLoadIntervalMs: getConfig().companionRuntime.browserLoadIntervalMs,
+				browserLoadStableCount: getConfig().companionRuntime.browserLoadStableCount,
+				browserLoadTimeoutMs: getConfig().companionRuntime.browserLoadTimeoutMs,
+				browserLoadChangeThreshold: getConfig().companionRuntime.browserLoadChangeThreshold,
+				browserLoadCropScale: getConfig().companionRuntime.browserLoadCropScale,
+				digestWindowSize: getConfig().companionRuntime.digestWindowSize,
 			},
 		});
 
@@ -314,8 +595,8 @@ export class CompanionRuntimeService {
 		this.emitState();
 	}
 
-	async testLocalVisionConnection(): Promise<void> {
-		await this.waitForLocalVisionReady();
+	async testLocalVisionConnection(options?: { timeoutMs?: number; silent?: boolean }): Promise<void> {
+		await this.waitForLocalVisionReady(options?.timeoutMs, { silent: options?.silent });
 	}
 
 	private async probeLocalVisionConnection(): Promise<void> {
@@ -330,17 +611,23 @@ export class CompanionRuntimeService {
 		}
 	}
 
-	private async waitForLocalVisionReady(): Promise<void> {
-		const deadline = Date.now() + LOCAL_VISION_READY_TIMEOUT_MS;
+	private async waitForLocalVisionReady(
+		timeoutMs = LOCAL_VISION_READY_TIMEOUT_MS,
+		options?: { silent?: boolean },
+	): Promise<void> {
+		const deadline = Date.now() + timeoutMs;
 		let lastError: unknown = null;
 		this.state.phase = "connecting";
+		this.state.observationReady = false;
 		this.state.lastError = null;
+		this.clearDiagnostic();
 		this.emitState();
 
 		while (Date.now() < deadline) {
 			try {
 				await this.probeLocalVisionConnection();
 				this.state.lastError = null;
+				this.clearDiagnostic();
 				if (this.state.phase === "connecting") {
 					this.state.phase = "idle";
 				}
@@ -353,7 +640,7 @@ export class CompanionRuntimeService {
 		}
 
 		const message = [
-			`本地视觉节点在 ${Math.round(LOCAL_VISION_READY_TIMEOUT_MS / 1000)} 秒内未就绪：${normalizeCompatibleOpenAIBaseUrl(this.state.localVisionBaseUrl)}`,
+			`本地视觉节点在 ${Math.round(timeoutMs / 1000)} 秒内未就绪：${normalizeCompatibleOpenAIBaseUrl(this.state.localVisionBaseUrl)}`,
 			"如果服务跑在 WSL 里，请确认：",
 			"1. vLLM 已经完成模型加载和 warmup",
 			"2. 端口已对 Windows 暴露",
@@ -363,10 +650,13 @@ export class CompanionRuntimeService {
 
 		this.state.phase = "error";
 		this.state.lastError = message;
-		this.bus.emit("system:error", {
-			module: "companion-runtime",
-			error: message,
-		});
+		this.setDiagnostic("local-vision-unavailable", message);
+		if (!options?.silent) {
+			this.bus.emit("system:error", {
+				module: "companion-runtime",
+				error: message,
+			});
+		}
 		this.emitState();
 		throw new Error(message);
 	}
@@ -463,8 +753,13 @@ export class CompanionRuntimeService {
 			const snapshot = await this.perception.captureTarget(this.state.target);
 			this.state.phase = "describing";
 			const changeRatio = await this.measureChange(snapshot);
+			const recentFrames = this.state.frameQueue.filter((frame) => frame.capturedAt >= snapshot.capturedAt - this.state.summaryWindowMs);
+			const shouldSkipLowDiff =
+				changeRatio !== null
+				&& changeRatio < MIN_MEANINGFUL_CHANGE_RATIO
+				&& recentFrames.length >= LOW_DIFF_SKIP_FRAME_QUEUE_LIMIT;
 			const description =
-				changeRatio !== null && changeRatio < MIN_MEANINGFUL_CHANGE_RATIO
+				shouldSkipLowDiff
 					? UNCHANGED_FRAME_DESCRIPTION
 					: await this.describeSnapshot(snapshot);
 			const record: CompanionFrameDescriptionRecord = {
@@ -472,7 +767,7 @@ export class CompanionRuntimeService {
 				targetTitle: snapshot.targetTitle,
 				capturedAt: snapshot.capturedAt,
 				description,
-				source: changeRatio !== null && changeRatio < MIN_MEANINGFUL_CHANGE_RATIO ? "unchanged" : "vision",
+				source: shouldSkipLowDiff ? "unchanged" : "vision",
 				captureMethod: snapshot.captureMethod,
 				qualityScore: snapshot.qualityScore,
 				changeRatio,
@@ -499,12 +794,20 @@ export class CompanionRuntimeService {
 			};
 			this.bus.emit("companion-runtime:frame-described", { record: cloneFrameRecord(record) });
 			this.lastSnapshotForDiff = snapshot;
+			this.state.lastObservationAt = record.capturedAt;
+			this.state.observationReady = true;
+			if (record.source === "vision") {
+				this.clearDiagnostic();
+			} else if (changeRatio !== null && changeRatio > 0) {
+				this.setDiagnostic("below-threshold-change", "A new frame arrived, but the visible change is below the current threshold.");
+			}
 			this.state.phase = "idle";
 			this.emitState();
 		} catch (err) {
 			const message = formatRuntimeError("frame", this.state.localVisionBaseUrl, err);
 			this.state.phase = "error";
 			this.state.lastError = message;
+			this.setDiagnostic("local-vision-unavailable", message);
 			this.bus.emit("system:error", {
 				module: "companion-runtime",
 				error: message,
@@ -566,12 +869,16 @@ export class CompanionRuntimeService {
 				),
 			};
 			this.bus.emit("companion-runtime:summary-complete", { record: cloneSummaryRecord(record) });
+			this.state.lastObservationAt = record.createdAt;
+			this.state.observationReady = true;
+			this.clearDiagnostic();
 			this.state.phase = "idle";
 			this.emitState();
 		} catch (err) {
 			const message = formatRuntimeError("summary", this.state.localVisionBaseUrl, err);
 			this.state.phase = "error";
 			this.state.lastError = message;
+			this.setDiagnostic("local-vision-unavailable", message);
 			this.bus.emit("system:error", {
 				module: "companion-runtime",
 				error: message,
@@ -659,6 +966,7 @@ export class CompanionRuntimeService {
 		previousSummaries: readonly CompanionSummaryRecord[],
 	): Promise<{ summary: string; source: "cloud" | "fallback" }> {
 		const config = getConfig();
+		const promptProfile = resolvePromptContextProfile();
 		const activeProfile = config.activeLlmProfileId
 			? config.llmProfiles.find((profile) => profile.id === config.activeLlmProfileId)
 			: null;
@@ -676,14 +984,25 @@ export class CompanionRuntimeService {
 
 		const historyText = previousSummaries.length
 			? previousSummaries
-				.slice(-6)
-				.map((summary, index) => `${index + 1}. ${summary.summary}`)
+				.slice(-promptProfile.summaryHistoryCount)
+				.map((summary, index) => `${index + 1}. ${truncateLine(summary.summary, promptProfile.lineCharLimit)}`)
 				.join("\n")
 			: "none";
 		const frameText = windowFrames
-			.map((frame) => `- [${new Date(frame.capturedAt).toLocaleTimeString()}] ${frame.description}`)
+			.map((frame) => `- [${new Date(frame.capturedAt).toLocaleTimeString()}] ${truncateLine(frame.description, promptProfile.lineCharLimit)}`)
 			.join("\n");
 		const observationOverlay = buildObservationOverlay(this.state.target?.title ?? windowFrames[windowFrames.length - 1]?.targetTitle ?? "");
+		if (promptProfile.auditLogEnabled) {
+			log.info("companion summary prompt audit", {
+				targetTitle: this.state.target?.title ?? null,
+				windowFrameCount: windowFrames.length,
+				historySummaryCount: previousSummaries.slice(-promptProfile.summaryHistoryCount).length,
+				frameTextChars: frameText.length,
+				historyTextChars: historyText.length,
+				lineCharLimit: promptProfile.lineCharLimit,
+				maxTokens: 220,
+			});
+		}
 
 		const response = await proxyRequest({
 			url: `${normalizeCompatibleOpenAIBaseUrl(baseUrl)}/chat/completions`,
@@ -754,6 +1073,10 @@ export class CompanionRuntimeService {
 			lastSummaryId: this.state.lastSummary?.id ?? null,
 			captureTicks: this.state.metrics.captureTicks,
 			summariesGenerated: this.state.metrics.summariesGenerated,
+			observationReady: this.state.observationReady,
+			lastObservationAt: this.state.lastObservationAt,
+			diagnosticCode: this.state.diagnosticCode,
+			diagnosticMessage: this.state.diagnosticMessage,
 			lastError: this.state.lastError,
 		};
 		const payloadKey = [
@@ -766,6 +1089,10 @@ export class CompanionRuntimeService {
 			payload.lastSummaryId ?? "",
 			String(payload.captureTicks),
 			String(payload.summariesGenerated),
+			payload.observationReady ? "1" : "0",
+			String(payload.lastObservationAt ?? 0),
+			payload.diagnosticCode ?? "",
+			payload.diagnosticMessage ?? "",
 			payload.lastError ?? "",
 		].join("|");
 		if (payloadKey === this.lastStateChangePayloadKey) {

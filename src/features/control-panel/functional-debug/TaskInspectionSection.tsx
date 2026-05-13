@@ -1,6 +1,7 @@
 import { Box, Button, Chip, Stack, Typography } from "@mui/material";
 import { useMemo, useState } from "react";
 import type { FunctionalRuntimeState, FunctionalTaskRecord } from "@/types";
+import { useI18n } from "@/contexts/I18nProvider";
 import {
 	formatDuration,
 	formatTime,
@@ -15,6 +16,7 @@ interface TaskInspectionSectionProps {
 }
 
 export function TaskInspectionSection(props: TaskInspectionSectionProps) {
+	const { t } = useI18n();
 	const [selectedTaskId, setSelectedTaskId] = useState<string | null>(props.functionalState.latestTask?.id ?? null);
 
 	const taskOptions = useMemo(
@@ -45,7 +47,7 @@ export function TaskInspectionSection(props: TaskInspectionSectionProps) {
 						Task Inspection
 					</Typography>
 					<Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>
-						从最近任务历史里挑一个看前后快照
+						{t("从最近任务历史里挑一个看前后快照", "Pick a recent task to inspect before/after snapshots")}
 					</Typography>
 				</Box>
 				<Chip
@@ -68,7 +70,7 @@ export function TaskInspectionSection(props: TaskInspectionSectionProps) {
 					</Button>
 				))}
 				<Button size="small" variant="text" onClick={props.onClearTaskHistory}>
-					清空任务历史
+					{t("清空任务历史", "Clear task history")}
 				</Button>
 			</Stack>
 
@@ -105,7 +107,7 @@ export function TaskInspectionSection(props: TaskInspectionSectionProps) {
 						label={`${selectedTask.name} before`}
 					/>
 				) : (
-					<PlaceholderSnapshot message="没有前置快照" />
+					<PlaceholderSnapshot message={t("没有前置快照", "No before snapshot")} />
 				)}
 				{selectedTask.afterSnapshot ? (
 					<SnapshotCard
@@ -114,7 +116,7 @@ export function TaskInspectionSection(props: TaskInspectionSectionProps) {
 						label={`${selectedTask.name} after`}
 					/>
 				) : (
-					<PlaceholderSnapshot message="没有后置快照" />
+					<PlaceholderSnapshot message={t("没有后置快照", "No after snapshot")} />
 				)}
 			</Stack>
 		</>

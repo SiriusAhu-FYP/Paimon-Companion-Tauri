@@ -1,5 +1,6 @@
-import type { AffectState, CharacterProfile } from "@/types";
+import type { AffectState, CharacterProfile, CompanionModeState, MemoryCandidate } from "@/types";
 import type { BehaviorConstraintsConfig } from "@/services/config/types";
+import { buildConversationReplyLanguageInstruction } from "@/services/config/reply-language";
 import type { ChatMessage } from "./types";
 import type { UserInputSource } from "@/services/affect-state";
 import { buildAffectPromptSummary } from "@/services/affect-state";
@@ -7,8 +8,12 @@ import { buildAffectPromptSummary } from "@/services/affect-state";
 export interface PromptContext {
 	characterProfile: CharacterProfile | null;
 	affectState: AffectState;
+	companionModeState: CompanionModeState;
 	knowledgeContext: string;
 	companionRuntimeContext: string;
+	delegationMemoryContext: string;
+	rollingContext: string;
+	memoryCandidates: MemoryCandidate[];
 	recentInteractionContext: string;
 	inputSource?: UserInputSource;
 	customPersona: string;
@@ -29,6 +34,37 @@ function truncateCompanionRuntime(text: string): string {
 	const t = text.trim();
 	if (t.length <= MAX_COMPANION_RUNTIME_CHARS) return t;
 	return `${t.slice(0, MAX_COMPANION_RUNTIME_CHARS)}\n\n[…时序观察上下文已截断…]`;
+}
+
+const MAX_MEMORY_CANDIDATES_CHARS = 2000;
+
+function formatMemoryCandidates(candidates: MemoryCandidate[]): string {
+	const header = [
+		"【Memory Candidates（长期记忆参考）】",
+		"以下为系统检索到的历史记忆候选，仅供参考。以当前视觉和用户问题为主，记忆仅作辅助；不确定时可不使用。",
+		"",
+	].join("\n");
+
+	const items: string[] = [];
+	let totalLen = header.length;
+
+	for (let i = 0; i < candidates.length; i++) {
+		const c = candidates[i]!;
+		const e = c.entry;
+		const timeStart = new Date(e.time_start).toLocaleString();
+		const entities = e.entities.length > 0 ? e.entities.join(",") : "无";
+		const line = [
+			`[候选 ${i + 1}] 时间: ${timeStart} | 场景: ${e.scene_or_task} | 实体: ${entities}`,
+			`结果: ${e.event_result} | 摘要: ${e.summary}`,
+			`相关度: ${c.relevanceScore.toFixed(2)}`,
+		].join("\n");
+
+		if (totalLen + line.length > MAX_MEMORY_CANDIDATES_CHARS) break;
+		items.push(line);
+		totalLen += line.length + 1;
+	}
+
+	return header + items.join("\n\n");
 }
 
 /** 构建行为约束段落，位于 system prompt 最前面以获得最高遵从度 */
@@ -80,6 +116,15 @@ export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 			"除非确实需要执行动作，否则仍应优先给出自然、简洁、可朗读的回复。",
 		].join("\n"),
 	);
+	sections.push(`【回复语言模式】\n${buildConversationReplyLanguageInstruction()}`);
+	sections.push(
+		[
+			"【当前交互模式】",
+			`当前系统模式：${ctx.companionModeState.mode}`,
+			`用户偏好模式：${ctx.companionModeState.preferredMode}`,
+			`最近模式切换原因：${ctx.companionModeState.lastReason}`,
+		].join("\n"),
+	);
 
 	if (ctx.behaviorConstraints) {
 		const bcSection = buildBehaviorConstraintsSection(ctx.behaviorConstraints);
@@ -112,6 +157,20 @@ export function buildSystemMessage(ctx: PromptContext): ChatMessage | null {
 	const companionRuntime = truncateCompanionRuntime(ctx.companionRuntimeContext ?? "");
 	if (companionRuntime) {
 		sections.push(`【最近游戏时序观察】\n${companionRuntime}`);
+	}
+
+	const delegationMemory = truncateCompanionRuntime(ctx.delegationMemoryContext ?? "");
+	if (delegationMemory) {
+		sections.push(`【最近托管执行记录】\n${delegationMemory}`);
+	}
+
+	const rolling = (ctx.rollingContext ?? "").trim();
+	if (rolling) {
+		sections.push(`【会话记忆上下文】\n${rolling}`);
+	}
+
+	if (ctx.memoryCandidates && ctx.memoryCandidates.length > 0) {
+		sections.push(formatMemoryCandidates(ctx.memoryCandidates));
 	}
 
 	sections.push(`【当前情感与表达引导】\n${buildAffectPromptSummary(ctx.affectState, {
@@ -149,10 +208,15 @@ export function summarizePromptContext(ctx: PromptContext): Record<string, unkno
 		affectEmotion: ctx.affectState.presentationEmotion,
 		affectIntensity: ctx.affectState.intensity,
 		affectSource: ctx.affectState.lastSource,
+		mode: ctx.companionModeState.mode,
+		preferredMode: ctx.companionModeState.preferredMode,
 		recentInteractionLen: (ctx.recentInteractionContext ?? "").length,
 		inputSource: ctx.inputSource ?? "manual",
 		customPersonaLen: (ctx.customPersona ?? "").length,
 		companionRuntimeLen: (ctx.companionRuntimeContext ?? "").length,
+		delegationMemoryLen: (ctx.delegationMemoryContext ?? "").length,
+		rollingContextLen: (ctx.rollingContext ?? "").length,
+		memoryCandidateCount: (ctx.memoryCandidates ?? []).length,
 		knowledgeLen: (ctx.knowledgeContext ?? "").length,
 		behaviorConstraintsEnabled: ctx.behaviorConstraints?.enabled ?? false,
 	};

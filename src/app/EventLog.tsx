@@ -14,6 +14,8 @@ function translateCategoryLabel(category: string, t: (zh: string, en: string) =>
 			return t("性能", "Performance");
 		case "功能":
 			return t("功能", "Functional");
+		case "记忆":
+			return t("记忆", "Memory");
 		case "调试":
 			return t("调试", "Debug");
 		case "角色":
@@ -21,9 +23,9 @@ function translateCategoryLabel(category: string, t: (zh: string, en: string) =>
 		case "语音":
 			return t("语音", "Voice");
 		case "LLM":
-			return "LLM";
+			return t("LLM", "LLM");
 		case "MCP":
-			return "MCP";
+			return t("MCP", "MCP");
 		case "其他":
 			return t("其他", "Other");
 		default:
@@ -89,8 +91,8 @@ const EventListItem = memo(function EventListItem(props: {
 			</span>
 			<div className="event-log-body">
 				<div className="event-log-main">
-					{entry.severity === "error" && <span className="event-log-severity error">ERROR</span>}
-					{entry.severity === "warn" && <span className="event-log-severity warn">WARN</span>}
+					{entry.severity === "error" && <span className="event-log-severity error">{t("ERROR", "ERROR")}</span>}
+					{entry.severity === "warn" && <span className="event-log-severity warn">{t("WARN", "WARN")}</span>}
 					<span className="event-log-name" style={{ color: entry.color }}>{entry.event}</span>
 					<span className="event-log-summary">{entry.summary}</span>
 				</div>
@@ -117,9 +119,11 @@ export function EventLog() {
 	const [selectedKey, setSelectedKey] = useState<string | null>(null);
 	const [copyMessage, setCopyMessage] = useState<string | null>(null);
 	const listRef = useRef<HTMLDivElement | null>(null);
+	const detailRef = useRef<HTMLDivElement | null>(null);
 	const stickToBottomRef = useRef(true);
 	const [scrollTop, setScrollTop] = useState(0);
 	const [viewportHeight, setViewportHeight] = useState(0);
+	const [detailHeight, setDetailHeight] = useState(0);
 
 	const filteredEntries = useMemo(() => {
 		const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
@@ -180,6 +184,20 @@ export function EventLog() {
 		return () => window.removeEventListener("resize", measure);
 	}, []);
 
+	useLayoutEffect(() => {
+		const detail = detailRef.current;
+		if (!detail) return;
+
+		const observer = new ResizeObserver((entries) => {
+			const entry = entries[0];
+			if (!entry) return;
+			setDetailHeight(entry.contentRect.height);
+		});
+		observer.observe(detail);
+		setDetailHeight(detail.clientHeight);
+		return () => observer.disconnect();
+	}, []);
+
 	useEffect(() => {
 		if (!stickToBottomRef.current) return;
 		const list = listRef.current;
@@ -193,6 +211,7 @@ export function EventLog() {
 		() => (selectedEntry ? serializePayload(selectedEntry.rawPayload, true) : ""),
 		[selectedEntry],
 	);
+	const canShowFullPayload = detailHeight >= 220;
 
 	const totalHeight = filteredEntries.length * ENTRY_ROW_HEIGHT;
 	const maxVisibleRows = Math.max(1, Math.ceil(viewportHeight / ENTRY_ROW_HEIGHT));
@@ -244,6 +263,14 @@ export function EventLog() {
 						<button
 							key={severity}
 							className={`event-log-filter-chip${activeSeverities.includes(severity) ? " active" : ""}`}
+							style={{
+								"--chip-color":
+									severity === "info"
+										? "#64748B"
+										: severity === "warn"
+											? "#D97706"
+											: "#DC2626",
+							} as CSSProperties}
 							onClick={() => {
 								setActiveSeverities((current) =>
 									current.includes(severity)
@@ -253,10 +280,10 @@ export function EventLog() {
 							}}
 						>
 							{severity === "info"
-								? "INFO"
+								? t("信息", "INFO")
 								: severity === "warn"
-									? "WARN"
-									: "ERROR"}
+									? t("警告", "WARN")
+									: t("错误", "ERROR")}
 						</button>
 					))}
 					<button
@@ -304,7 +331,9 @@ export function EventLog() {
 					className="event-log-entries"
 					onScroll={(event) => {
 						const element = event.currentTarget;
-						setScrollTop(element.scrollTop);
+						setScrollTop((current) => (
+							Math.abs(current - element.scrollTop) < 0.5 ? current : element.scrollTop
+						));
 						const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
 						stickToBottomRef.current = distanceFromBottom < 16;
 					}}
@@ -333,7 +362,7 @@ export function EventLog() {
 					)}
 				</div>
 
-				<div className="event-log-detail">
+				<div ref={detailRef} className="event-log-detail">
 					{selectedEntry ? (
 						<>
 							<div className="event-log-detail-header">
@@ -342,7 +371,7 @@ export function EventLog() {
 										{selectedEntry.event}
 									</div>
 									<div className="event-log-detail-meta">
-										{selectedEntry.timestampLabel} · {selectedEntry.category}
+										{selectedEntry.timestampLabel} · {translateCategoryLabel(selectedEntry.category, t)}
 									</div>
 								</div>
 								<div className="event-log-actions">
@@ -368,11 +397,17 @@ export function EventLog() {
 							</div>
 							{selectedEntry.severity !== "info" && (
 								<div className={`event-log-detail-severity ${selectedEntry.severity}`}>
-									{selectedEntry.severity === "error" ? "ERROR" : "WARN"}
+									{selectedEntry.severity === "error" ? t("错误", "ERROR") : t("警告", "WARN")}
 								</div>
 							)}
 							<div className="event-log-detail-summary">{selectedEntry.summary}</div>
-							<pre className="event-log-detail-payload">{selectedPayloadText}</pre>
+							{canShowFullPayload ? (
+								<pre className="event-log-detail-payload">{selectedPayloadText}</pre>
+							) : (
+								<div className="event-log-detail-payload-collapsed">
+									{t("面板高度不足，展开后显示完整 payload。", "Panel is too short; expand to view full payload.")}
+								</div>
+							)}
 						</>
 					) : (
 						<div className="event-log-empty">{t("选择一条事件以查看完整详情", "Select an event to inspect full details")}</div>

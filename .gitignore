@@ -44,4 +44,7 @@ public/*
 
 # Owner-local working material
 .private/
+.workbench/
 .cursor/
+.claude/
+dev-reports/

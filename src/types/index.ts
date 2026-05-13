@@ -25,12 +25,22 @@ export type {
 	ResetAffectInput,
 } from "./affect";
 export type {
-	CompanionInteractionMode,
 	ProactiveDecision,
 	ProactiveState,
 	ProactiveTriggerSource,
 } from "./proactive";
+export type {
+	CompanionInteractionMode,
+	CompanionModeSource,
+	CompanionModeState,
+} from "./companion-mode";
 export type { DebugCaptureState } from "./debug-capture";
+export type {
+	DelegatedExecutionRecord,
+	DelegatedExecutionVerificationResult,
+	DelegationMemoryState,
+	SokobanChangeType,
+} from "./delegation-memory";
 export type {
 	UnifiedRunPhase,
 	UnifiedRunTrigger,
@@ -43,6 +53,7 @@ export type {
 	CompanionRuntimeBenchmarkMetrics,
 	CompanionRuntimeBenchmarkResult,
 	CompanionRuntimeBenchmarkState,
+	CompanionRuntimeDiagnosticCode,
 	CompanionFrameDescriptionRecord,
 	CompanionRuntimeMetrics,
 	CompanionRuntimePhase,
@@ -71,6 +82,7 @@ export type {
 	PerceptionSnapshot,
 } from "./functional";
 export type {
+	HostFocusOptions,
 	HostMouseAction,
 	HostMouseButton,
 	HostWindowCapture,
@@ -78,6 +90,7 @@ export type {
 } from "./system";
 export type {
 	SemanticActionExecutionResult,
+	SemanticDelegationProfileConfig,
 	SemanticGameActionDefinition,
 	SemanticGameManifest,
 	SemanticGamePluginDefinition,
@@ -93,6 +106,24 @@ export type {
 	SokobanRunStatus,
 	SokobanState,
 } from "./sokoban";
+export type {
+	SalientEvent,
+	SalientEventType,
+	SalientEventSource,
+	L2RollingContext,
+	LongTermMemoryEntry,
+	LongTermMemorySource,
+	LongTermMemoryEventResult,
+	WritebackState,
+	WritebackTask,
+	MemoryCandidate,
+	LongTermMemoryIndex,
+	LongTermMemoryIndexEntry,
+	MemoryL2UpdatedPayload,
+	MemorySalientEventPayload,
+	MemoryCommittedPayload,
+	MemoryRecallCompletePayload,
+} from "./memory";
 export type {
 	KnowledgeDocument,
 	KnowledgeChunk,

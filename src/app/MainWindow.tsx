@@ -3,16 +3,16 @@ import { Box, Button, IconButton, Menu, MenuItem, Tooltip } from "@mui/material"
 import DashboardCustomizeIcon from "@mui/icons-material/DashboardCustomize";
 import ViewQuiltIcon from "@mui/icons-material/ViewQuilt";
 import CheckIcon from "@mui/icons-material/Check";
+import PushPinIcon from "@mui/icons-material/PushPin";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import TranslateIcon from "@mui/icons-material/Translate";
-import { listen } from "@tauri-apps/api/event";
 import { Window } from "@tauri-apps/api/window";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { StatusBar } from "@/app/StatusBar";
 import { getStoredOpenDockPanels, type DockPanelId } from "@/app/workspace/workspace-layout";
 import { DockWorkspace } from "@/app/workspace/DockWorkspace";
-import { requestCloseWorkspacePanel, requestOpenWorkspacePanel, requestResetWorkspaceLayout } from "@/app/workspace/WorkspaceContext";
+import { requestCloseWorkspacePanel, requestOpenWorkspacePanel, requestResetWorkspaceLayout, subscribeWorkspaceLayoutChanged } from "@/app/workspace/WorkspaceContext";
 import { broadcastControl, type StageDisplayMode, isTauriEnvironment } from "@/utils/window-sync";
 import { createLogger } from "@/services/logger";
 import { getServices } from "@/services";
@@ -22,6 +22,12 @@ import { useI18n } from "@/contexts/I18nProvider";
 const log = createLogger("main-window");
 const UI_STALL_THRESHOLD_MS = 200;
 const UI_STALL_THROTTLE_MS = 3000;
+
+interface PanelMenuItem {
+	id: DockPanelId;
+	label: string;
+	fixed?: boolean;
+}
 
 export function MainWindow() {
 	const { mode, setMode } = useThemeMode();
@@ -33,11 +39,11 @@ export function MainWindow() {
 	const [stageSlotOpen, setStageSlotOpen] = useState(false);
 	const [stageSlotRect, setStageSlotRect] = useState<DOMRect | null>(null);
 	const [panelsMenuAnchor, setPanelsMenuAnchor] = useState<null | HTMLElement>(null);
-	const [layoutMenuAnchor, setLayoutMenuAnchor] = useState<null | HTMLElement>(null);
 	const [openPanelsSnapshot, setOpenPanelsSnapshot] = useState<Set<DockPanelId>>(() => getStoredOpenDockPanels());
 	const stageModeRef = useRef(stageMode);
 	const stageVisibleRef = useRef(stageVisible);
 	const syncDebounceRef = useRef(0);
+	const lastDockedBoundsRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
 
 	stageModeRef.current = stageMode;
 	stageVisibleRef.current = stageVisible;
@@ -71,14 +77,52 @@ export function MainWindow() {
 			const stageWin = await Window.getByLabel("stage");
 			if (!mainWin || !stageWin) return;
 
+			const outerPosition = await mainWin.outerPosition();
 			const innerPosition = await mainWin.innerPosition();
 			const scaleFactor = await mainWin.scaleFactor();
-			const logicalPosition = innerPosition.toLogical(scaleFactor);
+			const outerLogicalPosition = outerPosition.toLogical(scaleFactor);
+			const innerLogicalPosition = innerPosition.toLogical(scaleFactor);
+			const contentOffsetX = innerLogicalPosition.x - outerLogicalPosition.x;
+			const contentOffsetY = innerLogicalPosition.y - outerLogicalPosition.y;
+			const nextBounds = {
+				x: outerLogicalPosition.x + contentOffsetX + rect.left,
+				y: outerLogicalPosition.y + contentOffsetY + rect.top,
+				width: rect.width,
+				height: rect.height,
+			};
+			const previousBounds = lastDockedBoundsRef.current;
 
-			await stageWin.setPosition(new LogicalPosition(logicalPosition.x + rect.left, logicalPosition.y + rect.top));
-			if (rect.width > 50 && rect.height > 50) {
-				await stageWin.setSize(new LogicalSize(rect.width, rect.height));
+			if (
+				previousBounds
+				&& Math.abs(previousBounds.x - nextBounds.x) < 0.5
+				&& Math.abs(previousBounds.y - nextBounds.y) < 0.5
+				&& Math.abs(previousBounds.width - nextBounds.width) < 0.5
+				&& Math.abs(previousBounds.height - nextBounds.height) < 0.5
+			) {
+				return;
 			}
+
+			if (
+				!previousBounds
+				|| Math.abs(previousBounds.x - nextBounds.x) >= 0.5
+				|| Math.abs(previousBounds.y - nextBounds.y) >= 0.5
+			) {
+				await stageWin.setPosition(new LogicalPosition(nextBounds.x, nextBounds.y));
+			}
+
+			if (
+				rect.width > 50
+				&& rect.height > 50
+				&& (
+					!previousBounds
+					|| Math.abs(previousBounds.width - nextBounds.width) >= 0.5
+					|| Math.abs(previousBounds.height - nextBounds.height) >= 0.5
+				)
+			) {
+				await stageWin.setSize(new LogicalSize(nextBounds.width, nextBounds.height));
+			}
+
+			lastDockedBoundsRef.current = nextBounds;
 		} catch (err) {
 			log.warn("sync docked stage bounds failed", err);
 		}
@@ -97,6 +141,33 @@ export function MainWindow() {
 		});
 	}, [syncDockedStageBounds]);
 
+	const handleStageSlotRectChange = useCallback((rect: DOMRect | null) => {
+		setStageSlotRect((current) => {
+			if (!rect && !current) {
+				return current;
+			}
+			if (
+				rect
+				&& current
+				&& Math.abs(current.left - rect.left) < 0.5
+				&& Math.abs(current.top - rect.top) < 0.5
+				&& Math.abs(current.width - rect.width) < 0.5
+				&& Math.abs(current.height - rect.height) < 0.5
+			) {
+				return current;
+			}
+			return rect;
+		});
+		if (rect) {
+			debouncedSyncDockedStageBounds(rect);
+		}
+	}, [debouncedSyncDockedStageBounds]);
+
+	const handleRedockStage = useCallback(() => {
+		lastDockedBoundsRef.current = null;
+		debouncedSyncDockedStageBounds(stageSlotRect);
+	}, [debouncedSyncDockedStageBounds, stageSlotRect]);
+
 	useEffect(() => {
 		const nextMode = stageSlotOpen ? "docked" : "floating";
 		setStageMode((current) => {
@@ -107,6 +178,12 @@ export function MainWindow() {
 	}, [stageSlotOpen]);
 
 	useEffect(() => {
+		if (stageMode !== "docked") {
+			lastDockedBoundsRef.current = null;
+		}
+	}, [stageMode]);
+
+	useEffect(() => {
 		if (stageMode !== "docked") return;
 		void syncDockedStageBounds();
 	}, [stageMode, stageSlotRect, stageVisible, syncDockedStageBounds]);
@@ -114,16 +191,21 @@ export function MainWindow() {
 	useEffect(() => {
 		if (!isTauriEnvironment() || !stageSlotOpen) return;
 
-		let unlistenMove: (() => void) | null = null;
-		let unlistenResize: (() => void) | null = null;
+		let unlistenMainMove: (() => void) | null = null;
+		let unlistenMainResize: (() => void) | null = null;
 		let disposed = false;
 
 		(async () => {
 			try {
-				unlistenMove = await listen("tauri://move", () => {
+				const mainWin = await Window.getByLabel("main");
+				if (!mainWin) {
+					return;
+				}
+
+				unlistenMainMove = await mainWin.onMoved(() => {
 					debouncedSyncDockedStageBounds();
 				});
-				unlistenResize = await listen("tauri://resize", () => {
+				unlistenMainResize = await mainWin.onResized(() => {
 					debouncedSyncDockedStageBounds();
 				});
 			} catch (err) {
@@ -135,8 +217,8 @@ export function MainWindow() {
 
 		return () => {
 			disposed = true;
-			unlistenMove?.();
-			unlistenResize?.();
+			unlistenMainMove?.();
+			unlistenMainResize?.();
 		};
 	}, [stageSlotOpen, debouncedSyncDockedStageBounds]);
 
@@ -179,16 +261,32 @@ export function MainWindow() {
 	}, []);
 
 	const closePanelsMenu = useCallback(() => setPanelsMenuAnchor(null), []);
-	const closeLayoutMenu = useCallback(() => setLayoutMenuAnchor(null), []);
-	const panelMenuItems = [
+	const panelMenuItems: readonly PanelMenuItem[] = [
+		{ id: "control-panel", label: t("控制面板", "Control Panel"), fixed: true },
 		{ id: "stage-controls", label: t("舞台面板", "Stage Panel") },
+		{ id: "delegation-timeline", label: t("托管时间轴", "Delegation Timeline") },
 		{ id: "chat", label: t("对话", "Chat") },
-		{ id: "control-panel", label: t("控制面板", "Control Panel") },
 		{ id: "knowledge", label: t("知识库", "Knowledge") },
 		{ id: "workbench", label: t("开发工作台", "Workbench") },
 		{ id: "settings", label: t("设置", "Settings") },
 		{ id: "event-log", label: t("日志", "Event Log") },
 	] as const;
+
+	useEffect(() => {
+		const syncSnapshot = () => setOpenPanelsSnapshot(getStoredOpenDockPanels());
+		return subscribeWorkspaceLayoutChanged(syncSnapshot);
+	}, []);
+
+	useEffect(() => {
+		const handleWorkspaceRedock = () => {
+			if (stageModeRef.current !== "docked" || !stageVisibleRef.current) {
+				return;
+			}
+			lastDockedBoundsRef.current = null;
+			debouncedSyncDockedStageBounds();
+		};
+		return subscribeWorkspaceLayoutChanged(handleWorkspaceRedock);
+	}, [debouncedSyncDockedStageBounds]);
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
@@ -217,10 +315,10 @@ export function MainWindow() {
 					<Button
 						size="small"
 						startIcon={<ViewQuiltIcon sx={{ fontSize: 15 }} />}
-						onClick={(event) => setLayoutMenuAnchor(event.currentTarget)}
+						onClick={handleResetLayout}
 						sx={{ minWidth: 0, px: 1.25, fontSize: 12, textTransform: "none", color: "text.secondary" }}
 					>
-						{t("布局", "Layout")}
+						{t("重置布局", "Reset Layout")}
 					</Button>
 				</Box>
 				<Box sx={{ flex: 1, alignSelf: "stretch" }} data-tauri-drag-region />
@@ -273,7 +371,10 @@ export function MainWindow() {
 					const isOpen = openPanelsSnapshot.has(panel.id);
 					return (
 						<MenuItem key={panel.id} onClick={() => {
-							if (isOpen && panel.id !== "control-panel") {
+							if (panel.fixed) {
+								return;
+							}
+							if (isOpen) {
 								requestCloseWorkspacePanel(panel.id);
 								setOpenPanelsSnapshot((current) => {
 									const next = new Set(current);
@@ -289,18 +390,15 @@ export function MainWindow() {
 								});
 							}
 						}}>
-							<Box sx={{ width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", mr: 0.75, color: "primary.main" }}>
-								{isOpen ? <CheckIcon sx={{ fontSize: 16 }} /> : null}
+							<Box sx={{ width: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", mr: 0.75, color: panel.fixed ? "warning.main" : "primary.main" }}>
+								{panel.fixed
+									? <PushPinIcon sx={{ fontSize: 15 }} />
+									: isOpen ? <CheckIcon sx={{ fontSize: 16 }} /> : null}
 							</Box>
-							{panel.label}
+							<span>{panel.label}</span>
 						</MenuItem>
 					);
 				})}
-			</Menu>
-
-			<Menu anchorEl={layoutMenuAnchor} open={Boolean(layoutMenuAnchor)} onClose={closeLayoutMenu}>
-				<MenuItem onClick={() => { handleResetLayout(); closeLayoutMenu(); }}>{t("重新打开全部标签页", "Reopen All Tabs")}</MenuItem>
-				<MenuItem onClick={() => { handleResetLayout(); closeLayoutMenu(); }}>{t("恢复默认布局", "Restore Default Layout")}</MenuItem>
 			</Menu>
 
 			<DockWorkspace
@@ -312,13 +410,9 @@ export function MainWindow() {
 				onVisibilityChange={setStageVisible}
 				onAlwaysOnTopChange={setAlwaysOnTop}
 				onDisplayModeChange={setDisplayMode}
+				onResetDockedStage={handleRedockStage}
 				onStageSlotOpenChange={setStageSlotOpen}
-				onStageSlotRectChange={(rect) => {
-					setStageSlotRect(rect);
-					if (rect) {
-						debouncedSyncDockedStageBounds(rect);
-					}
-				}}
+				onStageSlotRectChange={handleStageSlotRectChange}
 			/>
 
 			<StatusBar

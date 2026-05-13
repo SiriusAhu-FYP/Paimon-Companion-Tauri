@@ -15,6 +15,14 @@ interface WindowMatchOptions {
 interface SnapshotChangeOptions {
 	sampleSize?: number;
 	cropScale?: number;
+	crop?: SnapshotChangeCrop;
+}
+
+export interface SnapshotChangeCrop {
+	xNorm: number;
+	yNorm: number;
+	widthNorm: number;
+	heightNorm: number;
 }
 
 export function chooseWindowByKeywords(
@@ -75,8 +83,8 @@ export async function estimateSnapshotChange(
 
 	const sampleSize = options.sampleSize ?? 48;
 	const cropScale = options.cropScale ?? 0.75;
-	const beforeData = await sampleSnapshot(beforeSnapshot.dataUrl, sampleSize, cropScale);
-	const afterData = await sampleSnapshot(afterSnapshot.dataUrl, sampleSize, cropScale);
+	const beforeData = await sampleSnapshot(beforeSnapshot.dataUrl, sampleSize, cropScale, options.crop);
+	const afterData = await sampleSnapshot(afterSnapshot.dataUrl, sampleSize, cropScale, options.crop);
 	const pixelCount = beforeData.width * beforeData.height;
 	let totalDiff = 0;
 
@@ -140,6 +148,7 @@ async function sampleSnapshot(
 	dataUrl: string,
 	sampleSize: number,
 	cropScale: number,
+	crop?: SnapshotChangeCrop,
 ): Promise<ImageData> {
 	const image = await loadImage(dataUrl);
 	const canvas = document.createElement("canvas");
@@ -152,10 +161,11 @@ async function sampleSnapshot(
 	canvas.width = sampleSize;
 	canvas.height = sampleSize;
 
-	const cropWidth = image.width * cropScale;
-	const cropHeight = image.height * cropScale;
-	const cropX = (image.width - cropWidth) / 2;
-	const cropY = (image.height - cropHeight) / 2;
+	const normalizedCrop = crop ? normalizeSnapshotCrop(crop) : null;
+	const cropX = normalizedCrop ? image.width * normalizedCrop.xNorm : (image.width - image.width * cropScale) / 2;
+	const cropY = normalizedCrop ? image.height * normalizedCrop.yNorm : (image.height - image.height * cropScale) / 2;
+	const cropWidth = normalizedCrop ? image.width * normalizedCrop.widthNorm : image.width * cropScale;
+	const cropHeight = normalizedCrop ? image.height * normalizedCrop.heightNorm : image.height * cropScale;
 
 	context.drawImage(
 		image,
@@ -170,6 +180,21 @@ async function sampleSnapshot(
 	);
 
 	return context.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+function normalizeSnapshotCrop(crop: SnapshotChangeCrop): SnapshotChangeCrop {
+	const xNorm = clampUnit(crop.xNorm);
+	const yNorm = clampUnit(crop.yNorm);
+	const widthNorm = Math.max(0.001, Math.min(1 - xNorm, clampUnit(crop.widthNorm) || 1));
+	const heightNorm = Math.max(0.001, Math.min(1 - yNorm, clampUnit(crop.heightNorm) || 1));
+	return { xNorm, yNorm, widthNorm, heightNorm };
+}
+
+function clampUnit(value: number): number {
+	if (!Number.isFinite(value)) {
+		return 0;
+	}
+	return Math.max(0, Math.min(1, value));
 }
 
 function loadImage(dataUrl: string): Promise<HTMLImageElement> {

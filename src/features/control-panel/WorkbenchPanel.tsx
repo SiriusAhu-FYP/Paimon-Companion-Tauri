@@ -4,15 +4,16 @@ import { useI18n } from "@/contexts/I18nProvider";
 import { FunctionalPanel } from "./FunctionalPanel";
 import { CompanionWorkbenchPanel } from "./CompanionWorkbenchPanel";
 import { PanelRoot } from "./panel-shell";
+import { WorkbenchMcpQuickActions } from "./WorkbenchMcpQuickActions";
 
 export function WorkbenchPanel() {
 	const { t } = useI18n();
 	const [section, setSection] = useState<"companion" | "functional">("companion");
 
 	return (
-		<Box sx={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
+		<Box sx={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
 			<PanelRoot title={t("开发工作台", "Developer Workbench")}>
-				<ButtonGroup size="small" fullWidth sx={{ mb: 1 }}>
+				<ButtonGroup size="small" fullWidth>
 					<Button variant={section === "companion" ? "contained" : "outlined"} onClick={() => setSection("companion")}>
 						{t("陪伴", "Companion")}
 					</Button>
@@ -20,9 +21,18 @@ export function WorkbenchPanel() {
 						{t("功能", "Functional")}
 					</Button>
 				</ButtonGroup>
+				<WorkbenchMcpQuickActions />
 			</PanelRoot>
 
-			<Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+			<Box
+				sx={{
+					flex: 1,
+					minHeight: 0,
+					borderTop: "1px solid",
+					borderColor: "divider",
+					overflowY: "auto",
+				}}
+			>
 				{section === "companion" && <CompanionWorkbenchPanel />}
 				{section === "functional" && <FunctionalPanel />}
 			</Box>

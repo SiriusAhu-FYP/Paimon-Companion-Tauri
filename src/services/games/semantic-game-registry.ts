@@ -1,9 +1,11 @@
-import game2048ManifestJson from "@/config/games/2048.json";
-import sokobanManifestJson from "@/config/games/sokoban.json";
+import rawGame2048ManifestToml from "@/config/games/2048.toml?raw";
+import rawSokobanManifestToml from "@/config/games/sokoban.toml?raw";
+import { parse } from "smol-toml";
 import type {
 	Game2048ActionId,
 	HostMouseAction,
 	HostMouseButton,
+	SemanticDelegationProfileConfig,
 	SemanticGameActionDefinition,
 	SemanticGameManifest,
 	SemanticHostStep,
@@ -21,8 +23,8 @@ const HOST_MOUSE_BUTTONS: HostMouseButton[] = ["left", "middle", "right"];
 const HOST_MOUSE_ACTIONS: HostMouseAction[] = ["click", "down", "up"];
 
 const GAME_MANIFESTS: KnownManifestMap = {
-	"2048": validateManifest<Game2048ActionId>(game2048ManifestJson),
-	sokoban: validateManifest<SokobanActionId>(sokobanManifestJson),
+	"2048": validateManifest<Game2048ActionId>(parseManifestToml(rawGame2048ManifestToml, "2048.toml")),
+	sokoban: validateManifest<SokobanActionId>(parseManifestToml(rawSokobanManifestToml, "sokoban.toml")),
 };
 
 export function listSemanticGames(): ReadonlyArray<{ gameId: KnownGameId; displayName: string }> {
@@ -60,6 +62,39 @@ export function findSemanticGameByTargetTitle(
 	return null;
 }
 
+function parseManifestToml(rawToml: string, sourceName: string): unknown {
+	try {
+		return parse(rawToml);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		throw new Error(`failed to parse ${sourceName}: ${message}`);
+	}
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+	return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function sanitizeStringArray(input: unknown): string[] {
+	if (!Array.isArray(input)) {
+		return [];
+	}
+	return input
+		.map((item) => (typeof item === "string" ? item.trim() : ""))
+		.filter(Boolean);
+}
+
+function toOptionalNumber(value: unknown): number | undefined {
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return undefined;
+	}
+	return value;
+}
+
+function toOptionalBoolean(value: unknown): boolean | undefined {
+	return typeof value === "boolean" ? value : undefined;
+}
+
 function validateManifest<ActionId extends string>(value: unknown): SemanticGameManifest<ActionId> {
 	if (!value || typeof value !== "object") {
 		throw new Error("semantic game manifest must be an object");
@@ -72,6 +107,8 @@ function validateManifest<ActionId extends string>(value: unknown): SemanticGame
 		notes?: unknown;
 		windowTitleHints?: unknown;
 		observationFocus?: unknown;
+		loadGuardPolicy?: unknown;
+		delegationProfile?: unknown;
 		actions?: unknown;
 	};
 
@@ -99,6 +136,14 @@ function validateManifest<ActionId extends string>(value: unknown): SemanticGame
 		}
 	}
 
+	const loadGuardPolicy = (
+		manifest.loadGuardPolicy === "auto"
+		|| manifest.loadGuardPolicy === "force-enable"
+		|| manifest.loadGuardPolicy === "force-disable"
+	)
+		? manifest.loadGuardPolicy
+		: undefined;
+
 	return {
 		gameId,
 		displayName,
@@ -112,7 +157,101 @@ function validateManifest<ActionId extends string>(value: unknown): SemanticGame
 		observationFocus: Array.isArray(manifest.observationFocus)
 			? manifest.observationFocus.filter((entry): entry is string => typeof entry === "string")
 			: [],
+		loadGuardPolicy,
+		delegationProfile: validateDelegationProfile(manifest.delegationProfile),
 		actions,
+	};
+}
+
+function validateDelegationProfile(value: unknown): SemanticDelegationProfileConfig | undefined {
+	if (!isObjectRecord(value)) {
+		return undefined;
+	}
+	const locator = isObjectRecord(value.locator) ? value.locator : {};
+	const roles = isObjectRecord(value.roles) ? value.roles : {};
+	const missionAnalyst = isObjectRecord(roles.missionAnalyst) ? roles.missionAnalyst : {};
+	const operationsPlanner = isObjectRecord(roles.operationsPlanner) ? roles.operationsPlanner : {};
+	const progressEvaluator = isObjectRecord(roles.progressEvaluator) ? roles.progressEvaluator : {};
+	const boardPerception = isObjectRecord(value.boardPerception) ? value.boardPerception : {};
+	const visionPreprocess = isObjectRecord(value.visionPreprocess) ? value.visionPreprocess : {};
+	const visionPreprocessCrop = isObjectRecord(visionPreprocess.crop) ? visionPreprocess.crop : {};
+	const visionPreprocessMode = visionPreprocess.mode;
+	const longSequence = isObjectRecord(value.longSequence) ? value.longSequence : null;
+	const thinkingMode = missionAnalyst.missionAnalystThinkingMode;
+	const plannerThinkingMode = operationsPlanner.operationsPlannerThinkingMode;
+	const evaluatorThinkingMode = progressEvaluator.progressEvaluatorThinkingMode;
+	return {
+		profileId: typeof value.profileId === "string" ? value.profileId : undefined,
+		taskId: typeof value.taskId === "string" ? value.taskId : undefined,
+		displayName: typeof value.displayName === "string" ? value.displayName : undefined,
+		maxRounds: toOptionalNumber(value.maxRounds),
+		maxActionsPerRound: toOptionalNumber(value.maxActionsPerRound),
+		afterActionWaitMs: toOptionalNumber(value.afterActionWaitMs),
+		locatorRulesEnabled: toOptionalBoolean(locator.locatorRulesEnabled),
+		locatorCloudEnabled: toOptionalBoolean(locator.locatorCloudEnabled),
+		locatorLocalFallbackEnabled: toOptionalBoolean(locator.locatorLocalFallbackEnabled),
+		locatorMinConfidence: toOptionalNumber(locator.locatorMinConfidence),
+		missionAnalystTemperature: toOptionalNumber(missionAnalyst.missionAnalystTemperature),
+		missionAnalystThinkingMode: (
+			thinkingMode === "off"
+			|| thinkingMode === "low"
+			|| thinkingMode === "medium"
+			|| thinkingMode === "high"
+		)
+			? thinkingMode
+			: undefined,
+		operationsPlannerTemperature: toOptionalNumber(operationsPlanner.operationsPlannerTemperature),
+		operationsPlannerThinkingMode: (
+			plannerThinkingMode === "off"
+			|| plannerThinkingMode === "low"
+			|| plannerThinkingMode === "medium"
+			|| plannerThinkingMode === "high"
+		)
+			? plannerThinkingMode
+			: undefined,
+		progressEvaluatorTemperature: toOptionalNumber(progressEvaluator.progressEvaluatorTemperature),
+		progressEvaluatorThinkingMode: (
+			evaluatorThinkingMode === "off"
+			|| evaluatorThinkingMode === "low"
+			|| evaluatorThinkingMode === "medium"
+			|| evaluatorThinkingMode === "high"
+		)
+			? evaluatorThinkingMode
+			: undefined,
+		allowedTools: sanitizeStringArray(value.allowedTools),
+		missionAnalystRules: sanitizeStringArray(missionAnalyst.missionAnalystRules),
+		operationsPlannerRules: sanitizeStringArray(operationsPlanner.operationsPlannerRules),
+		progressEvaluatorRules: sanitizeStringArray(progressEvaluator.progressEvaluatorRules),
+		boardPerceptionPrompt: typeof boardPerception.boardPerceptionPrompt === "string" ? (boardPerception.boardPerceptionPrompt as string) : undefined,
+		visionPreprocess: {
+			enabled: toOptionalBoolean(visionPreprocess.enabled),
+			mode: (
+				visionPreprocessMode === "none"
+				|| visionPreprocessMode === "crop-only"
+				|| visionPreprocessMode === "crop-resize"
+			)
+				? visionPreprocessMode
+				: undefined,
+			crop: {
+				xNorm: toOptionalNumber(visionPreprocessCrop.xNorm),
+				yNorm: toOptionalNumber(visionPreprocessCrop.yNorm),
+				widthNorm: toOptionalNumber(visionPreprocessCrop.widthNorm),
+				heightNorm: toOptionalNumber(visionPreprocessCrop.heightNorm),
+			},
+			maxWidth: toOptionalNumber(visionPreprocess.maxWidth),
+			maxHeight: toOptionalNumber(visionPreprocess.maxHeight),
+			format: visionPreprocess.format === "png" || visionPreprocess.format === "jpeg" ? visionPreprocess.format : undefined,
+			quality: toOptionalNumber(visionPreprocess.quality),
+		},
+		longSequence: longSequence
+			? {
+				enabled: toOptionalBoolean(longSequence.enabled),
+				maxActions: toOptionalNumber(longSequence.maxActions),
+				minActions: toOptionalNumber(longSequence.minActions),
+				stepWaitMs: toOptionalNumber(longSequence.stepWaitMs),
+				stopOnUnchangedSnapshot: toOptionalBoolean(longSequence.stopOnUnchangedSnapshot),
+			}
+			: undefined,
 	};
 }
 
@@ -181,6 +320,8 @@ function validateStep(
 			kind: "send-mouse",
 			x: typeof step.x === "number" ? step.x : undefined,
 			y: typeof step.y === "number" ? step.y : undefined,
+			xNorm: typeof step.xNorm === "number" ? step.xNorm : undefined,
+			yNorm: typeof step.yNorm === "number" ? step.yNorm : undefined,
 			button,
 			action,
 		};

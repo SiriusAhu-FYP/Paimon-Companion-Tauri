@@ -7,10 +7,11 @@ import type {
 	FunctionalRuntimeState,
 	FunctionalTarget,
 	FunctionalTaskRecord,
+	HostFocusOptions,
 	HostMouseAction,
 	HostMouseButton,
 } from "@/types";
-import { focusWindow, sendHostKey, sendHostMouse } from "@/services/system";
+import { focusWindow, sendHostKey, sendHostMouse, sendHostText } from "@/services/system";
 
 const MAX_TASK_HISTORY = 20;
 
@@ -82,15 +83,20 @@ export class OrchestratorService {
 		});
 	}
 
-	async runFocusTask(targetOverride?: FunctionalTarget): Promise<FunctionalTaskRecord> {
+	async runFocusTask(targetOverride?: FunctionalTarget, options?: HostFocusOptions): Promise<FunctionalTaskRecord> {
 		return this.runTask({
 			name: "Focus Window",
 			actionKind: "focus",
 			targetOverride,
 			execute: async (task, target) => {
+				const focusOptions: HostFocusOptions = {
+					applyDelegatedViewport: options?.applyDelegatedViewport ?? true,
+				};
 				this.pushTaskLog(task, "info", "focusing target window");
-				await focusWindow(target.handle);
-				task.summary = "window focused";
+				await focusWindow(target.handle, focusOptions);
+				task.summary = focusOptions.applyDelegatedViewport
+					? "window focused with delegated viewport"
+					: "window focused";
 			},
 		});
 	}
@@ -137,6 +143,30 @@ export class OrchestratorService {
 				task.afterSnapshot = await this.perception.captureTarget(target);
 				this.state.latestSnapshot = task.afterSnapshot;
 				task.summary = `sent mouse ${action}/${button}`;
+			},
+		});
+	}
+
+	async runSendTextTask(text: string, targetOverride?: FunctionalTarget): Promise<FunctionalTaskRecord> {
+		if (!text.trim()) {
+			throw new Error("text is required");
+		}
+
+		return this.runTask({
+			name: "Send Text",
+			actionKind: "send-text",
+			targetOverride,
+			execute: async (task, target) => {
+				this.pushTaskLog(task, "info", "capturing pre-action snapshot");
+				task.beforeSnapshot = await this.perception.captureTarget(target);
+
+				this.pushTaskLog(task, "info", "sending text via paste channel");
+				await sendHostText(target.handle, text);
+
+				this.pushTaskLog(task, "info", "capturing post-action snapshot");
+				task.afterSnapshot = await this.perception.captureTarget(target);
+				this.state.latestSnapshot = task.afterSnapshot;
+				task.summary = `sent text (${text.length} chars)`;
 			},
 		});
 	}

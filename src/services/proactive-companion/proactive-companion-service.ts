@@ -2,15 +2,16 @@ import type { EventBus } from "@/services/event-bus";
 import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { LLMService } from "@/services/llm";
 import type { PipelineService } from "@/services/pipeline";
+import type { CompanionModeService } from "@/services/companion-mode";
+import type { DelegationMemoryService } from "@/services/delegation-memory";
 import { createLogger } from "@/services/logger";
-import type { EventMap, ProactiveState, ProactiveTriggerSource } from "@/types";
+import type { DelegatedExecutionRecord, EventMap, ProactiveState, ProactiveTriggerSource } from "@/types";
 import { PROACTIVE_NO_REPLY_SENTINEL } from "./constants";
 
 const log = createLogger("proactive-companion");
 const DEFAULT_RUNTIME_SUMMARY_SILENCE_MS = 30_000;
 const TASK_RESULT_SILENCE_MS = 20_000;
 const SYSTEM_ERROR_DEDUPE_MS = 30_000;
-const DELEGATED_TASK_COOLDOWN_MS = 10_000;
 const RUNTIME_SUMMARY_REPEAT_MS = 90_000;
 const CROSS_CONTEXT_WINDOW_MS = 60_000;
 
@@ -38,6 +39,7 @@ interface ProactiveCandidate {
 	traceId?: string;
 	isEntrance?: boolean;
 	forceSpeak?: boolean;
+	skipSilenceWindow?: boolean;
 }
 
 function makeInitialState(): ProactiveState {
@@ -68,6 +70,7 @@ export class ProactiveCompanionService {
 	private llm: LLMService;
 	private pipeline: PipelineService;
 	private companionRuntime: CompanionRuntimeService;
+	private delegationMemory: DelegationMemoryService;
 	private state: ProactiveState = makeInitialState();
 	private pendingCandidate: ProactiveCandidate | null = null;
 	private llmBusy = false;
@@ -75,7 +78,6 @@ export class ProactiveCompanionService {
 	private voiceBusy = false;
 	private processingCandidate = false;
 	private lastSpokenAt = 0;
-	private delegatedTaskCooldownUntil = 0;
 	private lastSystemErrorSeen = new Map<string, number>();
 	private lastRuntimeSummarySeen = new Map<string, number>();
 	private latestRuntimeSummary: RuntimeSummaryContext | null = null;
@@ -84,18 +86,25 @@ export class ProactiveCompanionService {
 	private firstRuntimeSummaryPendingEntrance = true;
 	private companionRuntimeRunning = false;
 	private companionRuntimeTargetTitle: string | null = null;
+	private latestDelegatedRecord: DelegatedExecutionRecord | null = null;
+	private activeUnifiedRunId: string | null = null;
 
 	constructor(deps: {
 		bus: EventBus;
 		llm: LLMService;
 		pipeline: PipelineService;
 		companionRuntime: CompanionRuntimeService;
+		companionMode: CompanionModeService;
+		delegationMemory: DelegationMemoryService;
 		runtimeSummarySilenceSeconds?: number;
 	}) {
 		this.bus = deps.bus;
 		this.llm = deps.llm;
 		this.pipeline = deps.pipeline;
 		this.companionRuntime = deps.companionRuntime;
+		this.delegationMemory = deps.delegationMemory;
+		this.state.mode = deps.companionMode.getState().mode;
+		this.latestDelegatedRecord = deps.delegationMemory.getLatestRecord();
 		this.setRuntimeSummarySilenceSeconds(deps.runtimeSummarySilenceSeconds);
 
 		this.bus.on("companion-runtime:summary-complete", (payload) => {
@@ -110,8 +119,23 @@ export class ProactiveCompanionService {
 		this.bus.on("system:error", (payload) => {
 			this.handleSystemError(payload);
 		});
+		this.bus.on("memory:salient-event", (payload) => {
+			this.handleSalientEvent(payload);
+		});
 		this.bus.on("companion-runtime:state-change", (payload) => {
 			this.handleCompanionRuntimeStateChange(payload);
+		});
+		this.bus.on("companion:mode-change", (payload) => {
+			this.state.mode = payload.mode;
+			this.emitStateChange(this.state.lastDecision, null, payload.reason);
+		});
+		this.bus.on("delegation-memory:state-change", (payload) => {
+			this.latestDelegatedRecord = payload.state.latestRecord;
+			this.emitStateChange(this.state.lastDecision, null, null);
+		});
+		this.bus.on("unified:state-change", (payload) => {
+			this.activeUnifiedRunId = payload.state.activeRunId;
+			this.emitStateChange(this.state.lastDecision, null, null);
 		});
 		this.bus.on("llm:request-start", () => {
 			this.llmBusy = true;
@@ -140,14 +164,6 @@ export class ProactiveCompanionService {
 		this.bus.on("voice:state-change", (payload) => {
 			this.voiceBusy = payload.state.status === "recording" || payload.state.status === "transcribing";
 			this.syncBusyState();
-			void this.maybeDrainPending();
-		});
-		this.bus.on("unified:run-start", () => {
-			this.setMode("delegated", "unified:run-start");
-		});
-		this.bus.on("unified:run-complete", () => {
-			this.delegatedTaskCooldownUntil = Date.now() + DELEGATED_TASK_COOLDOWN_MS;
-			this.setMode("companion", "unified:run-complete");
 			void this.maybeDrainPending();
 		});
 	}
@@ -280,6 +296,24 @@ export class ProactiveCompanionService {
 		void this.processCandidate(candidate);
 	}
 
+	private handleSalientEvent(payload: EventMap["memory:salient-event"]) {
+		const { event } = payload;
+		const candidate: ProactiveCandidate = {
+			source: "salient-event",
+			priority: 3,
+			preview: truncate(`${event.type}: ${event.description}`),
+			dedupeKey: `salient-event:${event.type}:${event.timestamp}`,
+			skipSilenceWindow: true,
+			facts: [
+				`【触发源】记忆系统关键事件`,
+				`【类型】${event.type}`,
+				`【严重度】${event.severity}/5`,
+				`【描述】${event.description}`,
+			],
+		};
+		void this.processCandidate(candidate);
+	}
+
 	private async processCandidate(candidate: ProactiveCandidate): Promise<void> {
 		this.state.lastCandidateSource = candidate.source;
 		this.emitStateChange("candidate-created", candidate.source, null);
@@ -305,14 +339,12 @@ export class ProactiveCompanionService {
 				return repeatReason;
 			}
 		}
-		if (candidate.source === "runtime-summary" && this.state.mode === "delegated") {
-			return "delegated-mode";
-		}
-		if ((candidate.source === "game2048-result" || candidate.source === "sokoban-result") && this.state.mode === "delegated") {
-			return "delegated-follow-up-active";
-		}
-		if ((candidate.source === "game2048-result" || candidate.source === "sokoban-result") && Date.now() < this.delegatedTaskCooldownUntil) {
-			return "delegated-follow-up-cooldown";
+		if (
+			(candidate.source === "game2048-result" || candidate.source === "sokoban-result")
+			&& candidate.traceId
+			&& this.activeUnifiedRunId === candidate.traceId
+		) {
+			return "unified-follow-up-active";
 		}
 		const sinceLastSpeech = Date.now() - this.lastSpokenAt;
 		if (candidate.source === "runtime-summary" && !candidate.isEntrance && this.lastSpokenAt > 0 && sinceLastSpeech < this.runtimeSummarySilenceMs) {
@@ -402,7 +434,7 @@ export class ProactiveCompanionService {
 				const fallback = this.buildForcedRuntimeSummaryFallback();
 				this.state.lastEmittedAt = Date.now();
 				this.state.lastEmittedSource = candidate.source;
-				await this.pipeline.speakText(fallback);
+				this.pipeline.speakTextNonBlocking(fallback);
 				this.emitStateChange("emitted", candidate.source, "forced-runtime-summary-fallback");
 				log.info("proactive reply emitted via forced fallback", {
 					source: candidate.source,
@@ -417,7 +449,7 @@ export class ProactiveCompanionService {
 
 			this.state.lastEmittedAt = Date.now();
 			this.state.lastEmittedSource = candidate.source;
-			await this.pipeline.speakText(normalized);
+			this.pipeline.speakTextNonBlocking(normalized);
 			this.emitStateChange("emitted", candidate.source, null);
 			log.info("proactive reply emitted", {
 				source: candidate.source,
@@ -436,32 +468,41 @@ export class ProactiveCompanionService {
 
 	private buildPrompt(candidate: ProactiveCandidate): string {
 		const runtimeContext = this.companionRuntime.getPromptContext();
-		const parts = [
-			"你正在决定是否主动对玩家说一句话。",
-			`如果不值得主动说话，请精确输出 ${PROACTIVE_NO_REPLY_SENTINEL} 。`,
-			"如果值得主动说话，请只输出一句到两句简短、自然、可直接播报的中文陪伴回复。",
-			"先判断再回答：重点考虑这件事是否足够相关、是否有新信息、是否值得打断当前沉默，以及现在是否真的需要由你开口。",
-			"普通、平稳、无明显变化的观察，通常不需要主动说话。",
-			"如果只是重复已经说过的内容，或者当前没有新增价值，请输出不说话哨兵。",
-			"不要过度热情，不要频繁刷存在感，不要编造未观察到的事实。",
-			"如果你选择不主动说话，不要调用任何工具。",
-			"如果你选择主动说话，并且需要同步表情/情绪，请调用现有 companion emotion 工具。",
-			`【当前内部模式】${this.state.mode}`,
-			...candidate.facts,
-		];
+		const parts: string[] = [];
+
+		// --- 1. Identity & Role (first) ---
+		parts.push([
+			`【你的身份】`,
+			`你是「派蒙」，一个正在陪用户一起看屏幕内容的小伙伴。`,
+			"你的核心职责不是监控或播报，而是像一个朋友坐在旁边，一起感受正在发生的事情。",
+			"你可以感叹、担心、吐槽、期待、轻声确认——这些都是自然的陪看反应。",
+		].join("\n"));
+
+		// --- 2. Ideal output style ---
+		parts.push([
+			"【输出风格】",
+			"说话像朋友随口一说，而不是解说员在做实况转播。",
+			"一句话足够时就说一句；两句话已经是上限。",
+			"只在确实有值得指出的事情时才开口，沉默也是一种好回应。",
+			"如果要指出观察，只挑最关键的一个点，不要罗列。",
+			`如果不值得说话，请精确输出 ${PROACTIVE_NO_REPLY_SENTINEL}`,
+		].join("\n"));
+
+		// --- 3. Context facts ---
+		parts.push(`【当前内部模式】${this.state.mode}`);
+		parts.push(...candidate.facts);
 		if (candidate.isEntrance) {
 			parts.push(
-				"【入场提示】这是你进入当前观看场景后的第一次观察。",
-				"如果画面已经足够明确，优先用一句自然的入场白开启陪看，再顺手点出你现在看到了什么；不要过长，也不要像正式解说。",
+				"【入场提示】这是你进入当前场景后的第一次观察。用一句自然的开场白即可，不要像正式解说。",
 			);
 		}
 		if (candidate.forceSpeak) {
-			parts.push(
-				"【陪伴存在感要求】距离上次已播报回复已经超过当前静默窗口，本轮必须说一句简短的陪伴性评论或确认。",
-				`【当前静默窗口】${Math.round(this.runtimeSummarySilenceMs / 1000)} 秒`,
-				"本轮禁止输出不说话哨兵；即使只是轻量回应，也要明确开口。",
-			);
+			parts.push([
+				`【存在感要求】已静默超过 ${Math.round(this.runtimeSummarySilenceMs / 1000)} 秒，本轮需要开口。`,
+				"即使只是轻声一句确认也好，本轮不输出不说话哨兵。",
+			].join("\n"));
 		}
+
 		const relatedContext = this.getRelatedContextFacts(candidate.source);
 		if (relatedContext.length) {
 			parts.push(...relatedContext);
@@ -469,11 +510,35 @@ export class ProactiveCompanionService {
 		if (runtimeContext) {
 			parts.push(`【当前可用观察上下文】\n${runtimeContext}`);
 		}
+
+		// --- 4. Prohibitions (last) ---
+		parts.push([
+			"【禁止项】",
+			"不要编造未观察到的事实。",
+			"不要流水账式复述画面内容。",
+			"不要过度热情或频繁刷存在感。",
+			"不要在文本里暗示情绪；如需表达情绪请调用 companion emotion 工具。",
+			"如果选择不说话，不要调用任何工具。",
+		].join("\n"));
+
 		return parts.join("\n\n");
 	}
 
+
 	private getRelatedContextFacts(source: ProactiveTriggerSource): string[] {
 		const parts: string[] = [];
+		if (this.latestDelegatedRecord && Date.now() - this.latestDelegatedRecord.createdAt <= CROSS_CONTEXT_WINDOW_MS) {
+			parts.push([
+				"【最近托管执行记录】",
+				`游戏：${this.latestDelegatedRecord.sourceGame ?? "none"}`,
+				`模式：${this.latestDelegatedRecord.mode}`,
+				`结果：${this.latestDelegatedRecord.executionSummary}`,
+				`验证：${this.latestDelegatedRecord.verificationResult.success ? "成功" : "失败"}`,
+				this.latestDelegatedRecord.decisionSummary ? `本轮思路：${this.latestDelegatedRecord.decisionSummary}` : "",
+				this.latestDelegatedRecord.postActionObservationSummary ? `动作后观察：${this.latestDelegatedRecord.postActionObservationSummary}` : "",
+				this.latestDelegatedRecord.nextStepHint ? `下一步线索：${this.latestDelegatedRecord.nextStepHint}` : "",
+			].filter(Boolean).join("\n"));
+		}
 		if ((source === "runtime-summary" || source === "system-error") && this.latestTaskResult && Date.now() - this.latestTaskResult.createdAt <= CROSS_CONTEXT_WINDOW_MS) {
 			parts.push([
 				"【最近任务结果】",
@@ -497,28 +562,14 @@ export class ProactiveCompanionService {
 		return parts;
 	}
 
-	private setMode(mode: ProactiveState["mode"], reason: string) {
-		if (this.state.mode === mode) {
-			return;
-		}
-		const previous = this.state.mode;
-		this.state.mode = mode;
-		this.bus.emit("companion:mode-change", {
-			mode,
-			previous,
-			reason,
-		});
-		this.emitStateChange(this.state.lastDecision, null, reason);
-	}
-
 	private resetRuntimeSession(reason: string) {
 		this.pendingCandidate = null;
-		this.delegatedTaskCooldownUntil = 0;
 		this.lastSpokenAt = 0;
 		this.lastSystemErrorSeen.clear();
 		this.lastRuntimeSummarySeen.clear();
 		this.latestRuntimeSummary = null;
 		this.latestTaskResult = null;
+		this.latestDelegatedRecord = this.delegationMemory.getLatestRecord();
 		this.firstRuntimeSummaryPendingEntrance = true;
 		this.state.pendingSource = null;
 		this.state.pendingPriority = null;

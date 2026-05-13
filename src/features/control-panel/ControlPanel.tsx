@@ -1,144 +1,167 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useState } from "react";
+import { Divider } from "@mui/material";
 import {
-	Box,
-	Button,
-	Chip,
-	Divider,
-	MenuItem,
-	Select,
-	Stack,
-	type SelectChangeEvent,
-	Typography,
-} from "@mui/material";
-import StopIcon from "@mui/icons-material/Stop";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import { useRuntime, useCharacter } from "@/hooks";
+	useRuntime,
+	useCompanionRuntime,
+	useCompanionMode,
+	useDebugCaptureState,
+	useFunctional,
+	useUnifiedRuntime,
+} from "@/hooks";
 import { useI18n } from "@/contexts/I18nProvider";
 import { getServices } from "@/services";
-import { updateConfig, getConfig } from "@/services/config";
-import { MOCK_CHARACTER_PROFILE } from "@/utils/mock";
-import type { CharacterProfile } from "@/types";
 import { createLogger } from "@/services/logger";
-import { PanelCard, PanelRoot } from "./panel-shell";
+import { chooseWindowByKeywords } from "@/services/games/game-utils";
+import { listWindows } from "@/services/system";
+import type { HostWindowInfo } from "@/types";
+import { PanelRoot } from "./panel-shell";
+import {
+	DebugCaptureCard,
+	InteractionModeCard,
+	RuntimeStateCard,
+} from "./control-panel-cards";
 
 const log = createLogger("control-panel");
-
-function normalizeSelectedCharacterId(currentId: string | null, available: readonly CharacterProfile[]): string {
-	if (!currentId || currentId === MOCK_CHARACTER_PROFILE.id) {
-		return "__manual__";
-	}
-
-	return available.some((profile) => profile.id === currentId) ? currentId : "__manual__";
-}
 
 export function ControlPanel() {
 	const { t } = useI18n();
 	const { mode, stop, resume } = useRuntime();
-	const { emotion, isSpeaking } = useCharacter();
-	const [profiles, setProfiles] = useState<CharacterProfile[]>([]);
-	const [selectedId, setSelectedId] = useState<string>("__manual__");
+	const companionMode = useCompanionMode();
+	const { state: companionRuntimeState, start: startCompanionRuntime, stop: stopCompanionRuntime } = useCompanionRuntime();
+	const { state: unifiedState, stopDelegationLoop, submitDelegationTaskInstruction, runModePreflight } = useUnifiedRuntime();
+	const { state: functionalState, setTarget, runFocus } = useFunctional();
+	const debugCapture = useDebugCaptureState();
+	const [delegationTaskText, setDelegationTaskText] = useState(() =>
+		t("请使用 Google 查询今日 GitHub 的热门项目", "Use Google to find today's trending GitHub projects."),
+	);
+	const [windowList, setWindowList] = useState<HostWindowInfo[]>([]);
+	const [windowsLoading, setWindowsLoading] = useState(false);
+	const companionRunning = companionRuntimeState.running;
+	const delegationRunning = unifiedState.loopActive || unifiedState.activeRunId !== null;
 
-	useEffect(() => {
-		const { character } = getServices();
-		const available = character.getAvailableProfiles();
-		setProfiles([...available]);
+	const startCompanionInteraction = useCallback(async () => {
+		const target = await runModePreflight("companion");
+		await startCompanionRuntime(target);
+	}, [runModePreflight, startCompanionRuntime]);
 
-		const current = character.getProfile();
-		setSelectedId(normalizeSelectedCharacterId(current?.id ?? null, available));
-	}, []);
-
-	const handleCharacterSwitch = useCallback(async (event: SelectChangeEvent<string>) => {
-		const id = event.target.value;
-		const { character, llm } = getServices();
-
-		if (id === "__manual__") {
-			character.loadFromProfile(MOCK_CHARACTER_PROFILE);
-			setSelectedId("__manual__");
-			llm.clearHistory();
-			await updateConfig({ character: { ...getConfig().character, activeProfileId: "" } });
-			log.info("switched to manual/default character");
+	const stopInteractionForMode = useCallback((modeToStop: "companion" | "delegated") => {
+		if (modeToStop === "delegated") {
+			stopDelegationLoop("control-panel-stop");
 			return;
 		}
+		stopCompanionRuntime();
+	}, [stopCompanionRuntime, stopDelegationLoop]);
 
-		const profile = character.findProfileById(id);
-		if (!profile) return;
+	const handleExecuteDelegationTask = useCallback(async () => {
+		const text = delegationTaskText.trim();
+		if (!text) {
+			return;
+		}
+		await submitDelegationTaskInstruction(text);
+	}, [delegationTaskText, submitDelegationTaskInstruction]);
 
-		character.loadFromProfile(profile);
-		setSelectedId(profile.id);
-		llm.clearHistory();
-		await updateConfig({ character: { ...getConfig().character, activeProfileId: profile.id } });
-		log.info(`switched to character: ${profile.name} (${profile.id})`);
+	const handleModeChange = useCallback(async (nextMode: "companion" | "delegated") => {
+		const currentMode = companionMode.mode;
+		if (currentMode === nextMode) {
+			return;
+		}
+		const shouldStopCurrent = currentMode === "delegated" ? delegationRunning : companionRunning;
+		if (shouldStopCurrent) {
+			stopInteractionForMode(currentMode);
+		}
+		getServices().companionMode.setMode(nextMode, "control-panel-toggle", "manual");
+	}, [companionMode.mode, companionRunning, delegationRunning, stopInteractionForMode]);
+
+	const handleStartCompanion = useCallback(async () => {
+		try {
+			await startCompanionInteraction();
+		} catch (err) {
+			log.error("failed to start companion interaction", err);
+		}
+	}, [startCompanionInteraction]);
+
+	const handleExecuteDelegationTaskSafe = useCallback(async () => {
+		try {
+			await handleExecuteDelegationTask();
+		} catch (err) {
+			log.error("failed to execute delegation task", err);
+		}
+	}, [handleExecuteDelegationTask]);
+
+	const handleFocusFirefox = useCallback(async () => {
+		setWindowsLoading(true);
+		try {
+			const windows = await listWindows();
+			setWindowList(windows);
+			const candidate = chooseWindowByKeywords(windows, {
+				keywords: ["firefox", "mozilla firefox"],
+				processKeywords: ["firefox"],
+				visibleBonus: 2,
+				normalBonus: 2,
+			});
+			if (!candidate) {
+				throw new Error("Firefox window not detected. Please ensure the browser is open and visible.");
+			}
+			const target = { handle: candidate.handle, title: candidate.title };
+			setTarget(target);
+			await runFocus(target, { applyDelegatedViewport: true });
+		} catch (err) {
+			log.error("failed to focus firefox from control panel", err);
+		} finally {
+			setWindowsLoading(false);
+		}
+	}, [runFocus, setTarget]);
+
+	const handleEnumerateWindows = useCallback(async () => {
+		setWindowsLoading(true);
+		try {
+			const windows = await listWindows();
+			setWindowList(windows);
+		} finally {
+			setWindowsLoading(false);
+		}
 	}, []);
 
-	const currentProfileName = selectedId === "__manual__"
-		? t("手动人设", "Manual Persona")
-		: profiles.find((profile) => profile.id === selectedId)?.name ?? t("手动人设", "Manual Persona");
+	const handleFocusWindowFromList = useCallback(async (windowInfo: HostWindowInfo) => {
+		const target = { handle: windowInfo.handle, title: windowInfo.title };
+		setTarget(target);
+		await runFocus(target, { applyDelegatedViewport: true });
+	}, [runFocus, setTarget]);
+
+	const handleToggleDebugCapture = useCallback(async () => {
+		const { debugCapture: debugCaptureService } = getServices();
+		await debugCaptureService.setEnabled(!debugCapture.enabled);
+	}, [debugCapture.enabled]);
+
 	return (
 		<PanelRoot title={t("陪伴面板", "Companion Panel")}>
-			<PanelCard>
-				<Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary" fontWeight={600}>
-						{t("运行状态", "Runtime State")}
-					</Typography>
-					{mode === "stopped" && (
-						<Chip label="STOPPED" size="small" color="error" sx={{ height: 18, fontSize: 10 }} />
-					)}
-				</Stack>
-				<Typography variant="body2" sx={{ mb: 0.75 }}>
-					{t("模式", "Mode")}：<strong>{mode}</strong>
-				</Typography>
-				<Stack direction="row" spacing={0.5}>
-					<Button
-						variant="outlined"
-						size="small"
-						onClick={stop}
-						disabled={mode === "stopped"}
-						startIcon={<StopIcon />}
-						color="error"
-					>
-						{t("急停", "Stop")}
-					</Button>
-					<Button
-						variant="outlined"
-						size="small"
-						onClick={resume}
-						disabled={mode === "auto"}
-						startIcon={<PlayArrowIcon />}
-					>
-						{t("恢复", "Resume")}
-					</Button>
-				</Stack>
-			</PanelCard>
+			<RuntimeStateCard mode={mode} onStop={stop} onResume={resume} />
 
 			<Divider />
 
-			<PanelCard>
-				<Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
-					{t("当前角色", "Current Character")}：{currentProfileName}
-				</Typography>
-				<Select
-					size="small"
-					fullWidth
-					value={selectedId}
-					onChange={handleCharacterSwitch}
-					displayEmpty
-					sx={{ fontSize: 13, mb: 1 }}
-				>
-					<MenuItem value="__manual__">
-						<em>{t("手动人设", "Manual Persona")}</em>
-					</MenuItem>
-					{profiles.map((profile) => (
-						<MenuItem key={profile.id} value={profile.id}>
-							{profile.name}
-						</MenuItem>
-					))}
-				</Select>
+			<DebugCaptureCard state={debugCapture} onToggle={handleToggleDebugCapture} />
 
-				<Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-					<Typography variant="body2">{t("当前表情", "Current Emotion")}：{emotion}</Typography>
-					<Typography variant="body2">{t("语音状态", "Speech State")}：{isSpeaking ? t("说话中", "Speaking") : t("空闲", "Idle")}</Typography>
-				</Box>
-			</PanelCard>
+			<Divider />
+
+			<InteractionModeCard
+				mode={companionMode.mode}
+				onModeChange={(nextMode) => { void handleModeChange(nextMode); }}
+				companionRunning={companionRunning}
+				delegationRunning={delegationRunning}
+				delegationTaskText={delegationTaskText}
+				delegationTaskPlaceholder={t("请使用 Google 查询今日 GitHub 的热门项目", "Use Google to find today's trending GitHub projects.")}
+				windowList={windowList}
+				windowsLoading={windowsLoading}
+				selectedTargetHandle={functionalState.selectedTarget?.handle ?? null}
+				onDelegationTaskTextChange={setDelegationTaskText}
+				onStartCompanion={handleStartCompanion}
+				onStopCompanion={() => stopInteractionForMode("companion")}
+				onExecuteDelegationTask={handleExecuteDelegationTaskSafe}
+				onStopDelegationTask={() => stopInteractionForMode("delegated")}
+				onFocusFirefox={handleFocusFirefox}
+				onEnumerateWindows={handleEnumerateWindows}
+				onFocusWindowFromList={handleFocusWindowFromList}
+			/>
 		</PanelRoot>
 	);
 }

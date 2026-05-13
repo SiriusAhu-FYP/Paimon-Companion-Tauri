@@ -121,6 +121,18 @@ export interface CompanionRuntimeConfig {
 	summaryWindowMs: number;
 	historyRetentionMs: number;
 	proactiveRuntimeSummarySilenceSeconds: number;
+	promptRecentFrameCount: number;
+	promptRecentSummaryCount: number;
+	promptLineCharLimit: number;
+	promptSummaryHistoryCount: number;
+	promptAuditLogEnabled: boolean;
+	browserLoadGuardEnabled: boolean;
+	browserLoadIntervalMs: number;
+	browserLoadStableCount: number;
+	browserLoadTimeoutMs: number;
+	browserLoadChangeThreshold: number;
+	browserLoadCropScale: number;
+	digestWindowSize: number;
 }
 
 // ── Knowledge（知识库配置，独立于 LLM / TTS） ──
@@ -140,6 +152,7 @@ export interface AppConfig {
 	ttsProfiles: TTSProfile[];
 	asrProfiles: ASRProfile[];
 	activeLlmProfileId: string;
+	activeVisionLlmProfileId: string;
 	activeTtsProfileId: string;
 	activeAsrProfileId: string;
 	knowledge: import("@/types/knowledge").KnowledgeConfig;
@@ -201,17 +214,30 @@ export const DEFAULT_CONFIG: AppConfig = {
 		},
 	},
 	companionRuntime: {
-		localVisionBaseUrl: "http://localhost:8000/v1",
+		localVisionBaseUrl: "http://localhost:32183/v1",
 		localVisionModel: "Qwen/Qwen3-VL-2B-Instruct",
 		captureIntervalMs: 1000,
-		summaryWindowMs: 10000,
+		summaryWindowMs: 8000,
 		historyRetentionMs: 60000,
 		proactiveRuntimeSummarySilenceSeconds: 30,
+		promptRecentFrameCount: 3,
+		promptRecentSummaryCount: 3,
+		promptLineCharLimit: 120,
+		promptSummaryHistoryCount: 6,
+		promptAuditLogEnabled: false,
+		browserLoadGuardEnabled: true,
+		browserLoadIntervalMs: 1000,
+		browserLoadStableCount: 3,
+		browserLoadTimeoutMs: 30000,
+		browserLoadChangeThreshold: 0.0025,
+		browserLoadCropScale: 0.9,
+		digestWindowSize: 6,
 	},
 	llmProfiles: [],
 	ttsProfiles: [],
 	asrProfiles: [],
 	activeLlmProfileId: "",
+	activeVisionLlmProfileId: "",
 	activeTtsProfileId: "",
 	activeAsrProfileId: "",
 	knowledge: {

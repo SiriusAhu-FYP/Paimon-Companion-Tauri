@@ -1,4 +1,4 @@
-import sharedGamePromptTemplate from "../../../prompts/example.md?raw";
+import sharedGamePromptTemplate from "../../../prompts/shared-game-prompt.md?raw";
 
 export interface SharedGamePromptInput {
 	gameName: string;

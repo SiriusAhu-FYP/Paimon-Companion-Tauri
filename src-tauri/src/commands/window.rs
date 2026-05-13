@@ -22,6 +22,7 @@ pub struct CaptureWindowRequest {
 #[serde(rename_all = "camelCase")]
 pub struct FocusWindowRequest {
 	pub handle: String,
+	pub apply_delegated_viewport: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,6 +40,13 @@ pub struct SendMouseRequest {
 	pub y: Option<i32>,
 	pub button: Option<String>,
 	pub action: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendTextRequest {
+	pub handle: String,
+	pub text: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -83,7 +91,7 @@ pub async fn capture_window(request: CaptureWindowRequest) -> Result<WindowCaptu
 pub async fn focus_window(request: FocusWindowRequest) -> Result<(), String> {
 	#[cfg(target_os = "windows")]
 	{
-		focus_window_windows(&request.handle)
+		focus_window_windows(&request.handle, request.apply_delegated_viewport.unwrap_or(false))
 	}
 
 	#[cfg(not(target_os = "windows"))]
@@ -118,6 +126,20 @@ pub async fn send_mouse(request: SendMouseRequest) -> Result<(), String> {
 	{
 		let _ = request;
 		Err("send_mouse is only implemented on Windows".to_string())
+	}
+}
+
+#[tauri::command]
+pub async fn send_text(request: SendTextRequest) -> Result<(), String> {
+	#[cfg(target_os = "windows")]
+	{
+		send_text_windows(&request.handle, &request.text)
+	}
+
+	#[cfg(not(target_os = "windows"))]
+	{
+		let _ = request;
+		Err("send_text is only implemented on Windows".to_string())
 	}
 }
 
@@ -224,7 +246,11 @@ fn capture_window_windows(handle: &str) -> Result<WindowCapture, String> {
 		return Err("target window has zero-sized bounds".to_string());
 	}
 
-	let capture = capture_window_pixels(hwnd, width, height)?;
+	let mut capture = capture_window_pixels(hwnd, width, height)?;
+	if let Some((cursor_x, cursor_y)) = resolve_cursor_position_in_window(rect, width, height) {
+		overlay_cursor_marker(&mut capture.pixels, width, height, cursor_x, cursor_y);
+		capture.method = format!("{}+cursor", capture.method);
+	}
 	let png_bytes = encode_png_rgba(&capture.pixels, width, height)?;
 
 	Ok(WindowCapture {
@@ -235,6 +261,116 @@ fn capture_window_windows(handle: &str) -> Result<WindowCapture, String> {
 		capture_method: capture.method,
 		quality_score: capture.quality_score,
 	})
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_cursor_position_in_window(
+	rect: windows::Win32::Foundation::RECT,
+	width: u32,
+	height: u32,
+) -> Option<(i32, i32)> {
+	use windows::Win32::Foundation::POINT;
+	use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+
+	let mut cursor = POINT { x: 0, y: 0 };
+	if unsafe { GetCursorPos(&mut cursor) }.is_err() {
+		return None;
+	}
+	let relative_x = cursor.x - rect.left;
+	let relative_y = cursor.y - rect.top;
+	if relative_x < 0 || relative_y < 0 {
+		return None;
+	}
+	if relative_x >= width as i32 || relative_y >= height as i32 {
+		return None;
+	}
+	Some((relative_x, relative_y))
+}
+
+#[cfg(target_os = "windows")]
+fn overlay_cursor_marker(
+	rgba: &mut [u8],
+	width: u32,
+	height: u32,
+	cursor_x: i32,
+	cursor_y: i32,
+) {
+	const CROSS_HALF: i32 = 13;
+	const RING_RADIUS: i32 = 11;
+	const CENTER_HALF: i32 = 3;
+
+	for offset in -CROSS_HALF..=CROSS_HALF {
+		for thickness in -1..=1 {
+			blend_rgba_pixel(
+				rgba,
+				width,
+				height,
+				cursor_x + offset,
+				cursor_y + thickness,
+				[0, 0, 0],
+				0.72,
+			);
+			blend_rgba_pixel(
+				rgba,
+				width,
+				height,
+				cursor_x + thickness,
+				cursor_y + offset,
+				[0, 0, 0],
+				0.72,
+			);
+		}
+		blend_rgba_pixel(rgba, width, height, cursor_x + offset, cursor_y, [0, 255, 120], 0.8);
+		blend_rgba_pixel(rgba, width, height, cursor_x, cursor_y + offset, [0, 255, 120], 0.8);
+	}
+
+	let ring_outer = RING_RADIUS * RING_RADIUS;
+	let ring_inner = (RING_RADIUS - 2) * (RING_RADIUS - 2);
+	let ring_shadow_outer = (RING_RADIUS + 1) * (RING_RADIUS + 1);
+	let ring_shadow_inner = (RING_RADIUS - 3) * (RING_RADIUS - 3);
+	for dy in -RING_RADIUS..=RING_RADIUS {
+		for dx in -RING_RADIUS..=RING_RADIUS {
+			let dist = dx * dx + dy * dy;
+			if dist <= ring_shadow_outer && dist >= ring_shadow_inner {
+				blend_rgba_pixel(rgba, width, height, cursor_x + dx, cursor_y + dy, [0, 0, 0], 0.68);
+			}
+			if dist <= ring_outer && dist >= ring_inner {
+				blend_rgba_pixel(rgba, width, height, cursor_x + dx, cursor_y + dy, [255, 255, 255], 0.86);
+			}
+		}
+	}
+
+	for dy in -CENTER_HALF..=CENTER_HALF {
+		for dx in -CENTER_HALF..=CENTER_HALF {
+			blend_rgba_pixel(rgba, width, height, cursor_x + dx, cursor_y + dy, [255, 64, 64], 0.9);
+		}
+	}
+}
+
+#[cfg(target_os = "windows")]
+fn blend_rgba_pixel(
+	rgba: &mut [u8],
+	width: u32,
+	height: u32,
+	x: i32,
+	y: i32,
+	color: [u8; 3],
+	alpha: f32,
+) {
+	if x < 0 || y < 0 || x >= width as i32 || y >= height as i32 {
+		return;
+	}
+	let index = ((y as u32 * width + x as u32) * 4) as usize;
+	if index + 3 >= rgba.len() {
+		return;
+	}
+	let blend = alpha.clamp(0.0, 1.0);
+	for channel in 0..3 {
+		let base = rgba[index + channel] as f32;
+		let target = color[channel] as f32;
+		rgba[index + channel] = ((1.0 - blend) * base + blend * target).round().clamp(0.0, 255.0) as u8;
+	}
+	rgba[index + 3] = 255;
 }
 
 #[cfg(target_os = "windows")]
@@ -420,7 +556,7 @@ impl Drop for CaptureContext {
 }
 
 #[cfg(target_os = "windows")]
-fn focus_window_windows(handle: &str) -> Result<(), String> {
+fn focus_window_windows(handle: &str, apply_delegated_viewport: bool) -> Result<(), String> {
 	use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
 	use windows::Win32::UI::WindowsAndMessaging::{
 		BringWindowToTop, GetForegroundWindow, IsWindow, SetForegroundWindow, SetWindowPos,
@@ -440,12 +576,18 @@ fn focus_window_windows(handle: &str) -> Result<(), String> {
 	}
 
 	if unsafe { SetForegroundWindow(hwnd) }.as_bool() {
+		if apply_delegated_viewport {
+			apply_delegated_viewport_windows(hwnd)?;
+		}
 		std::thread::sleep(std::time::Duration::from_millis(50));
 		return Ok(());
 	}
 
 	let foreground = unsafe { GetForegroundWindow() };
 	if foreground == hwnd {
+		if apply_delegated_viewport {
+			apply_delegated_viewport_windows(hwnd)?;
+		}
 		std::thread::sleep(std::time::Duration::from_millis(50));
 		return Ok(());
 	}
@@ -467,27 +609,153 @@ fn focus_window_windows(handle: &str) -> Result<(), String> {
 		}
 	}
 
+	if apply_delegated_viewport {
+		apply_delegated_viewport_windows(hwnd)?;
+	}
+
 	std::thread::sleep(std::time::Duration::from_millis(50));
 	Ok(())
 }
 
 #[cfg(target_os = "windows")]
-fn send_key_windows(handle: &str, key: &str) -> Result<(), String> {
-	use windows::Win32::UI::Input::KeyboardAndMouse::{
-		KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, keybd_event,
+fn apply_delegated_viewport_windows(hwnd: windows::Win32::Foundation::HWND) -> Result<(), String> {
+	use windows::Win32::Graphics::Gdi::{
+		GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+	};
+	use windows::Win32::UI::WindowsAndMessaging::{
+		SetWindowPos, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOZORDER,
 	};
 
-	focus_window_windows(handle)?;
+	let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+	if monitor.0.is_null() {
+		return Err("MonitorFromWindow failed".to_string());
+	}
+
+	let mut monitor_info = MONITORINFO {
+		cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+		..Default::default()
+	};
+	let monitor_info_ok = unsafe { GetMonitorInfoW(monitor, &mut monitor_info as *mut MONITORINFO) }.as_bool();
+	if !monitor_info_ok {
+		return Err("GetMonitorInfoW failed".to_string());
+	}
+
+	let monitor_width = monitor_info.rcMonitor.right - monitor_info.rcMonitor.left;
+	let monitor_height = monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top;
+	if monitor_width <= 0 || monitor_height <= 0 {
+		return Err("monitor bounds invalid".to_string());
+	}
+
+	let (viewport_width, viewport_height) = choose_delegated_viewport_size(monitor_width, monitor_height);
+	let offset_x = (monitor_width - viewport_width) / 2;
+	let offset_y = (monitor_height - viewport_height) / 2;
+	let target_x = monitor_info.rcMonitor.left + offset_x.max(0);
+	let target_y = monitor_info.rcMonitor.top + offset_y.max(0);
+
+	unsafe {
+		SetWindowPos(
+			hwnd,
+			None,
+			target_x,
+			target_y,
+			viewport_width,
+			viewport_height,
+			SWP_NOACTIVATE | SWP_NOZORDER,
+		)
+	}
+	.map_err(|err| format!("SetWindowPos resize failed: {err}"))?;
+
+	std::thread::sleep(std::time::Duration::from_millis(40));
+	let (applied_width, applied_height) = get_window_size_windows(hwnd)?;
+	let width_delta = (applied_width - viewport_width).abs();
+	let height_delta = (applied_height - viewport_height).abs();
+	if width_delta > 48 || height_delta > 48 {
+		unsafe {
+			SetWindowPos(
+				hwnd,
+				None,
+				target_x,
+				target_y,
+				viewport_width,
+				viewport_height,
+				SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED,
+			)
+		}
+		.map_err(|err| format!("SetWindowPos viewport retry failed: {err}"))?;
+		std::thread::sleep(std::time::Duration::from_millis(40));
+		let (retry_width, retry_height) = get_window_size_windows(hwnd)?;
+		let retry_width_delta = (retry_width - viewport_width).abs();
+		let retry_height_delta = (retry_height - viewport_height).abs();
+		if retry_width_delta > 48 || retry_height_delta > 48 {
+			return Err(format!(
+				"delegated viewport mismatch after retry: expected={}x{}, actual={}x{}",
+				viewport_width, viewport_height, retry_width, retry_height
+			));
+		}
+	}
+	Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn get_window_size_windows(hwnd: windows::Win32::Foundation::HWND) -> Result<(i32, i32), String> {
+	use windows::Win32::Foundation::RECT;
+	use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+
+	let mut rect = RECT::default();
+	unsafe { GetWindowRect(hwnd, &mut rect) }.map_err(|err| format!("GetWindowRect failed: {err}"))?;
+	let width = rect.right - rect.left;
+	let height = rect.bottom - rect.top;
+	if width <= 0 || height <= 0 {
+		return Err("window bounds invalid after viewport apply".to_string());
+	}
+	Ok((width, height))
+}
+
+#[cfg(target_os = "windows")]
+fn choose_delegated_viewport_size(monitor_width: i32, monitor_height: i32) -> (i32, i32) {
+	const PRESET_VIEWPORTS: &[(i32, i32)] = &[(1600, 900), (1366, 768), (1280, 720), (1024, 576)];
+	let max_width = (monitor_width - 120).max(640);
+	let max_height = (monitor_height - 120).max(360);
+	for (width, height) in PRESET_VIEWPORTS {
+		if *width <= max_width && *height <= max_height {
+			return (*width, *height);
+		}
+	}
+
+	let mut width = max_width.min((max_height * 16) / 9);
+	if width < 640 {
+		width = max_width.max(640);
+	}
+	let mut height = (width * 9) / 16;
+	if height > max_height {
+		height = max_height;
+		width = (height * 16) / 9;
+	}
+	(width.max(640).min(max_width), height.max(360).min(max_height))
+}
+
+#[cfg(target_os = "windows")]
+fn send_key_windows(handle: &str, key: &str) -> Result<(), String> {
+	use windows::Win32::UI::Input::KeyboardAndMouse::{
+		KEYBD_EVENT_FLAGS, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, keybd_event,
+	};
+
+	focus_window_windows(handle, false)?;
 
 	let (virtual_key, modifiers) = resolve_virtual_key(key)?;
+	let extended_flag = if is_extended_virtual_key(virtual_key) {
+		KEYEVENTF_EXTENDEDKEY
+	} else {
+		KEYBD_EVENT_FLAGS(0)
+	};
 
 	unsafe {
 		for modifier in &modifiers {
 			keybd_event(modifier.0 as u8, 0, KEYBD_EVENT_FLAGS(0), 0);
 		}
 
-		keybd_event(virtual_key.0 as u8, 0, KEYBD_EVENT_FLAGS(0), 0);
-		keybd_event(virtual_key.0 as u8, 0, KEYEVENTF_KEYUP, 0);
+		keybd_event(virtual_key.0 as u8, 0, extended_flag, 0);
+		keybd_event(virtual_key.0 as u8, 0, extended_flag | KEYEVENTF_KEYUP, 0);
 
 		for modifier in modifiers.iter().rev() {
 			keybd_event(modifier.0 as u8, 0, KEYEVENTF_KEYUP, 0);
@@ -495,6 +763,34 @@ fn send_key_windows(handle: &str, key: &str) -> Result<(), String> {
 	}
 
 	Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn is_extended_virtual_key(
+	vk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY,
+) -> bool {
+	use windows::Win32::UI::Input::KeyboardAndMouse::{
+		VK_DELETE, VK_DOWN, VK_END, VK_HOME, VK_INSERT, VK_LEFT, VK_NEXT, VK_PRIOR, VK_RIGHT, VK_RMENU, VK_UP,
+	};
+	matches!(
+		vk,
+		VK_UP | VK_DOWN | VK_LEFT | VK_RIGHT | VK_HOME | VK_END | VK_PRIOR | VK_NEXT | VK_INSERT | VK_DELETE | VK_RMENU
+	)
+}
+
+#[cfg(target_os = "windows")]
+fn send_text_windows(handle: &str, text: &str) -> Result<(), String> {
+	if text.trim().is_empty() {
+		return Err("text cannot be empty".to_string());
+	}
+
+	let mut clipboard = arboard::Clipboard::new()
+		.map_err(|err| format!("clipboard open failed: {err}"))?;
+	clipboard
+		.set_text(text.to_string())
+		.map_err(|err| format!("clipboard write failed: {err}"))?;
+
+	send_key_windows(handle, "Ctrl+V")
 }
 
 #[cfg(target_os = "windows")]
@@ -507,19 +803,90 @@ fn resolve_virtual_key(
 	),
 	String,
 > {
-	use windows::Win32::UI::Input::KeyboardAndMouse::{
-		VK_BACK, VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE, VK_F1, VK_F10, VK_F11,
-		VK_F12, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6, VK_F7, VK_F8, VK_F9, VK_HOME, VK_LEFT,
-		VK_MENU, VK_NEXT, VK_PRIOR, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
-		VIRTUAL_KEY, VkKeyScanW,
-	};
-
-	let normalized = key.trim().to_lowercase();
+	let normalized = key.trim();
 	if normalized.is_empty() {
 		return Err("key cannot be empty".to_string());
 	}
 
-	let named = match normalized.as_str() {
+	if normalized.contains('+') {
+		let tokens = normalized
+			.split('+')
+			.map(str::trim)
+			.filter(|token| !token.is_empty())
+			.collect::<Vec<_>>();
+		if tokens.len() < 2 {
+			return Err(format!("unsupported key token: {key}"));
+		}
+		let mut modifiers: Vec<windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY> = Vec::new();
+		for token in tokens.iter().take(tokens.len() - 1) {
+			let modifier = parse_modifier_virtual_key_token(token)
+				.ok_or_else(|| format!("unsupported modifier token: {token}"))?;
+			if !modifiers.iter().any(|existing| existing.0 == modifier.0) {
+				modifiers.push(modifier);
+			}
+		}
+		let action_token = tokens[tokens.len() - 1];
+		let (virtual_key, inferred_modifiers) = parse_base_virtual_key_token(action_token)?;
+		for modifier in inferred_modifiers {
+			if !modifiers.iter().any(|existing| existing.0 == modifier.0) {
+				modifiers.push(modifier);
+			}
+		}
+		return Ok((virtual_key, modifiers));
+	}
+
+	parse_base_virtual_key_token(normalized)
+}
+
+#[cfg(target_os = "windows")]
+fn parse_base_virtual_key_token(
+	token: &str,
+) -> Result<
+	(
+		windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY,
+		Vec<windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY>,
+	),
+	String,
+> {
+	use windows::Win32::UI::Input::KeyboardAndMouse::{VK_CONTROL, VK_MENU, VK_SHIFT, VIRTUAL_KEY, VkKeyScanW};
+	let normalized = token.trim().to_lowercase();
+	if normalized.is_empty() {
+		return Err("key cannot be empty".to_string());
+	}
+	if let Some(named) = parse_named_virtual_key_token(&normalized) {
+		return Ok((named, Vec::new()));
+	}
+	let mut chars = normalized.chars();
+	let ch = chars.next().ok_or_else(|| "key cannot be empty".to_string())?;
+	if chars.next().is_some() {
+		return Err(format!("unsupported key token: {token}"));
+	}
+	let code = unsafe { VkKeyScanW(ch as u16) };
+	if code == -1 {
+		return Err(format!("failed to resolve virtual key: {token}"));
+	}
+	let vk = VIRTUAL_KEY((code & 0xff) as u16);
+	let shift_state = ((code >> 8) & 0xff) as u8;
+	let mut modifiers = Vec::new();
+	if shift_state & 1 != 0 {
+		modifiers.push(VK_SHIFT);
+	}
+	if shift_state & 2 != 0 {
+		modifiers.push(VK_CONTROL);
+	}
+	if shift_state & 4 != 0 {
+		modifiers.push(VK_MENU);
+	}
+	Ok((vk, modifiers))
+}
+
+#[cfg(target_os = "windows")]
+fn parse_named_virtual_key_token(token: &str) -> Option<windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY> {
+	use windows::Win32::UI::Input::KeyboardAndMouse::{
+		VK_BACK, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE, VK_F1, VK_F10, VK_F11, VK_F12, VK_F2, VK_F3, VK_F4, VK_F5,
+		VK_F6, VK_F7, VK_F8, VK_F9, VK_HOME, VK_LEFT, VK_NEXT, VK_PRIOR, VK_RETURN, VK_RIGHT, VK_SPACE, VK_TAB, VK_UP,
+	};
+	match token {
 		"up" | "arrowup" => Some(VK_UP),
 		"down" | "arrowdown" => Some(VK_DOWN),
 		"left" | "arrowleft" => Some(VK_LEFT),
@@ -547,38 +914,18 @@ fn resolve_virtual_key(
 		"f11" => Some(VK_F11),
 		"f12" => Some(VK_F12),
 		_ => None,
-	};
-
-	if let Some(vk) = named {
-		return Ok((vk, Vec::new()));
 	}
+}
 
-	let mut chars = key.chars();
-	let ch = chars.next().ok_or_else(|| "key cannot be empty".to_string())?;
-	if chars.next().is_some() {
-		return Err(format!("unsupported key token: {key}"));
+#[cfg(target_os = "windows")]
+fn parse_modifier_virtual_key_token(token: &str) -> Option<windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY> {
+	use windows::Win32::UI::Input::KeyboardAndMouse::{VK_CONTROL, VK_MENU, VK_SHIFT};
+	match token.trim().to_lowercase().as_str() {
+		"ctrl" | "control" => Some(VK_CONTROL),
+		"shift" => Some(VK_SHIFT),
+		"alt" | "menu" => Some(VK_MENU),
+		_ => None,
 	}
-
-	let code = unsafe { VkKeyScanW(ch as u16) };
-	if code == -1 {
-		return Err(format!("failed to resolve virtual key: {key}"));
-	}
-
-	let vk = VIRTUAL_KEY((code & 0xff) as u16);
-	let shift_state = ((code >> 8) & 0xff) as u8;
-	let mut modifiers = Vec::new();
-
-	if shift_state & 1 != 0 {
-		modifiers.push(VK_SHIFT);
-	}
-	if shift_state & 2 != 0 {
-		modifiers.push(VK_CONTROL);
-	}
-	if shift_state & 4 != 0 {
-		modifiers.push(VK_MENU);
-	}
-
-	Ok((vk, modifiers))
 }
 
 #[cfg(target_os = "windows")]
@@ -590,7 +937,7 @@ fn send_mouse_windows(request: SendMouseRequest) -> Result<(), String> {
 	};
 	use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsWindow, SetCursorPos};
 
-	focus_window_windows(&request.handle)?;
+	focus_window_windows(&request.handle, false)?;
 
 	let hwnd = parse_hwnd(&request.handle)?;
 	if !unsafe { IsWindow(Some(hwnd)) }.as_bool() {

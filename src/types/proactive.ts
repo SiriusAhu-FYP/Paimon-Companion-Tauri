@@ -1,10 +1,11 @@
-export type CompanionInteractionMode = "companion" | "delegated";
+import type { CompanionInteractionMode } from "./companion-mode";
 
 export type ProactiveTriggerSource =
 	| "runtime-summary"
 	| "game2048-result"
 	| "sokoban-result"
-	| "system-error";
+	| "system-error"
+	| "salient-event";
 
 export type ProactiveDecision =
 	| "idle"

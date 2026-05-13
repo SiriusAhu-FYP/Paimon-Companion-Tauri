@@ -28,8 +28,9 @@ export interface OpenAICompatibleVisionRequest {
 
 export function resolveActiveOpenAICompatibleVisionClient(): OpenAICompatibleVisionClientConfig | null {
 	const config = getConfig();
-	const activeProfile = config.activeLlmProfileId
-		? config.llmProfiles.find((profile) => profile.id === config.activeLlmProfileId)
+	const activeProfileId = config.activeVisionLlmProfileId || config.activeLlmProfileId;
+	const activeProfile = activeProfileId
+		? config.llmProfiles.find((profile) => profile.id === activeProfileId)
 		: null;
 
 	const provider = activeProfile?.provider ?? config.llm.provider;

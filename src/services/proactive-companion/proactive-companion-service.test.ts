@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "@/services/event-bus";
+import { CompanionModeService } from "@/services/companion-mode";
+import { DelegationMemoryService } from "@/services/delegation-memory";
 import type { CompanionRuntimeService } from "@/services/companion-runtime";
 import type { LLMService } from "@/services/llm";
 import type { PipelineService } from "@/services/pipeline";
@@ -25,26 +27,30 @@ describe("ProactiveCompanionService", () => {
 	function createService(options?: {
 		reply?: string;
 		runtimeContext?: string;
-		speakText?: ReturnType<typeof vi.fn>;
+		speakTextNonBlocking?: ReturnType<typeof vi.fn>;
 	}) {
 		const bus = new EventBus();
 		const llm = {
 			generateCompanionReply: vi.fn().mockResolvedValue(options?.reply ?? "注意脚下，小心一点。"),
 		};
 		const pipeline = {
-			speakText: options?.speakText ?? vi.fn().mockResolvedValue(undefined),
+			speakTextNonBlocking: options?.speakTextNonBlocking ?? vi.fn().mockReturnValue(true),
 		};
 		const companionRuntime = {
 			getPromptContext: vi.fn().mockReturnValue(options?.runtimeContext ?? "最近观察：角色正在谨慎探索。"),
 		};
+		const companionMode = new CompanionModeService(bus);
+		const delegationMemory = new DelegationMemoryService(bus);
 		const service = new ProactiveCompanionService({
 			bus,
 			llm: llm as unknown as LLMService,
 			pipeline: pipeline as unknown as PipelineService,
 			companionRuntime: companionRuntime as unknown as CompanionRuntimeService,
+			companionMode,
+			delegationMemory,
 		});
 
-		return { bus, llm, pipeline, companionRuntime, service };
+		return { bus, llm, pipeline, companionRuntime, companionMode, delegationMemory, service };
 	}
 
 	it("skips proactive emission when the model returns the no-reply sentinel", async () => {
@@ -59,7 +65,7 @@ describe("ProactiveCompanionService", () => {
 		await flushAsyncWork();
 
 		expect(llm.generateCompanionReply).toHaveBeenCalledTimes(1);
-		expect(pipeline.speakText).not.toHaveBeenCalled();
+		expect(pipeline.speakTextNonBlocking).not.toHaveBeenCalled();
 		expect(service.getState()).toMatchObject({
 			lastDecision: "skipped",
 			lastSkipReason: "llm-no-proactive-reply",
@@ -90,7 +96,7 @@ describe("ProactiveCompanionService", () => {
 		await flushAsyncWork();
 
 		expect(llm.generateCompanionReply).toHaveBeenCalledTimes(1);
-		expect(pipeline.speakText).toHaveBeenCalledWith("刚才那个报错我注意到了，我们先稳一下。");
+		expect(pipeline.speakTextNonBlocking).toHaveBeenCalledWith("刚才那个报错我注意到了，我们先稳一下。");
 		expect(service.getState()).toMatchObject({
 			pendingSource: null,
 			lastDecision: "emitted",
@@ -154,50 +160,62 @@ describe("ProactiveCompanionService", () => {
 		expect(llm.generateCompanionReply.mock.calls[0]?.[0]).toContain("【触发源】system error");
 	});
 
-	it("suppresses opportunistic proactive chatter during delegated execution", async () => {
+	it("still allows proactive speech during delegated execution", async () => {
+		const { bus, llm, pipeline, companionMode, service } = createService({
+			reply: "这一步已经推进了，我们继续盯着局面。",
+		});
+
+		companionMode.setMode("delegated", "test-enter-delegated", "manual");
+		bus.emit("game2048:run-complete", {
+			runId: "2048-1",
+			success: true,
+			selectedMove: "move_right",
+			boardChanged: true,
+			summary: "2048 step verified with Right (4.0%) via planner",
+		});
+		await flushAsyncWork();
+
+		expect(llm.generateCompanionReply).toHaveBeenCalledTimes(1);
+		expect(pipeline.speakTextNonBlocking).toHaveBeenCalledWith("这一步已经推进了，我们继续盯着局面。");
+		expect(service.getState()).toMatchObject({
+			mode: "delegated",
+			lastDecision: "emitted",
+			lastEmittedSource: "game2048-result",
+		});
+	});
+
+	it("suppresses task-result proactive when the same unified run already owns the follow-up", async () => {
 		const { bus, llm, service } = createService();
 
-		bus.emit("unified:run-start", {
-			runId: "run-1",
-			trigger: "manual",
-			requestText: "帮我看看下一步",
+		bus.emit("unified:state-change", {
+			state: {
+				speechEnabled: true,
+				voiceInputEnabled: true,
+				activeRunId: "unified-trace-1",
+				loopActive: true,
+				phase: "acting",
+				lastVoiceInput: null,
+				lastCommand: "2048-step",
+				lastCompanionText: null,
+				lastRun: null,
+				history: [],
+			},
 		});
 		bus.emit("game2048:run-complete", {
 			runId: "2048-1",
-			success: false,
-			selectedMove: null,
-			boardChanged: false,
-			summary: "2048 stalled",
+			success: true,
+			selectedMove: "move_right",
+			boardChanged: true,
+			summary: "2048 step verified with Right (4.0%) via planner",
+			traceId: "unified-trace-1",
 		});
 		await flushAsyncWork();
 
 		expect(llm.generateCompanionReply).not.toHaveBeenCalled();
 		expect(service.getState()).toMatchObject({
-			mode: "delegated",
 			lastDecision: "skipped",
-			lastSkipReason: "delegated-follow-up-active",
+			lastSkipReason: "unified-follow-up-active",
 		});
-
-		bus.emit("unified:run-complete", {
-			runId: "run-1",
-			gameId: "game-2048",
-			success: false,
-			summary: "run complete",
-			emotion: "neutral",
-			spoke: true,
-			timings: {
-				totalMs: 1000,
-				actionMs: 300,
-				runtimeRefreshMs: 100,
-				llmReplyMs: 300,
-				speechMs: 300,
-				totalBlockingMs: 700,
-				totalNonBlockingMs: 300,
-			},
-		});
-		await flushAsyncWork();
-
-		expect(service.getState().mode).toBe("companion");
 	});
 
 	it("passes proactive source metadata and runtime context into proactive generation", async () => {
@@ -251,7 +269,7 @@ describe("ProactiveCompanionService", () => {
 		await flushAsyncWork();
 
 		expect(llm.generateCompanionReply).toHaveBeenCalledWith(
-			expect.stringContaining("【入场提示】这是你进入当前观看场景后的第一次观察。"),
+			expect.stringContaining("【入场提示】"),
 			expect.objectContaining({
 				source: "proactive-reply",
 			}),
@@ -407,7 +425,7 @@ describe("ProactiveCompanionService", () => {
 
 		expect(llm.generateCompanionReply).toHaveBeenCalledTimes(1);
 		expect(llm.generateCompanionReply).toHaveBeenCalledWith(
-			expect.stringContaining("本轮禁止输出不说话哨兵"),
+			expect.stringContaining("不输出不说话哨兵"),
 			expect.objectContaining({
 				source: "proactive-reply",
 			}),
@@ -415,10 +433,10 @@ describe("ProactiveCompanionService", () => {
 	});
 
 	it("forces a short runtime-summary fallback after the silence window when the llm still declines", async () => {
-		const speakText = vi.fn().mockResolvedValue(undefined);
+		const speakTextNonBlocking = vi.fn().mockReturnValue(true);
 		const { bus, llm, service, pipeline } = createService({
 			reply: PROACTIVE_NO_REPLY_SENTINEL,
-			speakText,
+			speakTextNonBlocking,
 		});
 		service.setRuntimeSummarySilenceSeconds(30);
 
@@ -435,7 +453,7 @@ describe("ProactiveCompanionService", () => {
 		});
 		await flushAsyncWork();
 		llm.generateCompanionReply.mockClear();
-		speakText.mockClear();
+		speakTextNonBlocking.mockClear();
 
 		bus.emit("audio:tts-start", { text: "previous reply" });
 		bus.emit("audio:tts-end");
@@ -454,7 +472,7 @@ describe("ProactiveCompanionService", () => {
 		});
 		await flushAsyncWork();
 
-		expect(pipeline.speakText).toHaveBeenCalledWith("派蒙还在陪你看着呢，这段气氛有点紧，我继续帮你盯着后面，汪。");
+		expect(pipeline.speakTextNonBlocking).toHaveBeenCalledWith("派蒙还在陪你看着呢，这段气氛有点紧，我继续帮你盯着后面，汪。");
 		expect(service.getState()).toMatchObject({
 			lastDecision: "emitted",
 			lastEmittedSource: "runtime-summary",
@@ -476,6 +494,10 @@ describe("ProactiveCompanionService", () => {
 			lastSummaryId: null,
 			captureTicks: 0,
 			summariesGenerated: 0,
+			observationReady: false,
+			lastObservationAt: null,
+			diagnosticCode: null,
+			diagnosticMessage: null,
 			lastError: null,
 		});
 		bus.emit("companion-runtime:summary-complete", {
@@ -492,7 +514,7 @@ describe("ProactiveCompanionService", () => {
 		await flushAsyncWork();
 
 		expect(llm.generateCompanionReply).toHaveBeenCalledWith(
-			expect.stringContaining("【入场提示】这是你进入当前观看场景后的第一次观察。"),
+			expect.stringContaining("【入场提示】"),
 			expect.objectContaining({
 				source: "proactive-reply",
 			}),
@@ -510,6 +532,10 @@ describe("ProactiveCompanionService", () => {
 			lastSummaryId: null,
 			captureTicks: 0,
 			summariesGenerated: 0,
+			observationReady: false,
+			lastObservationAt: null,
+			diagnosticCode: null,
+			diagnosticMessage: null,
 			lastError: null,
 		});
 		await flushAsyncWork();
@@ -532,6 +558,10 @@ describe("ProactiveCompanionService", () => {
 			lastSummaryId: null,
 			captureTicks: 0,
 			summariesGenerated: 0,
+			observationReady: false,
+			lastObservationAt: null,
+			diagnosticCode: null,
+			diagnosticMessage: null,
 			lastError: null,
 		});
 		bus.emit("companion-runtime:summary-complete", {
@@ -548,7 +578,7 @@ describe("ProactiveCompanionService", () => {
 		await flushAsyncWork();
 
 		expect(llm.generateCompanionReply).toHaveBeenCalledWith(
-			expect.stringContaining("【入场提示】这是你进入当前观看场景后的第一次观察。"),
+			expect.stringContaining("【入场提示】"),
 			expect.objectContaining({
 				source: "proactive-reply",
 			}),

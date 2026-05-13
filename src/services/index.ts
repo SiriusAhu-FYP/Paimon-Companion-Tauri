@@ -14,6 +14,12 @@ import { UnifiedRuntimeService } from "./unified";
 import { CompanionRuntimeBenchmarkService, CompanionRuntimeService } from "./companion-runtime";
 import { LLMService } from "./llm";
 import { ProactiveCompanionService } from "./proactive-companion";
+import { CompanionModeService } from "./companion-mode";
+import { DelegationMemoryService } from "./delegation-memory";
+import { L2RollingContextService } from "./memory/l2-rolling-context-service";
+import { LongTermMemoryService } from "./memory/long-term-memory-service";
+import { MemoryLogService } from "./memory/memory-log-service";
+import { installSessionWritebackHook, promotePendingLogs } from "./memory/session-writeback-hook";
 import { AudioPlayer } from "./audio";
 import type { IASRService } from "./asr";
 import { PipelineService } from "./pipeline";
@@ -48,6 +54,10 @@ export interface ServiceContainer {
 	player: AudioPlayer;
 	pipeline: PipelineService;
 	voiceInput: VoiceInputService;
+	companionMode: CompanionModeService;
+	delegationMemory: DelegationMemoryService;
+	l2RollingContext: L2RollingContextService;
+	longTermMemory: LongTermMemoryService;
 }
 
 let services: ServiceContainer | null = null;
@@ -61,6 +71,8 @@ export function initServices(): ServiceContainer {
 	const config = getConfig();
 
 	const runtime = new RuntimeService(eventBus);
+	const companionMode = new CompanionModeService(eventBus);
+	const delegationMemory = new DelegationMemoryService(eventBus);
 	const affect = new AffectStateService(eventBus);
 	const affectInputs = new AffectInputsService({
 		bus: eventBus,
@@ -71,10 +83,34 @@ export function initServices(): ServiceContainer {
 	const knowledge = new KnowledgeService(eventBus);
 	const perception = new PerceptionService(eventBus, debugCapture);
 	const safety = new SafetyService(eventBus, runtime);
+	const companionRuntime = new CompanionRuntimeService({
+		bus: eventBus,
+		perception,
+	});
 	const orchestrator = new OrchestratorService({
 		bus: eventBus,
 		safety,
 		perception,
+	});
+	const llmProvider = resolveLLMProvider(config);
+	const llm = new LLMService(eventBus, runtime, llmProvider, affect, character, knowledge, companionRuntime, companionMode, delegationMemory, debugCapture);
+	const l2RollingContext = new L2RollingContextService({
+		bus: eventBus,
+		llmProvider,
+		windowSize: config.companionRuntime.digestWindowSize,
+	});
+	const longTermMemory = new LongTermMemoryService({ bus: eventBus });
+	const memoryLog = new MemoryLogService({ bus: eventBus });
+	llm.setMemoryServices(l2RollingContext, longTermMemory);
+
+	// Initialize LTM + memory log, then promote any pending logs from last session
+	Promise.all([
+		longTermMemory.initialize(),
+		memoryLog.initialize(),
+	]).then(() => {
+		return promotePendingLogs(memoryLog, longTermMemory, llmProvider);
+	}).catch((err) => {
+		log.error("memory initialization or startup promotion failed", err);
 	});
 	const game2048 = new Game2048Service({
 		bus: eventBus,
@@ -83,10 +119,6 @@ export function initServices(): ServiceContainer {
 	const sokoban = new SokobanService({
 		bus: eventBus,
 		orchestrator,
-	});
-	const companionRuntime = new CompanionRuntimeService({
-		bus: eventBus,
-		perception,
 	});
 	const companionRuntimeBenchmark = new CompanionRuntimeBenchmarkService({
 		bus: eventBus,
@@ -100,8 +132,6 @@ export function initServices(): ServiceContainer {
 		log.error("knowledge initialization failed", err);
 	});
 
-	const llmProvider = resolveLLMProvider(config);
-	const llm = new LLMService(eventBus, runtime, llmProvider, affect, character, knowledge, companionRuntime, debugCapture);
 	const asr = resolveASRProvider(config);
 	const ttsProvider = resolveTTSProvider(config);
 	const player = new AudioPlayer();
@@ -130,12 +160,25 @@ export function initServices(): ServiceContainer {
 		sokoban,
 		llm,
 		pipeline,
+		companionMode,
+		delegationMemory,
+		debugCapture,
+	});
+	unified.setLongTermMemory(longTermMemory);
+	unified.setMemoryLog(memoryLog);
+	installSessionWritebackHook({
+		bus: eventBus,
+		llmProvider,
+		ltmService: longTermMemory,
+		memoryLog,
 	});
 	const proactiveCompanion = new ProactiveCompanionService({
 		bus: eventBus,
 		llm,
 		pipeline,
 		companionRuntime,
+		companionMode,
+		delegationMemory,
 		runtimeSummarySilenceSeconds: config.companionRuntime.proactiveRuntimeSummarySilenceSeconds,
 	});
 	const evaluation = new EvaluationService({
@@ -170,6 +213,10 @@ export function initServices(): ServiceContainer {
 		player,
 		pipeline,
 		voiceInput,
+		companionMode,
+		delegationMemory,
+		l2RollingContext,
+		longTermMemory,
 	};
 
 	log.info("all services initialized", {

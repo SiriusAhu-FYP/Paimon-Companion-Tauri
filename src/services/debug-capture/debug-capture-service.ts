@@ -1,7 +1,13 @@
 import type { EventBus, EventHistoryEntry } from "@/services/event-bus/event-bus";
 import { registerLogSink } from "@/services/logger/logger-service";
 import type { DebugCaptureState } from "@/types";
-import { appendDebugCaptureText, startDebugCapture, writeDebugCaptureImage } from "./client";
+import {
+	appendDebugCaptureText,
+	exportDebugCaptureSession,
+	type DebugCaptureExportInfo,
+	startDebugCapture,
+	writeDebugCaptureImage,
+} from "./client";
 
 function makeInitialState(): DebugCaptureState {
 	return {
@@ -15,39 +21,88 @@ function makeInitialState(): DebugCaptureState {
 	};
 }
 
-function sanitizePayload(value: unknown): unknown {
-	if (value == null) return value;
-	if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-		return value;
+const STRING_SOFT_LIMIT = 512;
+const ARRAY_DEPTH_LIMIT = 32;
+const MAX_DEPTH = 6;
+const DATA_URL_PREFIX = "data:image/";
+
+const THROTTLED_EVENTS = new Set([
+	"orchestrator:state-change",
+	"companion-runtime:state-change",
+	"unified:state-change",
+	"game2048:state-change",
+	"sokoban:state-change",
+]);
+const THROTTLE_INTERVAL_MS = 2000;
+
+type DataUrlSummary = {
+	_redactedDataUrl: true;
+	mimeType: string;
+	charLength: number;
+	estimatedBytes: number | null;
+};
+
+function isDataUrl(value: string): boolean {
+	return value.startsWith(DATA_URL_PREFIX);
+}
+
+function summarizeDataUrl(value: string): DataUrlSummary {
+	const commaIndex = value.indexOf(",");
+	const header = commaIndex >= 0 ? value.slice(0, commaIndex) : "";
+	const match = header.match(/^data:([^;,\s]+)/i);
+	const mimeType = match?.[1] ?? "image/unknown";
+	if (commaIndex < 0) {
+		return {
+			_redactedDataUrl: true,
+			mimeType,
+			charLength: value.length,
+			estimatedBytes: null,
+		};
 	}
-	if (value instanceof ArrayBuffer) {
-		return { type: "ArrayBuffer", byteLength: value.byteLength };
+	const encoded = value.slice(commaIndex + 1);
+	const padding = encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0;
+	const estimatedBytes = Math.max(0, Math.floor((encoded.length * 3) / 4) - padding);
+	return {
+		_redactedDataUrl: true,
+		mimeType,
+		charLength: value.length,
+		estimatedBytes,
+	};
+}
+
+function truncateString(value: string): string | { _truncated: true; length: number; preview: string } | DataUrlSummary {
+	if (isDataUrl(value)) {
+		return summarizeDataUrl(value);
 	}
-	if (ArrayBuffer.isView(value)) {
-		return { type: value.constructor.name, byteLength: value.byteLength };
-	}
-	if (Array.isArray(value)) {
-		return value.map(sanitizePayload);
-	}
-	if (typeof value === "object") {
-		return Object.fromEntries(
-			Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, sanitizePayload(nested)]),
-		);
-	}
-	return String(value);
+	if (value.length <= STRING_SOFT_LIMIT) return value;
+	return { _truncated: true, length: value.length, preview: value.slice(0, STRING_SOFT_LIMIT) + "..." };
 }
 
 function stringifyJsonl(payload: unknown) {
 	return `${JSON.stringify(payload)}\n`;
 }
 
+function sanitizePathSegment(value: string): string {
+	return value
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9_-]+/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^-|-$/g, "")
+		.slice(0, 40);
+}
+
 export class DebugCaptureService {
 	private bus: EventBus;
 	private state: DebugCaptureState = makeInitialState();
+	private nextLabel = "manual";
 	private lastEventSequence = 0;
 	private pendingWrites = new Map<string, string[]>();
 	private flushTimer: ReturnType<typeof setTimeout> | null = null;
 	private flushInFlight = false;
+	private lastThrottledWriteAt = new Map<string, number>();
+	private lastSessionId: string | null = null;
+	private inlineEventImageCounter = 0;
 
 	constructor(bus: EventBus) {
 		this.bus = bus;
@@ -65,10 +120,16 @@ export class DebugCaptureService {
 		return { ...this.state };
 	}
 
+	setNextLabel(label: string | null | undefined) {
+		const trimmed = label?.trim();
+		this.nextLabel = trimmed || "manual";
+	}
+
 	async setEnabled(enabled: boolean): Promise<void> {
 		if (enabled === this.state.enabled) return;
 		if (enabled) {
-			const session = await startDebugCapture("p4-debug");
+			const session = await startDebugCapture(this.nextLabel);
+			this.inlineEventImageCounter = 0;
 			this.state = {
 				...this.state,
 				enabled: true,
@@ -81,6 +142,7 @@ export class DebugCaptureService {
 			};
 			const history = this.bus.getHistory();
 			this.lastEventSequence = history.length ? history[history.length - 1].sequence : 0;
+			this.lastSessionId = session.sessionId;
 			this.emitState();
 			this.enqueueWrite("session.jsonl", stringifyJsonl({
 				timestamp: new Date().toISOString(),
@@ -104,6 +166,14 @@ export class DebugCaptureService {
 			sessionDirectory: null,
 		};
 		this.emitState();
+	}
+
+	async exportSession(label?: string): Promise<DebugCaptureExportInfo> {
+		const sessionId = this.state.sessionId ?? this.lastSessionId;
+		if (!sessionId) {
+			throw new Error("no debug capture session available for export");
+		}
+		return exportDebugCaptureSession(sessionId, label);
 	}
 
 	recordLlmExchange(kind: "request" | "response" | "error", payload: Record<string, unknown>) {
@@ -149,22 +219,94 @@ export class DebugCaptureService {
 		if (!nextEntries.length) return;
 		for (const entry of nextEntries) {
 			this.lastEventSequence = entry.sequence;
-			if (entry.event === "debug-capture:state-change") {
-				continue;
+			if (entry.event === "debug-capture:state-change") continue;
+			if (THROTTLED_EVENTS.has(entry.event)) {
+				const lastAt = this.lastThrottledWriteAt.get(entry.event) ?? 0;
+				if (entry.timestamp - lastAt < THROTTLE_INTERVAL_MS) continue;
+				this.lastThrottledWriteAt.set(entry.event, entry.timestamp);
 			}
-			this.enqueueEvent(entry);
+			await this.enqueueEvent(entry);
 		}
 	}
 
-	private enqueueEvent(entry: EventHistoryEntry) {
+	private async enqueueEvent(entry: EventHistoryEntry) {
 		this.state.capturedEventCount += 1;
+		const payload = await this.sanitizeEventPayload(entry.payload, entry.sequence, ["payload"], 0);
 		this.enqueueWrite("events.jsonl", stringifyJsonl({
 			timestamp: new Date(entry.timestamp).toISOString(),
 			sequence: entry.sequence,
 			event: entry.event,
-			payload: sanitizePayload(entry.payload),
+			payload,
 		}));
 		this.emitState();
+	}
+
+	private async sanitizeEventPayload(value: unknown, sequence: number, path: string[], depth: number): Promise<unknown> {
+		if (value == null) return value;
+		if (typeof value === "number" || typeof value === "boolean") return value;
+		if (typeof value === "string") {
+			if (isDataUrl(value)) {
+				return this.persistEventImageReference(value, sequence, path);
+			}
+			return truncateString(value);
+		}
+		if (value instanceof ArrayBuffer) {
+			return { _type: "ArrayBuffer", byteLength: value.byteLength };
+		}
+		if (ArrayBuffer.isView(value)) {
+			return { _type: value.constructor.name, byteLength: value.byteLength };
+		}
+		if (depth >= MAX_DEPTH) return "[depth limit]";
+		if (Array.isArray(value)) {
+			const sliced = value.slice(0, ARRAY_DEPTH_LIMIT);
+			const items = await Promise.all(
+				sliced.map((item, index) => this.sanitizeEventPayload(item, sequence, [...path, String(index)], depth + 1)),
+			);
+			if (value.length > ARRAY_DEPTH_LIMIT) {
+				items.push({ _truncated: true, totalLength: value.length });
+			}
+			return items;
+		}
+		if (typeof value === "object") {
+			const entries = Object.entries(value as Record<string, unknown>);
+			const mapped = await Promise.all(entries.map(async ([key, nested]) => (
+				[key, await this.sanitizeEventPayload(nested, sequence, [...path, key], depth + 1)] as const
+			)));
+			return Object.fromEntries(mapped);
+		}
+		return String(value);
+	}
+
+	private async persistEventImageReference(dataUrl: string, sequence: number, path: string[]): Promise<unknown> {
+		const sessionId = this.state.sessionId;
+		if (!sessionId) {
+			return summarizeDataUrl(dataUrl);
+		}
+		const counter = this.inlineEventImageCounter++;
+		const pathHint = sanitizePathSegment(path.slice(-2).join("-")) || "payload";
+		const fileName = `images/events/event-${sequence}-${counter}-${pathHint}.png`;
+		try {
+			await writeDebugCaptureImage(sessionId, fileName, dataUrl);
+			this.state.capturedImageCount += 1;
+			this.state.lastWriteAt = Date.now();
+			this.enqueueWrite("images.jsonl", stringifyJsonl({
+				timestamp: new Date().toISOString(),
+				fileName,
+				source: "event-payload",
+				sequence,
+				path: path.join("."),
+				charLength: dataUrl.length,
+			}));
+			return {
+				_imageRef: true,
+				fileName,
+				source: "event-payload",
+				charLength: dataUrl.length,
+			};
+		} catch (error) {
+			this.setLastError(error);
+			return summarizeDataUrl(dataUrl);
+		}
 	}
 
 	private enqueueWrite(fileName: string, text: string) {

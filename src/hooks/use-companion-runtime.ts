@@ -31,8 +31,8 @@ export function useCompanionRuntime() {
 		return companionRuntime.updateRuntimeConfig(partial);
 	}, [companionRuntime]);
 
-	const testLocalVisionConnection = useCallback(() => {
-		return companionRuntime.testLocalVisionConnection();
+	const testLocalVisionConnection = useCallback((options?: { timeoutMs?: number }) => {
+		return companionRuntime.testLocalVisionConnection(options);
 	}, [companionRuntime]);
 
 	return {

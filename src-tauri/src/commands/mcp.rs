@@ -347,6 +347,107 @@ fn build_tool_descriptors() -> Vec<Value> {
 				"additionalProperties": false
 			}
 		}),
+		json!({
+			"name": "host.list_windows",
+			"description": "List desktop windows and return focus candidates for delegated host control.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"query": { "type": "string" },
+					"limit": { "type": "number" }
+				},
+				"additionalProperties": false
+			}
+		}),
+		json!({
+			"name": "host.focus_window",
+			"description": "Focus one desktop window by explicit target handle/title or the currently selected target.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"targetHandle": { "type": "string" },
+					"targetTitle": { "type": "string" },
+					"applyDelegatedViewport": { "type": "boolean" }
+				},
+				"additionalProperties": false
+			}
+		}),
+		json!({
+			"name": "host.capture_window",
+			"description": "Capture one screenshot from the target window.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"targetHandle": { "type": "string" },
+					"targetTitle": { "type": "string" }
+				},
+				"additionalProperties": false
+			}
+		}),
+		json!({
+			"name": "host.resolve_locator_consensus",
+			"description": "Run multiple local vision localization samples, reject outlier boxes, and return a robust averaged click center.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"locatorHint": { "type": "string" },
+					"taskGoal": { "type": "string" },
+					"targetHandle": { "type": "string" },
+					"targetTitle": { "type": "string" },
+					"samples": { "type": "number" }
+				},
+				"required": ["locatorHint"],
+				"additionalProperties": false
+			}
+		}),
+		json!({
+			"name": "host.send_key",
+			"description": "Send one key token or key combo such as Enter, Space, Ctrl+L to target window.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"key": { "type": "string" },
+					"targetHandle": { "type": "string" },
+					"targetTitle": { "type": "string" }
+				},
+				"required": ["key"],
+				"additionalProperties": false
+			}
+		}),
+		json!({
+			"name": "host.send_mouse",
+			"description": "Send mouse action to target window with optional pixel or normalized coordinates.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"action": { "type": "string", "enum": ["move", "down", "up", "click"] },
+					"button": { "type": "string", "enum": ["left", "right", "middle"] },
+					"x": { "type": "number" },
+					"y": { "type": "number" },
+					"xNorm": { "type": "number" },
+					"yNorm": { "type": "number" },
+					"locatorHint": { "type": "string" },
+					"allowLocalVisionFallback": { "type": "boolean" },
+					"targetHandle": { "type": "string" },
+					"targetTitle": { "type": "string" }
+				},
+				"additionalProperties": false
+			}
+		}),
+		json!({
+			"name": "host.paste_text",
+			"description": "Paste full sentence into target window. Falls back to per-character key input when paste fails.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"text": { "type": "string" },
+					"targetHandle": { "type": "string" },
+					"targetTitle": { "type": "string" }
+				},
+				"required": ["text"],
+				"additionalProperties": false
+			}
+		}),
 	]
 }
 

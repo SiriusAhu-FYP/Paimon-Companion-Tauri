@@ -1,90 +1,100 @@
-# Paimon Companion Tauri
+<h1 align="center">PAIMON</h1>
 
-Tauri-first desktop host for PAIMON:
-Player-Aware Intelligent Monitoring and Operations Navigator.
+<p align="center">
+  <strong>PAIMON the Attentive Interactive Multi-modal Observer-Navigator</strong>
+</p>
 
-## Status
+<p align="center">
+  A desktop companion-agent prototype that combines screen-aware companionship and bounded task delegation in one application runtime.
+</p>
 
-This repository is the active Tauri implementation trunk.
+<p align="center">
+  <img src="https://img.shields.io/badge/Tauri-Desktop%20Runtime-24C8D8?style=flat-square" alt="Tauri Desktop Runtime" />
+  <img src="https://img.shields.io/badge/Interaction-Dual%20Mode-4C6FFF?style=flat-square" alt="Dual Mode Interaction" />
+  <img src="https://img.shields.io/badge/Scope-Companion%20Agent%20Prototype-E6B35A?style=flat-square" alt="Companion Agent Prototype" />
+</p>
 
-`P1 Functional Core Validation` is complete and merged into `main`.
+<p align="center">
+  <img src="./docs/imgs/readme-banner.png" alt="PAIMON banner" width="100%" />
+</p>
 
-Current `P2` mainline is not new game expansion.
+## Overview
 
-It is focused on fully integrating the functional heritage of these source repositories:
+`paimon-companion-tauri` is the main FYP implementation of PAIMON. It presents one desktop system with two separately activated interaction paths built on the same technical foundation:
 
-- `LLMPlay-MVP`
-- `VoiceL2D-MVP`
-- `Video-Understanding-MVP`
+<p align="center">
+  <img src="./docs/imgs/app-screenshot-light.png" alt="PAIMON desktop application main interface" width="100%" />
+</p>
 
-`paimon-live` is treated as the desktop host/framework origin only.
+- `Companion Mode`, which focuses on screen-aware presence, speech interaction, rolling memory, and affect-linked Live2D expression
+- `Delegation Mode`, which handles explicit browser and game tasks through a bounded multi-role loop
 
-Current accepted baseline:
+The project is companion-first in overall direction. Delegated operation is intentionally constrained, verified, and task-bounded rather than framed as unrestricted autonomy.
 
-- Windows host primitives for window discovery, capture, focus, and input
-- `2048` functional loop with capture -> decide -> execute -> verify
-- evaluation harness and functional debug tooling
-- companion UI, Live2D stage foundation, runtime/config/service scaffolding
+## What It Includes
 
-What the baseline does not yet prove:
+- a Tauri desktop host with Rust-side window, capture, focus, and input primitives
+- a React and TypeScript runtime for companion interaction, orchestration, and visible inspection surfaces
+- a dual-mode interaction design in which Companion Mode and Delegation Mode are activated separately
+- a three-role delegation pipeline built around `Mission Analyst -> Operations Planner -> Progress Evaluator`
+- semantic task handling for retained browser and game validation cases such as `2048` and `Sokoban`
+- memory, debug capture, timeline inspection, and evidence-oriented runtime surfaces
 
-- full migration of `LLMPlay-MVP` source scope
-- full migration of `Video-Understanding-MVP` pipeline/evaluation capabilities
-- full post-fusion validation across all three source lines
+## System Direction
 
-Current fusion direction:
+PAIMON combines several ideas in one runtime:
 
-- accepted `P2.2` baseline: local voice input -> companion pipeline -> `GPT-SoVITS` -> Live2D response
-- accepted `P2.3` sub-baseline: companion replies can already drive model-aware Live2D expression changes
-- current next focus: `P2.4` and `P2.5`
-- long-term control boundary: MCP for both companion actions and gameplay actions
+- `General Computer Control (GCC)` for screen-grounded desktop interaction
+- an MCP-facing tool boundary for orchestration and host control
+- a hybrid perception strategy that combines local observation with cloud reasoning when needed
 
-## UI
+This repository is therefore not a minimal demo of one isolated feature. It is the integrated project line where companion behavior, speech, Live2D presentation, bounded delegation, memory, and runtime inspection meet.
 
-The desktop UI is currently split into:
+## Repository Structure
 
-- `控制面板`: runtime, character, behavior, and context controls
-- `功能实验`: host-window tools, functional loops, evaluation harness, and debug drill-down
+- `src/` - React UI and TypeScript runtime
+- `src-tauri/` - Rust/Tauri backend and native host boundary
+- `prompts/` - prompt and wording artifacts
+- `docs/` - implementation-facing project documentation
+- `ROADMAP.md` - phase history and milestone record
+
+Machine-local or branch-specific working material may also exist around the repo, but those are support surfaces rather than the center of the tracked mainline implementation.
 
 ## Development
 
 Prerequisites:
 
-- Node.js 18+
-- pnpm
+- Node.js `20.19+` or `22.12+` (`22.x` recommended)
+  - per Vite 7 compatibility requirements
+- `pnpm 10+`
 - Rust
-- Tauri prerequisites for Windows
+- Windows Tauri prerequisites
 
-Start:
+Install and run:
 
 ```bash
 pnpm install
-pnpm tauri dev
+pnpm dev
 ```
 
-Rust-only check:
+Rust-side check:
 
 ```bash
 pnpm setup:local-asr
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
-## Notes
+`pnpm dev` runs the tracked local ASR setup first. See `docs/runtime-setup.md` for the local runtime boundary, including the optional WSL-based local vision helper and the retained GPT-SoVITS path.
 
-- The app stays Tauri-first. Optional local sidecars remain acceptable for heavy workloads where the source projects already depend on them.
-- External AI services may still run outside the app over HTTP/SSE.
-- Local TTS stays on the GPT-SoVITS path inherited from `VoiceL2D-MVP`.
-- A real chat-panel microphone path now exists, with browser-side capture/VAD plus pluggable cloud or local-runtime ASR upload.
-- Accepted ASR families are currently `local-sherpa`, `volcengine`, and `aliyun`.
-- The default local ASR route is the bundled `sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16` model.
-- `pnpm setup:local-asr` prepares both the local ASR model assets and the sherpa native archive needed by `cargo check`.
-- The current local bilingual ASR baseline is practical for both Chinese and English, but mixed-language recognition is still effectively resolved one utterance at a time rather than as robust intra-sentence code-switching.
-- The currently accepted `P2.2` live voice baseline is local-only: `local-sherpa` microphone input -> companion pipeline -> `GPT-SoVITS` playback -> Live2D reaction.
-- Cloud ASR providers remain supported configuration options, but they are not yet part of the accepted live-validation baseline.
-- The next fusion step is to formalize an MCP-facing runtime where local perception, cloud reasoning, companion expression control, and semantic gameplay actions can coexist without a rigid visible reply format.
-- Production tuning should start from an `8-10s` local description window and preserve at least the latest `1min` of summarized context.
-- The functional path intentionally excludes knowledge retrieval / embedding / rerank due to latency sensitivity.
-- The current host input model is foreground-oriented and does not guarantee coexistence with user typing or IME composition.
-- New game transfer work is gated behind source-repository fusion and validation.
-- Public progress is tracked in `ROADMAP.md`.
-- Architecture references live under `docs/`.
+## Scope Boundary
+
+This repository is intended to present the main implementation clearly. It does not guarantee one-click reproduction of every machine-local runtime condition, external service setup, or evaluation harness.
+
+The main review surface is the tracked codebase and the architecture/runtime it expresses.
+
+## Further Reading
+
+- `docs/architecture.md` for the system structure
+- `docs/runtime-setup.md` for local runtime dependencies and optional sidecar services
+- `ROADMAP.md` for the development phases and accepted milestones
+- `README_zh.md` for the Chinese version of the repository introduction
